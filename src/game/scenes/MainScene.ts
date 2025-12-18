@@ -1784,16 +1784,20 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
-    private drawWall(graphics: Phaser.GameObjects.Graphics, center: Phaser.Math.Vector2, gridX: number, gridY: number, alpha: number, tint: number | null, building?: PlacedBuilding) {
-        // Wall dimensions
-        const height = 18;
-        const width = 8;
-        const postColor = tint ?? 0xdddddd;
-        const baseColor = 0x999999;
-        const owner = building?.owner ?? 'PLAYER'; // Default to player for ghost/shop
+    private drawWall(graphics: Phaser.GameObjects.Graphics, _center: Phaser.Math.Vector2, gridX: number, gridY: number, alpha: number, tint: number | null, building?: PlacedBuilding) {
+        // Wall dimensions - isometric stone wall style
+        const wallHeight = 22;
+        const wallThickness = 0.35; // As fraction of tile
+        const owner = building?.owner ?? 'PLAYER';
 
-        // Check neighbors for connections
-        // Only connect if same owner (or if ghost, assume player)
+        // Stone colors
+        const stoneTop = tint ?? 0xc9b896;    // Light tan stone top
+        const stoneFront = tint ?? 0xa89070;  // Medium brown stone front
+        const stoneSide = tint ?? 0x8a7560;   // Darker brown stone side
+        const stoneEdge = 0x6b5a4a;           // Dark edge outline
+        const mortarColor = 0x7a6a5a;         // Mortar between stones
+
+        // Check neighbors for connections (same owner only)
         const hasNeighbor = (dx: number, dy: number) => {
             return this.buildings.some(b =>
                 b.type === 'wall' &&
@@ -1803,151 +1807,524 @@ export class MainScene extends Phaser.Scene {
             );
         };
 
-        const nN = hasNeighbor(0, -1); // Up-Right (Y-1)
-        const nS = hasNeighbor(0, 1);  // Down-Left (Y+1)
-        const nW = hasNeighbor(-1, 0); // Up-Left (X-1)
-        const nE = hasNeighbor(1, 0);  // Down-Right (X+1)
+        const nN = hasNeighbor(0, -1); // North (Y-1) - appears up-right
+        const nS = hasNeighbor(0, 1);  // South (Y+1) - appears down-left
+        const nW = hasNeighbor(-1, 0); // West (X-1) - appears up-left
+        const nE = hasNeighbor(1, 0);  // East (X+1) - appears down-right
 
-        // Draw connections first (so post covers seams)
-        graphics.fillStyle(postColor, alpha);
+        // Calculate wall segment bounds in grid coords, then convert to iso
+        // Wall occupies center strip of the tile
+        const hw = wallThickness / 2; // half width in grid units
 
-        const drawSegment = (targetPos: Phaser.Math.Vector2) => {
-            // Simple thick line logic using polygon
-            // Vector from center to target
-            const dx = targetPos.x - center.x;
-            const dy = targetPos.y - center.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
+        // Helper to draw a 3D isometric wall segment
+        const drawWallSegment = (
+            x1: number, y1: number, // Start grid coords
+            x2: number, y2: number  // End grid coords
+        ) => {
+            // Determine wall direction (N-S or E-W in grid space)
+            const isNS = Math.abs(y2 - y1) > Math.abs(x2 - x1);
 
-            // Perpendicular vector for thickness
-            const px = -dy / dist * (width * 0.4); // slightly thinner than post
-            const py = dx / dist * (width * 0.4);
+            let corners: Phaser.Math.Vector2[];
+            let topCorners: Phaser.Math.Vector2[];
 
-            // 4 points of the segment (top face)
-            // Center is top, we need to go down by height for sides
+            if (isNS) {
+                // Wall runs North-South (Y direction) - perpendicular offset in X
+                const left1 = this.cartToIso(x1 - hw, y1);
+                const right1 = this.cartToIso(x1 + hw, y1);
+                const left2 = this.cartToIso(x2 - hw, y2);
+                const right2 = this.cartToIso(x2 + hw, y2);
 
-            // Lets just draw a vertical wall segment
-            // Base quad
-            graphics.fillPoints([
-                new Phaser.Math.Vector2(center.x + px, center.y + py),
-                new Phaser.Math.Vector2(targetPos.x + px, targetPos.y + py),
-                new Phaser.Math.Vector2(targetPos.x - px, targetPos.y - py),
-                new Phaser.Math.Vector2(center.x - px, center.y - py)
-            ], true);
+                // Base corners (clockwise from top-left in iso view)
+                corners = [left1, right1, right2, left2];
+                topCorners = [
+                    new Phaser.Math.Vector2(left1.x, left1.y - wallHeight),
+                    new Phaser.Math.Vector2(right1.x, right1.y - wallHeight),
+                    new Phaser.Math.Vector2(right2.x, right2.y - wallHeight),
+                    new Phaser.Math.Vector2(left2.x, left2.y - wallHeight)
+                ];
 
-            // Front face (approximate based on direction) - adds depth
-            graphics.fillStyle(0xbbbbbb, alpha);
-            // Draw a rect extending down? 
-            // Simplified: Just draw the block from center to edge
-            // We'll draw 2 quads: Top and Side.
+                // Draw front face (right side visible for NS walls going down-left)
+                graphics.fillStyle(stoneFront, alpha);
+                graphics.fillPoints([corners[1], corners[2], topCorners[2], topCorners[1]], true);
 
-            // Side face (we mostly see one side due to iso) - Draw FIRST
-            graphics.fillStyle(baseColor, alpha);
-            graphics.fillPoints([
-                new Phaser.Math.Vector2(targetPos.x + px, targetPos.y + py - height),
-                new Phaser.Math.Vector2(targetPos.x + px, targetPos.y + py),
-                new Phaser.Math.Vector2(center.x + px, center.y + py),
-                new Phaser.Math.Vector2(center.x + px, center.y + py - height)
-            ], true);
-            graphics.fillPoints([
-                new Phaser.Math.Vector2(targetPos.x - px, targetPos.y - py - height),
-                new Phaser.Math.Vector2(targetPos.x - px, targetPos.y - py),
-                new Phaser.Math.Vector2(center.x - px, center.y - py),
-                new Phaser.Math.Vector2(center.x - px, center.y - py - height)
-            ], true);
+                // Draw left face (visible for NS walls)
+                graphics.fillStyle(stoneSide, alpha);
+                graphics.fillPoints([corners[2], corners[3], topCorners[3], topCorners[2]], true);
+            } else {
+                // Wall runs East-West (X direction) - perpendicular offset in Y
+                const top1 = this.cartToIso(x1, y1 - hw);
+                const bot1 = this.cartToIso(x1, y1 + hw);
+                const top2 = this.cartToIso(x2, y2 - hw);
+                const bot2 = this.cartToIso(x2, y2 + hw);
 
-            // Re-do: 
-            // Top Face - Draw LAST
-            graphics.fillStyle(0xffffff, alpha);
-            graphics.fillPoints([
-                new Phaser.Math.Vector2(center.x + px, center.y + py - height),
-                new Phaser.Math.Vector2(targetPos.x + px, targetPos.y + py - height),
-                new Phaser.Math.Vector2(targetPos.x - px, targetPos.y - py - height),
-                new Phaser.Math.Vector2(center.x - px, center.y - py - height)
-            ], true);
+                corners = [top1, top2, bot2, bot1];
+                topCorners = [
+                    new Phaser.Math.Vector2(top1.x, top1.y - wallHeight),
+                    new Phaser.Math.Vector2(top2.x, top2.y - wallHeight),
+                    new Phaser.Math.Vector2(bot2.x, bot2.y - wallHeight),
+                    new Phaser.Math.Vector2(bot1.x, bot1.y - wallHeight)
+                ];
+
+                // Draw front face (bottom side visible for EW walls going down-right)
+                graphics.fillStyle(stoneFront, alpha);
+                graphics.fillPoints([corners[2], corners[3], topCorners[3], topCorners[2]], true);
+
+                // Draw right face (visible for EW walls)
+                graphics.fillStyle(stoneSide, alpha);
+                graphics.fillPoints([corners[1], corners[2], topCorners[2], topCorners[1]], true);
+            }
+
+            // Draw top face
+            graphics.fillStyle(stoneTop, alpha);
+            graphics.fillPoints(topCorners, true);
+
+            // Stone block texture on top
+            graphics.fillStyle(mortarColor, alpha * 0.3);
+            const midX = (topCorners[0].x + topCorners[2].x) / 2;
+            const midY = (topCorners[0].y + topCorners[2].y) / 2;
+            graphics.fillCircle(midX, midY, 2);
+
+            // Edge highlights
+            graphics.lineStyle(1, 0xddd0c0, alpha * 0.6);
+            graphics.lineBetween(topCorners[0].x, topCorners[0].y, topCorners[1].x, topCorners[1].y);
+
+            // Edge shadows
+            graphics.lineStyle(1, stoneEdge, alpha * 0.5);
+            graphics.lineBetween(topCorners[2].x, topCorners[2].y, topCorners[3].x, topCorners[3].y);
         };
 
-        if (nE) drawSegment(this.cartToIso(gridX + 1, gridY + 0.5)); // Edge center X+1
-        if (nW) drawSegment(this.cartToIso(gridX, gridY + 0.5));     // Edge center X
-        if (nS) drawSegment(this.cartToIso(gridX + 0.5, gridY + 1)); // Edge center Y+1
-        if (nN) drawSegment(this.cartToIso(gridX + 0.5, gridY));     // Edge center Y
+        // Calculate segment positions
+        const cx = gridX + 0.5;
+        const cy = gridY + 0.5;
 
+        // Draw wall segments to neighbors (from center to edge)
+        if (nN) drawWallSegment(cx, cy, cx, gridY);           // To north edge
+        if (nS) drawWallSegment(cx, cy, cx, gridY + 1);       // To south edge
+        if (nW) drawWallSegment(cx, cy, gridX, cy);           // To west edge
+        if (nE) drawWallSegment(cx, cy, gridX + 1, cy);       // To east edge
 
-        // === CENTRAL POST ===
-        // Side faces
-        graphics.fillStyle(baseColor, alpha);
-        // Left face
-        graphics.fillPoints([
-            new Phaser.Math.Vector2(center.x - width / 2, center.y),
-            new Phaser.Math.Vector2(center.x, center.y + width / 4),
-            new Phaser.Math.Vector2(center.x, center.y + width / 4 - height),
-            new Phaser.Math.Vector2(center.x - width / 2, center.y - height)
-        ], true);
-        // Right face
-        graphics.fillStyle(0x888888, alpha);
-        graphics.fillPoints([
-            new Phaser.Math.Vector2(center.x + width / 2, center.y),
-            new Phaser.Math.Vector2(center.x, center.y + width / 4),
-            new Phaser.Math.Vector2(center.x, center.y + width / 4 - height),
-            new Phaser.Math.Vector2(center.x + width / 2, center.y - height)
-        ], true);
+        // === CENTRAL PILLAR (always drawn) ===
+        // Creates the junction/corner piece
+        const pillarSize = wallThickness * 1.1;
+        const hps = pillarSize / 2;
 
-        // Top cap
-        graphics.fillStyle(postColor, alpha);
-        graphics.fillPoints([
-            new Phaser.Math.Vector2(center.x, center.y - width / 4 - height),
-            new Phaser.Math.Vector2(center.x + width / 2, center.y - height),
-            new Phaser.Math.Vector2(center.x, center.y + width / 4 - height),
-            new Phaser.Math.Vector2(center.x - width / 2, center.y - height)
-        ], true);
+        // Pillar corners in grid space
+        const pTL = this.cartToIso(cx - hps, cy - hps);
+        const pTR = this.cartToIso(cx + hps, cy - hps);
+        const pBR = this.cartToIso(cx + hps, cy + hps);
+        const pBL = this.cartToIso(cx - hps, cy + hps);
 
-        // Highlight/Trim
-        graphics.fillStyle(0xffffff, alpha * 0.5);
-        graphics.fillPoints([
-            new Phaser.Math.Vector2(center.x, center.y - width / 4 - height),
-            new Phaser.Math.Vector2(center.x + width / 2, center.y - height),
-            new Phaser.Math.Vector2(center.x, center.y - height + 2),
-            new Phaser.Math.Vector2(center.x - width / 2 + 2, center.y - height - width / 8 + 2)
-        ], true);
+        // Top corners
+        const pTLt = new Phaser.Math.Vector2(pTL.x, pTL.y - wallHeight);
+        const pTRt = new Phaser.Math.Vector2(pTR.x, pTR.y - wallHeight);
+        const pBRt = new Phaser.Math.Vector2(pBR.x, pBR.y - wallHeight);
+        const pBLt = new Phaser.Math.Vector2(pBL.x, pBL.y - wallHeight);
 
+        // Draw pillar faces (back to front for proper occlusion)
+        // Right face (SE side)
+        graphics.fillStyle(stoneSide, alpha);
+        graphics.fillPoints([pTR, pBR, pBRt, pTRt], true);
+
+        // Front face (SW side)
+        graphics.fillStyle(stoneFront, alpha);
+        graphics.fillPoints([pBR, pBL, pBLt, pBRt], true);
+
+        // Top face
+        graphics.fillStyle(stoneTop, alpha);
+        graphics.fillPoints([pTLt, pTRt, pBRt, pBLt], true);
+
+        // Stone texture details on pillar top
+        const pillarCenterX = (pTLt.x + pBRt.x) / 2;
+        const pillarCenterY = (pTLt.y + pBRt.y) / 2;
+
+        // Carved stone pattern
+        graphics.fillStyle(mortarColor, alpha * 0.4);
+        graphics.fillCircle(pillarCenterX, pillarCenterY, 3);
+
+        // Highlight on top edge
+        graphics.lineStyle(1, 0xefe0d0, alpha * 0.7);
+        graphics.lineBetween(pTLt.x, pTLt.y, pTRt.x, pTRt.y);
+        graphics.lineBetween(pTLt.x, pTLt.y, pBLt.x, pBLt.y);
+
+        // Shadow on bottom edges
+        graphics.lineStyle(1, stoneEdge, alpha * 0.6);
+        graphics.lineBetween(pBRt.x, pBRt.y, pTRt.x, pTRt.y);
+        graphics.lineBetween(pBRt.x, pBRt.y, pBLt.x, pBLt.y);
+
+        // Add decorative cap detail for corner pieces (4 neighbors)
+        if (nN && nS && nE && nW) {
+            // Full intersection - add decorative top
+            graphics.fillStyle(0xddd0c0, alpha);
+            graphics.fillCircle(pillarCenterX, pillarCenterY - 2, 4);
+            graphics.fillStyle(stoneTop, alpha);
+            graphics.fillCircle(pillarCenterX, pillarCenterY - 2, 2);
+        }
     }
 
     private drawArmyCamp(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null) {
-        // Dirt/sand ground
-        graphics.fillStyle(tint ?? 0xa08060, alpha);
+        const time = this.time.now;
+
+        // === TRAINING GROUND BASE ===
+        // Packed dirt/sand arena floor
+        graphics.fillStyle(tint ?? 0xb8a080, alpha);
         graphics.fillPoints([c1, c2, c3, c4], true);
 
-        // Ground texture variation
-        graphics.fillStyle(0x907050, 0.5 * alpha);
-        for (let i = 0; i < 8; i++) {
-            const ox = (Math.sin(i * 1.5) * 25);
-            const oy = (Math.cos(i * 2) * 15);
-            graphics.fillCircle(center.x + ox, center.y + oy, 3 + Math.random() * 2);
+        // Inner training circle (worn area)
+        graphics.fillStyle(0xa89070, alpha * 0.8);
+        graphics.fillEllipse(center.x, center.y + 5, 55, 28);
+
+        // Ground texture - packed earth patterns
+        graphics.fillStyle(0x9a8060, alpha * 0.5);
+        for (let i = 0; i < 12; i++) {
+            const angle = (i / 12) * Math.PI * 2;
+            const dist = 20 + (i % 3) * 12;
+            const ox = Math.cos(angle) * dist * 0.8;
+            const oy = Math.sin(angle) * dist * 0.4;
+            graphics.fillCircle(center.x + ox, center.y + 5 + oy, 2 + (i % 2));
         }
 
-        // Border posts
-        graphics.lineStyle(1, 0x3a2a1a, 0.6 * alpha);
+        // Decorative border - rope boundary
+        graphics.lineStyle(2, 0x8b7355, alpha * 0.7);
         graphics.strokePoints([c1, c2, c3, c4], true, true);
+        graphics.lineStyle(1, 0x6b5335, alpha * 0.5);
+        const inset = 4;
+        const ic1 = new Phaser.Math.Vector2(c1.x, c1.y + inset);
+        const ic2 = new Phaser.Math.Vector2(c2.x, c2.y + inset);
+        const ic3 = new Phaser.Math.Vector2(c3.x, c3.y + inset);
+        const ic4 = new Phaser.Math.Vector2(c4.x, c4.y + inset);
+        graphics.strokePoints([ic1, ic2, ic3, ic4], true, true);
 
-        // Corner tent poles
-        const poles = [c1, c2, c3, c4];
-        poles.forEach((p) => {
+        // === CORNER POSTS WITH TORCHES ===
+        const posts = [
+            { pos: c1, torch: true },
+            { pos: c2, torch: false },
+            { pos: c3, torch: true },
+            { pos: c4, torch: false }
+        ];
+
+        posts.forEach((post, idx) => {
+            const p = post.pos;
+            const poleHeight = 28;
+
+            // Wooden post base
             graphics.fillStyle(0x5d4e37, alpha);
-            graphics.fillRect(p.x - 2, p.y - 15, 4, 15);
-            graphics.lineStyle(1, 0x3d2e17, alpha);
-            graphics.strokeRect(p.x - 2, p.y - 15, 4, 15);
+            graphics.fillRect(p.x - 3, p.y - poleHeight, 6, poleHeight);
+
+            // Post shadow side
+            graphics.fillStyle(0x3d2e17, alpha);
+            graphics.fillRect(p.x + 1, p.y - poleHeight, 2, poleHeight);
+
+            // Post highlight
+            graphics.fillStyle(0x7d6e57, alpha * 0.6);
+            graphics.fillRect(p.x - 3, p.y - poleHeight, 1, poleHeight);
+
+            // Post cap
+            graphics.fillStyle(0x4d3e27, alpha);
+            graphics.fillRect(p.x - 4, p.y - poleHeight - 2, 8, 3);
+
+            if (post.torch) {
+                // Torch holder
+                graphics.fillStyle(0x3d2e17, alpha);
+                graphics.fillRect(p.x - 1, p.y - poleHeight + 4, 2, 6);
+
+                // Animated torch flame
+                const flicker = 0.7 + Math.sin(time / 70 + idx * 1.5) * 0.3;
+                const flicker2 = 0.6 + Math.sin(time / 50 + idx * 2.3) * 0.4;
+
+                // Flame glow (outer)
+                graphics.fillStyle(0xff4400, alpha * flicker * 0.4);
+                graphics.fillCircle(p.x, p.y - poleHeight + 2, 8);
+
+                // Flame core (orange)
+                graphics.fillStyle(0xff6600, alpha * flicker);
+                graphics.fillCircle(p.x, p.y - poleHeight + 1, 5);
+
+                // Flame inner (yellow)
+                graphics.fillStyle(0xffaa00, alpha * flicker2);
+                graphics.fillCircle(p.x, p.y - poleHeight, 3);
+
+                // Flame tip (white-yellow)
+                graphics.fillStyle(0xffdd66, alpha * flicker);
+                graphics.fillCircle(p.x, p.y - poleHeight - 2, 1.5);
+
+                // Sparks
+                for (let s = 0; s < 2; s++) {
+                    const sparkTime = (time / 100 + idx * 50 + s * 30) % 20;
+                    if (sparkTime < 15) {
+                        const sparkY = p.y - poleHeight - 3 - sparkTime * 0.8;
+                        const sparkX = p.x + Math.sin(sparkTime + s) * 3;
+                        graphics.fillStyle(0xffaa44, alpha * (1 - sparkTime / 15));
+                        graphics.fillCircle(sparkX, sparkY, 1);
+                    }
+                }
+            }
         });
 
-        // Central tent
-        const tentH = 20;
-        graphics.fillStyle(0xc4a484, alpha);
-        graphics.fillTriangle(center.x - 20, center.y + 5, center.x + 20, center.y + 5, center.x, center.y - tentH);
-        graphics.lineStyle(1, 0x8b7355, alpha);
-        graphics.lineBetween(center.x, center.y - tentH, center.x - 20, center.y + 5);
-        graphics.lineBetween(center.x, center.y - tentH, center.x + 20, center.y + 5);
+        // === CENTRAL CAMPFIRE ===
+        const fireX = center.x;
+        const fireY = center.y + 8;
 
-        // Tent opening
-        graphics.fillStyle(0x2a1a0a, 0.7 * alpha);
-        graphics.fillTriangle(center.x - 8, center.y + 5, center.x + 8, center.y + 5, center.x, center.y - 5);
+        // Fire pit stones (ring)
+        graphics.fillStyle(0x555555, alpha);
+        for (let i = 0; i < 8; i++) {
+            const angle = (i / 8) * Math.PI * 2;
+            const stoneX = fireX + Math.cos(angle) * 12;
+            const stoneY = fireY + Math.sin(angle) * 6;
+            graphics.fillEllipse(stoneX, stoneY, 5, 3);
+        }
+
+        // Fire pit inner (ash/coals)
+        graphics.fillStyle(0x2a2020, alpha);
+        graphics.fillEllipse(fireX, fireY, 10, 5);
+
+        // Glowing coals
+        const coalGlow = 0.5 + Math.sin(time / 200) * 0.2;
+        graphics.fillStyle(0x881100, alpha * coalGlow);
+        graphics.fillEllipse(fireX, fireY, 8, 4);
+        graphics.fillStyle(0xcc3300, alpha * coalGlow * 0.7);
+        graphics.fillEllipse(fireX - 2, fireY, 4, 2);
+        graphics.fillEllipse(fireX + 3, fireY + 1, 3, 1.5);
+
+        // Main flame animation
+        const flame1 = Math.sin(time / 60) * 0.3 + 0.7;
+        const flame2 = Math.sin(time / 45 + 1) * 0.25 + 0.75;
+        const flame3 = Math.sin(time / 80 + 2) * 0.35 + 0.65;
+
+        // Flame glow on ground
+        graphics.fillStyle(0xff4400, alpha * 0.15 * flame1);
+        graphics.fillEllipse(fireX, fireY, 25, 12);
+
+        // Back flames (draw first)
+        graphics.fillStyle(0xdd4400, alpha * flame3);
+        graphics.beginPath();
+        graphics.moveTo(fireX - 6, fireY);
+        graphics.lineTo(fireX - 8, fireY - 12 - flame3 * 5);
+        graphics.lineTo(fireX - 3, fireY - 8);
+        graphics.lineTo(fireX - 5, fireY - 18 - flame2 * 6);
+        graphics.lineTo(fireX, fireY - 10);
+        graphics.lineTo(fireX + 2, fireY - 16 - flame1 * 5);
+        graphics.lineTo(fireX + 5, fireY - 6);
+        graphics.lineTo(fireX + 7, fireY - 14 - flame3 * 4);
+        graphics.lineTo(fireX + 6, fireY);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Mid flames (orange)
+        graphics.fillStyle(0xff6600, alpha * flame1);
+        graphics.beginPath();
+        graphics.moveTo(fireX - 5, fireY);
+        graphics.lineTo(fireX - 6, fireY - 10 - flame2 * 4);
+        graphics.lineTo(fireX - 2, fireY - 7);
+        graphics.lineTo(fireX - 3, fireY - 15 - flame1 * 5);
+        graphics.lineTo(fireX + 1, fireY - 9);
+        graphics.lineTo(fireX + 3, fireY - 13 - flame3 * 4);
+        graphics.lineTo(fireX + 5, fireY - 5);
+        graphics.lineTo(fireX + 5, fireY);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Inner flames (yellow-orange)
+        graphics.fillStyle(0xffaa00, alpha * flame2);
+        graphics.beginPath();
+        graphics.moveTo(fireX - 3, fireY);
+        graphics.lineTo(fireX - 4, fireY - 7 - flame1 * 3);
+        graphics.lineTo(fireX - 1, fireY - 5);
+        graphics.lineTo(fireX, fireY - 11 - flame2 * 4);
+        graphics.lineTo(fireX + 2, fireY - 6);
+        graphics.lineTo(fireX + 3, fireY - 8 - flame3 * 3);
+        graphics.lineTo(fireX + 3, fireY);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Core flames (yellow)
+        graphics.fillStyle(0xffdd44, alpha * flame3);
+        graphics.beginPath();
+        graphics.moveTo(fireX - 2, fireY);
+        graphics.lineTo(fireX - 2, fireY - 5 - flame2 * 2);
+        graphics.lineTo(fireX, fireY - 8 - flame1 * 3);
+        graphics.lineTo(fireX + 2, fireY - 4 - flame3 * 2);
+        graphics.lineTo(fireX + 2, fireY);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Fire sparks/embers rising
+        for (let i = 0; i < 5; i++) {
+            const sparkPhase = (time / 80 + i * 40) % 40;
+            if (sparkPhase < 35) {
+                const sparkRise = sparkPhase * 0.7;
+                const sparkDrift = Math.sin(sparkPhase * 0.3 + i) * 4;
+                const sparkAlpha = 1 - sparkPhase / 35;
+                graphics.fillStyle(0xffaa44, alpha * sparkAlpha * 0.8);
+                graphics.fillCircle(fireX + sparkDrift + (i - 2) * 2, fireY - 15 - sparkRise, 1.2);
+            }
+        }
+
+        // === TRAINING DUMMY (left side) ===
+        const dummyX = center.x - 35;
+        const dummyY = center.y - 5;
+
+        // Dummy post
+        graphics.fillStyle(0x5d4e37, alpha);
+        graphics.fillRect(dummyX - 2, dummyY - 25, 4, 30);
+        graphics.fillStyle(0x3d2e17, alpha);
+        graphics.fillRect(dummyX + 1, dummyY - 25, 1, 30);
+
+        // Dummy body (straw-stuffed sack)
+        graphics.fillStyle(0xc4a060, alpha);
+        graphics.fillEllipse(dummyX, dummyY - 18, 8, 12);
+        graphics.fillStyle(0xa48040, alpha * 0.6);
+        graphics.fillEllipse(dummyX + 2, dummyY - 18, 5, 10);
+
+        // Dummy head
+        graphics.fillStyle(0xc4a060, alpha);
+        graphics.fillCircle(dummyX, dummyY - 32, 6);
+        graphics.fillStyle(0xa48040, alpha * 0.5);
+        graphics.fillCircle(dummyX + 1, dummyY - 32, 4);
+
+        // Dummy arms (wooden crossbar)
+        graphics.fillStyle(0x5d4e37, alpha);
+        graphics.fillRect(dummyX - 10, dummyY - 22, 20, 3);
+
+        // Straw detail
+        graphics.lineStyle(1, 0x8a7030, alpha * 0.6);
+        graphics.lineBetween(dummyX - 4, dummyY - 10, dummyX - 6, dummyY - 5);
+        graphics.lineBetween(dummyX + 3, dummyY - 10, dummyX + 5, dummyY - 6);
+        graphics.lineBetween(dummyX, dummyY - 10, dummyX, dummyY - 4);
+
+        // === WEAPON RACK (right side) ===
+        const rackX = center.x + 35;
+        const rackY = center.y;
+
+        // Rack frame (A-frame)
+        graphics.fillStyle(0x5d4e37, alpha);
+        // Left leg
+        graphics.beginPath();
+        graphics.moveTo(rackX - 10, rackY + 5);
+        graphics.lineTo(rackX - 8, rackY - 20);
+        graphics.lineTo(rackX - 5, rackY - 20);
+        graphics.lineTo(rackX - 7, rackY + 5);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Right leg
+        graphics.beginPath();
+        graphics.moveTo(rackX + 10, rackY + 5);
+        graphics.lineTo(rackX + 8, rackY - 20);
+        graphics.lineTo(rackX + 5, rackY - 20);
+        graphics.lineTo(rackX + 7, rackY + 5);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Cross bar
+        graphics.fillRect(rackX - 9, rackY - 18, 18, 3);
+        graphics.fillStyle(0x3d2e17, alpha);
+        graphics.fillRect(rackX - 9, rackY - 16, 18, 1);
+
+        // Weapons on rack
+        // Sword 1
+        graphics.fillStyle(0x888888, alpha);
+        graphics.fillRect(rackX - 7, rackY - 30, 2, 14);
+        graphics.fillStyle(0x5d4e37, alpha);
+        graphics.fillRect(rackX - 8, rackY - 17, 4, 3);
+        graphics.fillStyle(0xccaa00, alpha);
+        graphics.fillRect(rackX - 7, rackY - 17, 2, 1);
+
+        // Sword 2
+        graphics.fillStyle(0x777777, alpha);
+        graphics.fillRect(rackX + 1, rackY - 28, 2, 12);
+        graphics.fillStyle(0x5d4e37, alpha);
+        graphics.fillRect(rackX, rackY - 17, 4, 3);
+        graphics.fillStyle(0xccaa00, alpha);
+        graphics.fillRect(rackX + 1, rackY - 17, 2, 1);
+
+        // Axe
+        graphics.fillStyle(0x5d4e37, alpha);
+        graphics.fillRect(rackX + 6, rackY - 32, 2, 16);
+        graphics.fillStyle(0x666666, alpha);
+        graphics.beginPath();
+        graphics.moveTo(rackX + 5, rackY - 32);
+        graphics.lineTo(rackX + 11, rackY - 30);
+        graphics.lineTo(rackX + 11, rackY - 26);
+        graphics.lineTo(rackX + 5, rackY - 24);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // === TENT/CANOPY (back area) ===
+        const tentX = center.x;
+        const tentY = center.y - 25;
+
+        // Tent back panel (darker)
+        graphics.fillStyle(0x8b6b4b, alpha);
+        graphics.beginPath();
+        graphics.moveTo(tentX - 30, tentY + 15);
+        graphics.lineTo(tentX - 25, tentY - 10);
+        graphics.lineTo(tentX, tentY - 20);
+        graphics.lineTo(tentX + 25, tentY - 10);
+        graphics.lineTo(tentX + 30, tentY + 15);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Tent front panel (lighter - canvas color)
+        graphics.fillStyle(0xc4a484, alpha);
+        graphics.beginPath();
+        graphics.moveTo(tentX - 25, tentY - 10);
+        graphics.lineTo(tentX, tentY - 20);
+        graphics.lineTo(tentX + 25, tentY - 10);
+        graphics.lineTo(tentX + 20, tentY + 5);
+        graphics.lineTo(tentX, tentY);
+        graphics.lineTo(tentX - 20, tentY + 5);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Tent fabric folds
+        graphics.lineStyle(1, 0xa48464, alpha * 0.6);
+        graphics.lineBetween(tentX - 12, tentY - 8, tentX - 10, tentY + 3);
+        graphics.lineBetween(tentX + 12, tentY - 8, tentX + 10, tentY + 3);
+        graphics.lineBetween(tentX, tentY - 18, tentX, tentY - 2);
+
+        // Tent outline
+        graphics.lineStyle(1, 0x6b4b2b, alpha * 0.8);
+        graphics.lineBetween(tentX - 25, tentY - 10, tentX, tentY - 20);
+        graphics.lineBetween(tentX, tentY - 20, tentX + 25, tentY - 10);
+
+        // Tent pole peak detail
+        graphics.fillStyle(0x5d4e37, alpha);
+        graphics.fillCircle(tentX, tentY - 20, 3);
+        graphics.fillStyle(0xccaa00, alpha);
+        graphics.fillCircle(tentX, tentY - 21, 2);
+
+        // === BANNER/FLAG ===
+        const bannerX = center.x + 20;
+        const bannerY = center.y - 40;
+
+        // Banner pole
+        graphics.fillStyle(0x5d4e37, alpha);
+        graphics.fillRect(bannerX - 1, bannerY, 2, 35);
+        graphics.fillStyle(0x7d6e57, alpha * 0.5);
+        graphics.fillRect(bannerX - 1, bannerY, 1, 35);
+
+        // Banner fabric (animated wave)
+        const wave = Math.sin(time / 150) * 2;
+        const wave2 = Math.sin(time / 120 + 1) * 1.5;
+
+        graphics.fillStyle(0xcc2222, alpha);
+        graphics.beginPath();
+        graphics.moveTo(bannerX + 1, bannerY + 2);
+        graphics.lineTo(bannerX + 15 + wave, bannerY + 5 + wave2);
+        graphics.lineTo(bannerX + 14 + wave2, bannerY + 15 + wave);
+        graphics.lineTo(bannerX + 1, bannerY + 12);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Banner emblem (sword icon)
+        graphics.fillStyle(0xffdd88, alpha * 0.8);
+        graphics.fillRect(bannerX + 6 + wave * 0.3, bannerY + 6 + wave2 * 0.3, 1, 6);
+        graphics.fillRect(bannerX + 4 + wave * 0.3, bannerY + 7 + wave2 * 0.3, 5, 1);
+
+        // Banner edge detail
+        graphics.lineStyle(1, 0x881111, alpha * 0.8);
+        graphics.lineBetween(bannerX + 1, bannerY + 2, bannerX + 15 + wave, bannerY + 5 + wave2);
+        graphics.lineBetween(bannerX + 15 + wave, bannerY + 5 + wave2, bannerX + 14 + wave2, bannerY + 15 + wave);
     }
 
     private drawGenericBuilding(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, _center: Phaser.Math.Vector2, info: BuildingInfo, alpha: number, tint: number | null) {
