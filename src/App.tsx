@@ -10,9 +10,9 @@ function App() {
   const gameRef = useRef<Phaser.Game | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [resources, setResources] = useState({ gold: 1000, elixir: 5000 });
-  const [army, setArmy] = useState({ warrior: 0, archer: 0, giant: 0, ward: 0 });
+  const [army, setArmy] = useState({ warrior: 0, archer: 0, giant: 0, ward: 0, mimic: 0, recursion: 0, voidanchor: 0, chronoswarm: 0, sporemother: 0 });
   const [capacity, setCapacity] = useState({ current: 0, max: 20 });
-  const [selectedTroopType, setSelectedTroopType] = useState<'warrior' | 'archer' | 'giant' | 'ward'>('warrior');
+  const [selectedTroopType, setSelectedTroopType] = useState<'warrior' | 'archer' | 'giant' | 'ward' | 'mimic' | 'recursion' | 'voidanchor' | 'chronoswarm' | 'sporemother'>('warrior');
   const [isTrainingOpen, setIsTrainingOpen] = useState(false);
   const [isBuildingOpen, setIsBuildingOpen] = useState(false);
   const [view, setView] = useState<GameMode>('HOME');
@@ -87,7 +87,7 @@ function App() {
     (window as any).getSelectedTroopType = () => selectedTroopType;
     (window as any).deployTroop = (type: keyof typeof army) => {
       setArmy(prev => {
-        const housing = { warrior: 1, archer: 1, giant: 5, ward: 3 };
+        const housing = { warrior: 1, archer: 1, giant: 5, ward: 3, mimic: 2, recursion: 2, voidanchor: 4, chronoswarm: 2, sporemother: 3 };
         setCapacity(c => ({ ...c, current: Math.max(0, c.current - housing[type]) }));
         return { ...prev, [type]: prev[type] - 1 };
       });
@@ -104,9 +104,9 @@ function App() {
     (window as any).selectBuilding(newSelected);
   };
 
-  const handleTrainTroop = (type: 'warrior' | 'archer' | 'giant' | 'ward') => {
-    const costs = { warrior: 25, archer: 40, giant: 150, ward: 80 };
-    const housing = { warrior: 1, archer: 1, giant: 5, ward: 3 };
+  const handleTrainTroop = (type: 'warrior' | 'archer' | 'giant' | 'ward' | 'mimic' | 'recursion' | 'voidanchor' | 'chronoswarm' | 'sporemother') => {
+    const costs = { warrior: 25, archer: 40, giant: 150, ward: 80, mimic: 60, recursion: 70, voidanchor: 120, chronoswarm: 55, sporemother: 90 };
+    const housing = { warrior: 1, archer: 1, giant: 5, ward: 3, mimic: 2, recursion: 2, voidanchor: 4, chronoswarm: 2, sporemother: 3 };
 
     const cost = costs[type];
     const space = housing[type];
@@ -126,7 +126,7 @@ function App() {
   };
 
   const handleStartAttack = () => {
-    const total = army.warrior + army.archer + army.giant + army.ward;
+    const total = army.warrior + army.archer + army.giant + army.ward + army.mimic + army.recursion + army.voidanchor + army.chronoswarm + army.sporemother;
     if (total === 0) {
       alert("Train some troops first!");
       return;
@@ -143,7 +143,7 @@ function App() {
   };
 
   const handleRaidNow = () => {
-    const total = army.warrior + army.archer + army.giant + army.ward;
+    const total = army.warrior + army.archer + army.giant + army.ward + army.mimic + army.recursion + army.voidanchor + army.chronoswarm + army.sporemother;
     if (total === 0) {
       alert("Train some troops first!");
       return;
@@ -172,6 +172,9 @@ function App() {
     { id: 'tesla', name: 'Tesla Coil', cost: 600, desc: 'Hidden zapping trap.' },
     { id: 'wall', name: 'Wall', cost: 50, desc: 'Stops enemies cold.' },
     { id: 'army_camp', name: 'Army Camp', cost: 300, desc: 'Houses your army.' },
+    { id: 'prism', name: 'Prism Tower', cost: 550, desc: 'Beam bounces between foes.' },
+    { id: 'magmavent', name: 'Magma Vent', cost: 650, desc: 'Erupts with area damage.' },
+    { id: 'mindspire', name: 'Mind Spire', cost: 500, desc: 'Confuses and slows enemies.' },
   ];
 
 
@@ -279,6 +282,31 @@ function App() {
                       onClick={() => setSelectedTroopType('ward')}>
                       <div className="icon ward-icon"></div> {army.ward}
                     </button>
+                    <button
+                      className={`troop-sel-btn mimic ${selectedTroopType === 'mimic' ? 'active' : ''}`}
+                      onClick={() => setSelectedTroopType('mimic')}>
+                      <div className="icon mimic-icon"></div> {army.mimic}
+                    </button>
+                    <button
+                      className={`troop-sel-btn recursion ${selectedTroopType === 'recursion' ? 'active' : ''}`}
+                      onClick={() => setSelectedTroopType('recursion')}>
+                      <div className="icon recursion-icon"></div> {army.recursion}
+                    </button>
+                    <button
+                      className={`troop-sel-btn voidanchor ${selectedTroopType === 'voidanchor' ? 'active' : ''}`}
+                      onClick={() => setSelectedTroopType('voidanchor')}>
+                      <div className="icon voidanchor-icon"></div> {army.voidanchor}
+                    </button>
+                    <button
+                      className={`troop-sel-btn chronoswarm ${selectedTroopType === 'chronoswarm' ? 'active' : ''}`}
+                      onClick={() => setSelectedTroopType('chronoswarm')}>
+                      <div className="icon chronoswarm-icon"></div> {army.chronoswarm}
+                    </button>
+                    <button
+                      className={`troop-sel-btn sporemother ${selectedTroopType === 'sporemother' ? 'active' : ''}`}
+                      onClick={() => setSelectedTroopType('sporemother')}>
+                      <div className="icon sporemother-icon"></div> {army.sporemother}
+                    </button>
                   </div>
                   <button className="action-btn home" onClick={handleGoHome}>HOME</button>
                 </div>
@@ -311,6 +339,11 @@ function App() {
                   { id: 'archer', name: 'Archer', cost: 40, space: 1, desc: 'Ranged attacker.' },
                   { id: 'giant', name: 'Giant', cost: 150, space: 5, desc: 'Tank targeting Defenses.' },
                   { id: 'ward', name: 'Ward', cost: 80, space: 3, desc: 'Heals friendly troops.' },
+                  { id: 'mimic', name: 'Mimic', cost: 60, space: 2, desc: 'Shapeshifter with burst damage.' },
+                  { id: 'recursion', name: 'Recursion', cost: 70, space: 2, desc: 'Splits into copies on death.' },
+                  { id: 'voidanchor', name: 'Void Anchor', cost: 120, space: 4, desc: 'Pulls enemies toward it.' },
+                  { id: 'chronoswarm', name: 'Chrono Swarm', cost: 55, space: 2, desc: 'Speeds up nearby allies.' },
+                  { id: 'sporemother', name: 'Spore Mother', cost: 90, space: 3, desc: 'Heals allies on death.' },
                 ].map(t => (
 
                   <div key={t.id} className="troop-card">

@@ -28,6 +28,10 @@ const BUILDINGS: Record<string, BuildingInfoExt> = {
     tesla: { type: 'tesla', color: 0x00ccff, width: 1, height: 1, name: 'Tesla Coil', category: 'defense' },
     wall: { type: 'wall', color: 0xcccccc, width: 1, height: 1, name: 'Wall', category: 'defense' },
     army_camp: { type: 'army_camp', color: 0x884422, width: 3, height: 3, name: 'Army Camp', category: 'military' },
+    // Novel defenses
+    prism: { type: 'prism', color: 0xff00ff, width: 1, height: 1, name: 'Prism Tower', category: 'defense' }, // Beam bounces between enemies
+    magmavent: { type: 'magmavent', color: 0xff4400, width: 2, height: 2, name: 'Magma Vent', category: 'defense' }, // Periodic area eruptions
+    mindspire: { type: 'mindspire', color: 0x9944ff, width: 1, height: 1, name: 'Mind Spire', category: 'defense' }, // Confuses enemies
 };
 
 
@@ -54,7 +58,7 @@ interface PlacedBuilding {
 
 interface Troop {
     id: string;
-    type: 'warrior' | 'archer' | 'giant' | 'ward';
+    type: 'warrior' | 'archer' | 'giant' | 'ward' | 'mimic' | 'recursion' | 'voidanchor' | 'chronoswarm' | 'sporemother';
     gameObject: Phaser.GameObjects.Graphics;
     healthBar: Phaser.GameObjects.Graphics;
     gridX: number;
@@ -71,6 +75,11 @@ interface Troop {
     lastPathTime?: number;
     nextPathTime?: number;
     target: any; // PlacedBuilding | Troop | null
+    // Special troop properties
+    isDisguised?: boolean; // For mimic
+    recursionGen?: number; // For recursion (0 = original, 1 = first split, 2 = final)
+    lastPullTime?: number; // For void anchor
+    lastSwarmBoost?: number; // For chrono swarm
 }
 
 
@@ -78,7 +87,13 @@ const TROOP_STATS = {
     warrior: { health: 100, range: 0.8, damage: 10, speed: 0.003, color: 0xffff00, space: 1 },
     archer: { health: 50, range: 4.5, damage: 3.5, speed: 0.0025, color: 0x00ffff, space: 1 },
     giant: { health: 500, range: 0.8, damage: 10, speed: 0.001, color: 0xff8800, space: 5 },
-    ward: { health: 300, range: 5.0, damage: 3, speed: 0.0015, color: 0x00ff88, space: 3, healRadius: 7.0, healAmount: 8 }
+    ward: { health: 300, range: 5.0, damage: 3, speed: 0.0015, color: 0x00ff88, space: 3, healRadius: 7.0, healAmount: 8 },
+    // Novel units
+    mimic: { health: 80, range: 0.8, damage: 25, speed: 0.002, color: 0x666666, space: 2 }, // Disguises as building, high burst
+    recursion: { health: 60, range: 0.8, damage: 8, speed: 0.003, color: 0x00ffaa, space: 2 }, // Splits on death
+    voidanchor: { health: 200, range: 3.0, damage: 2, speed: 0.0008, color: 0x4400aa, space: 4, pullRadius: 4.0 }, // Pulls enemies
+    chronoswarm: { health: 40, range: 1.5, damage: 5, speed: 0.004, color: 0xffcc00, space: 2, boostRadius: 3.0 }, // Speeds allies
+    sporemother: { health: 150, range: 1.0, damage: 6, speed: 0.0015, color: 0x44aa44, space: 3, deathHealRadius: 5.0, deathHeal: 50 } // Heals on death
 };
 
 
@@ -498,6 +513,15 @@ export class MainScene extends Phaser.Scene {
             case 'xbow':
                 this.drawXBow(graphics, c1, c2, c3, c4, center, alpha, tint, building);
                 break;
+            case 'prism':
+                this.drawPrismTower(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                break;
+            case 'magmavent':
+                this.drawMagmaVent(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                break;
+            case 'mindspire':
+                this.drawMindSpire(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                break;
 
             default:
                 this.drawGenericBuilding(graphics, c1, c2, c3, c4, center, info, alpha, tint);
@@ -784,27 +808,43 @@ export class MainScene extends Phaser.Scene {
         graphics.lineBetween(c3.x, c3.y, t3.x, t3.y);
         graphics.lineBetween(c4.x, c4.y, t4.x, t4.y);
 
-        // === DOORWAY (on front-facing wall) ===
-        const doorWidth = 8;
+        // === DOORWAY (on front-facing wall - SW wall between c3 and c4) ===
+        // Door must follow isometric angle of the wall
         const doorHeight = 16;
-        const doorX = (c3.x + c4.x) / 2;
-        const doorY = (c3.y + c4.y) / 2;
+
+        // Wall direction vector (c3 to c4)
+        const wallDirX = (c4.x - c3.x);
+        const wallDirY = (c4.y - c3.y);
+        const wallLen = Math.sqrt(wallDirX * wallDirX + wallDirY * wallDirY);
+        const normX = wallDirX / wallLen;
+        const normY = wallDirY / wallLen;
+
+        // Door center on the wall
+        const doorCenterX = (c3.x + c4.x) / 2;
+        const doorCenterY = (c3.y + c4.y) / 2;
+        const doorHalfWidth = 10;
+
+        // Bottom corners of door (on wall line)
+        const dbl = { x: doorCenterX - normX * doorHalfWidth, y: doorCenterY - normY * doorHalfWidth };
+        const dbr = { x: doorCenterX + normX * doorHalfWidth, y: doorCenterY + normY * doorHalfWidth };
+        // Top corners (straight up in screen space)
+        const dtl = { x: dbl.x, y: dbl.y - doorHeight };
+        const dtr = { x: dbr.x, y: dbr.y - doorHeight };
 
         // Door opening (dark interior)
         graphics.fillStyle(0x1a0a0a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(doorX - doorWidth, doorY);
-        graphics.lineTo(doorX + doorWidth, doorY);
-        graphics.lineTo(doorX + doorWidth, doorY - doorHeight);
-        graphics.lineTo(doorX - doorWidth, doorY - doorHeight);
-        graphics.closePath();
-        graphics.fillPath();
+        graphics.fillPoints([
+            new Phaser.Math.Vector2(dbl.x, dbl.y),
+            new Phaser.Math.Vector2(dbr.x, dbr.y),
+            new Phaser.Math.Vector2(dtr.x, dtr.y),
+            new Phaser.Math.Vector2(dtl.x, dtl.y)
+        ], true);
 
         // Door frame
         graphics.lineStyle(2, 0x5d4e37, alpha);
-        graphics.lineBetween(doorX - doorWidth, doorY, doorX - doorWidth, doorY - doorHeight);
-        graphics.lineBetween(doorX + doorWidth, doorY, doorX + doorWidth, doorY - doorHeight);
-        graphics.lineBetween(doorX - doorWidth, doorY - doorHeight, doorX + doorWidth, doorY - doorHeight);
+        graphics.lineBetween(dbl.x, dbl.y, dtl.x, dtl.y);
+        graphics.lineBetween(dbr.x, dbr.y, dtr.x, dtr.y);
+        graphics.lineBetween(dtl.x, dtl.y, dtr.x, dtr.y);
 
         // === ISOMETRIC ROOF ===
         const roofHeight = 18;
@@ -1610,6 +1650,324 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
+    // === PRISM TOWER - Beam bounces between enemies ===
+    private drawPrismTower(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, _building?: PlacedBuilding) {
+        const time = this.time.now;
+
+        // Isometric stone base platform
+        graphics.fillStyle(tint ?? 0x4a4a5a, alpha);
+        graphics.fillPoints([c1, c2, c3, c4], true);
+
+        // Base edge highlights (isometric)
+        graphics.lineStyle(1, 0x6a6a7a, alpha * 0.8);
+        graphics.lineBetween(c1.x, c1.y, c2.x, c2.y);
+        graphics.lineBetween(c1.x, c1.y, c4.x, c4.y);
+        graphics.lineStyle(1, 0x2a2a3a, alpha * 0.8);
+        graphics.lineBetween(c2.x, c2.y, c3.x, c3.y);
+        graphics.lineBetween(c3.x, c3.y, c4.x, c4.y);
+
+        // Crystal pillar base (isometric hexagonal)
+        const baseHeight = 15;
+        graphics.fillStyle(0x3a3a4a, alpha);
+        // SE face
+        graphics.fillPoints([
+            new Phaser.Math.Vector2(center.x + 8, center.y + 4),
+            new Phaser.Math.Vector2(center.x + 8, center.y + 4 - baseHeight),
+            new Phaser.Math.Vector2(center.x, center.y - 4 - baseHeight),
+            new Phaser.Math.Vector2(center.x, center.y - 4)
+        ], true);
+        // SW face (lighter)
+        graphics.fillStyle(0x5a5a6a, alpha);
+        graphics.fillPoints([
+            new Phaser.Math.Vector2(center.x, center.y - 4),
+            new Phaser.Math.Vector2(center.x, center.y - 4 - baseHeight),
+            new Phaser.Math.Vector2(center.x - 8, center.y + 4 - baseHeight),
+            new Phaser.Math.Vector2(center.x - 8, center.y + 4)
+        ], true);
+
+        // Main crystal (triangular prism - isometric)
+        const crystalBase = center.y - baseHeight;
+        const crystalHeight = 35;
+
+        // Crystal faces with rainbow refraction
+        const hue1 = (time / 20) % 360;
+        const hue2 = (hue1 + 120) % 360;
+        const hue3 = (hue1 + 240) % 360;
+
+        // Convert HSL to approximate hex (simplified)
+        const hslToColor = (h: number) => {
+            const c = 0.7;
+            const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+            let r = 0, g = 0, b = 0;
+            if (h < 60) { r = c; g = x; }
+            else if (h < 120) { r = x; g = c; }
+            else if (h < 180) { g = c; b = x; }
+            else if (h < 240) { g = x; b = c; }
+            else if (h < 300) { r = x; b = c; }
+            else { r = c; b = x; }
+            return ((Math.floor((r + 0.3) * 255) << 16) | (Math.floor((g + 0.3) * 255) << 8) | Math.floor((b + 0.3) * 255));
+        };
+
+        // SE crystal face
+        graphics.fillStyle(hslToColor(hue1), alpha * 0.8);
+        graphics.beginPath();
+        graphics.moveTo(center.x + 6, crystalBase + 4);
+        graphics.lineTo(center.x, crystalBase - crystalHeight);
+        graphics.lineTo(center.x, crystalBase - 2);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // SW crystal face
+        graphics.fillStyle(hslToColor(hue2), alpha * 0.8);
+        graphics.beginPath();
+        graphics.moveTo(center.x - 6, crystalBase + 4);
+        graphics.lineTo(center.x, crystalBase - crystalHeight);
+        graphics.lineTo(center.x, crystalBase - 2);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Front crystal face
+        graphics.fillStyle(hslToColor(hue3), alpha * 0.9);
+        graphics.beginPath();
+        graphics.moveTo(center.x - 6, crystalBase + 4);
+        graphics.lineTo(center.x, crystalBase - crystalHeight);
+        graphics.lineTo(center.x + 6, crystalBase + 4);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Crystal glow
+        const glowPulse = 0.4 + Math.sin(time / 100) * 0.2;
+        graphics.fillStyle(0xffffff, alpha * glowPulse);
+        graphics.fillCircle(center.x, crystalBase - crystalHeight + 5, 4);
+
+        // Refracted light beams (subtle)
+        graphics.lineStyle(1, 0xffffff, alpha * 0.3);
+        for (let i = 0; i < 3; i++) {
+            const beamAngle = (time / 500 + i * 2.1) % (Math.PI * 2);
+            const beamLen = 15 + Math.sin(time / 150 + i) * 5;
+            graphics.lineBetween(
+                center.x, crystalBase - crystalHeight,
+                center.x + Math.cos(beamAngle) * beamLen,
+                crystalBase - crystalHeight + Math.sin(beamAngle) * beamLen * 0.5
+            );
+        }
+    }
+
+    // === MAGMA VENT - Periodic area eruptions ===
+    private drawMagmaVent(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, _building?: PlacedBuilding) {
+        const time = this.time.now;
+
+        // Cracked volcanic rock base (isometric diamond)
+        graphics.fillStyle(tint ?? 0x2a2020, alpha);
+        graphics.fillPoints([c1, c2, c3, c4], true);
+
+        // Lava cracks in ground (following isometric angles)
+        const crackGlow = 0.6 + Math.sin(time / 200) * 0.2;
+        graphics.lineStyle(2, 0xff4400, alpha * crackGlow);
+        // Cracks follow isometric diagonals
+        graphics.lineBetween(c1.x, c1.y, center.x, center.y);
+        graphics.lineBetween(c2.x, c2.y, center.x, center.y);
+        graphics.lineBetween(c3.x, c3.y, center.x, center.y);
+        graphics.lineBetween(c4.x, c4.y, center.x, center.y);
+
+        // Additional crack details
+        graphics.lineStyle(1, 0xff6600, alpha * crackGlow * 0.7);
+        const midSE = { x: (c2.x + c3.x) / 2, y: (c2.y + c3.y) / 2 };
+        const midSW = { x: (c3.x + c4.x) / 2, y: (c3.y + c4.y) / 2 };
+        graphics.lineBetween(midSE.x, midSE.y, center.x + 5, center.y + 3);
+        graphics.lineBetween(midSW.x, midSW.y, center.x - 5, center.y + 3);
+
+        // Central volcanic cone (isometric)
+        const coneHeight = 25;
+        // SE face (dark)
+        graphics.fillStyle(0x3a2a20, alpha);
+        graphics.beginPath();
+        graphics.moveTo(center.x + 20, center.y + 10);
+        graphics.lineTo(center.x + 5, center.y - coneHeight);
+        graphics.lineTo(center.x, center.y - 5);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // SW face (lighter)
+        graphics.fillStyle(0x4a3a30, alpha);
+        graphics.beginPath();
+        graphics.moveTo(center.x - 20, center.y + 10);
+        graphics.lineTo(center.x - 5, center.y - coneHeight);
+        graphics.lineTo(center.x, center.y - 5);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Front face
+        graphics.fillStyle(0x5a4a40, alpha);
+        graphics.beginPath();
+        graphics.moveTo(center.x - 20, center.y + 10);
+        graphics.lineTo(center.x - 5, center.y - coneHeight);
+        graphics.lineTo(center.x + 5, center.y - coneHeight);
+        graphics.lineTo(center.x + 20, center.y + 10);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Crater opening (isometric ellipse at top)
+        graphics.fillStyle(0x1a0a00, alpha);
+        graphics.fillEllipse(center.x, center.y - coneHeight, 12, 6);
+
+        // Lava pool in crater
+        const lavaGlow = 0.7 + Math.sin(time / 150) * 0.3;
+        graphics.fillStyle(0xff2200, alpha * lavaGlow);
+        graphics.fillEllipse(center.x, center.y - coneHeight, 8, 4);
+        graphics.fillStyle(0xff6600, alpha * lavaGlow);
+        graphics.fillEllipse(center.x - 1, center.y - coneHeight - 1, 5, 2.5);
+        graphics.fillStyle(0xffaa00, alpha * lavaGlow * 0.8);
+        graphics.fillEllipse(center.x, center.y - coneHeight, 3, 1.5);
+
+        // Eruption effect (periodic)
+        const eruptionCycle = (time % 3000) / 3000;
+        if (eruptionCycle < 0.3) {
+            const eruptIntensity = Math.sin(eruptionCycle / 0.3 * Math.PI);
+
+            // Lava spray particles
+            for (let i = 0; i < 8; i++) {
+                const particlePhase = (eruptionCycle * 3 + i * 0.1) % 1;
+                const particleY = center.y - coneHeight - particlePhase * 40 * eruptIntensity;
+                const particleX = center.x + Math.sin(i * 2.5 + time / 50) * (10 * particlePhase);
+                const particleAlpha = (1 - particlePhase) * eruptIntensity;
+
+                graphics.fillStyle(0xff4400, alpha * particleAlpha);
+                graphics.fillCircle(particleX, particleY, 3 - particlePhase * 2);
+            }
+
+            // Glow during eruption
+            graphics.fillStyle(0xff4400, alpha * 0.2 * eruptIntensity);
+            graphics.fillEllipse(center.x, center.y - coneHeight - 10, 30, 20);
+        }
+
+        // Smoke wisps
+        for (let i = 0; i < 3; i++) {
+            const smokePhase = ((time / 2000) + i * 0.33) % 1;
+            const smokeY = center.y - coneHeight - 10 - smokePhase * 30;
+            const smokeX = center.x + Math.sin(time / 300 + i * 2) * 8 * smokePhase;
+            const smokeAlpha = (1 - smokePhase) * 0.3;
+            graphics.fillStyle(0x666666, alpha * smokeAlpha);
+            graphics.fillCircle(smokeX, smokeY, 4 + smokePhase * 6);
+        }
+    }
+
+    // === MIND SPIRE - Confuses enemies ===
+    private drawMindSpire(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, _building?: PlacedBuilding) {
+        const time = this.time.now;
+
+        // Dark mystical stone base (isometric)
+        graphics.fillStyle(tint ?? 0x2a1a2a, alpha);
+        graphics.fillPoints([c1, c2, c3, c4], true);
+
+        // Arcane rune circle on ground (isometric ellipse)
+        const runeGlow = 0.4 + Math.sin(time / 200) * 0.2;
+        graphics.lineStyle(2, 0x9944ff, alpha * runeGlow);
+        graphics.strokeEllipse(center.x, center.y + 2, 28, 14);
+
+        // Inner rune circle
+        graphics.lineStyle(1, 0xaa66ff, alpha * runeGlow * 0.7);
+        graphics.strokeEllipse(center.x, center.y + 2, 20, 10);
+
+        // Rune symbols (rotating around the ellipse)
+        const runeCount = 6;
+        for (let i = 0; i < runeCount; i++) {
+            const runeAngle = (time / 2000 + i / runeCount) * Math.PI * 2;
+            const runeX = center.x + Math.cos(runeAngle) * 13;
+            const runeY = center.y + 2 + Math.sin(runeAngle) * 6.5;
+            graphics.fillStyle(0xcc88ff, alpha * runeGlow);
+            graphics.fillCircle(runeX, runeY, 2);
+        }
+
+        // Central spire (twisted design - isometric)
+        const spireHeight = 45;
+
+        // Spire body (SE face - dark)
+        graphics.fillStyle(0x3a2a3a, alpha);
+        graphics.beginPath();
+        graphics.moveTo(center.x + 6, center.y);
+        graphics.lineTo(center.x + 2, center.y - spireHeight);
+        graphics.lineTo(center.x, center.y - 5);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Spire body (SW face - lighter)
+        graphics.fillStyle(0x5a4a5a, alpha);
+        graphics.beginPath();
+        graphics.moveTo(center.x - 6, center.y);
+        graphics.lineTo(center.x - 2, center.y - spireHeight);
+        graphics.lineTo(center.x, center.y - 5);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Front face
+        graphics.fillStyle(0x4a3a4a, alpha);
+        graphics.beginPath();
+        graphics.moveTo(center.x - 6, center.y);
+        graphics.lineTo(center.x - 2, center.y - spireHeight);
+        graphics.lineTo(center.x + 2, center.y - spireHeight);
+        graphics.lineTo(center.x + 6, center.y);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Spiral energy wrapping around spire
+        graphics.lineStyle(2, 0x9944ff, alpha * 0.6);
+        const spiralSegments = 12;
+        for (let i = 0; i < spiralSegments; i++) {
+            const t1 = i / spiralSegments;
+            const t2 = (i + 1) / spiralSegments;
+            const angle1 = (time / 300 + t1 * 4) * Math.PI;
+            const angle2 = (time / 300 + t2 * 4) * Math.PI;
+            const y1 = center.y - t1 * spireHeight;
+            const y2 = center.y - t2 * spireHeight;
+            const radius1 = 6 * (1 - t1 * 0.7);
+            const radius2 = 6 * (1 - t2 * 0.7);
+
+            graphics.lineBetween(
+                center.x + Math.cos(angle1) * radius1,
+                y1 + Math.sin(angle1) * radius1 * 0.3,
+                center.x + Math.cos(angle2) * radius2,
+                y2 + Math.sin(angle2) * radius2 * 0.3
+            );
+        }
+
+        // Mind-affecting orb at top
+        const orbY = center.y - spireHeight - 5;
+        const mindPulse = 0.6 + Math.sin(time / 120) * 0.3;
+
+        // Outer psychic aura
+        graphics.fillStyle(0x9944ff, alpha * mindPulse * 0.3);
+        graphics.fillCircle(center.x, orbY, 12);
+
+        // Mid aura
+        graphics.fillStyle(0xaa66ff, alpha * mindPulse * 0.5);
+        graphics.fillCircle(center.x, orbY, 8);
+
+        // Core eye
+        graphics.fillStyle(0xcc88ff, alpha);
+        graphics.fillCircle(center.x, orbY, 5);
+
+        // Pupil (follows a pattern - hypnotic)
+        const pupilAngle = time / 500;
+        const pupilX = center.x + Math.cos(pupilAngle) * 1.5;
+        const pupilY = orbY + Math.sin(pupilAngle) * 1;
+        graphics.fillStyle(0x220033, alpha);
+        graphics.fillCircle(pupilX, pupilY, 2.5);
+
+        // Highlight
+        graphics.fillStyle(0xffffff, alpha * 0.7);
+        graphics.fillCircle(center.x - 1.5, orbY - 1.5, 1.5);
+
+        // Psychic waves emanating (isometric ellipses)
+        for (let i = 0; i < 3; i++) {
+            const wavePhase = ((time / 1500) + i * 0.33) % 1;
+            const waveRadius = 10 + wavePhase * 40;
+            const waveAlpha = (1 - wavePhase) * 0.3;
+            graphics.lineStyle(1, 0x9944ff, alpha * waveAlpha);
+            graphics.strokeEllipse(center.x, orbY + wavePhase * 20, waveRadius, waveRadius * 0.4);
+        }
+    }
+
     private drawWall(graphics: Phaser.GameObjects.Graphics, _center: Phaser.Math.Vector2, gridX: number, gridY: number, alpha: number, tint: number | null, building?: PlacedBuilding) {
         // Isometric wall with proper connected segments
         // Key: Only draw segments toward neighbors with LOWER depth (behind us in iso view)
@@ -2131,6 +2489,9 @@ export class MainScene extends Phaser.Scene {
                 else if (defense.type === 'tesla') this.shootTeslaAt(defense, nearestTroop);
                 else if (defense.type === 'ballista') this.shootBallistaAt(defense, nearestTroop);
                 else if (defense.type === 'xbow') this.shootXBowAt(defense, nearestTroop);
+                else if (defense.type === 'prism') this.shootPrismAt(defense, nearestTroop);
+                else if (defense.type === 'magmavent') this.shootMagmaAt(defense);
+                else if (defense.type === 'mindspire') this.shootMindAt(defense, nearestTroop);
                 else this.shootAt(defense, nearestTroop);
             }
         });
@@ -2638,6 +2999,199 @@ export class MainScene extends Phaser.Scene {
 
             lastTarget = end;
         });
+    }
+
+    // === PRISM TOWER - Bouncing beam attack ===
+    private shootPrismAt(prism: PlacedBuilding, troop: Troop) {
+        const start = this.cartToIso(prism.gridX + 0.5, prism.gridY + 0.5);
+        start.y -= 50; // From the crystal tip
+
+        const bounceCount = 4;
+        const bounceRadius = 6;
+        let targets: Troop[] = [troop];
+
+        // Find bounce targets
+        for (let i = 1; i < bounceCount; i++) {
+            const prev = targets[i - 1];
+            const next = this.troops.find(t =>
+                t.owner !== prism.owner && t.health > 0 && !targets.includes(t) &&
+                Phaser.Math.Distance.Between(prev.gridX, prev.gridY, t.gridX, t.gridY) < bounceRadius
+            );
+            if (next) targets.push(next);
+            else break;
+        }
+
+        // Rainbow beam colors
+        const colors = [0xff0000, 0xff8800, 0xffff00, 0x00ff00, 0x00ffff, 0x0088ff, 0xff00ff];
+        let lastPos = start;
+
+        targets.forEach((t, idx) => {
+            const end = this.cartToIso(t.gridX, t.gridY);
+            const beamColor = colors[idx % colors.length];
+
+            // Draw prismatic beam
+            const beam = this.add.graphics();
+            beam.lineStyle(4, beamColor, 0.8);
+            beam.setDepth(10000);
+            beam.lineBetween(lastPos.x, lastPos.y, end.x, end.y);
+
+            // Inner white core
+            const core = this.add.graphics();
+            core.lineStyle(1, 0xffffff, 1);
+            core.setDepth(10001);
+            core.lineBetween(lastPos.x, lastPos.y, end.x, end.y);
+
+            // Prismatic sparkle at impact
+            const sparkle = this.add.graphics();
+            sparkle.fillStyle(beamColor, 0.8);
+            sparkle.setDepth(10002);
+            for (let s = 0; s < 6; s++) {
+                const sparkAngle = (s / 6) * Math.PI * 2;
+                const sparkDist = 8;
+                sparkle.fillCircle(end.x + Math.cos(sparkAngle) * sparkDist, end.y + Math.sin(sparkAngle) * sparkDist * 0.5, 2);
+            }
+
+            // Fade out effects
+            this.tweens.add({
+                targets: [beam, core, sparkle],
+                alpha: 0,
+                duration: 200,
+                delay: idx * 50,
+                onComplete: () => { beam.destroy(); core.destroy(); sparkle.destroy(); }
+            });
+
+            // Damage decreases with each bounce
+            const damage = 20 / (idx + 1);
+            t.health -= damage;
+            t.hasTakenDamage = true;
+            this.updateHealthBar(t);
+            if (t.health <= 0) this.destroyTroop(t);
+
+            lastPos = end;
+        });
+    }
+
+    // === MAGMA VENT - Area eruption attack ===
+    private shootMagmaAt(magma: PlacedBuilding) {
+        const info = BUILDINGS['magmavent'];
+        const center = this.cartToIso(magma.gridX + info.width / 2, magma.gridY + info.height / 2);
+        center.y -= 25; // From crater
+
+        const aoeRadius = 4; // Grid units
+        const damage = 15;
+
+        // Eruption visual - lava spray
+        for (let i = 0; i < 12; i++) {
+            const angle = (i / 12) * Math.PI * 2;
+            const dist = 20 + Math.random() * 30;
+            const lavaParticle = this.add.graphics();
+            lavaParticle.fillStyle(0xff4400 + Math.floor(Math.random() * 0x4400), 1);
+            lavaParticle.fillCircle(0, 0, 4 + Math.random() * 3);
+            lavaParticle.setPosition(center.x, center.y);
+            lavaParticle.setDepth(10000);
+
+            this.tweens.add({
+                targets: lavaParticle,
+                x: center.x + Math.cos(angle) * dist,
+                y: center.y + Math.sin(angle) * dist * 0.5 + 20,
+                alpha: 0,
+                scale: 0.3,
+                duration: 400 + Math.random() * 200,
+                ease: 'Quad.easeOut',
+                onComplete: () => lavaParticle.destroy()
+            });
+        }
+
+        // Area glow
+        const aoeGlow = this.add.graphics();
+        aoeGlow.fillStyle(0xff4400, 0.3);
+        aoeGlow.fillEllipse(center.x, center.y + 20, aoeRadius * 32, aoeRadius * 16);
+        aoeGlow.setDepth(9999);
+        this.tweens.add({
+            targets: aoeGlow,
+            alpha: 0,
+            duration: 500,
+            onComplete: () => aoeGlow.destroy()
+        });
+
+        // Damage all troops in range
+        this.troops.forEach(t => {
+            if (t.owner === magma.owner || t.health <= 0) return;
+            const dist = Phaser.Math.Distance.Between(
+                magma.gridX + info.width / 2, magma.gridY + info.height / 2,
+                t.gridX, t.gridY
+            );
+            if (dist <= aoeRadius) {
+                t.health -= damage * (1 - dist / aoeRadius * 0.5); // More damage at center
+                t.hasTakenDamage = true;
+                this.updateHealthBar(t);
+                if (t.health <= 0) this.destroyTroop(t);
+            }
+        });
+    }
+
+    // === MIND SPIRE - Confusion attack ===
+    private shootMindAt(spire: PlacedBuilding, troop: Troop) {
+        const start = this.cartToIso(spire.gridX + 0.5, spire.gridY + 0.5);
+        start.y -= 50; // From the eye orb
+        const end = this.cartToIso(troop.gridX, troop.gridY);
+
+        // Psychic wave effect
+        const wave = this.add.graphics();
+        wave.lineStyle(3, 0x9944ff, 0.6);
+        wave.setDepth(10000);
+
+        // Wavy line pattern
+        wave.beginPath();
+        wave.moveTo(start.x, start.y);
+        const segments = 10;
+        for (let i = 1; i <= segments; i++) {
+            const progress = i / segments;
+            const x = start.x + (end.x - start.x) * progress;
+            const y = start.y + (end.y - start.y) * progress;
+            const wave_offset = Math.sin(progress * Math.PI * 4) * 8;
+            const perpX = -(end.y - start.y) / Math.sqrt((end.x - start.x) ** 2 + (end.y - start.y) ** 2);
+            const perpY = (end.x - start.x) / Math.sqrt((end.x - start.x) ** 2 + (end.y - start.y) ** 2);
+            wave.lineTo(x + perpX * wave_offset, y + perpY * wave_offset);
+        }
+        wave.strokePath();
+
+        // Confusion spiral at target
+        const spiral = this.add.graphics();
+        spiral.lineStyle(2, 0xaa66ff, 0.8);
+        spiral.setDepth(10001);
+        spiral.beginPath();
+        for (let i = 0; i < 20; i++) {
+            const t = i / 20;
+            const angle = t * Math.PI * 4;
+            const radius = t * 12;
+            const x = end.x + Math.cos(angle) * radius;
+            const y = end.y - 10 + Math.sin(angle) * radius * 0.5;
+            if (i === 0) spiral.moveTo(x, y);
+            else spiral.lineTo(x, y);
+        }
+        spiral.strokePath();
+
+        this.tweens.add({
+            targets: [wave, spiral],
+            alpha: 0,
+            duration: 300,
+            onComplete: () => { wave.destroy(); spiral.destroy(); }
+        });
+
+        // Damage
+        const damage = 12;
+        troop.health -= damage;
+        troop.hasTakenDamage = true;
+        this.updateHealthBar(troop);
+
+        // Confusion effect - temporarily slow and redirect
+        troop.speedMult *= 0.5;
+        this.time.delayedCall(2000, () => {
+            if (troop.health > 0) troop.speedMult *= 2;
+        });
+
+        if (troop.health <= 0) this.destroyTroop(troop);
     }
 
     private showArcherProjectile(troop: Troop, target: PlacedBuilding, damage: number) {
@@ -3679,7 +4233,7 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
-    private drawTroopVisual(graphics: Phaser.GameObjects.Graphics, type: 'warrior' | 'archer' | 'giant' | 'ward', owner: 'PLAYER' | 'ENEMY', facingAngle: number = 0) {
+    private drawTroopVisual(graphics: Phaser.GameObjects.Graphics, type: 'warrior' | 'archer' | 'giant' | 'ward' | 'mimic' | 'recursion' | 'voidanchor' | 'chronoswarm' | 'sporemother', owner: 'PLAYER' | 'ENEMY', facingAngle: number = 0) {
         const isPlayer = owner === 'PLAYER';
 
         switch (type) {
@@ -3843,13 +4397,254 @@ export class MainScene extends Phaser.Scene {
                 break;
             }
 
+            // === NOVEL UNITS ===
+            case 'mimic': {
+                // A shapeshifting blob that disguises as buildings
+                const bodyColor = isPlayer ? 0x666666 : 0x555555;
+                const coreColor = isPlayer ? 0x88ff88 : 0xff8888;
+                const now = Date.now();
+
+                // Shadow (irregular)
+                graphics.fillStyle(0x000000, 0.3);
+                graphics.fillEllipse(0, 6, 16, 7);
+
+                // Morphing outer body - amorphous blob shape
+                graphics.fillStyle(bodyColor, 0.9);
+                graphics.beginPath();
+                const blobPoints = 12;
+                for (let i = 0; i <= blobPoints; i++) {
+                    const angle = (i / blobPoints) * Math.PI * 2;
+                    const wobble = Math.sin(now / 150 + angle * 3) * 2 + Math.sin(now / 200 + angle * 5) * 1.5;
+                    const r = 10 + wobble;
+                    const px = Math.cos(angle) * r;
+                    const py = Math.sin(angle) * r * 0.7 - 2;
+                    if (i === 0) graphics.moveTo(px, py);
+                    else graphics.lineTo(px, py);
+                }
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Inner shifting patterns (like it's analyzing/copying)
+                const patternAlpha = 0.3 + Math.sin(now / 100) * 0.1;
+                graphics.fillStyle(0x444444, patternAlpha);
+                graphics.fillCircle(-3 + Math.sin(now / 180) * 2, -3, 4);
+                graphics.fillCircle(4 + Math.cos(now / 200) * 2, 1, 3);
+
+                // Glowing core eye
+                const eyePulse = 0.6 + Math.sin(now / 80) * 0.2;
+                graphics.fillStyle(coreColor, eyePulse);
+                graphics.fillCircle(0, -2, 4);
+                graphics.fillStyle(0xffffff, 0.8);
+                graphics.fillCircle(-1, -3, 1.5);
+                break;
+            }
+
+            case 'recursion': {
+                // Fractal/geometric entity that splits on death
+                const bodyColor = isPlayer ? 0x00ffaa : 0xaa00ff;
+                const innerColor = isPlayer ? 0x00aa77 : 0x7700aa;
+                const now = Date.now();
+
+                // Shadow
+                graphics.fillStyle(0x000000, 0.3);
+                graphics.fillEllipse(0, 5, 14, 6);
+
+                // Outer hexagonal shell (rotating slowly)
+                const rot = now / 2000;
+                graphics.fillStyle(bodyColor, 0.9);
+                graphics.beginPath();
+                for (let i = 0; i < 6; i++) {
+                    const angle = rot + (i / 6) * Math.PI * 2;
+                    const px = Math.cos(angle) * 10;
+                    const py = Math.sin(angle) * 10 * 0.6 - 2;
+                    if (i === 0) graphics.moveTo(px, py);
+                    else graphics.lineTo(px, py);
+                }
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Inner hexagon (counter-rotating)
+                graphics.fillStyle(innerColor, 1);
+                graphics.beginPath();
+                for (let i = 0; i < 6; i++) {
+                    const angle = -rot * 1.5 + (i / 6) * Math.PI * 2;
+                    const px = Math.cos(angle) * 5;
+                    const py = Math.sin(angle) * 5 * 0.6 - 2;
+                    if (i === 0) graphics.moveTo(px, py);
+                    else graphics.lineTo(px, py);
+                }
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Central core with split symbol
+                graphics.fillStyle(0xffffff, 0.9);
+                graphics.fillCircle(0, -2, 2.5);
+                graphics.lineStyle(1, bodyColor, 1);
+                graphics.lineBetween(-1.5, -2, 1.5, -2);
+                graphics.lineBetween(0, -3.5, 0, -0.5);
+                break;
+            }
+
+            case 'voidanchor': {
+                // Dark gravitational orb that pulls enemies
+                const coreColor = isPlayer ? 0x4400aa : 0xaa0044;
+                const ringColor = isPlayer ? 0x6622cc : 0xcc2266;
+                const now = Date.now();
+
+                // Gravity distortion effect (dark ellipse on ground)
+                const pullPulse = 0.15 + Math.sin(now / 300) * 0.05;
+                graphics.fillStyle(0x220044, pullPulse);
+                graphics.fillEllipse(0, 8, 50, 25);
+
+                // Swirling particle rings (isometric ellipses!)
+                graphics.lineStyle(2, ringColor, 0.5);
+                const ring1 = (now / 400) % (Math.PI * 2);
+                graphics.beginPath();
+                for (let i = 0; i <= 24; i++) {
+                    const t = (i / 24) * Math.PI * 2 + ring1;
+                    const px = Math.cos(t) * 18;
+                    const py = Math.sin(t) * 9 + 2; // Ellipse for isometric
+                    if (i === 0) graphics.moveTo(px, py);
+                    else graphics.lineTo(px, py);
+                }
+                graphics.strokePath();
+
+                // Inner ring (opposite direction)
+                graphics.lineStyle(1.5, 0x8844ff, 0.4);
+                const ring2 = -(now / 300) % (Math.PI * 2);
+                graphics.beginPath();
+                for (let i = 0; i <= 20; i++) {
+                    const t = (i / 20) * Math.PI * 2 + ring2;
+                    const px = Math.cos(t) * 12;
+                    const py = Math.sin(t) * 6;
+                    if (i === 0) graphics.moveTo(px, py);
+                    else graphics.lineTo(px, py);
+                }
+                graphics.strokePath();
+
+                // Central void orb
+                graphics.fillStyle(0x000011, 1);
+                graphics.fillCircle(0, 0, 8);
+                graphics.fillStyle(coreColor, 0.8);
+                graphics.fillCircle(0, -1, 6);
+
+                // Event horizon glow
+                graphics.lineStyle(2, 0xaa66ff, 0.6 + Math.sin(now / 100) * 0.2);
+                graphics.strokeCircle(0, 0, 9);
+
+                // Singularity core
+                graphics.fillStyle(0x000000, 1);
+                graphics.fillCircle(0, 0, 3);
+                graphics.fillStyle(0xffffff, 0.5);
+                graphics.fillCircle(-1, -1, 1);
+                break;
+            }
+
+            case 'chronoswarm': {
+                // Mechanical time-bending insects
+                const shellColor = isPlayer ? 0xffcc00 : 0x00ccff;
+                const innerColor = isPlayer ? 0xaa8800 : 0x0088aa;
+                const now = Date.now();
+
+                // Shadow
+                graphics.fillStyle(0x000000, 0.25);
+                graphics.fillEllipse(0, 4, 18, 8);
+
+                // Speed aura (clockwork rings)
+                const auraAlpha = 0.2 + Math.sin(now / 150) * 0.1;
+                graphics.lineStyle(1, shellColor, auraAlpha);
+                graphics.strokeEllipse(0, 2, 30, 15);
+
+                // Main beetle body (isometric oval)
+                graphics.fillStyle(innerColor, 1);
+                graphics.fillEllipse(0, 0, 12, 8);
+                graphics.fillStyle(shellColor, 1);
+                graphics.fillEllipse(0, -1, 10, 7);
+
+                // Clockwork pattern on shell
+                graphics.lineStyle(1, innerColor, 0.6);
+                graphics.lineBetween(-4, -1, 4, -1);
+                graphics.lineBetween(0, -4, 0, 2);
+
+                // Gear symbols
+                const gearRot = now / 100;
+                graphics.lineStyle(1, 0xffffff, 0.5);
+                for (let i = 0; i < 4; i++) {
+                    const ga = gearRot + (i / 4) * Math.PI * 2;
+                    const gx = Math.cos(ga) * 3;
+                    const gy = Math.sin(ga) * 2 - 1;
+                    graphics.fillStyle(0xffffff, 0.6);
+                    graphics.fillCircle(gx, gy, 1);
+                }
+
+                // Antennae (vibrating fast)
+                const antVib = Math.sin(now / 30) * 2;
+                graphics.lineStyle(1, shellColor, 0.8);
+                graphics.lineBetween(-3, -5, -5 + antVib, -10);
+                graphics.lineBetween(3, -5, 5 - antVib, -10);
+
+                // Glowing eyes
+                graphics.fillStyle(0xffffff, 0.9);
+                graphics.fillCircle(-2, -3, 1.5);
+                graphics.fillCircle(2, -3, 1.5);
+                break;
+            }
+
+            case 'sporemother': {
+                // Organic fungal creature that heals on death
+                const bodyColor = isPlayer ? 0x44aa44 : 0xaa4444;
+                const capColor = isPlayer ? 0x66cc66 : 0xcc6666;
+                const sporeColor = isPlayer ? 0xaaffaa : 0xffaaaa;
+                const now = Date.now();
+
+                // Shadow
+                graphics.fillStyle(0x000000, 0.3);
+                graphics.fillEllipse(0, 7, 18, 8);
+
+                // Spore particles floating around
+                for (let i = 0; i < 6; i++) {
+                    const sporePhase = (now / 1000 + i * 0.5) % 3;
+                    const sporeY = -5 - sporePhase * 8;
+                    const sporeX = Math.sin(now / 300 + i * 2) * (5 + i * 2);
+                    const sporeAlpha = 1 - sporePhase / 3;
+                    graphics.fillStyle(sporeColor, sporeAlpha * 0.6);
+                    graphics.fillCircle(sporeX, sporeY, 2 - sporePhase * 0.4);
+                }
+
+                // Mushroom stalk
+                graphics.fillStyle(0xccbb99, 1);
+                graphics.fillRect(-4, -2, 8, 12);
+                graphics.fillStyle(0xaa9977, 0.5);
+                graphics.fillRect(-2, -2, 2, 12);
+
+                // Mushroom cap (bulbous)
+                graphics.fillStyle(bodyColor, 1);
+                graphics.fillEllipse(0, -6, 16, 10);
+                graphics.fillStyle(capColor, 1);
+                graphics.fillEllipse(0, -8, 14, 8);
+
+                // Cap spots
+                graphics.fillStyle(sporeColor, 0.7);
+                graphics.fillCircle(-4, -9, 2.5);
+                graphics.fillCircle(3, -7, 2);
+                graphics.fillCircle(-1, -11, 1.5);
+                graphics.fillCircle(5, -10, 1.5);
+
+                // Pulsing glow indicating stored healing
+                const healPulse = 0.3 + Math.sin(now / 200) * 0.15;
+                graphics.fillStyle(sporeColor, healPulse);
+                graphics.fillEllipse(0, -7, 18, 11);
+                break;
+            }
 
         }
 
-        // Outline
-        graphics.lineStyle(1, 0x000000, 0.5);
-        const radius = type === 'giant' ? 12 : (type === 'ward' ? 8 : 8);
-        graphics.strokeCircle(0, type === 'giant' ? -2 : (type === 'ward' ? 0 : -1), radius);
+        // Outline (skip for special visual units that have their own outlines)
+        if (!['voidanchor', 'sporemother', 'mimic'].includes(type)) {
+            graphics.lineStyle(1, 0x000000, 0.5);
+            const radius = type === 'giant' ? 12 : (type === 'ward' ? 8 : 8);
+            graphics.strokeCircle(0, type === 'giant' ? -2 : (type === 'ward' ? 0 : -1), radius);
+        }
     }
 
 
