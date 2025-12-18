@@ -389,258 +389,52 @@ export class MainScene extends Phaser.Scene {
         const pos = this.cartToIso(cannon.gridX + info.width / 2, cannon.gridY + info.height / 2);
         const g = cannon.barrelGraphics;
 
-        // Convert screen-space angle to direction index
-        // In screen space: right is 0, down is PI/2, left is PI, up is -PI/2
-        // Directions: 0=E, 1=NE, 2=N, 3=NW, 4=W, 5=SW, 6=S, 7=SE
-        // We need to offset because screen Y goes down but our indices go counter-clockwise from E
-        let normalizedAngle = angle;
-        while (normalizedAngle < 0) normalizedAngle += Math.PI * 2;
-        while (normalizedAngle >= Math.PI * 2) normalizedAngle -= Math.PI * 2;
+        // Simple rotating cannon barrel using angle math (like xbow)
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+        const heightOffset = -12;
+        const barrelLength = 18;
 
-        // Map angle to 8 directions (each sector is PI/4 = 45 degrees)
-        // Offset by PI/8 so each direction is centered in its sector
-        const sector = Math.floor((normalizedAngle + Math.PI / 8) / (Math.PI / 4)) % 8;
+        // Barrel tip position
+        const tipX = pos.x + cos * barrelLength;
+        const tipY = pos.y + heightOffset + sin * 0.5 * barrelLength;
 
-        // Draw isometric cannon for the calculated direction
-        this.drawIsometricCannon(g, pos.x, pos.y, sector);
+        // Draw barrel shadow
+        g.lineStyle(8, 0x1a1a1a, 1);
+        g.lineBetween(pos.x, pos.y + heightOffset + 2, tipX, tipY + 2);
+
+        // Draw main barrel body
+        g.lineStyle(6, 0x3a3a3a, 1);
+        g.lineBetween(pos.x, pos.y + heightOffset, tipX, tipY);
+
+        // Barrel highlight
+        g.lineStyle(3, 0x5a5a5a, 1);
+        g.lineBetween(pos.x, pos.y + heightOffset - 1, tipX, tipY - 1);
+
+        // Muzzle (end of barrel)
+        g.fillStyle(0x2a2a2a, 1);
+        g.fillCircle(tipX, tipY, 5);
+        g.fillStyle(0x111111, 1);
+        g.fillCircle(tipX, tipY, 2.5);
+
+        // Barrel rings
+        const ring1X = pos.x + cos * 6;
+        const ring1Y = pos.y + heightOffset + sin * 0.5 * 6;
+        const ring2X = pos.x + cos * 12;
+        const ring2Y = pos.y + heightOffset + sin * 0.5 * 12;
+
+        g.fillStyle(0x6a6a6a, 1);
+        g.fillCircle(ring1X, ring1Y, 4);
+        g.fillCircle(ring2X, ring2Y, 4);
+
+        // Central pivot
+        g.fillStyle(0x2a2a2a, 1);
+        g.fillCircle(pos.x, pos.y + heightOffset, 5);
+        g.fillStyle(0x4a4a4a, 1);
+        g.fillCircle(pos.x, pos.y + heightOffset, 3);
     }
 
 
-    private drawIsometricCannon(g: Phaser.GameObjects.Graphics, x: number, y: number, direction: number) {
-        const baseY = y - 6;
-
-        // Cannon colors
-        const metalDark = 0x2a2a2a;
-        const metalMid = 0x3a3a3a;
-        const metalLight = 0x5a5a5a;
-        const metalHighlight = 0x7a7a7a;
-        const woodDark = 0x4a3520;
-        const woodMid = 0x5d4e37;
-        const woodLight = 0x7a6a5a;
-
-        // Direction-specific barrel rendering with proper isometric perspective
-        // Directions: 0=E, 1=NE, 2=N, 3=NW, 4=W, 5=SW, 6=S, 7=SE
-        switch (direction) {
-            case 0: // East (facing right)
-                // Thicker barrel pointing right
-                g.fillStyle(metalDark, 1);
-                g.fillRect(x + 2, baseY - 8, 22, 10);
-                g.fillStyle(metalMid, 1);
-                g.fillRect(x + 2, baseY - 8, 22, 5);
-                g.fillStyle(metalHighlight, 1);
-                g.fillRect(x + 2, baseY - 8, 22, 2);
-                // Barrel end (muzzle) - bigger
-                g.fillStyle(metalDark, 1);
-                g.fillCircle(x + 24, baseY - 3, 6);
-                g.fillStyle(0x111111, 1);
-                g.fillCircle(x + 24, baseY - 3, 3);
-                // Barrel rings - more prominent
-                g.fillStyle(metalLight, 1);
-                g.fillRect(x + 6, baseY - 10, 4, 12);
-                g.fillRect(x + 16, baseY - 10, 4, 12);
-                break;
-
-
-            case 1: // Northeast
-                g.fillStyle(metalDark, 1);
-                g.beginPath();
-                g.moveTo(x + 4, baseY - 4);
-                g.lineTo(x + 18, baseY - 12);
-                g.lineTo(x + 20, baseY - 8);
-                g.lineTo(x + 6, baseY);
-                g.closePath();
-                g.fillPath();
-                g.fillStyle(metalMid, 1);
-                g.beginPath();
-                g.moveTo(x + 4, baseY - 4);
-                g.lineTo(x + 18, baseY - 12);
-                g.lineTo(x + 19, baseY - 10);
-                g.lineTo(x + 5, baseY - 2);
-                g.closePath();
-                g.fillPath();
-                g.fillStyle(metalDark, 1);
-                g.fillCircle(x + 19, baseY - 10, 3);
-                break;
-
-            case 2: // North (facing up-right in iso)
-                g.fillStyle(metalDark, 1);
-                g.beginPath();
-                g.moveTo(x - 2, baseY - 4);
-                g.lineTo(x + 8, baseY - 16);
-                g.lineTo(x + 12, baseY - 14);
-                g.lineTo(x + 2, baseY - 2);
-                g.closePath();
-                g.fillPath();
-                g.fillStyle(metalMid, 1);
-                g.beginPath();
-                g.moveTo(x - 2, baseY - 4);
-                g.lineTo(x + 8, baseY - 16);
-                g.lineTo(x + 10, baseY - 15);
-                g.lineTo(x, baseY - 3);
-                g.closePath();
-                g.fillPath();
-                g.fillStyle(metalDark, 1);
-                g.fillCircle(x + 10, baseY - 15, 3);
-                break;
-
-            case 3: // Northwest
-                g.fillStyle(metalDark, 1);
-                g.beginPath();
-                g.moveTo(x - 4, baseY - 4);
-                g.lineTo(x - 18, baseY - 12);
-                g.lineTo(x - 16, baseY - 8);
-                g.lineTo(x - 2, baseY);
-                g.closePath();
-                g.fillPath();
-                g.fillStyle(metalMid, 1);
-                g.beginPath();
-                g.moveTo(x - 4, baseY - 4);
-                g.lineTo(x - 18, baseY - 12);
-                g.lineTo(x - 17, baseY - 10);
-                g.lineTo(x - 3, baseY - 2);
-                g.closePath();
-                g.fillPath();
-                g.fillStyle(metalDark, 1);
-                g.fillCircle(x - 17, baseY - 10, 3);
-                break;
-
-            case 4: // West (facing left)
-                g.fillStyle(metalDark, 1);
-                g.fillRect(x - 20, baseY - 6, 18, 6);
-                g.fillStyle(metalMid, 1);
-                g.fillRect(x - 20, baseY - 6, 18, 3);
-                g.fillStyle(metalHighlight, 1);
-                g.fillRect(x - 20, baseY - 6, 18, 1);
-                g.fillStyle(metalDark, 1);
-                g.fillCircle(x - 20, baseY - 3, 4);
-                g.fillStyle(0x111111, 1);
-                g.fillCircle(x - 20, baseY - 3, 2);
-                g.fillStyle(metalLight, 1);
-                g.fillRect(x - 11, baseY - 7, 3, 8);
-                g.fillRect(x - 19, baseY - 7, 3, 8);
-                break;
-
-            case 5: // Southwest
-                g.fillStyle(metalDark, 1);
-                g.beginPath();
-                g.moveTo(x - 4, baseY);
-                g.lineTo(x - 18, baseY + 8);
-                g.lineTo(x - 16, baseY + 12);
-                g.lineTo(x - 2, baseY + 4);
-                g.closePath();
-                g.fillPath();
-                g.fillStyle(metalMid, 1);
-                g.beginPath();
-                g.moveTo(x - 4, baseY);
-                g.lineTo(x - 18, baseY + 8);
-                g.lineTo(x - 17, baseY + 10);
-                g.lineTo(x - 3, baseY + 2);
-                g.closePath();
-                g.fillPath();
-                g.fillStyle(metalDark, 1);
-                g.fillCircle(x - 17, baseY + 10, 3);
-                break;
-
-            case 6: // South (facing down-left in iso)
-                g.fillStyle(metalDark, 1);
-                g.beginPath();
-                g.moveTo(x - 2, baseY + 2);
-                g.lineTo(x - 8, baseY + 14);
-                g.lineTo(x - 4, baseY + 16);
-                g.lineTo(x + 2, baseY + 4);
-                g.closePath();
-                g.fillPath();
-                g.fillStyle(metalMid, 1);
-                g.beginPath();
-                g.moveTo(x - 2, baseY + 2);
-                g.lineTo(x - 8, baseY + 14);
-                g.lineTo(x - 6, baseY + 15);
-                g.lineTo(x, baseY + 3);
-                g.closePath();
-                g.fillPath();
-                g.fillStyle(metalDark, 1);
-                g.fillCircle(x - 6, baseY + 15, 3);
-                break;
-
-            case 7: // Southeast
-                g.fillStyle(metalDark, 1);
-                g.beginPath();
-                g.moveTo(x + 4, baseY);
-                g.lineTo(x + 18, baseY + 8);
-                g.lineTo(x + 16, baseY + 12);
-                g.lineTo(x + 2, baseY + 4);
-                g.closePath();
-                g.fillPath();
-                g.fillStyle(metalMid, 1);
-                g.beginPath();
-                g.moveTo(x + 4, baseY);
-                g.lineTo(x + 18, baseY + 8);
-                g.lineTo(x + 17, baseY + 10);
-                g.lineTo(x + 3, baseY + 2);
-                g.closePath();
-                g.fillPath();
-                g.fillStyle(metalDark, 1);
-                g.fillCircle(x + 17, baseY + 10, 3);
-                break;
-        }
-
-        // Cannon base/carriage (same for all directions with slight adjustments)
-        // Wooden wheel supports
-        g.fillStyle(woodDark, 1);
-        g.fillRect(x - 8, baseY - 2, 16, 6);
-        g.fillStyle(woodMid, 1);
-        g.fillRect(x - 8, baseY - 2, 16, 3);
-        g.fillStyle(woodLight, 1);
-        g.fillRect(x - 6, baseY - 1, 12, 1);
-
-        // Left wheel
-        g.fillStyle(woodDark, 1);
-        g.fillCircle(x - 10, baseY + 4, 6);
-        g.fillStyle(woodMid, 1);
-        g.fillCircle(x - 10, baseY + 4, 5);
-        g.fillStyle(woodLight, 1);
-        g.fillCircle(x - 10, baseY + 3, 2);
-        g.lineStyle(1, woodDark, 1);
-        g.strokeCircle(x - 10, baseY + 4, 6);
-        // Wheel spokes
-        g.lineStyle(1, woodDark, 0.8);
-        for (let i = 0; i < 4; i++) {
-            const angle = (i / 4) * Math.PI;
-            g.lineBetween(
-                x - 10 + Math.cos(angle) * 5,
-                baseY + 4 + Math.sin(angle) * 5,
-                x - 10 - Math.cos(angle) * 5,
-                baseY + 4 - Math.sin(angle) * 5
-            );
-        }
-
-        // Right wheel
-        g.fillStyle(woodDark, 1);
-        g.fillCircle(x + 10, baseY + 4, 6);
-        g.fillStyle(woodMid, 1);
-        g.fillCircle(x + 10, baseY + 4, 5);
-        g.fillStyle(woodLight, 1);
-        g.fillCircle(x + 10, baseY + 3, 2);
-        g.lineStyle(1, woodDark, 1);
-        g.strokeCircle(x + 10, baseY + 4, 6);
-        for (let i = 0; i < 4; i++) {
-            const angle = (i / 4) * Math.PI;
-            g.lineBetween(
-                x + 10 + Math.cos(angle) * 5,
-                baseY + 4 + Math.sin(angle) * 5,
-                x + 10 - Math.cos(angle) * 5,
-                baseY + 4 - Math.sin(angle) * 5
-            );
-        }
-
-        // Cannon pivot mount
-        g.fillStyle(metalDark, 1);
-        g.fillCircle(x, baseY - 3, 6);
-        g.fillStyle(metalMid, 1);
-        g.fillCircle(x, baseY - 4, 5);
-        g.fillStyle(metalHighlight, 0.5);
-        g.fillCircle(x - 1, baseY - 5, 2);
-    }
 
 
 
@@ -958,91 +752,147 @@ export class MainScene extends Phaser.Scene {
 
 
     private drawBarracks(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null) {
-        const height = 30;
-        const t1 = new Phaser.Math.Vector2(c1.x, c1.y - height);
-        const t2 = new Phaser.Math.Vector2(c2.x, c2.y - height);
-        const t3 = new Phaser.Math.Vector2(c3.x, c3.y - height);
-        const t4 = new Phaser.Math.Vector2(c4.x, c4.y - height);
+        const wallHeight = 28;
 
-        // Dark red/maroon base
-        graphics.fillStyle(tint ?? 0x8b2222, alpha);
+        // Wall top corners
+        const t1 = new Phaser.Math.Vector2(c1.x, c1.y - wallHeight);
+        const t2 = new Phaser.Math.Vector2(c2.x, c2.y - wallHeight);
+        const t3 = new Phaser.Math.Vector2(c3.x, c3.y - wallHeight);
+        const t4 = new Phaser.Math.Vector2(c4.x, c4.y - wallHeight);
+
+        // === STONE FOUNDATION ===
+        graphics.fillStyle(tint ?? 0x7a6a5a, alpha);
         graphics.fillPoints([c1, c2, c3, c4], true);
 
-        // Walls with war-like aesthetic
-        graphics.fillStyle(tint ?? 0x6a1a1a, alpha);
+        // Foundation texture
+        graphics.fillStyle(0x6a5a4a, alpha * 0.4);
+        graphics.fillCircle(center.x - 8, center.y + 3, 3);
+        graphics.fillCircle(center.x + 6, center.y + 5, 2);
+
+        // === WALLS (proper isometric 3D) ===
+        // Right wall (shadow side - SE facing)
+        graphics.fillStyle(tint ?? 0x8b3030, alpha);
         graphics.fillPoints([c2, c3, t3, t2], true);
-        graphics.fillStyle(tint ?? 0x7a2020, alpha);
+
+        // Left wall (lit side - SW facing)
+        graphics.fillStyle(tint ?? 0xa04040, alpha);
         graphics.fillPoints([c3, c4, t4, t3], true);
 
-        graphics.lineStyle(1, 0x000000, 0.4 * alpha);
-        graphics.strokePoints([c2, c3, t3, t2], true, true);
-        graphics.strokePoints([c3, c4, t4, t3], true, true);
+        // Wall edge outlines
+        graphics.lineStyle(1, 0x4a1a1a, 0.6 * alpha);
+        graphics.lineBetween(c2.x, c2.y, t2.x, t2.y);
+        graphics.lineBetween(c3.x, c3.y, t3.x, t3.y);
+        graphics.lineBetween(c4.x, c4.y, t4.x, t4.y);
 
-        // Peaked roof
-        const roofPeak = new Phaser.Math.Vector2(center.x, center.y - height - 15);
-        graphics.fillStyle(0x3a2a1a, alpha);
-        graphics.fillTriangle(t1.x, t1.y, t2.x, t2.y, roofPeak.x, roofPeak.y);
-        graphics.fillStyle(0x2a1a0a, alpha);
-        graphics.fillTriangle(t2.x, t2.y, t3.x, t3.y, roofPeak.x, roofPeak.y);
-        graphics.fillTriangle(t3.x, t3.y, t4.x, t4.y, roofPeak.x, roofPeak.y);
-        graphics.fillStyle(0x4a3a2a, alpha);
-        graphics.fillTriangle(t4.x, t4.y, t1.x, t1.y, roofPeak.x, roofPeak.y);
+        // === DOORWAY (on front-facing wall) ===
+        const doorWidth = 8;
+        const doorHeight = 16;
+        const doorX = (c3.x + c4.x) / 2;
+        const doorY = (c3.y + c4.y) / 2;
 
-        // Sword emblem
-        graphics.fillStyle(0xcccccc, alpha);
-        graphics.fillRect(center.x - 1, center.y - 12, 2, 14);
-        graphics.fillRect(center.x - 4, center.y - 8, 8, 2);
+        // Door opening (dark interior)
+        graphics.fillStyle(0x1a0a0a, alpha);
+        graphics.beginPath();
+        graphics.moveTo(doorX - doorWidth, doorY);
+        graphics.lineTo(doorX + doorWidth, doorY);
+        graphics.lineTo(doorX + doorWidth, doorY - doorHeight);
+        graphics.lineTo(doorX - doorWidth, doorY - doorHeight);
+        graphics.closePath();
+        graphics.fillPath();
 
-        // Animated torches on sides
-        const flicker1 = 0.7 + Math.sin(Date.now() / 80) * 0.3;
-        const flicker2 = 0.7 + Math.sin(Date.now() / 90 + 1) * 0.3;
+        // Door frame
+        graphics.lineStyle(2, 0x5d4e37, alpha);
+        graphics.lineBetween(doorX - doorWidth, doorY, doorX - doorWidth, doorY - doorHeight);
+        graphics.lineBetween(doorX + doorWidth, doorY, doorX + doorWidth, doorY - doorHeight);
+        graphics.lineBetween(doorX - doorWidth, doorY - doorHeight, doorX + doorWidth, doorY - doorHeight);
 
-        // Left torch
-        graphics.fillStyle(0x5d4e37, alpha);
-        graphics.fillRect(c1.x + 5, c1.y - 20, 2, 12);
-        graphics.fillStyle(0xff6600, alpha * flicker1);
-        graphics.fillCircle(c1.x + 6, c1.y - 22, 4);
-        graphics.fillStyle(0xffaa00, alpha * flicker1 * 0.8);
-        graphics.fillCircle(c1.x + 6, c1.y - 23, 2);
+        // === ISOMETRIC ROOF ===
+        const roofHeight = 18;
+        const roofOverhang = 4;
 
-        // Right torch
-        graphics.fillStyle(0x5d4e37, alpha);
-        graphics.fillRect(c4.x - 7, c4.y - 20, 2, 12);
-        graphics.fillStyle(0xff6600, alpha * flicker2);
-        graphics.fillCircle(c4.x - 6, c4.y - 22, 4);
-        graphics.fillStyle(0xffaa00, alpha * flicker2 * 0.8);
-        graphics.fillCircle(c4.x - 6, c4.y - 23, 2);
+        // Roof base corners (with overhang)
+        const r1 = new Phaser.Math.Vector2(t1.x, t1.y - roofOverhang);
+        const r2 = new Phaser.Math.Vector2(t2.x + roofOverhang, t2.y);
+        const r3 = new Phaser.Math.Vector2(t3.x, t3.y + roofOverhang);
+        const r4 = new Phaser.Math.Vector2(t4.x - roofOverhang, t4.y);
+
+        // Roof peak (ridge line along the isometric axis)
+        const peakFront = new Phaser.Math.Vector2(center.x + 10, center.y - wallHeight - roofHeight + 5);
+        const peakBack = new Phaser.Math.Vector2(center.x - 10, center.y - wallHeight - roofHeight - 5);
+
+        // Roof panels (4 triangular sections for pitched roof)
+        // Back-left panel (darkest)
+        graphics.fillStyle(0x3a2515, alpha);
+        graphics.fillTriangle(r1.x, r1.y, r4.x, r4.y, peakBack.x, peakBack.y);
+
+        // Back-right panel
+        graphics.fillStyle(0x4a3020, alpha);
+        graphics.fillTriangle(r1.x, r1.y, r2.x, r2.y, peakBack.x, peakBack.y);
+
+        // Front-right panel (medium)
+        graphics.fillStyle(0x5a3a25, alpha);
+        graphics.fillTriangle(r2.x, r2.y, r3.x, r3.y, peakFront.x, peakFront.y);
+        graphics.fillTriangle(r2.x, r2.y, peakBack.x, peakBack.y, peakFront.x, peakFront.y);
+
+        // Front-left panel (lightest)
+        graphics.fillStyle(0x6a4a30, alpha);
+        graphics.fillTriangle(r3.x, r3.y, r4.x, r4.y, peakFront.x, peakFront.y);
+        graphics.fillTriangle(r4.x, r4.y, peakBack.x, peakBack.y, peakFront.x, peakFront.y);
+
+        // Roof ridge line
+        graphics.lineStyle(2, 0x2a1510, alpha);
+        graphics.lineBetween(peakBack.x, peakBack.y, peakFront.x, peakFront.y);
+
+        // Roof edge highlights
+        graphics.lineStyle(1, 0x7a5a40, alpha * 0.6);
+        graphics.lineBetween(r3.x, r3.y, peakFront.x, peakFront.y);
+        graphics.lineBetween(r4.x, r4.y, peakFront.x, peakFront.y);
+
+        // === SHIELD EMBLEM (on right wall) ===
+        const shieldX = (c2.x + c3.x) / 2;
+        const shieldY = (c2.y + c3.y) / 2 - wallHeight / 2;
+
+        // Shield shape
+        graphics.fillStyle(0xcc9900, alpha);
+        graphics.beginPath();
+        graphics.moveTo(shieldX, shieldY - 8);
+        graphics.lineTo(shieldX + 6, shieldY - 5);
+        graphics.lineTo(shieldX + 6, shieldY + 3);
+        graphics.lineTo(shieldX, shieldY + 8);
+        graphics.lineTo(shieldX - 6, shieldY + 3);
+        graphics.lineTo(shieldX - 6, shieldY - 5);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Shield border
+        graphics.lineStyle(1, 0x886600, alpha);
+        graphics.strokePath();
+
+        // Sword on shield
+        graphics.fillStyle(0xdddddd, alpha);
+        graphics.fillRect(shieldX - 1, shieldY - 5, 2, 10);
+        graphics.fillRect(shieldX - 3, shieldY - 2, 6, 2);
     }
 
 
     private drawCannonBase(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null) {
-        // Stone platform with beveled edges
-        graphics.fillStyle(tint ?? 0x6b6b6b, alpha);
+        // Stone platform
+        graphics.fillStyle(tint ?? 0x6a6a6a, alpha);
         graphics.fillPoints([c1, c2, c3, c4], true);
 
-        // Platform highlight
-        graphics.lineStyle(2, 0x888888, 0.5 * alpha);
+        // Platform edges
+        graphics.lineStyle(1, 0x888888, 0.6 * alpha);
         graphics.lineBetween(c1.x, c1.y, c2.x, c2.y);
         graphics.lineBetween(c1.x, c1.y, c4.x, c4.y);
-
-        // Platform shadow
-        graphics.lineStyle(2, 0x333333, 0.5 * alpha);
+        graphics.lineStyle(1, 0x3a3a3a, 0.6 * alpha);
         graphics.lineBetween(c2.x, c2.y, c3.x, c3.y);
         graphics.lineBetween(c3.x, c3.y, c4.x, c4.y);
 
-        // Wooden base for cannon
-        graphics.fillStyle(0x5d4e37, alpha);
-        graphics.fillCircle(center.x, center.y - 4, 12);
-        graphics.lineStyle(1, 0x3d2e17, alpha);
-        graphics.strokeCircle(center.x, center.y - 4, 12);
-
-        // Wood grain lines
-        graphics.lineStyle(1, 0x4d3e27, 0.5 * alpha);
-        graphics.lineBetween(center.x - 8, center.y - 4, center.x + 8, center.y - 4);
-
-        // Cannon pivot (dark metal)
-        graphics.fillStyle(0x2a2a2a, alpha);
-        graphics.fillCircle(center.x, center.y - 8, 5);
+        // Circular turret base (isometric ellipse)
+        graphics.fillStyle(0x5a5a5a, alpha);
+        graphics.fillEllipse(center.x, center.y - 2, 18, 10);
+        graphics.lineStyle(1, 0x3a3a3a, alpha);
+        graphics.strokeEllipse(center.x, center.y - 2, 18, 10);
     }
 
     private drawBallista(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
@@ -1983,82 +1833,9 @@ export class MainScene extends Phaser.Scene {
             graphics.fillCircle(center.x + ox, center.y + 5 + oy, 2 + (i % 2));
         }
 
-        // Decorative border - rope boundary
+        // Simple border
         graphics.lineStyle(2, 0x8b7355, alpha * 0.7);
         graphics.strokePoints([c1, c2, c3, c4], true, true);
-        graphics.lineStyle(1, 0x6b5335, alpha * 0.5);
-        const inset = 4;
-        const ic1 = new Phaser.Math.Vector2(c1.x, c1.y + inset);
-        const ic2 = new Phaser.Math.Vector2(c2.x, c2.y + inset);
-        const ic3 = new Phaser.Math.Vector2(c3.x, c3.y + inset);
-        const ic4 = new Phaser.Math.Vector2(c4.x, c4.y + inset);
-        graphics.strokePoints([ic1, ic2, ic3, ic4], true, true);
-
-        // === CORNER POSTS WITH TORCHES ===
-        const posts = [
-            { pos: c1, torch: true },
-            { pos: c2, torch: false },
-            { pos: c3, torch: true },
-            { pos: c4, torch: false }
-        ];
-
-        posts.forEach((post, idx) => {
-            const p = post.pos;
-            const poleHeight = 28;
-
-            // Wooden post base
-            graphics.fillStyle(0x5d4e37, alpha);
-            graphics.fillRect(p.x - 3, p.y - poleHeight, 6, poleHeight);
-
-            // Post shadow side
-            graphics.fillStyle(0x3d2e17, alpha);
-            graphics.fillRect(p.x + 1, p.y - poleHeight, 2, poleHeight);
-
-            // Post highlight
-            graphics.fillStyle(0x7d6e57, alpha * 0.6);
-            graphics.fillRect(p.x - 3, p.y - poleHeight, 1, poleHeight);
-
-            // Post cap
-            graphics.fillStyle(0x4d3e27, alpha);
-            graphics.fillRect(p.x - 4, p.y - poleHeight - 2, 8, 3);
-
-            if (post.torch) {
-                // Torch holder
-                graphics.fillStyle(0x3d2e17, alpha);
-                graphics.fillRect(p.x - 1, p.y - poleHeight + 4, 2, 6);
-
-                // Animated torch flame
-                const flicker = 0.7 + Math.sin(time / 70 + idx * 1.5) * 0.3;
-                const flicker2 = 0.6 + Math.sin(time / 50 + idx * 2.3) * 0.4;
-
-                // Flame glow (outer)
-                graphics.fillStyle(0xff4400, alpha * flicker * 0.4);
-                graphics.fillCircle(p.x, p.y - poleHeight + 2, 8);
-
-                // Flame core (orange)
-                graphics.fillStyle(0xff6600, alpha * flicker);
-                graphics.fillCircle(p.x, p.y - poleHeight + 1, 5);
-
-                // Flame inner (yellow)
-                graphics.fillStyle(0xffaa00, alpha * flicker2);
-                graphics.fillCircle(p.x, p.y - poleHeight, 3);
-
-                // Flame tip (white-yellow)
-                graphics.fillStyle(0xffdd66, alpha * flicker);
-                graphics.fillCircle(p.x, p.y - poleHeight - 2, 1.5);
-
-                // Sparks
-                for (let s = 0; s < 2; s++) {
-                    const sparkTime = (time / 100 + idx * 50 + s * 30) % 20;
-                    if (sparkTime < 15) {
-                        const sparkY = p.y - poleHeight - 3 - sparkTime * 0.8;
-                        const sparkX = p.x + Math.sin(sparkTime + s) * 3;
-                        graphics.fillStyle(0xffaa44, alpha * (1 - sparkTime / 15));
-                        graphics.fillCircle(sparkX, sparkY, 1);
-                    }
-                }
-            }
-        });
 
         // === CENTRAL CAMPFIRE ===
         const fireX = center.x;
@@ -2248,83 +2025,6 @@ export class MainScene extends Phaser.Scene {
         graphics.lineTo(rackX + 5, rackY - 24);
         graphics.closePath();
         graphics.fillPath();
-
-        // === TENT/CANOPY (back area) ===
-        const tentX = center.x;
-        const tentY = center.y - 25;
-
-        // Tent back panel (darker)
-        graphics.fillStyle(0x8b6b4b, alpha);
-        graphics.beginPath();
-        graphics.moveTo(tentX - 30, tentY + 15);
-        graphics.lineTo(tentX - 25, tentY - 10);
-        graphics.lineTo(tentX, tentY - 20);
-        graphics.lineTo(tentX + 25, tentY - 10);
-        graphics.lineTo(tentX + 30, tentY + 15);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Tent front panel (lighter - canvas color)
-        graphics.fillStyle(0xc4a484, alpha);
-        graphics.beginPath();
-        graphics.moveTo(tentX - 25, tentY - 10);
-        graphics.lineTo(tentX, tentY - 20);
-        graphics.lineTo(tentX + 25, tentY - 10);
-        graphics.lineTo(tentX + 20, tentY + 5);
-        graphics.lineTo(tentX, tentY);
-        graphics.lineTo(tentX - 20, tentY + 5);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Tent fabric folds
-        graphics.lineStyle(1, 0xa48464, alpha * 0.6);
-        graphics.lineBetween(tentX - 12, tentY - 8, tentX - 10, tentY + 3);
-        graphics.lineBetween(tentX + 12, tentY - 8, tentX + 10, tentY + 3);
-        graphics.lineBetween(tentX, tentY - 18, tentX, tentY - 2);
-
-        // Tent outline
-        graphics.lineStyle(1, 0x6b4b2b, alpha * 0.8);
-        graphics.lineBetween(tentX - 25, tentY - 10, tentX, tentY - 20);
-        graphics.lineBetween(tentX, tentY - 20, tentX + 25, tentY - 10);
-
-        // Tent pole peak detail
-        graphics.fillStyle(0x5d4e37, alpha);
-        graphics.fillCircle(tentX, tentY - 20, 3);
-        graphics.fillStyle(0xccaa00, alpha);
-        graphics.fillCircle(tentX, tentY - 21, 2);
-
-        // === BANNER/FLAG ===
-        const bannerX = center.x + 20;
-        const bannerY = center.y - 40;
-
-        // Banner pole
-        graphics.fillStyle(0x5d4e37, alpha);
-        graphics.fillRect(bannerX - 1, bannerY, 2, 35);
-        graphics.fillStyle(0x7d6e57, alpha * 0.5);
-        graphics.fillRect(bannerX - 1, bannerY, 1, 35);
-
-        // Banner fabric (animated wave)
-        const wave = Math.sin(time / 150) * 2;
-        const wave2 = Math.sin(time / 120 + 1) * 1.5;
-
-        graphics.fillStyle(0xcc2222, alpha);
-        graphics.beginPath();
-        graphics.moveTo(bannerX + 1, bannerY + 2);
-        graphics.lineTo(bannerX + 15 + wave, bannerY + 5 + wave2);
-        graphics.lineTo(bannerX + 14 + wave2, bannerY + 15 + wave);
-        graphics.lineTo(bannerX + 1, bannerY + 12);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Banner emblem (sword icon)
-        graphics.fillStyle(0xffdd88, alpha * 0.8);
-        graphics.fillRect(bannerX + 6 + wave * 0.3, bannerY + 6 + wave2 * 0.3, 1, 6);
-        graphics.fillRect(bannerX + 4 + wave * 0.3, bannerY + 7 + wave2 * 0.3, 5, 1);
-
-        // Banner edge detail
-        graphics.lineStyle(1, 0x881111, alpha * 0.8);
-        graphics.lineBetween(bannerX + 1, bannerY + 2, bannerX + 15 + wave, bannerY + 5 + wave2);
-        graphics.lineBetween(bannerX + 15 + wave, bannerY + 5 + wave2, bannerX + 14 + wave2, bannerY + 15 + wave);
     }
 
     private drawGenericBuilding(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, _center: Phaser.Math.Vector2, info: BuildingInfo, alpha: number, tint: number | null) {
