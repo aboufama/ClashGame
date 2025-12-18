@@ -9,7 +9,7 @@ import './App.css';
 function App() {
   const gameRef = useRef<Phaser.Game | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const [resources, setResources] = useState({ gold: 1000, elixir: 1000 });
+  const [resources, setResources] = useState({ gold: 1000, elixir: 5000 });
   const [army, setArmy] = useState({ warrior: 0, archer: 0, giant: 0, ward: 0 });
   const [capacity, setCapacity] = useState({ current: 0, max: 20 });
   const [selectedTroopType, setSelectedTroopType] = useState<'warrior' | 'archer' | 'giant' | 'ward'>('warrior');
