@@ -1635,19 +1635,19 @@ export class MainScene extends Phaser.Scene {
     }
 
     private drawWall(graphics: Phaser.GameObjects.Graphics, _center: Phaser.Math.Vector2, gridX: number, gridY: number, alpha: number, tint: number | null, building?: PlacedBuilding) {
-        // Wall dimensions - isometric stone wall style
-        const wallHeight = 22;
-        const wallThickness = 0.35; // As fraction of tile
+        // Isometric wall with proper connected segments
+        // Key: Only draw segments toward neighbors with LOWER depth (behind us in iso view)
+        // This ensures segment tops are drawn by the "front" wall, preventing overlap issues
+        const wallHeight = 20;
+        const wallThickness = 0.3;
         const owner = building?.owner ?? 'PLAYER';
 
-        // Stone colors
-        const stoneTop = tint ?? 0xc9b896;    // Light tan stone top
-        const stoneFront = tint ?? 0xa89070;  // Medium brown stone front
-        const stoneSide = tint ?? 0x8a7560;   // Darker brown stone side
-        const stoneEdge = 0x6b5a4a;           // Dark edge outline
-        const mortarColor = 0x7a6a5a;         // Mortar between stones
+        // Stone colors - consistent isometric shading
+        const stoneTop = tint ?? 0xd4c4a8;
+        const stoneFront = tint ?? 0xa89878;
+        const stoneSide = tint ?? 0x8a7a68;
 
-        // Check neighbors for connections (same owner only)
+        // Check which neighbors exist
         const hasNeighbor = (dx: number, dy: number) => {
             return this.buildings.some(b =>
                 b.type === 'wall' &&
@@ -1657,157 +1657,115 @@ export class MainScene extends Phaser.Scene {
             );
         };
 
-        const nN = hasNeighbor(0, -1); // North (Y-1) - appears up-right
-        const nS = hasNeighbor(0, 1);  // South (Y+1) - appears down-left
-        const nW = hasNeighbor(-1, 0); // West (X-1) - appears up-left
-        const nE = hasNeighbor(1, 0);  // East (X+1) - appears down-right
+        const nN = hasNeighbor(0, -1); // North (Y-1) - LOWER depth, draw TO it
+        const nS = hasNeighbor(0, 1);  // South (Y+1) - HIGHER depth, don't draw
+        const nW = hasNeighbor(-1, 0); // West (X-1) - LOWER depth, draw TO it
+        const nE = hasNeighbor(1, 0);  // East (X+1) - HIGHER depth, don't draw
 
-        // Calculate wall segment bounds in grid coords, then convert to iso
-        // Wall occupies center strip of the tile
-        const hw = wallThickness / 2; // half width in grid units
-
-        // Helper to draw a 3D isometric wall segment
-        const drawWallSegment = (
-            x1: number, y1: number, // Start grid coords
-            x2: number, y2: number  // End grid coords
-        ) => {
-            // Determine wall direction (N-S or E-W in grid space)
-            const isNS = Math.abs(y2 - y1) > Math.abs(x2 - x1);
-
-            let corners: Phaser.Math.Vector2[];
-            let topCorners: Phaser.Math.Vector2[];
-
-            if (isNS) {
-                // Wall runs North-South (Y direction) - perpendicular offset in X
-                const left1 = this.cartToIso(x1 - hw, y1);
-                const right1 = this.cartToIso(x1 + hw, y1);
-                const left2 = this.cartToIso(x2 - hw, y2);
-                const right2 = this.cartToIso(x2 + hw, y2);
-
-                // Base corners (clockwise from top-left in iso view)
-                corners = [left1, right1, right2, left2];
-                topCorners = [
-                    new Phaser.Math.Vector2(left1.x, left1.y - wallHeight),
-                    new Phaser.Math.Vector2(right1.x, right1.y - wallHeight),
-                    new Phaser.Math.Vector2(right2.x, right2.y - wallHeight),
-                    new Phaser.Math.Vector2(left2.x, left2.y - wallHeight)
-                ];
-
-                // Draw front face (right side visible for NS walls going down-left)
-                graphics.fillStyle(stoneFront, alpha);
-                graphics.fillPoints([corners[1], corners[2], topCorners[2], topCorners[1]], true);
-
-                // Draw left face (visible for NS walls)
-                graphics.fillStyle(stoneSide, alpha);
-                graphics.fillPoints([corners[2], corners[3], topCorners[3], topCorners[2]], true);
-            } else {
-                // Wall runs East-West (X direction) - perpendicular offset in Y
-                const top1 = this.cartToIso(x1, y1 - hw);
-                const bot1 = this.cartToIso(x1, y1 + hw);
-                const top2 = this.cartToIso(x2, y2 - hw);
-                const bot2 = this.cartToIso(x2, y2 + hw);
-
-                corners = [top1, top2, bot2, bot1];
-                topCorners = [
-                    new Phaser.Math.Vector2(top1.x, top1.y - wallHeight),
-                    new Phaser.Math.Vector2(top2.x, top2.y - wallHeight),
-                    new Phaser.Math.Vector2(bot2.x, bot2.y - wallHeight),
-                    new Phaser.Math.Vector2(bot1.x, bot1.y - wallHeight)
-                ];
-
-                // Draw front face (bottom side visible for EW walls going down-right)
-                graphics.fillStyle(stoneFront, alpha);
-                graphics.fillPoints([corners[2], corners[3], topCorners[3], topCorners[2]], true);
-
-                // Draw right face (visible for EW walls)
-                graphics.fillStyle(stoneSide, alpha);
-                graphics.fillPoints([corners[1], corners[2], topCorners[2], topCorners[1]], true);
-            }
-
-            // Draw top face
-            graphics.fillStyle(stoneTop, alpha);
-            graphics.fillPoints(topCorners, true);
-
-            // Stone block texture on top
-            graphics.fillStyle(mortarColor, alpha * 0.3);
-            const midX = (topCorners[0].x + topCorners[2].x) / 2;
-            const midY = (topCorners[0].y + topCorners[2].y) / 2;
-            graphics.fillCircle(midX, midY, 2);
-
-            // Edge highlights
-            graphics.lineStyle(1, 0xddd0c0, alpha * 0.6);
-            graphics.lineBetween(topCorners[0].x, topCorners[0].y, topCorners[1].x, topCorners[1].y);
-
-            // Edge shadows
-            graphics.lineStyle(1, stoneEdge, alpha * 0.5);
-            graphics.lineBetween(topCorners[2].x, topCorners[2].y, topCorners[3].x, topCorners[3].y);
-        };
-
-        // Calculate segment positions
+        const hw = wallThickness / 2;
         const cx = gridX + 0.5;
         const cy = gridY + 0.5;
 
-        // Draw wall segments to neighbors (from center to edge)
-        if (nN) drawWallSegment(cx, cy, cx, gridY);           // To north edge
-        if (nS) drawWallSegment(cx, cy, cx, gridY + 1);       // To south edge
-        if (nW) drawWallSegment(cx, cy, gridX, cy);           // To west edge
-        if (nE) drawWallSegment(cx, cy, gridX + 1, cy);       // To east edge
+        // Collect geometry: sides first, then tops
+        const sideFaces: { points: Phaser.Math.Vector2[], color: number }[] = [];
+        const topFaces: Phaser.Math.Vector2[][] = [];
 
-        // === CENTRAL PILLAR (always drawn) ===
-        // Creates the junction/corner piece
-        const pillarSize = wallThickness * 1.1;
-        const hps = pillarSize / 2;
+        // Helper to add a segment's geometry
+        const addSegment = (x1: number, y1: number, x2: number, y2: number) => {
+            const isVertical = Math.abs(y2 - y1) > Math.abs(x2 - x1);
 
-        // Pillar corners in grid space
+            if (isVertical) {
+                // Segment runs in Y direction (N-S in grid)
+                const minY = Math.min(y1, y2);
+                const maxY = Math.max(y1, y2);
+
+                const bl = this.cartToIso(x1 - hw, minY);
+                const br = this.cartToIso(x1 + hw, minY);
+                const fl = this.cartToIso(x1 - hw, maxY);
+                const fr = this.cartToIso(x1 + hw, maxY);
+
+                const tbl = new Phaser.Math.Vector2(bl.x, bl.y - wallHeight);
+                const tbr = new Phaser.Math.Vector2(br.x, br.y - wallHeight);
+                const tfl = new Phaser.Math.Vector2(fl.x, fl.y - wallHeight);
+                const tfr = new Phaser.Math.Vector2(fr.x, fr.y - wallHeight);
+
+                // Right face (SE)
+                sideFaces.push({ points: [br, fr, tfr, tbr], color: stoneSide });
+                // Front face (SW)
+                sideFaces.push({ points: [fr, fl, tfl, tfr], color: stoneFront });
+                // Top
+                topFaces.push([tbl, tbr, tfr, tfl]);
+            } else {
+                // Segment runs in X direction (E-W in grid)
+                const minX = Math.min(x1, x2);
+                const maxX = Math.max(x1, x2);
+
+                const lt = this.cartToIso(minX, y1 - hw);
+                const lb = this.cartToIso(minX, y1 + hw);
+                const rt = this.cartToIso(maxX, y1 - hw);
+                const rb = this.cartToIso(maxX, y1 + hw);
+
+                const tlt = new Phaser.Math.Vector2(lt.x, lt.y - wallHeight);
+                const tlb = new Phaser.Math.Vector2(lb.x, lb.y - wallHeight);
+                const trt = new Phaser.Math.Vector2(rt.x, rt.y - wallHeight);
+                const trb = new Phaser.Math.Vector2(rb.x, rb.y - wallHeight);
+
+                // Right face (SE)
+                sideFaces.push({ points: [rt, rb, trb, trt], color: stoneSide });
+                // Front face (SW)
+                sideFaces.push({ points: [rb, lb, tlb, trb], color: stoneFront });
+                // Top
+                topFaces.push([tlt, trt, trb, tlb]);
+            }
+        };
+
+        // Only draw segments toward neighbors with LOWER depth (North and West)
+        // This wall is "in front" so it owns these segments and their tops render last
+        if (nN) addSegment(cx, cy, cx, gridY);       // To North neighbor
+        if (nW) addSegment(cx, cy, gridX, cy);       // To West neighbor
+
+        // Central pillar
+        const ps = wallThickness * 0.6;
+        const hps = ps / 2;
+
         const pTL = this.cartToIso(cx - hps, cy - hps);
         const pTR = this.cartToIso(cx + hps, cy - hps);
         const pBR = this.cartToIso(cx + hps, cy + hps);
         const pBL = this.cartToIso(cx - hps, cy + hps);
 
-        // Top corners
-        const pTLt = new Phaser.Math.Vector2(pTL.x, pTL.y - wallHeight);
-        const pTRt = new Phaser.Math.Vector2(pTR.x, pTR.y - wallHeight);
-        const pBRt = new Phaser.Math.Vector2(pBR.x, pBR.y - wallHeight);
-        const pBLt = new Phaser.Math.Vector2(pBL.x, pBL.y - wallHeight);
+        const ptTL = new Phaser.Math.Vector2(pTL.x, pTL.y - wallHeight);
+        const ptTR = new Phaser.Math.Vector2(pTR.x, pTR.y - wallHeight);
+        const ptBR = new Phaser.Math.Vector2(pBR.x, pBR.y - wallHeight);
+        const ptBL = new Phaser.Math.Vector2(pBL.x, pBL.y - wallHeight);
 
-        // Draw pillar faces (back to front for proper occlusion)
-        // Right face (SE side)
-        graphics.fillStyle(stoneSide, alpha);
-        graphics.fillPoints([pTR, pBR, pBRt, pTRt], true);
+        sideFaces.push({ points: [pTR, pBR, ptBR, ptTR], color: stoneSide });
+        sideFaces.push({ points: [pBR, pBL, ptBL, ptBR], color: stoneFront });
+        topFaces.push([ptTL, ptTR, ptBR, ptBL]);
 
-        // Front face (SW side)
-        graphics.fillStyle(stoneFront, alpha);
-        graphics.fillPoints([pBR, pBL, pBLt, pBRt], true);
+        // === RENDER PASS 1: All side faces ===
+        for (const face of sideFaces) {
+            graphics.fillStyle(face.color, alpha);
+            graphics.fillPoints(face.points, true);
+        }
 
-        // Top face
+        // === RENDER PASS 2: All top faces ===
         graphics.fillStyle(stoneTop, alpha);
-        graphics.fillPoints([pTLt, pTRt, pBRt, pBLt], true);
+        for (const top of topFaces) {
+            graphics.fillPoints(top, true);
+        }
 
-        // Stone texture details on pillar top
-        const pillarCenterX = (pTLt.x + pBRt.x) / 2;
-        const pillarCenterY = (pTLt.y + pBRt.y) / 2;
+        // === RENDER PASS 3: Top highlights ===
+        graphics.lineStyle(1, 0xe8dcc8, alpha * 0.6);
+        graphics.lineBetween(ptTL.x, ptTL.y, ptTR.x, ptTR.y);
+        graphics.lineBetween(ptTL.x, ptTL.y, ptBL.x, ptBL.y);
 
-        // Carved stone pattern
-        graphics.fillStyle(mortarColor, alpha * 0.4);
-        graphics.fillCircle(pillarCenterX, pillarCenterY, 3);
-
-        // Highlight on top edge
-        graphics.lineStyle(1, 0xefe0d0, alpha * 0.7);
-        graphics.lineBetween(pTLt.x, pTLt.y, pTRt.x, pTRt.y);
-        graphics.lineBetween(pTLt.x, pTLt.y, pBLt.x, pBLt.y);
-
-        // Shadow on bottom edges
-        graphics.lineStyle(1, stoneEdge, alpha * 0.6);
-        graphics.lineBetween(pBRt.x, pBRt.y, pTRt.x, pTRt.y);
-        graphics.lineBetween(pBRt.x, pBRt.y, pBLt.x, pBLt.y);
-
-        // Add decorative cap detail for corner pieces (4 neighbors)
-        if (nN && nS && nE && nW) {
-            // Full intersection - add decorative top
-            graphics.fillStyle(0xddd0c0, alpha);
-            graphics.fillCircle(pillarCenterX, pillarCenterY - 2, 4);
-            graphics.fillStyle(stoneTop, alpha);
-            graphics.fillCircle(pillarCenterX, pillarCenterY - 2, 2);
+        // Junction decoration
+        const neighborCount = (nN ? 1 : 0) + (nS ? 1 : 0) + (nE ? 1 : 0) + (nW ? 1 : 0);
+        if (neighborCount >= 3) {
+            const pcx = (ptTL.x + ptBR.x) / 2;
+            const pcy = (ptTL.y + ptBR.y) / 2;
+            graphics.fillStyle(0xe8dcc8, alpha);
+            graphics.fillCircle(pcx, pcy, 2.5);
         }
     }
 
