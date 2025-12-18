@@ -2232,6 +2232,29 @@ export class MainScene extends Phaser.Scene {
                             }
                         }
                     }
+                } else if (troop.type === 'ward' && !isEnemy && time > troop.lastAttackTime + troop.attackDelay) {
+                    // Ward Simultaneous Attack Logic:
+                    // Even if following an ally, attack any enemy in range.
+                    const stats = TROOP_STATS.ward;
+                    const enemies = this.buildings.filter(b => b.owner !== troop.owner && b.health > 0);
+                    let nearestEnemy: PlacedBuilding | null = null;
+                    let minEnemyDist = stats.range;
+
+                    enemies.forEach(b => {
+                        const info = BUILDINGS[b.type];
+                        const bdx = Math.max(b.gridX - troop.gridX, 0, troop.gridX - (b.gridX + info.width));
+                        const bdy = Math.max(b.gridY - troop.gridY, 0, troop.gridY - (b.gridY + info.height));
+                        const d = Math.sqrt(bdx * bdx + bdy * bdy);
+                        if (d <= minEnemyDist) {
+                            minEnemyDist = d;
+                            nearestEnemy = b;
+                        }
+                    });
+
+                    if (nearestEnemy) {
+                        troop.lastAttackTime = time;
+                        this.showWardLaser(troop, nearestEnemy, stats.damage);
+                    }
                 }
             }
         });
@@ -3016,9 +3039,35 @@ export class MainScene extends Phaser.Scene {
 
                     // Pathfinding - Staggered updates & Fanning
                     if (!troop.path || time >= (troop.nextPathTime || 0)) {
-                        troop.path = this.findPath(troop, troop.target) || undefined;
+                        // Ward Stay Behind Logic:
+                        // If following an ally, target a spot behind them relative to their own target.
+                        let finalTarget: any = troop.target;
+                        if (troop.type === 'ward' && !isBuilding && troop.target.target) {
+                            const ally = troop.target;
+                            const allyTarget = ally.target;
+                            const itw = ('type' in allyTarget && BUILDINGS[allyTarget.type]) ? BUILDINGS[allyTarget.type].width : 0.5;
+                            const ith = ('type' in allyTarget && BUILDINGS[allyTarget.type]) ? BUILDINGS[allyTarget.type].height : 0.5;
+                            const atx = allyTarget.gridX + itw / 2;
+                            const aty = allyTarget.gridY + ith / 2;
+
+                            const dx = ally.gridX - atx;
+                            const dy = ally.gridY - aty;
+                            const len = Math.sqrt(dx * dx + dy * dy);
+                            if (len > 0.5) {
+                                // Target 1.5 tiles behind the ally
+                                finalTarget = {
+                                    gridX: ally.gridX + (dx / len) * 1.5,
+                                    gridY: ally.gridY + (dy / len) * 1.5,
+                                    id: 'offset-' + ally.id,
+                                    health: 1 // Dummy
+                                };
+                            }
+                        }
+
+                        troop.path = this.findPath(troop, finalTarget) || undefined;
                         troop.lastPathTime = time;
-                        troop.nextPathTime = time + 500 + Math.random() * 500;
+                        const interval = troop.type === 'ward' ? 250 : 500;
+                        troop.nextPathTime = time + interval + Math.random() * interval;
                     }
 
                     let moveDir = new Phaser.Math.Vector2(0, 0);
