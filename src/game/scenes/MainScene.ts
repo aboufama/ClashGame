@@ -2211,22 +2211,52 @@ export class MainScene extends Phaser.Scene {
                     }
                 } else if (troop.type === 'ward' && !isEnemy && time > troop.lastAttackTime + troop.attackDelay) {
                     // Ward Simultaneous Attack Logic:
-                    // Even if following an ally, attack any enemy in range.
+                    // Prioritize buildings over walls, and prefer what the followed ally is targeting.
                     const stats = TROOP_STATS.ward;
                     const enemies = this.buildings.filter(b => b.owner !== troop.owner && b.health > 0);
+
                     let nearestEnemy: PlacedBuilding | null = null;
                     let minEnemyDist = stats.range;
 
-                    enemies.forEach(b => {
-                        const info = BUILDINGS[b.type];
-                        const bdx = Math.max(b.gridX - troop.gridX, 0, troop.gridX - (b.gridX + info.width));
-                        const bdy = Math.max(b.gridY - troop.gridY, 0, troop.gridY - (b.gridY + info.height));
-                        const d = Math.sqrt(bdx * bdx + bdy * bdy);
-                        if (d <= minEnemyDist) {
-                            minEnemyDist = d;
-                            nearestEnemy = b;
+                    // Influence: If following an ally, help them if they are targeting an ENEMY building.
+                    if (troop.target && !('type' in troop.target) && troop.target.target && troop.target.target.owner !== troop.owner) {
+                        const allyTarget = troop.target.target;
+                        const adx = Math.max(allyTarget.gridX - troop.gridX, 0, troop.gridX - (allyTarget.gridX + (BUILDINGS[allyTarget.type]?.width || 1)));
+                        const ady = Math.max(allyTarget.gridY - troop.gridY, 0, troop.gridY - (allyTarget.gridY + (BUILDINGS[allyTarget.type]?.height || 1)));
+                        const ad = Math.sqrt(adx * adx + ady * ady);
+                        if (ad <= stats.range && allyTarget.type !== 'wall') {
+                            nearestEnemy = allyTarget;
                         }
-                    });
+                    }
+
+                    if (!nearestEnemy) {
+                        // Priority 1: Non-wall buildings in range
+                        const buildingsInRange = enemies.filter(b => b.type !== 'wall').filter(b => {
+                            const info = BUILDINGS[b.type];
+                            const bdx = Math.max(b.gridX - troop.gridX, 0, troop.gridX - (b.gridX + info.width));
+                            const bdy = Math.max(b.gridY - troop.gridY, 0, troop.gridY - (b.gridY + info.height));
+                            return Math.sqrt(bdx * bdx + bdy * bdy) <= stats.range;
+                        });
+
+                        if (buildingsInRange.length > 0) {
+                            nearestEnemy = buildingsInRange.sort((a, b) => {
+                                const distA = Phaser.Math.Distance.Between(troop.gridX, troop.gridY, a.gridX, a.gridY);
+                                const distB = Phaser.Math.Distance.Between(troop.gridX, troop.gridY, b.gridX, b.gridY);
+                                return distA - distB;
+                            })[0];
+                        } else {
+                            // Priority 2: Walls in range (only if no buildings)
+                            enemies.filter(b => b.type === 'wall').forEach(b => {
+                                const bdx = Math.max(b.gridX - troop.gridX, 0, troop.gridX - (b.gridX + 1));
+                                const bdy = Math.max(b.gridY - troop.gridY, 0, troop.gridY - (b.gridY + 1));
+                                const d = Math.sqrt(bdx * bdx + bdy * bdy);
+                                if (d <= minEnemyDist) {
+                                    minEnemyDist = d;
+                                    nearestEnemy = b;
+                                }
+                            });
+                        }
+                    }
 
                     if (nearestEnemy) {
                         troop.lastAttackTime = time;
@@ -3184,7 +3214,7 @@ export class MainScene extends Phaser.Scene {
                 // 2. Any Non-Wall (Act as if no logic/Warriors)
                 targets = enemies.filter(b => !isWall(b));
                 if (targets.length === 0) {
-                    // 3. Walls (Last resort)
+                    // 3. Walls (Absolute last resort - only if NO other buildings exist)
                     targets = enemies.filter(b => isWall(b));
                     if (targets.length === 0) return null;
                 }
@@ -3193,12 +3223,7 @@ export class MainScene extends Phaser.Scene {
             // Regular: Prioritize Non-Walls
             targets = enemies.filter(b => !isWall(b));
             if (targets.length === 0) {
-                // Fallback to walls if nothing else remains (e.g. trapped inside walls, though pathfinding prevents this usually)
-                // But traditionally, if stuck, attack walls. 
-                // Current logic returns null -> idle.
-                // Let's stick to null as pathfinding handles "Obstacle" attacking usually?
-                // Actually, if only walls remain, return null means game over even if walls exist.
-                // We should attack walls if ONLY walls remain.
+                // Fallback to walls if nothing else remains
                 targets = enemies.filter(b => isWall(b));
                 if (targets.length === 0) return null;
             }
