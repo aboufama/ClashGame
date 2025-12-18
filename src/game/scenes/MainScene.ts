@@ -848,30 +848,6 @@ export class MainScene extends Phaser.Scene {
         graphics.lineBetween(r3.x, r3.y, peakFront.x, peakFront.y);
         graphics.lineBetween(r4.x, r4.y, peakFront.x, peakFront.y);
 
-        // === SHIELD EMBLEM (on right wall) ===
-        const shieldX = (c2.x + c3.x) / 2;
-        const shieldY = (c2.y + c3.y) / 2 - wallHeight / 2;
-
-        // Shield shape
-        graphics.fillStyle(0xcc9900, alpha);
-        graphics.beginPath();
-        graphics.moveTo(shieldX, shieldY - 8);
-        graphics.lineTo(shieldX + 6, shieldY - 5);
-        graphics.lineTo(shieldX + 6, shieldY + 3);
-        graphics.lineTo(shieldX, shieldY + 8);
-        graphics.lineTo(shieldX - 6, shieldY + 3);
-        graphics.lineTo(shieldX - 6, shieldY - 5);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Shield border
-        graphics.lineStyle(1, 0x886600, alpha);
-        graphics.strokePath();
-
-        // Sword on shield
-        graphics.fillStyle(0xdddddd, alpha);
-        graphics.fillRect(shieldX - 1, shieldY - 5, 2, 10);
-        graphics.fillRect(shieldX - 3, shieldY - 2, 6, 2);
     }
 
 
@@ -1721,8 +1697,9 @@ export class MainScene extends Phaser.Scene {
 
         // Only draw segments toward neighbors with LOWER depth (North and West)
         // This wall is "in front" so it owns these segments and their tops render last
-        if (nN) addSegment(cx, cy, cx, gridY);       // To North neighbor
-        if (nW) addSegment(cx, cy, gridX, cy);       // To West neighbor
+        // Segments extend all the way to neighbor's center to connect properly
+        if (nN) addSegment(cx, cy, cx, gridY - 0.5);       // To North neighbor's center
+        if (nW) addSegment(cx, cy, gridX - 0.5, cy);       // To West neighbor's center
 
         // Central pillar
         const ps = wallThickness * 0.6;
