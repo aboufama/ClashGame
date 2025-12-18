@@ -2178,89 +2178,84 @@ export class MainScene extends Phaser.Scene {
 
                 if (dist <= stats.range + 0.1 && isEnemy) {
                     if (time > troop.lastAttackTime + troop.attackDelay) {
-                        troop.lastAttackTime = time;
-
-                        // Ranged attackers - damage on projectile hit
-                        if (troop.type === 'archer') {
-                            this.showArcherProjectile(troop, troop.target, stats.damage);
-                        } else if (troop.type === 'ward') {
-                            this.showWardLaser(troop, troop.target, stats.damage);
+                        // Ward assistance rule: Never target walls on its own
+                        if (troop.type === 'ward' && b.type === 'wall') {
+                            // Skip attack if ward hasn't found an ally to assist on this wall
                         } else {
-                            // Melee: immediate damage
-                            troop.target.health -= stats.damage;
-                            this.showHitEffect(troop.target.graphics);
-                            this.updateHealthBar(troop.target);
+                            troop.lastAttackTime = time;
 
-                            // Lunge effect for melee
-                            const targetPos = this.cartToIso(bx + tw / 2, by + th / 2);
-                            const currentPos = this.cartToIso(troop.gridX, troop.gridY);
-                            const angle = Math.atan2(targetPos.y - currentPos.y, targetPos.x - currentPos.x);
-                            this.tweens.add({
-                                targets: troop.gameObject,
-                                x: currentPos.x + Math.cos(angle) * 10,
-                                y: currentPos.y + Math.sin(angle) * 10,
-                                duration: 50,
-                                yoyo: true
-                            });
+                            // Ranged attackers - damage on projectile hit
+                            if (troop.type === 'archer') {
+                                this.showArcherProjectile(troop, troop.target, stats.damage);
+                            } else if (troop.type === 'ward') {
+                                this.showWardLaser(troop, troop.target, stats.damage);
+                            } else {
+                                // Melee: immediate damage
+                                troop.target.health -= stats.damage;
+                                this.showHitEffect(troop.target.graphics);
+                                this.updateHealthBar(troop.target);
 
-                            if (troop.target.health <= 0) {
-                                this.destroyBuilding(troop.target);
-                                troop.target = null;
+                                // Lunge effect for melee
+                                const targetPos = this.cartToIso(bx + tw / 2, by + th / 2);
+                                const currentPos = this.cartToIso(troop.gridX, troop.gridY);
+                                const angle = Math.atan2(targetPos.y - currentPos.y, targetPos.x - currentPos.x);
+                                this.tweens.add({
+                                    targets: troop.gameObject,
+                                    x: currentPos.x + Math.cos(angle) * 10,
+                                    y: currentPos.y + Math.sin(angle) * 10,
+                                    duration: 50,
+                                    yoyo: true
+                                });
+
+                                if (troop.target.health <= 0) {
+                                    this.destroyBuilding(troop.target);
+                                    troop.target = null;
+                                }
                             }
                         }
                     }
                 } else if (troop.type === 'ward' && !isEnemy && time > troop.lastAttackTime + troop.attackDelay) {
-                    // Ward Simultaneous Attack Logic:
-                    // Prioritize buildings over walls, and prefer what the followed ally is targeting.
-                    const stats = TROOP_STATS.ward;
+                    // Ward specialized attack behavior (Grand Warden style)
+                    const wardStats = TROOP_STATS.ward;
                     const enemies = this.buildings.filter(b => b.owner !== troop.owner && b.health > 0);
+                    let attackTarget: PlacedBuilding | null = null;
 
-                    let nearestEnemy: PlacedBuilding | null = null;
-                    let minEnemyDist = stats.range;
+                    // 1. ASSIST the leader if they have an enemy target
+                    const leader = troop.target;
+                    if (leader && leader.target && leader.target.owner !== troop.owner) {
+                        const targetBuilding = leader.target as PlacedBuilding;
+                        const tInfo = BUILDINGS[targetBuilding.type];
+                        const tdx = Math.max(targetBuilding.gridX - troop.gridX, 0, troop.gridX - (targetBuilding.gridX + (tInfo?.width || 1)));
+                        const tdy = Math.max(targetBuilding.gridY - troop.gridY, 0, troop.gridY - (targetBuilding.gridY + (tInfo?.height || 1)));
+                        const tdist = Math.sqrt(tdx * tdx + tdy * tdy);
 
-                    // Influence: If following an ally, help them if they are targeting an ENEMY building.
-                    if (troop.target && !('type' in troop.target) && troop.target.target && troop.target.target.owner !== troop.owner) {
-                        const allyTarget = troop.target.target;
-                        const adx = Math.max(allyTarget.gridX - troop.gridX, 0, troop.gridX - (allyTarget.gridX + (BUILDINGS[allyTarget.type]?.width || 1)));
-                        const ady = Math.max(allyTarget.gridY - troop.gridY, 0, troop.gridY - (allyTarget.gridY + (BUILDINGS[allyTarget.type]?.height || 1)));
-                        const ad = Math.sqrt(adx * adx + ady * ady);
-                        if (ad <= stats.range && allyTarget.type !== 'wall') {
-                            nearestEnemy = allyTarget;
+                        // Ward will help with ANYTHING (including walls) that the leader is hitting
+                        if (tdist <= wardStats.range) {
+                            attackTarget = targetBuilding;
                         }
                     }
 
-                    if (!nearestEnemy) {
-                        // Priority 1: Non-wall buildings in range
-                        const buildingsInRange = enemies.filter(b => b.type !== 'wall').filter(b => {
+                    // 2. If no leader target in range, find nearest building (PRIORITIZE NON-WALLS)
+                    if (!attackTarget) {
+                        const buildings = enemies.filter(b => b.type !== 'wall');
+                        let minDist = wardStats.range;
+                        buildings.forEach(b => {
                             const info = BUILDINGS[b.type];
                             const bdx = Math.max(b.gridX - troop.gridX, 0, troop.gridX - (b.gridX + info.width));
                             const bdy = Math.max(b.gridY - troop.gridY, 0, troop.gridY - (b.gridY + info.height));
-                            return Math.sqrt(bdx * bdx + bdy * bdy) <= stats.range;
+                            const bd = Math.sqrt(bdx * bdx + bdy * bdy);
+                            if (bd <= minDist) {
+                                minDist = bd;
+                                attackTarget = b;
+                            }
                         });
-
-                        if (buildingsInRange.length > 0) {
-                            nearestEnemy = buildingsInRange.sort((a, b) => {
-                                const distA = Phaser.Math.Distance.Between(troop.gridX, troop.gridY, a.gridX, a.gridY);
-                                const distB = Phaser.Math.Distance.Between(troop.gridX, troop.gridY, b.gridX, b.gridY);
-                                return distA - distB;
-                            })[0];
-                        } else {
-                            // Priority 2: Walls in range (only if no buildings)
-                            enemies.filter(b => b.type === 'wall').forEach(b => {
-                                const bdx = Math.max(b.gridX - troop.gridX, 0, troop.gridX - (b.gridX + 1));
-                                const bdy = Math.max(b.gridY - troop.gridY, 0, troop.gridY - (b.gridY + 1));
-                                const d = Math.sqrt(bdx * bdx + bdy * bdy);
-                                if (d <= minEnemyDist) {
-                                    minEnemyDist = d;
-                                    nearestEnemy = b;
-                                }
-                            });
-                        }
                     }
 
-                    if (nearestEnemy) {
+                    // Ward NEVER targets walls independently.
+
+                    if (attackTarget) {
                         troop.lastAttackTime = time;
-                        this.showWardLaser(troop, nearestEnemy, stats.damage);
+                        this.showWardLaser(troop, attackTarget, wardStats.damage);
                     }
                 }
             }
@@ -3218,6 +3213,15 @@ export class MainScene extends Phaser.Scene {
                     targets = enemies.filter(b => isWall(b));
                     if (targets.length === 0) return null;
                 }
+            }
+        } else if (troop.type === 'ward') {
+            // Ward: Assistance Mode (No walls unless assisting or absolute last resort)
+            targets = enemies.filter(b => !isWall(b));
+            if (targets.length === 0) {
+                // Only target walls if allies are already targetting them (handled in combat loop)
+                // As fallback for movement, only pick walls if NOTHING else exists.
+                targets = enemies.filter(b => isWall(b));
+                if (targets.length === 0) return null;
             }
         } else {
             // Regular: Prioritize Non-Walls
