@@ -31,7 +31,6 @@ const BUILDINGS: Record<string, BuildingInfoExt> = {
     // Novel defenses
     prism: { type: 'prism', color: 0xff00ff, width: 1, height: 1, name: 'Prism Tower', category: 'defense' }, // Beam bounces between enemies
     magmavent: { type: 'magmavent', color: 0xff4400, width: 2, height: 2, name: 'Magma Vent', category: 'defense' }, // Periodic area eruptions
-    mindspire: { type: 'mindspire', color: 0x9944ff, width: 1, height: 1, name: 'Mind Spire', category: 'defense' }, // Confuses enemies
 };
 
 
@@ -58,7 +57,7 @@ interface PlacedBuilding {
 
 interface Troop {
     id: string;
-    type: 'warrior' | 'archer' | 'giant' | 'ward' | 'mimic' | 'recursion' | 'voidanchor' | 'chronoswarm' | 'sporemother';
+    type: 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'chronoswarm';
     gameObject: Phaser.GameObjects.Graphics;
     healthBar: Phaser.GameObjects.Graphics;
     gridX: number;
@@ -76,10 +75,7 @@ interface Troop {
     nextPathTime?: number;
     target: any; // PlacedBuilding | Troop | null
     // Special troop properties
-    isDisguised?: boolean; // For mimic
     recursionGen?: number; // For recursion (0 = original, 1 = first split, 2 = final)
-    lastPullTime?: number; // For void anchor
-    lastSwarmBoost?: number; // For chrono swarm
 }
 
 
@@ -89,11 +85,8 @@ const TROOP_STATS = {
     giant: { health: 500, range: 0.8, damage: 10, speed: 0.001, color: 0xff8800, space: 5 },
     ward: { health: 300, range: 5.0, damage: 3, speed: 0.0015, color: 0x00ff88, space: 3, healRadius: 7.0, healAmount: 8 },
     // Novel units
-    mimic: { health: 80, range: 0.8, damage: 25, speed: 0.002, color: 0x666666, space: 2 }, // Disguises as building, high burst
-    recursion: { health: 60, range: 0.8, damage: 8, speed: 0.003, color: 0x00ffaa, space: 2 }, // Splits on death
-    voidanchor: { health: 200, range: 3.0, damage: 2, speed: 0.0008, color: 0x4400aa, space: 4, pullRadius: 4.0 }, // Pulls enemies
-    chronoswarm: { health: 40, range: 1.5, damage: 5, speed: 0.004, color: 0xffcc00, space: 2, boostRadius: 3.0 }, // Speeds allies
-    sporemother: { health: 150, range: 1.0, damage: 6, speed: 0.0015, color: 0x44aa44, space: 3, deathHealRadius: 5.0, deathHeal: 50 } // Heals on death
+    recursion: { health: 120, range: 0.8, damage: 8, speed: 0.0025, color: 0x00ffaa, space: 3 }, // Splits into 2 on death (max 2 generations)
+    chronoswarm: { health: 50, range: 1.5, damage: 5, speed: 0.004, color: 0xffcc00, space: 2, boostRadius: 4.0, boostAmount: 1.5 } // 50% speed boost to nearby allies
 };
 
 
@@ -518,9 +511,6 @@ export class MainScene extends Phaser.Scene {
                 break;
             case 'magmavent':
                 this.drawMagmaVent(graphics, c1, c2, c3, c4, center, alpha, tint, building);
-                break;
-            case 'mindspire':
-                this.drawMindSpire(graphics, c1, c2, c3, c4, center, alpha, tint, building);
                 break;
 
             default:
@@ -1852,122 +1842,6 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
-    // === MIND SPIRE - Confuses enemies ===
-    private drawMindSpire(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, _building?: PlacedBuilding) {
-        const time = this.time.now;
-
-        // Dark mystical stone base (isometric)
-        graphics.fillStyle(tint ?? 0x2a1a2a, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
-
-        // Arcane rune circle on ground (isometric ellipse)
-        const runeGlow = 0.4 + Math.sin(time / 200) * 0.2;
-        graphics.lineStyle(2, 0x9944ff, alpha * runeGlow);
-        graphics.strokeEllipse(center.x, center.y + 2, 28, 14);
-
-        // Inner rune circle
-        graphics.lineStyle(1, 0xaa66ff, alpha * runeGlow * 0.7);
-        graphics.strokeEllipse(center.x, center.y + 2, 20, 10);
-
-        // Rune symbols (rotating around the ellipse)
-        const runeCount = 6;
-        for (let i = 0; i < runeCount; i++) {
-            const runeAngle = (time / 2000 + i / runeCount) * Math.PI * 2;
-            const runeX = center.x + Math.cos(runeAngle) * 13;
-            const runeY = center.y + 2 + Math.sin(runeAngle) * 6.5;
-            graphics.fillStyle(0xcc88ff, alpha * runeGlow);
-            graphics.fillCircle(runeX, runeY, 2);
-        }
-
-        // Central spire (twisted design - isometric)
-        const spireHeight = 45;
-
-        // Spire body (SE face - dark)
-        graphics.fillStyle(0x3a2a3a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(center.x + 6, center.y);
-        graphics.lineTo(center.x + 2, center.y - spireHeight);
-        graphics.lineTo(center.x, center.y - 5);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Spire body (SW face - lighter)
-        graphics.fillStyle(0x5a4a5a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(center.x - 6, center.y);
-        graphics.lineTo(center.x - 2, center.y - spireHeight);
-        graphics.lineTo(center.x, center.y - 5);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Front face
-        graphics.fillStyle(0x4a3a4a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(center.x - 6, center.y);
-        graphics.lineTo(center.x - 2, center.y - spireHeight);
-        graphics.lineTo(center.x + 2, center.y - spireHeight);
-        graphics.lineTo(center.x + 6, center.y);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Spiral energy wrapping around spire
-        graphics.lineStyle(2, 0x9944ff, alpha * 0.6);
-        const spiralSegments = 12;
-        for (let i = 0; i < spiralSegments; i++) {
-            const t1 = i / spiralSegments;
-            const t2 = (i + 1) / spiralSegments;
-            const angle1 = (time / 300 + t1 * 4) * Math.PI;
-            const angle2 = (time / 300 + t2 * 4) * Math.PI;
-            const y1 = center.y - t1 * spireHeight;
-            const y2 = center.y - t2 * spireHeight;
-            const radius1 = 6 * (1 - t1 * 0.7);
-            const radius2 = 6 * (1 - t2 * 0.7);
-
-            graphics.lineBetween(
-                center.x + Math.cos(angle1) * radius1,
-                y1 + Math.sin(angle1) * radius1 * 0.3,
-                center.x + Math.cos(angle2) * radius2,
-                y2 + Math.sin(angle2) * radius2 * 0.3
-            );
-        }
-
-        // Mind-affecting orb at top
-        const orbY = center.y - spireHeight - 5;
-        const mindPulse = 0.6 + Math.sin(time / 120) * 0.3;
-
-        // Outer psychic aura
-        graphics.fillStyle(0x9944ff, alpha * mindPulse * 0.3);
-        graphics.fillCircle(center.x, orbY, 12);
-
-        // Mid aura
-        graphics.fillStyle(0xaa66ff, alpha * mindPulse * 0.5);
-        graphics.fillCircle(center.x, orbY, 8);
-
-        // Core eye
-        graphics.fillStyle(0xcc88ff, alpha);
-        graphics.fillCircle(center.x, orbY, 5);
-
-        // Pupil (follows a pattern - hypnotic)
-        const pupilAngle = time / 500;
-        const pupilX = center.x + Math.cos(pupilAngle) * 1.5;
-        const pupilY = orbY + Math.sin(pupilAngle) * 1;
-        graphics.fillStyle(0x220033, alpha);
-        graphics.fillCircle(pupilX, pupilY, 2.5);
-
-        // Highlight
-        graphics.fillStyle(0xffffff, alpha * 0.7);
-        graphics.fillCircle(center.x - 1.5, orbY - 1.5, 1.5);
-
-        // Psychic waves emanating (isometric ellipses)
-        for (let i = 0; i < 3; i++) {
-            const wavePhase = ((time / 1500) + i * 0.33) % 1;
-            const waveRadius = 10 + wavePhase * 40;
-            const waveAlpha = (1 - wavePhase) * 0.3;
-            graphics.lineStyle(1, 0x9944ff, alpha * waveAlpha);
-            graphics.strokeEllipse(center.x, orbY + wavePhase * 20, waveRadius, waveRadius * 0.4);
-        }
-    }
-
     private drawWall(graphics: Phaser.GameObjects.Graphics, _center: Phaser.Math.Vector2, gridX: number, gridY: number, alpha: number, tint: number | null, building?: PlacedBuilding) {
         // Isometric wall with proper connected segments
         // Key: Only draw segments toward neighbors with LOWER depth (behind us in iso view)
@@ -2491,7 +2365,6 @@ export class MainScene extends Phaser.Scene {
                 else if (defense.type === 'xbow') this.shootXBowAt(defense, nearestTroop);
                 else if (defense.type === 'prism') this.shootPrismAt(defense, nearestTroop);
                 else if (defense.type === 'magmavent') this.shootMagmaAt(defense);
-                else if (defense.type === 'mindspire') this.shootMindAt(defense, nearestTroop);
                 else this.shootAt(defense, nearestTroop);
             }
         });
@@ -3082,70 +2955,6 @@ export class MainScene extends Phaser.Scene {
         });
     }
 
-    // === MIND SPIRE - Confusion attack ===
-    private shootMindAt(spire: PlacedBuilding, troop: Troop) {
-        const start = this.cartToIso(spire.gridX + 0.5, spire.gridY + 0.5);
-        start.y -= 50; // From the eye orb
-        const end = this.cartToIso(troop.gridX, troop.gridY);
-
-        // Psychic wave effect
-        const wave = this.add.graphics();
-        wave.lineStyle(3, 0x9944ff, 0.6);
-        wave.setDepth(10000);
-
-        // Wavy line pattern
-        wave.beginPath();
-        wave.moveTo(start.x, start.y);
-        const segments = 10;
-        for (let i = 1; i <= segments; i++) {
-            const progress = i / segments;
-            const x = start.x + (end.x - start.x) * progress;
-            const y = start.y + (end.y - start.y) * progress;
-            const wave_offset = Math.sin(progress * Math.PI * 4) * 8;
-            const perpX = -(end.y - start.y) / Math.sqrt((end.x - start.x) ** 2 + (end.y - start.y) ** 2);
-            const perpY = (end.x - start.x) / Math.sqrt((end.x - start.x) ** 2 + (end.y - start.y) ** 2);
-            wave.lineTo(x + perpX * wave_offset, y + perpY * wave_offset);
-        }
-        wave.strokePath();
-
-        // Confusion spiral at target
-        const spiral = this.add.graphics();
-        spiral.lineStyle(2, 0xaa66ff, 0.8);
-        spiral.setDepth(10001);
-        spiral.beginPath();
-        for (let i = 0; i < 20; i++) {
-            const t = i / 20;
-            const angle = t * Math.PI * 4;
-            const radius = t * 12;
-            const x = end.x + Math.cos(angle) * radius;
-            const y = end.y - 10 + Math.sin(angle) * radius * 0.5;
-            if (i === 0) spiral.moveTo(x, y);
-            else spiral.lineTo(x, y);
-        }
-        spiral.strokePath();
-
-        this.tweens.add({
-            targets: [wave, spiral],
-            alpha: 0,
-            duration: 300,
-            onComplete: () => { wave.destroy(); spiral.destroy(); }
-        });
-
-        // Damage
-        const damage = 12;
-        troop.health -= damage;
-        troop.hasTakenDamage = true;
-        this.updateHealthBar(troop);
-
-        // Confusion effect - temporarily slow and redirect
-        troop.speedMult *= 0.5;
-        this.time.delayedCall(2000, () => {
-            if (troop.health > 0) troop.speedMult *= 2;
-        });
-
-        if (troop.health <= 0) this.destroyTroop(troop);
-    }
-
     private showArcherProjectile(troop: Troop, target: PlacedBuilding, damage: number) {
         const start = this.cartToIso(troop.gridX, troop.gridY);
         const info = BUILDINGS[target.type];
@@ -3525,6 +3334,10 @@ export class MainScene extends Phaser.Scene {
 
     private updateTroops(delta: number) {
         this.troops.forEach(troop => {
+            // Redraw chronoswarm every frame for animated aura
+            if (troop.type === 'chronoswarm' && troop.health > 0) {
+                this.redrawTroop(troop);
+            }
             if (troop.target && troop.health > 0) {
                 const b = troop.target;
                 const isBuilding = ('type' in b && BUILDINGS[b.type]);
@@ -3610,8 +3423,21 @@ export class MainScene extends Phaser.Scene {
                             }
                         });
 
+                        // Chrono Swarm speed boost: check for nearby chronoswarm allies
+                        let chronoBoost = 1.0;
+                        if (troop.type !== 'chronoswarm') { // Chrono swarm doesn't boost itself
+                            for (const other of this.troops) {
+                                if (other.type === 'chronoswarm' && other.owner === troop.owner && other.id !== troop.id) {
+                                    const d = Phaser.Math.Distance.Between(troop.gridX, troop.gridY, other.gridX, other.gridY);
+                                    const boostRadius = TROOP_STATS.chronoswarm.boostRadius ?? 4.0;
+                                    if (d < boostRadius) {
+                                        chronoBoost = Math.max(chronoBoost, TROOP_STATS.chronoswarm.boostAmount ?? 1.5);
+                                    }
+                                }
+                            }
+                        }
 
-                        const speed = stats.speed * troop.speedMult * delta;
+                        const speed = stats.speed * troop.speedMult * chronoBoost * delta;
                         troop.gridX += (moveDir.x + sepX) * speed;
                         troop.gridY += (moveDir.y + sepY) * speed;
 
@@ -4025,6 +3851,31 @@ export class MainScene extends Phaser.Scene {
     private destroyTroop(t: Troop) {
         const pos = this.cartToIso(t.gridX, t.gridY);
 
+        // RECURSION SPLIT: Spawn two smaller recursions on death if generation < 2
+        if (t.type === 'recursion' && (t.recursionGen ?? 0) < 2) {
+            const nextGen = (t.recursionGen ?? 0) + 1;
+            // Spawn split effect
+            const splitFlash = this.add.circle(pos.x, pos.y, 15, 0x00ffaa, 0.8);
+            splitFlash.setDepth(30002);
+            this.tweens.add({
+                targets: splitFlash,
+                scale: 2.5, alpha: 0,
+                duration: 200,
+                onComplete: () => splitFlash.destroy()
+            });
+
+            // Spawn two smaller recursions slightly offset
+            const offsets = [
+                { dx: -0.5, dy: -0.3 },
+                { dx: 0.5, dy: 0.3 }
+            ];
+            for (const off of offsets) {
+                this.time.delayedCall(50, () => {
+                    this.spawnTroop(t.gridX + off.dx, t.gridY + off.dy, 'recursion', t.owner, nextGen);
+                });
+            }
+        }
+
         // Death explosion effect
         const flash = this.add.circle(pos.x, pos.y, 6, 0xffffff, 0.8);
         flash.setDepth(30001);
@@ -4033,6 +3884,8 @@ export class MainScene extends Phaser.Scene {
         // Particle burst
         const particleColors = t.type === 'warrior' ? [0xffff00, 0xffcc00] :
             t.type === 'archer' ? [0x00ccff, 0x0088cc] :
+            t.type === 'recursion' ? [0x00ffaa, 0x00cc88] :
+            t.type === 'chronoswarm' ? [0xffcc00, 0xffaa00] :
                 [0xff8800, 0xcc6600];
         for (let i = 0; i < 8; i++) {
             const angle = (i / 8) * Math.PI * 2;
@@ -4089,9 +3942,12 @@ export class MainScene extends Phaser.Scene {
     }
 
 
-    private spawnTroop(gx: number, gy: number, type: 'warrior' | 'archer' | 'giant' | 'ward' = 'warrior', owner: 'PLAYER' | 'ENEMY' = 'PLAYER') {
+    private spawnTroop(gx: number, gy: number, type: 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'chronoswarm' = 'warrior', owner: 'PLAYER' | 'ENEMY' = 'PLAYER', recursionGen: number = 0) {
         const stats = TROOP_STATS[type];
         const pos = this.cartToIso(gx, gy);
+
+        // Scale factor for recursions based on generation (each split = 75% size)
+        const scaleFactor = type === 'recursion' ? Math.pow(0.75, recursionGen) : 1;
 
         // Create detailed troop graphic
         const troopGraphic = this.add.graphics();
@@ -4120,15 +3976,19 @@ export class MainScene extends Phaser.Scene {
         }
 
         // Landing bounce animation
-        troopGraphic.setScale(0.5);
+        troopGraphic.setScale(0.5 * scaleFactor);
         troopGraphic.y -= 20;
         this.tweens.add({
             targets: troopGraphic,
-            scaleX: 1, scaleY: 1,
+            scaleX: scaleFactor, scaleY: scaleFactor,
             y: pos.y,
             duration: 200,
             ease: 'Bounce.easeOut'
         });
+
+        // Recursions have reduced health per generation (70% per gen)
+        const healthMod = type === 'recursion' ? Math.pow(0.7, recursionGen) : 1;
+        const troopHealth = stats.health * healthMod;
 
         const troop: Troop = {
             id: Phaser.Utils.String.UUID(),
@@ -4136,13 +3996,14 @@ export class MainScene extends Phaser.Scene {
             gameObject: troopGraphic,
             healthBar: this.add.graphics(),
             gridX: gx, gridY: gy,
-            health: stats.health, maxHealth: stats.health,
+            health: troopHealth, maxHealth: troopHealth,
             target: null, owner: owner,
             lastAttackTime: 0,
             attackDelay: 700 + Math.random() * 300,
             speedMult: 0.9 + Math.random() * 0.2,
             hasTakenDamage: false,
-            facingAngle: 0
+            facingAngle: 0,
+            recursionGen: type === 'recursion' ? recursionGen : undefined
         };
 
         this.troops.push(troop);
@@ -4155,7 +4016,7 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
-    private drawTroopVisual(graphics: Phaser.GameObjects.Graphics, type: 'warrior' | 'archer' | 'giant' | 'ward' | 'mimic' | 'recursion' | 'voidanchor' | 'chronoswarm' | 'sporemother', owner: 'PLAYER' | 'ENEMY', facingAngle: number = 0) {
+    private drawTroopVisual(graphics: Phaser.GameObjects.Graphics, type: 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'chronoswarm', owner: 'PLAYER' | 'ENEMY', facingAngle: number = 0) {
         const isPlayer = owner === 'PLAYER';
 
         switch (type) {
@@ -4320,47 +4181,6 @@ export class MainScene extends Phaser.Scene {
             }
 
             // === NOVEL UNITS ===
-            case 'mimic': {
-                // A shapeshifting blob that disguises as buildings
-                const bodyColor = isPlayer ? 0x666666 : 0x555555;
-                const coreColor = isPlayer ? 0x88ff88 : 0xff8888;
-                const now = Date.now();
-
-                // Shadow (irregular)
-                graphics.fillStyle(0x000000, 0.3);
-                graphics.fillEllipse(0, 6, 16, 7);
-
-                // Morphing outer body - amorphous blob shape
-                graphics.fillStyle(bodyColor, 0.9);
-                graphics.beginPath();
-                const blobPoints = 12;
-                for (let i = 0; i <= blobPoints; i++) {
-                    const angle = (i / blobPoints) * Math.PI * 2;
-                    const wobble = Math.sin(now / 150 + angle * 3) * 2 + Math.sin(now / 200 + angle * 5) * 1.5;
-                    const r = 10 + wobble;
-                    const px = Math.cos(angle) * r;
-                    const py = Math.sin(angle) * r * 0.7 - 2;
-                    if (i === 0) graphics.moveTo(px, py);
-                    else graphics.lineTo(px, py);
-                }
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Inner shifting patterns (like it's analyzing/copying)
-                const patternAlpha = 0.3 + Math.sin(now / 100) * 0.1;
-                graphics.fillStyle(0x444444, patternAlpha);
-                graphics.fillCircle(-3 + Math.sin(now / 180) * 2, -3, 4);
-                graphics.fillCircle(4 + Math.cos(now / 200) * 2, 1, 3);
-
-                // Glowing core eye
-                const eyePulse = 0.6 + Math.sin(now / 80) * 0.2;
-                graphics.fillStyle(coreColor, eyePulse);
-                graphics.fillCircle(0, -2, 4);
-                graphics.fillStyle(0xffffff, 0.8);
-                graphics.fillCircle(-1, -3, 1.5);
-                break;
-            }
-
             case 'recursion': {
                 // Fractal/geometric entity that splits on death
                 const bodyColor = isPlayer ? 0x00ffaa : 0xaa00ff;
@@ -4407,75 +4227,34 @@ export class MainScene extends Phaser.Scene {
                 break;
             }
 
-            case 'voidanchor': {
-                // Dark gravitational orb that pulls enemies
-                const coreColor = isPlayer ? 0x4400aa : 0xaa0044;
-                const ringColor = isPlayer ? 0x6622cc : 0xcc2266;
-                const now = Date.now();
-
-                // Gravity distortion effect (dark ellipse on ground)
-                const pullPulse = 0.15 + Math.sin(now / 300) * 0.05;
-                graphics.fillStyle(0x220044, pullPulse);
-                graphics.fillEllipse(0, 8, 50, 25);
-
-                // Swirling particle rings (isometric ellipses!)
-                graphics.lineStyle(2, ringColor, 0.5);
-                const ring1 = (now / 400) % (Math.PI * 2);
-                graphics.beginPath();
-                for (let i = 0; i <= 24; i++) {
-                    const t = (i / 24) * Math.PI * 2 + ring1;
-                    const px = Math.cos(t) * 18;
-                    const py = Math.sin(t) * 9 + 2; // Ellipse for isometric
-                    if (i === 0) graphics.moveTo(px, py);
-                    else graphics.lineTo(px, py);
-                }
-                graphics.strokePath();
-
-                // Inner ring (opposite direction)
-                graphics.lineStyle(1.5, 0x8844ff, 0.4);
-                const ring2 = -(now / 300) % (Math.PI * 2);
-                graphics.beginPath();
-                for (let i = 0; i <= 20; i++) {
-                    const t = (i / 20) * Math.PI * 2 + ring2;
-                    const px = Math.cos(t) * 12;
-                    const py = Math.sin(t) * 6;
-                    if (i === 0) graphics.moveTo(px, py);
-                    else graphics.lineTo(px, py);
-                }
-                graphics.strokePath();
-
-                // Central void orb
-                graphics.fillStyle(0x000011, 1);
-                graphics.fillCircle(0, 0, 8);
-                graphics.fillStyle(coreColor, 0.8);
-                graphics.fillCircle(0, -1, 6);
-
-                // Event horizon glow
-                graphics.lineStyle(2, 0xaa66ff, 0.6 + Math.sin(now / 100) * 0.2);
-                graphics.strokeCircle(0, 0, 9);
-
-                // Singularity core
-                graphics.fillStyle(0x000000, 1);
-                graphics.fillCircle(0, 0, 3);
-                graphics.fillStyle(0xffffff, 0.5);
-                graphics.fillCircle(-1, -1, 1);
-                break;
-            }
-
             case 'chronoswarm': {
                 // Mechanical time-bending insects
                 const shellColor = isPlayer ? 0xffcc00 : 0x00ccff;
                 const innerColor = isPlayer ? 0xaa8800 : 0x0088aa;
                 const now = Date.now();
 
+                // Large visible speed aura - corresponds to 4 tile boost radius
+                // In isometric: 4 tiles ≈ 160px wide, 80px tall
+                const auraScale = 0.85 + Math.sin(now / 200) * 0.15;
+                const auraAlpha = 0.15 + Math.sin(now / 150) * 0.08;
+                graphics.lineStyle(2, shellColor, auraAlpha);
+                graphics.strokeEllipse(0, 0, 160 * auraScale, 80 * auraScale);
+                // Inner aura ring
+                graphics.lineStyle(1, 0xffffff, auraAlpha * 0.5);
+                graphics.strokeEllipse(0, 0, 140 * auraScale, 70 * auraScale);
+                // Speed particles orbiting
+                const particleCount = 6;
+                for (let i = 0; i < particleCount; i++) {
+                    const pAngle = (now / 500) + (i / particleCount) * Math.PI * 2;
+                    const px = Math.cos(pAngle) * 70;
+                    const py = Math.sin(pAngle) * 35;
+                    graphics.fillStyle(shellColor, 0.4 + Math.sin(now / 100 + i) * 0.2);
+                    graphics.fillCircle(px, py, 3);
+                }
+
                 // Shadow
                 graphics.fillStyle(0x000000, 0.25);
                 graphics.fillEllipse(0, 4, 18, 8);
-
-                // Speed aura (clockwork rings)
-                const auraAlpha = 0.2 + Math.sin(now / 150) * 0.1;
-                graphics.lineStyle(1, shellColor, auraAlpha);
-                graphics.strokeEllipse(0, 2, 30, 15);
 
                 // Main beetle body (isometric oval)
                 graphics.fillStyle(innerColor, 1);
@@ -4512,61 +4291,12 @@ export class MainScene extends Phaser.Scene {
                 break;
             }
 
-            case 'sporemother': {
-                // Organic fungal creature that heals on death
-                const bodyColor = isPlayer ? 0x44aa44 : 0xaa4444;
-                const capColor = isPlayer ? 0x66cc66 : 0xcc6666;
-                const sporeColor = isPlayer ? 0xaaffaa : 0xffaaaa;
-                const now = Date.now();
-
-                // Shadow
-                graphics.fillStyle(0x000000, 0.3);
-                graphics.fillEllipse(0, 7, 18, 8);
-
-                // Spore particles floating around
-                for (let i = 0; i < 6; i++) {
-                    const sporePhase = (now / 1000 + i * 0.5) % 3;
-                    const sporeY = -5 - sporePhase * 8;
-                    const sporeX = Math.sin(now / 300 + i * 2) * (5 + i * 2);
-                    const sporeAlpha = 1 - sporePhase / 3;
-                    graphics.fillStyle(sporeColor, sporeAlpha * 0.6);
-                    graphics.fillCircle(sporeX, sporeY, 2 - sporePhase * 0.4);
-                }
-
-                // Mushroom stalk
-                graphics.fillStyle(0xccbb99, 1);
-                graphics.fillRect(-4, -2, 8, 12);
-                graphics.fillStyle(0xaa9977, 0.5);
-                graphics.fillRect(-2, -2, 2, 12);
-
-                // Mushroom cap (bulbous)
-                graphics.fillStyle(bodyColor, 1);
-                graphics.fillEllipse(0, -6, 16, 10);
-                graphics.fillStyle(capColor, 1);
-                graphics.fillEllipse(0, -8, 14, 8);
-
-                // Cap spots
-                graphics.fillStyle(sporeColor, 0.7);
-                graphics.fillCircle(-4, -9, 2.5);
-                graphics.fillCircle(3, -7, 2);
-                graphics.fillCircle(-1, -11, 1.5);
-                graphics.fillCircle(5, -10, 1.5);
-
-                // Pulsing glow indicating stored healing
-                const healPulse = 0.3 + Math.sin(now / 200) * 0.15;
-                graphics.fillStyle(sporeColor, healPulse);
-                graphics.fillEllipse(0, -7, 18, 11);
-                break;
-            }
-
         }
 
-        // Outline (skip for special visual units that have their own outlines)
-        if (!['voidanchor', 'sporemother', 'mimic'].includes(type)) {
-            graphics.lineStyle(1, 0x000000, 0.5);
-            const radius = type === 'giant' ? 12 : (type === 'ward' ? 8 : 8);
-            graphics.strokeCircle(0, type === 'giant' ? -2 : (type === 'ward' ? 0 : -1), radius);
-        }
+        // Outline
+        graphics.lineStyle(1, 0x000000, 0.5);
+        const radius = type === 'giant' ? 12 : (type === 'ward' ? 8 : 8);
+        graphics.strokeCircle(0, type === 'giant' ? -2 : (type === 'ward' ? 0 : -1), radius);
     }
 
 
@@ -4941,13 +4671,19 @@ export class MainScene extends Phaser.Scene {
         const centerY = 8 + Math.floor(Math.random() * 8);
         this.placeBuilding(centerX, centerY, 'town_hall', 'ENEMY');
 
-        // Place defenses including ballista
-        const defCount = 4 + Math.floor(Math.random() * 3);
+        // Place defenses including ballista, prism, and magmavent
+        const defCount = 5 + Math.floor(Math.random() * 3);
         for (let i = 0; i < defCount; i++) {
             const rx = centerX + (Math.random() > 0.5 ? 4 : -4) + Math.floor(Math.random() * 3);
             const ry = centerY + (Math.random() > 0.5 ? 4 : -4) + Math.floor(Math.random() * 3);
             const r = Math.random();
-            const def = r > 0.9 ? 'xbow' : r > 0.75 ? 'ballista' : r > 0.55 ? 'tesla' : r > 0.3 ? 'cannon' : 'mortar';
+            // Include new defenses: prism (chain lightning) and magmavent (area damage)
+            const def = r > 0.92 ? 'xbow' :
+                       r > 0.82 ? 'prism' :
+                       r > 0.72 ? 'magmavent' :
+                       r > 0.58 ? 'ballista' :
+                       r > 0.42 ? 'tesla' :
+                       r > 0.22 ? 'cannon' : 'mortar';
             if (this.isPositionValid(rx, ry, def)) this.placeBuilding(rx, ry, def, 'ENEMY');
         }
 
