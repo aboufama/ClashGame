@@ -313,14 +313,14 @@ export class MainScene extends Phaser.Scene {
         PixelatePipeline.scroll.set(this.cameras.main.scrollX, this.cameras.main.scrollY);
         // Auto-end raid if all troops dead and no reserves
         if (this.mode === 'ATTACK' && this.hasDeployed) {
-            const army = (window as any).getArmy ? (window as any).getArmy() : { warrior: 0, archer: 0, giant: 0, ward: 0 };
-            const remaining = army.warrior + army.archer + army.giant + army.ward;
+            const army = (window as any).getArmy ? (window as any).getArmy() : {};
+            const remaining = Object.values(army).reduce((a: number, b: any) => a + (typeof b === 'number' ? b : 0), 0) as number;
             const liveTroops = this.troops.filter(t => t.health > 0).length;
 
             if (remaining === 0 && liveTroops === 0 && !this.raidEndScheduled) {
                 this.raidEndScheduled = true;
-                // Give player 3 seconds to see final stats before auto-ending
-                this.time.delayedCall(3000, () => {
+                // Give player 2 seconds to see final state before auto-ending
+                this.time.delayedCall(2000, () => {
                     if ((window as any).onRaidEnded) {
                         (window as any).onRaidEnded(this.goldLooted, this.elixirLooted);
                     }
@@ -1841,7 +1841,7 @@ export class MainScene extends Phaser.Scene {
                 const bandX = barrelBaseX + cos * barrelLength * t;
                 const bandY = barrelBaseY + sin * 0.5 * barrelLength * t;
 
-                // Gold bands with glow
+                // Gold bands with subtle depth
                 graphics.fillStyle(0xb8860b, alpha);
                 graphics.fillEllipse(bandX, bandY, 6, 3.5);
                 graphics.fillStyle(0xffd700, alpha * 0.7);
@@ -1849,14 +1849,6 @@ export class MainScene extends Phaser.Scene {
                 graphics.lineStyle(1, 0x8b6914, alpha);
                 graphics.strokeEllipse(bandX, bandY, 6, 3.5);
             }
-
-            // === MUZZLE GLOW (heat effect) ===
-            graphics.fillStyle(0xff4400, alpha * 0.4);
-            graphics.fillCircle(tipX, tipY, 5);
-            graphics.fillStyle(0xff6600, alpha * 0.3);
-            graphics.fillCircle(tipX, tipY, 7);
-            graphics.fillStyle(0xff9900, alpha * 0.2);
-            graphics.fillCircle(tipX, tipY, 9);
         };
 
         // Draw both barrels
@@ -1966,12 +1958,12 @@ export class MainScene extends Phaser.Scene {
         const sin = Math.sin(angle);
 
         // === CENTRAL PIVOT MECHANISM ===
-        // Heavy iron pivot hub on the wooden platform
+        // Heavy dark grey pivot hub on the wooden platform
         graphics.fillStyle(0x2a2a2a, alpha);
         graphics.fillCircle(center.x, baseY, 8);
         graphics.fillStyle(0x3a3a3a, alpha);
         graphics.fillCircle(center.x, baseY - 1, 6);
-        graphics.fillStyle(0x4a4a4a, alpha);
+        graphics.fillStyle(0x444444, alpha);
         graphics.fillCircle(center.x, baseY - 2, 4);
         // Highlight
         graphics.fillStyle(0x606060, alpha * 0.6);
@@ -2187,8 +2179,8 @@ export class MainScene extends Phaser.Scene {
         const mid34 = { x: (c3.x + c4.x) / 2, y: (c3.y + c4.y) / 2 };
         graphics.lineBetween(mid12.x, mid12.y, mid34.x, mid34.y);
 
-        // Bronze corner accents
-        graphics.fillStyle(0xcd7f32, alpha * 0.8);
+        // Dark grey corner accents
+        graphics.fillStyle(0x444444, alpha * 0.8);
         graphics.fillCircle(c1.x, c1.y, 3);
         graphics.fillCircle(c2.x, c2.y, 2.5);
         graphics.fillCircle(c3.x, c3.y, 2.5);
@@ -2222,35 +2214,35 @@ export class MainScene extends Phaser.Scene {
             graphics.lineBetween(x1, y1, x2, y2);
         }
 
-        // Bronze outer ring (upgraded from iron)
-        graphics.lineStyle(4, 0xcd7f32, alpha);
+        // Dark grey outer ring
+        graphics.lineStyle(4, 0x3a3a3a, alpha);
         graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-        graphics.lineStyle(2, 0xdaa520, alpha * 0.5);
+        graphics.lineStyle(2, 0x555555, alpha * 0.5);
         graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
 
-        // Bronze rivets
-        graphics.fillStyle(0xcd7f32, alpha);
+        // Dark grey rivets
+        graphics.fillStyle(0x444444, alpha);
         for (let i = 0; i < 10; i++) {
             const ang = (i / 10) * Math.PI * 2;
             const rx = center.x + Math.cos(ang) * (baseRadiusX - 3);
             const ry = baseY + Math.sin(ang) * (baseRadiusY - 2);
             graphics.fillCircle(rx, ry, 2.5);
-            graphics.fillStyle(0xdaa520, alpha * 0.5);
+            graphics.fillStyle(0x666666, alpha * 0.5);
             graphics.fillCircle(rx - 0.5, ry - 0.5, 1);
-            graphics.fillStyle(0xcd7f32, alpha);
+            graphics.fillStyle(0x444444, alpha);
         }
 
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
 
-        // === BRONZE PIVOT MECHANISM ===
-        graphics.fillStyle(0x8b6914, alpha);
+        // === DARK GREY PIVOT MECHANISM ===
+        graphics.fillStyle(0x2a2a2a, alpha);
         graphics.fillCircle(center.x, baseY, 10);
-        graphics.fillStyle(0xcd7f32, alpha);
+        graphics.fillStyle(0x3a3a3a, alpha);
         graphics.fillCircle(center.x, baseY - 1, 7);
-        graphics.fillStyle(0xdaa520, alpha);
+        graphics.fillStyle(0x444444, alpha);
         graphics.fillCircle(center.x, baseY - 2, 4);
-        graphics.fillStyle(0xffd700, alpha * 0.5);
+        graphics.fillStyle(0x666666, alpha * 0.5);
         graphics.fillCircle(center.x - 1, baseY - 3, 2);
 
         // === REINFORCED CROSSBOW ARMS ===
@@ -2283,7 +2275,7 @@ export class MainScene extends Phaser.Scene {
         graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
         graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
 
-        // Bronze reinforcement bands
+        // Dark grey reinforcement bands
         const bandDist1 = 0.25;
         const bandDist2 = 0.5;
         const bandDist3 = 0.75;
@@ -2294,22 +2286,22 @@ export class MainScene extends Phaser.Scene {
             const rightBandX = center.x + (sin) * armLength * dist;
             const rightBandY = center.y + bowHeight + (-cos * 0.5) * armLength * dist;
 
-            graphics.fillStyle(0xcd7f32, alpha);
+            graphics.fillStyle(0x333333, alpha);
             graphics.fillCircle(leftBandX, leftBandY, 4);
             graphics.fillCircle(rightBandX, rightBandY, 4);
-            graphics.fillStyle(0xdaa520, alpha * 0.6);
+            graphics.fillStyle(0x555555, alpha * 0.6);
             graphics.fillCircle(leftBandX - 0.5, leftBandY - 0.5, 2);
             graphics.fillCircle(rightBandX - 0.5, rightBandY - 0.5, 2);
         }
 
-        // Bronze arm tips
-        graphics.fillStyle(0x8b6914, alpha);
+        // Dark grey arm tips
+        graphics.fillStyle(0x2a2a2a, alpha);
         graphics.fillCircle(leftArmX, leftArmY, 6);
         graphics.fillCircle(rightArmX, rightArmY, 6);
-        graphics.fillStyle(0xcd7f32, alpha);
+        graphics.fillStyle(0x444444, alpha);
         graphics.fillCircle(leftArmX, leftArmY, 4);
         graphics.fillCircle(rightArmX, rightArmY, 4);
-        graphics.fillStyle(0xdaa520, alpha * 0.6);
+        graphics.fillStyle(0x666666, alpha * 0.6);
         graphics.fillCircle(leftArmX - 1, leftArmY - 1, 2);
         graphics.fillCircle(rightArmX - 1, rightArmY - 1, 2);
 
@@ -2334,13 +2326,13 @@ export class MainScene extends Phaser.Scene {
         graphics.lineStyle(2, 0x1a0a05, alpha * 0.7);
         graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
 
-        // Bronze rail plates
+        // Dark grey rail plates
         for (const t of [0.3, 0.6]) {
             const plateX = center.x + cos * railLength * t;
             const plateY = center.y + bowHeight + sin * 0.5 * railLength * t;
-            graphics.fillStyle(0xcd7f32, alpha);
+            graphics.fillStyle(0x444444, alpha);
             graphics.fillEllipse(plateX, plateY, 5, 3);
-            graphics.fillStyle(0xdaa520, alpha * 0.5);
+            graphics.fillStyle(0x666666, alpha * 0.5);
             graphics.fillCircle(plateX - 1, plateY - 1, 1.5);
         }
 
@@ -2379,10 +2371,10 @@ export class MainScene extends Phaser.Scene {
             graphics.closePath();
             graphics.fillPath();
 
-            // Bronze fletching
+            // Dark grey fletching
             const fletchX = boltStartX + cos * 3;
             const fletchY = boltStartY + sin * 0.5 * 3;
-            graphics.fillStyle(0xcd7f32, alpha);
+            graphics.fillStyle(0x444444, alpha);
             graphics.beginPath();
             graphics.moveTo(fletchX, fletchY);
             graphics.lineTo(fletchX + (-sin) * 6, fletchY + (cos * 0.5) * 6 - 3);
@@ -2616,14 +2608,14 @@ export class MainScene extends Phaser.Scene {
         const mid34 = { x: (c3.x + c4.x) / 2, y: (c3.y + c4.y) / 2 };
         graphics.lineBetween(mid12.x, mid12.y, mid34.x, mid34.y);
 
-        // Purple/magenta corner crystals
-        graphics.fillStyle(0x8b008b, alpha * 0.9);
+        // Dark grey corner accents
+        graphics.fillStyle(0x444444, alpha * 0.9);
         graphics.fillCircle(c1.x, c1.y, 4);
         graphics.fillCircle(c2.x, c2.y, 3);
         graphics.fillCircle(c3.x, c3.y, 3);
         graphics.fillCircle(c4.x, c4.y, 3);
-        // Crystal glow
-        graphics.fillStyle(0xda70d6, alpha * 0.4);
+        // Subtle grey glow
+        graphics.fillStyle(0x666666, alpha * 0.4);
         graphics.fillCircle(c1.x, c1.y, 6);
 
         graphics.lineStyle(2, 0x4a4a5a, 0.7 * alpha);
@@ -2638,12 +2630,12 @@ export class MainScene extends Phaser.Scene {
         graphics.fillStyle(0x1a1a2a, alpha * 0.4);
         graphics.fillEllipse(center.x + 2, baseY + 5, baseRadiusX, baseRadiusY);
 
-        // Dark metal with purple tint
-        graphics.fillStyle(0x3a3a5a, alpha);
+        // Dark grey metal platform
+        graphics.fillStyle(0x333333, alpha);
         graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
 
-        // Energy pattern
-        graphics.lineStyle(1, 0x8b008b, alpha * 0.4);
+        // Geometric pattern
+        graphics.lineStyle(1, 0x444444, alpha * 0.4);
         for (let i = 0; i < 8; i++) {
             const ang = (i / 8) * Math.PI * 2 + time / 2000;
             const x1 = center.x + Math.cos(ang) * (baseRadiusX - 2);
@@ -2651,34 +2643,33 @@ export class MainScene extends Phaser.Scene {
             graphics.lineBetween(center.x, baseY, x1, y1);
         }
 
-        // Purple outer ring
-        graphics.lineStyle(4, 0x8b008b, alpha);
+        // Dark grey outer ring
+        graphics.lineStyle(4, 0x3a3a3a, alpha);
         graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-        graphics.lineStyle(2, 0xda70d6, alpha * 0.5);
+        graphics.lineStyle(2, 0x555555, alpha * 0.5);
         graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
 
-        // Purple gem bolts
-        graphics.fillStyle(0x8b008b, alpha);
+        // Dark grey rivets
+        graphics.fillStyle(0x444444, alpha);
         for (let i = 0; i < 10; i++) {
             const ang = (i / 10) * Math.PI * 2;
             const rx = center.x + Math.cos(ang) * (baseRadiusX - 3);
             const ry = baseY + Math.sin(ang) * (baseRadiusY - 2);
             graphics.fillCircle(rx, ry, 2.5);
-            graphics.fillStyle(0xda70d6, alpha * 0.5);
+            graphics.fillStyle(0x666666, alpha * 0.5);
             graphics.fillCircle(rx - 0.5, ry - 0.5, 1);
-            graphics.fillStyle(0x8b008b, alpha);
+            graphics.fillStyle(0x444444, alpha);
         }
 
-        // === ENHANCED PIVOT ===
-        graphics.fillStyle(0x6a006a, alpha);
+        // === ENHANCED DARK GREY PIVOT ===
+        graphics.fillStyle(0x2a2a2a, alpha);
         graphics.fillCircle(center.x, baseY, 10);
-        graphics.fillStyle(0x8b008b, alpha);
+        graphics.fillStyle(0x3a3a3a, alpha);
         graphics.fillCircle(center.x, baseY - 1, 7);
-        graphics.fillStyle(0xda70d6, alpha);
+        graphics.fillStyle(0x444444, alpha);
         graphics.fillCircle(center.x, baseY - 2, 4);
-        // Energy core glow
-        const coreGlow = 0.5 + Math.sin(time / 80) * 0.3;
-        graphics.fillStyle(0xffffff, alpha * coreGlow * 0.5);
+        // Core highlight
+        graphics.fillStyle(0x666666, alpha * 0.6);
         graphics.fillCircle(center.x, baseY - 2, 2);
 
         // === ENHANCED CROSSBOW BODY ===
@@ -2690,13 +2681,13 @@ export class MainScene extends Phaser.Scene {
         // Enhanced rail
         graphics.lineStyle(12, 0x2a2a3a, alpha);
         graphics.lineBetween(backX, backY, frontX, frontY);
-        graphics.lineStyle(8, 0x3a3a5a, alpha);
+        graphics.lineStyle(8, 0x333333, alpha);
         graphics.lineBetween(backX, backY, frontX, frontY);
-        graphics.lineStyle(4, 0x4a4a6a, alpha);
+        graphics.lineStyle(4, 0x444444, alpha);
         graphics.lineBetween(backX, backY, frontX, frontY);
 
-        // Purple energy line along rail
-        graphics.lineStyle(2, 0x8b008b, alpha * (0.5 + Math.sin(time / 100) * 0.2));
+        // Dark grey line along rail
+        graphics.lineStyle(2, 0x444444, alpha * 0.7);
         graphics.lineBetween(backX, backY, frontX, frontY);
 
         // === ENHANCED ARMS ===
@@ -2718,23 +2709,23 @@ export class MainScene extends Phaser.Scene {
         graphics.lineBetween(mountX, mountY, rArmX, rArmY);
 
         // Dark arms
-        graphics.lineStyle(5, 0x3a3a5a, alpha);
+        graphics.lineStyle(5, 0x333333, alpha);
         graphics.lineBetween(mountX, mountY, lArmX, lArmY);
         graphics.lineBetween(mountX, mountY, rArmX, rArmY);
 
-        // Arm glow
-        graphics.lineStyle(3, 0x4a4a6a, alpha);
+        // Arm highlights
+        graphics.lineStyle(3, 0x444444, alpha);
         graphics.lineBetween(mountX, mountY, lArmX, lArmY);
         graphics.lineBetween(mountX, mountY, rArmX, rArmY);
 
-        // Purple tips with glow
-        graphics.fillStyle(0x6a006a, alpha);
+        // Dark grey tips
+        graphics.fillStyle(0x2a2a2a, alpha);
         graphics.fillCircle(lArmX, lArmY, 5);
         graphics.fillCircle(rArmX, rArmY, 5);
-        graphics.fillStyle(0x8b008b, alpha);
+        graphics.fillStyle(0x444444, alpha);
         graphics.fillCircle(lArmX, lArmY, 3);
         graphics.fillCircle(rArmX, rArmY, 3);
-        graphics.fillStyle(0xda70d6, alpha * 0.6);
+        graphics.fillStyle(0x666666, alpha * 0.6);
         graphics.fillCircle(lArmX - 0.5, lArmY - 0.5, 1.5);
         graphics.fillCircle(rArmX - 0.5, rArmY - 0.5, 1.5);
 
@@ -2744,32 +2735,31 @@ export class MainScene extends Phaser.Scene {
         const nockX = center.x + cos * nockOffset;
         const nockY = center.y + heightOffset + sin * 0.5 * nockOffset;
 
-        // Electric string effect
-        graphics.lineStyle(2, 0xda70d6, alpha);
+        // Reinforced string effect
+        graphics.lineStyle(2, 0x555555, alpha);
         graphics.lineBetween(lArmX, lArmY, nockX, nockY);
         graphics.lineBetween(rArmX, rArmY, nockX, nockY);
-        graphics.lineStyle(1, 0xffffff, alpha * 0.7);
+        graphics.lineStyle(1, 0x777777, alpha * 0.7);
         graphics.lineBetween(lArmX, lArmY, nockX, nockY);
         graphics.lineBetween(rArmX, rArmY, nockX, nockY);
 
-        // === ENERGY BOLT ===
+        // Reinforced bolt
         if (stringTension > 0.1) {
             const boltTipX = frontX;
             const boltTipY = frontY;
-            // Energy bolt with glow
-            graphics.lineStyle(4, 0x8b008b, alpha * 0.5);
+            graphics.lineStyle(4, 0x333333, alpha * 0.5);
             graphics.lineBetween(nockX, nockY, boltTipX, boltTipY);
-            graphics.lineStyle(2, 0xda70d6, alpha);
+            graphics.lineStyle(2, 0x555555, alpha);
             graphics.lineBetween(nockX, nockY, boltTipX, boltTipY);
-            graphics.lineStyle(1, 0xffffff, alpha * 0.8);
+            graphics.lineStyle(1, 0x777777, alpha * 0.8);
             graphics.lineBetween(nockX, nockY, boltTipX, boltTipY);
         }
 
-        // Enhanced firing glow
-        const firingGlow = 0.4 + Math.sin(time / 40) * 0.3;
-        graphics.fillStyle(0xda70d6, alpha * firingGlow * 0.5);
+        // Subtle firing effect
+        const firingGlow = 0.2 + Math.sin(time / 60) * 0.1;
+        graphics.fillStyle(0x666666, alpha * firingGlow * 0.5);
         graphics.fillCircle(frontX, frontY, 8);
-        graphics.fillStyle(0xff00ff, alpha * firingGlow);
+        graphics.fillStyle(0x888888, alpha * firingGlow);
         graphics.fillCircle(frontX, frontY, 5);
     }
 
