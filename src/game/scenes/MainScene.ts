@@ -758,6 +758,9 @@ export class MainScene extends Phaser.Scene {
             case 'magmavent':
                 this.drawMagmaVent(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics);
                 break;
+            case 'dragons_breath':
+                this.drawDragonsBreath(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics);
+                break;
 
             default:
                 this.drawGenericBuilding(graphics, c1, c2, c3, c4, center, info, alpha, tint);
@@ -2982,6 +2985,299 @@ export class MainScene extends Phaser.Scene {
             graphics.fillStyle(0x888888, alpha * smokeAlpha);
             graphics.fillRect(smokeX - smokeSize / 2, smokeY - smokeSize / 2, smokeSize, smokeSize);
         }
+    }
+
+    // === DRAGON'S BREATH - Ancient Chinese/Steampunk Firecracker Salvo Launcher ===
+    private drawDragonsBreath(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding, baseGraphics?: Phaser.GameObjects.Graphics) {
+        const time = this.time.now || 0;
+        const g = baseGraphics || graphics;
+
+        // Firing state
+        const timeSinceFire = building?.lastFireTime ? (time - building.lastFireTime) : 100000;
+        const salvoActive = timeSinceFire < 800;
+        const salvoPhase = salvoActive ? timeSinceFire / 800 : 0;
+
+        // === ORNATE STONE PLATFORM (Chinese temple style) ===
+        // Main platform with red lacquer appearance
+        g.fillStyle(tint ?? 0x8b1a1a, alpha);
+        g.fillPoints([c1, c2, c3, c4], true);
+
+        // Gold trim border (3 layers for depth)
+        g.lineStyle(4, 0xffd700, alpha);
+        g.strokePoints([c1, c2, c3, c4], true, true);
+        g.lineStyle(2, 0xb8860b, alpha * 0.8);
+        const inset1 = 4;
+        const i1 = new Phaser.Math.Vector2(c1.x, c1.y + inset1);
+        const i2 = new Phaser.Math.Vector2(c2.x + inset1 * 0.5, c2.y);
+        const i3 = new Phaser.Math.Vector2(c3.x, c3.y - inset1);
+        const i4 = new Phaser.Math.Vector2(c4.x - inset1 * 0.5, c4.y);
+        g.strokePoints([i1, i2, i3, i4], true, true);
+
+        // Decorative corner ornaments (Chinese cloud motifs)
+        g.fillStyle(0xffd700, alpha * 0.9);
+        g.fillCircle(c1.x, c1.y, 5);
+        g.fillCircle(c2.x, c2.y, 5);
+        g.fillCircle(c3.x, c3.y, 5);
+        g.fillCircle(c4.x, c4.y, 5);
+        g.fillStyle(0xcc0000, alpha);
+        g.fillCircle(c1.x, c1.y, 3);
+        g.fillCircle(c2.x, c2.y, 3);
+        g.fillCircle(c3.x, c3.y, 3);
+        g.fillCircle(c4.x, c4.y, 3);
+
+        // Dragon scale pattern on base (isometric texture)
+        g.fillStyle(0x6a1010, alpha * 0.4);
+        for (let row = 0; row < 3; row++) {
+            for (let col = 0; col < 4; col++) {
+                const scaleX = center.x - 30 + col * 18 + (row % 2) * 9;
+                const scaleY = center.y - 5 + row * 8;
+                g.fillEllipse(scaleX, scaleY, 8, 4);
+            }
+        }
+
+        // === CENTRAL PAGODA STRUCTURE ===
+        const baseHeight = -15;
+        const strutHeight = 50;
+
+        // Four corner pillars (brass with Chinese red accents)
+        const pillarOffsets = [
+            { x: -28, y: -12 }, { x: 28, y: -12 },
+            { x: -28, y: 12 }, { x: 28, y: 12 }
+        ];
+
+        for (const offset of pillarOffsets) {
+            const px = center.x + offset.x;
+            const py = center.y + offset.y * 0.5;
+
+            // Pillar shadow
+            graphics.fillStyle(0x1a0a0a, alpha * 0.3);
+            graphics.fillRect(px - 4, py + 2, 10, strutHeight + 5);
+
+            // Brass pillar body
+            graphics.fillStyle(0xb8860b, alpha);
+            graphics.fillRect(px - 3, py + baseHeight, 8, strutHeight);
+
+            // Red lacquer section
+            graphics.fillStyle(0xcc0000, alpha);
+            graphics.fillRect(px - 2, py + baseHeight + 5, 6, strutHeight - 10);
+
+            // Gold bands
+            graphics.fillStyle(0xffd700, alpha);
+            graphics.fillRect(px - 4, py + baseHeight, 10, 3);
+            graphics.fillRect(px - 4, py + baseHeight + strutHeight - 5, 10, 3);
+            graphics.fillRect(px - 3, py + baseHeight + 20, 8, 2);
+
+            // Decorative dragon head on front pillars
+            if (offset.y > 0) {
+                graphics.fillStyle(0xffd700, alpha);
+                graphics.fillCircle(px + 2, py + baseHeight - 5, 4);
+                graphics.fillStyle(0xff0000, alpha);
+                graphics.fillCircle(px + 1, py + baseHeight - 6, 1.5);
+                graphics.fillCircle(px + 4, py + baseHeight - 6, 1.5);
+            }
+        }
+
+        // === 16 FIRECRACKER LAUNCH PODS (4x4 Grid) ===
+        const podBaseY = center.y + baseHeight - 5;
+        const podSpacing = 12;
+        const gridOffset = -18;
+
+        for (let row = 0; row < 4; row++) {
+            for (let col = 0; col < 4; col++) {
+                const podIndex = row * 4 + col;
+                const podX = center.x + gridOffset + col * podSpacing;
+                const podY = podBaseY + (row - 1.5) * (podSpacing * 0.5);
+
+                // Staggered firing animation
+                const podFireDelay = podIndex * 40; // Each pod fires 40ms after previous
+                const podTimeSinceFire = timeSinceFire - podFireDelay;
+                const podFiring = podTimeSinceFire > 0 && podTimeSinceFire < 200;
+                const podRecoil = podFiring ? Math.sin((podTimeSinceFire / 200) * Math.PI) * 4 : 0;
+
+                // Pod tube shadow
+                graphics.fillStyle(0x1a1a1a, alpha * 0.4);
+                graphics.fillEllipse(podX + 2, podY + 3, 6, 3);
+
+                // Brass pod tube (pointing upward)
+                const tubeHeight = 18;
+                const tubeTop = podY - tubeHeight + podRecoil;
+
+                // Tube body
+                graphics.fillStyle(0x8b5a2b, alpha);
+                graphics.fillRect(podX - 4, tubeTop, 8, tubeHeight);
+
+                // Copper sheen
+                graphics.fillStyle(0xcd7f32, alpha * 0.7);
+                graphics.fillRect(podX - 3, tubeTop + 2, 3, tubeHeight - 4);
+
+                // Red paper wrapper (firecracker style)
+                graphics.fillStyle(0xcc0000, alpha);
+                graphics.fillRect(podX - 3, tubeTop + 4, 6, tubeHeight - 8);
+
+                // Gold band at top
+                graphics.fillStyle(0xffd700, alpha);
+                graphics.fillRect(podX - 4, tubeTop, 8, 3);
+                graphics.fillRect(podX - 4, tubeTop + tubeHeight - 3, 8, 3);
+
+                // Fuse (glowing when about to fire)
+                const fuseGlow = salvoActive && podTimeSinceFire > -100 && podTimeSinceFire < 50;
+                graphics.fillStyle(fuseGlow ? 0xff6600 : 0x3a3a3a, alpha);
+                graphics.fillRect(podX - 1, tubeTop - 3, 2, 4);
+
+                if (fuseGlow) {
+                    // Spark effect
+                    graphics.fillStyle(0xffff00, alpha * (0.5 + Math.sin(time / 30 + podIndex) * 0.5));
+                    graphics.fillCircle(podX, tubeTop - 4, 2);
+                    graphics.fillStyle(0xff8800, alpha * 0.6);
+                    graphics.fillCircle(podX, tubeTop - 5, 3);
+                }
+
+                // Muzzle flash when firing
+                if (podFiring) {
+                    const flashIntensity = 1 - (podTimeSinceFire / 200);
+                    graphics.fillStyle(0xffff00, alpha * flashIntensity * 0.8);
+                    graphics.fillCircle(podX, tubeTop - 6, 6 * flashIntensity);
+                    graphics.fillStyle(0xff6600, alpha * flashIntensity * 0.6);
+                    graphics.fillCircle(podX, tubeTop - 8, 8 * flashIntensity);
+                    graphics.fillStyle(0xff4400, alpha * flashIntensity * 0.4);
+                    graphics.fillCircle(podX, tubeTop - 10, 10 * flashIntensity);
+                }
+
+                // Smoke trail after firing
+                if (podTimeSinceFire > 100 && podTimeSinceFire < 600) {
+                    const smokeProgress = (podTimeSinceFire - 100) / 500;
+                    const smokeY = tubeTop - 10 - smokeProgress * 30;
+                    const smokeX = podX + Math.sin(time / 100 + podIndex) * 5 * smokeProgress;
+                    graphics.fillStyle(0x888888, alpha * (1 - smokeProgress) * 0.4);
+                    graphics.fillCircle(smokeX, smokeY, 3 + smokeProgress * 4);
+                }
+            }
+        }
+
+        // === PAGODA ROOF ===
+        const roofY = center.y + baseHeight - 30;
+
+        // Curved roof edges (Chinese style)
+        graphics.fillStyle(0x2a1a10, alpha);
+        // Main roof polygon
+        graphics.beginPath();
+        graphics.moveTo(center.x - 38, roofY + 15);
+        graphics.lineTo(center.x - 32, roofY);
+        graphics.lineTo(center.x, roofY - 8);
+        graphics.lineTo(center.x + 32, roofY);
+        graphics.lineTo(center.x + 38, roofY + 15);
+        graphics.lineTo(center.x + 32, roofY + 18);
+        graphics.lineTo(center.x, roofY + 8);
+        graphics.lineTo(center.x - 32, roofY + 18);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Red lacquer on roof
+        graphics.fillStyle(0x8b0000, alpha);
+        graphics.beginPath();
+        graphics.moveTo(center.x - 30, roofY + 12);
+        graphics.lineTo(center.x - 26, roofY + 2);
+        graphics.lineTo(center.x, roofY - 4);
+        graphics.lineTo(center.x + 26, roofY + 2);
+        graphics.lineTo(center.x + 30, roofY + 12);
+        graphics.lineTo(center.x, roofY + 5);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Gold roof edge trim
+        graphics.lineStyle(2, 0xffd700, alpha);
+        graphics.lineBetween(center.x - 38, roofY + 15, center.x - 32, roofY);
+        graphics.lineBetween(center.x - 32, roofY, center.x, roofY - 8);
+        graphics.lineBetween(center.x, roofY - 8, center.x + 32, roofY);
+        graphics.lineBetween(center.x + 32, roofY, center.x + 38, roofY + 15);
+
+        // Curved roof tips (dragon tail style)
+        graphics.fillStyle(0xffd700, alpha);
+        graphics.fillCircle(center.x - 40, roofY + 13, 4);
+        graphics.fillCircle(center.x + 40, roofY + 13, 4);
+
+        // Central finial (dragon pearl)
+        graphics.fillStyle(0xffd700, alpha);
+        graphics.fillCircle(center.x, roofY - 12, 6);
+        graphics.fillStyle(0xff0000, alpha);
+        graphics.fillCircle(center.x, roofY - 12, 4);
+        graphics.fillStyle(0xff6600, alpha * 0.6);
+        graphics.fillCircle(center.x - 1, roofY - 13, 2);
+
+        // === DRAGON DECORATIONS ===
+        // Left dragon silhouette
+        graphics.fillStyle(0xffd700, alpha * 0.9);
+        graphics.beginPath();
+        graphics.moveTo(center.x - 42, center.y - 5);
+        graphics.lineTo(center.x - 48, center.y - 15);
+        graphics.lineTo(center.x - 45, center.y - 20);
+        graphics.lineTo(center.x - 40, center.y - 18);
+        graphics.lineTo(center.x - 38, center.y - 10);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Right dragon silhouette
+        graphics.beginPath();
+        graphics.moveTo(center.x + 42, center.y - 5);
+        graphics.lineTo(center.x + 48, center.y - 15);
+        graphics.lineTo(center.x + 45, center.y - 20);
+        graphics.lineTo(center.x + 40, center.y - 18);
+        graphics.lineTo(center.x + 38, center.y - 10);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Dragon eyes (glowing)
+        const eyeGlow = 0.7 + Math.sin(time / 200) * 0.3;
+        graphics.fillStyle(0xff0000, alpha * eyeGlow);
+        graphics.fillCircle(center.x - 45, center.y - 17, 2);
+        graphics.fillCircle(center.x + 45, center.y - 17, 2);
+
+        // === STEAM/SMOKE EFFECTS ===
+        // Ambient steam from the mechanism
+        if (!salvoActive) {
+            for (let i = 0; i < 3; i++) {
+                const steamCycle = ((time / 3000) + i * 0.33) % 1;
+                const steamX = center.x - 15 + i * 15 + Math.sin(time / 500 + i) * 5;
+                const steamY = roofY - 5 - steamCycle * 25;
+                const steamAlpha = (1 - steamCycle) * 0.2;
+                const steamSize = 3 + steamCycle * 5;
+
+                graphics.fillStyle(0xcccccc, alpha * steamAlpha);
+                graphics.fillCircle(steamX, steamY, steamSize);
+            }
+        }
+
+        // === GLOWING RUNES (Ancient symbols) ===
+        const runeGlow = 0.4 + Math.sin(time / 300) * 0.2;
+        graphics.fillStyle(0xff6600, alpha * runeGlow);
+
+        // Front rune symbols
+        graphics.fillRect(center.x - 8, center.y + 8, 3, 6);
+        graphics.fillRect(center.x - 4, center.y + 9, 2, 4);
+        graphics.fillRect(center.x + 2, center.y + 8, 3, 6);
+        graphics.fillRect(center.x + 6, center.y + 9, 2, 4);
+
+        // === BRASS CONTROL MECHANISMS ===
+        // Pressure dials on sides
+        graphics.fillStyle(0xb8860b, alpha);
+        graphics.fillCircle(center.x - 35, center.y + 5, 5);
+        graphics.fillCircle(center.x + 35, center.y + 5, 5);
+
+        graphics.fillStyle(0x2a2a2a, alpha);
+        graphics.fillCircle(center.x - 35, center.y + 5, 3);
+        graphics.fillCircle(center.x + 35, center.y + 5, 3);
+
+        // Dial needles (animated)
+        const dialAngle = salvoActive ? salvoPhase * Math.PI : Math.sin(time / 1000) * 0.5;
+        graphics.lineStyle(1, 0xff4400, alpha);
+        graphics.lineBetween(
+            center.x - 35, center.y + 5,
+            center.x - 35 + Math.cos(dialAngle) * 2, center.y + 5 - Math.sin(dialAngle) * 2
+        );
+        graphics.lineBetween(
+            center.x + 35, center.y + 5,
+            center.x + 35 + Math.cos(dialAngle) * 2, center.y + 5 - Math.sin(dialAngle) * 2
+        );
     }
 
     // === RUBBLE SYSTEM (Destroyed Building Remains) ===
