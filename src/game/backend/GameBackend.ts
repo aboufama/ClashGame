@@ -135,7 +135,19 @@ export class GameBackend {
         const b = world.buildings.find(b => b.id === buildingId);
         if (!b) return false;
 
-        b.level += 1;
+        // Special case: walls upgrade ALL walls of the same level at once
+        if (b.type === 'wall') {
+            const currentLevel = b.level;
+            const wallsToUpgrade = world.buildings.filter(
+                building => building.type === 'wall' && building.level === currentLevel
+            );
+            for (const wall of wallsToUpgrade) {
+                wall.level += 1;
+            }
+        } else {
+            b.level += 1;
+        }
+
         this.saveWorld(world);
         return true;
     }

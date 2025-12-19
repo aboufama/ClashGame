@@ -197,7 +197,24 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
             { hp: 750, damage: 75, fireRate: 1300, cost: 900 }    // Level 2 - Enhanced (ring + thicker base)
         ]
     },
-    wall: { id: 'wall', name: 'Wall', cost: 50, desc: 'Stops enemies cold.', width: 1, height: 1, maxHealth: 500, category: 'defense', maxCount: 100, color: 0xcccccc, maxLevel: 1 },
+    wall: {
+        id: 'wall',
+        name: 'Wall',
+        cost: 50,
+        desc: 'Stops enemies cold.',
+        width: 1,
+        height: 1,
+        maxHealth: 500,
+        category: 'defense',
+        maxCount: 100,
+        color: 0xcccccc,
+        maxLevel: 3,
+        levels: [
+            { hp: 500, cost: 50 },      // Level 1 - Wooden palisade
+            { hp: 800, cost: 150 },     // Level 2 - Stone wall
+            { hp: 1200, cost: 350 }     // Level 3 - Fortified dark stone
+        ]
+    },
     army_camp: {
         id: 'army_camp',
         name: 'Army Camp',

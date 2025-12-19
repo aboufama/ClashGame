@@ -4802,127 +4802,228 @@ export class MainScene extends Phaser.Scene {
     }
 
     private drawWall(graphics: Phaser.GameObjects.Graphics, _center: Phaser.Math.Vector2, gridX: number, gridY: number, alpha: number, tint: number | null, building?: PlacedBuilding) {
-        // Isometric wall with proper connected segments
-        // Key: Only draw segments toward neighbors with LOWER depth (behind us in iso view)
-        // This ensures segment tops are drawn by the "front" wall, preventing overlap issues
-        const wallHeight = 20;
-        const wallThickness = 0.3;
+        const level = building?.level ?? 1;
         const owner = building?.owner ?? 'PLAYER';
 
-        // Stone colors - consistent isometric shading
-        const stoneTop = tint ?? 0xd4c4a8;
-        const stoneFront = tint ?? 0xa89878;
-        const stoneSide = tint ?? 0x8a7a68;
+        // Route to appropriate level renderer
+        if (level >= 3) {
+            this.drawWallLevel3(graphics, gridX, gridY, alpha, tint, owner);
+        } else if (level === 2) {
+            this.drawWallLevel2(graphics, gridX, gridY, alpha, tint, owner);
+        } else {
+            this.drawWallLevel1(graphics, gridX, gridY, alpha, tint, owner);
+        }
+    }
 
-        // Check which neighbors exist
+    // === LEVEL 1: WOODEN PALISADE ===
+    private drawWallLevel1(graphics: Phaser.GameObjects.Graphics, gridX: number, gridY: number, alpha: number, tint: number | null, owner: string) {
+        const wallHeight = 22;
+        const wallThickness = 0.28;
+
+        // Wooden colors - warm browns
+        const woodTop = tint ?? 0x8b6b4a;
+        const woodFront = tint ?? 0x6b4a30;
+        const woodSide = tint ?? 0x5a3a20;
+
         const hasNeighbor = (dx: number, dy: number) => {
             return this.buildings.some(b =>
-                b.type === 'wall' &&
-                b.gridX === gridX + dx &&
-                b.gridY === gridY + dy &&
-                b.owner === owner
+                b.type === 'wall' && b.gridX === gridX + dx && b.gridY === gridY + dy && b.owner === owner
             );
         };
 
-        const nN = hasNeighbor(0, -1); // North (Y-1) - LOWER depth, draw TO it
-        const nS = hasNeighbor(0, 1);  // South (Y+1) - HIGHER depth, don't draw
-        const nW = hasNeighbor(-1, 0); // West (X-1) - LOWER depth, draw TO it
-        const nE = hasNeighbor(1, 0);  // East (X+1) - HIGHER depth, don't draw
+        const nN = hasNeighbor(0, -1);
+        const nS = hasNeighbor(0, 1);
+        const nW = hasNeighbor(-1, 0);
+        const nE = hasNeighbor(1, 0);
 
         const hw = wallThickness / 2;
         const cx = gridX + 0.5;
         const cy = gridY + 0.5;
 
-        // Collect geometry: sides first, then tops
         const sideFaces: { points: Phaser.Math.Vector2[], color: number }[] = [];
         const topFaces: Phaser.Math.Vector2[][] = [];
 
-        // Helper to add a segment's geometry
         const addSegment = (x1: number, y1: number, x2: number, y2: number) => {
             const isVertical = Math.abs(y2 - y1) > Math.abs(x2 - x1);
-
             if (isVertical) {
-                // Segment runs in Y direction (N-S in grid)
-                const minY = Math.min(y1, y2);
-                const maxY = Math.max(y1, y2);
-
-                const bl = this.cartToIso(x1 - hw, minY);
-                const br = this.cartToIso(x1 + hw, minY);
-                const fl = this.cartToIso(x1 - hw, maxY);
-                const fr = this.cartToIso(x1 + hw, maxY);
-
+                const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
+                const bl = this.cartToIso(x1 - hw, minY), br = this.cartToIso(x1 + hw, minY);
+                const fl = this.cartToIso(x1 - hw, maxY), fr = this.cartToIso(x1 + hw, maxY);
                 const tbl = new Phaser.Math.Vector2(bl.x, bl.y - wallHeight);
                 const tbr = new Phaser.Math.Vector2(br.x, br.y - wallHeight);
                 const tfl = new Phaser.Math.Vector2(fl.x, fl.y - wallHeight);
                 const tfr = new Phaser.Math.Vector2(fr.x, fr.y - wallHeight);
-
-                // Right face (SE)
-                sideFaces.push({ points: [br, fr, tfr, tbr], color: stoneSide });
-                // Front face (SW)
-                sideFaces.push({ points: [fr, fl, tfl, tfr], color: stoneFront });
-                // Top
+                sideFaces.push({ points: [br, fr, tfr, tbr], color: woodSide });
+                sideFaces.push({ points: [fr, fl, tfl, tfr], color: woodFront });
                 topFaces.push([tbl, tbr, tfr, tfl]);
             } else {
-                // Segment runs in X direction (E-W in grid)
-                const minX = Math.min(x1, x2);
-                const maxX = Math.max(x1, x2);
-
-                const lt = this.cartToIso(minX, y1 - hw);
-                const lb = this.cartToIso(minX, y1 + hw);
-                const rt = this.cartToIso(maxX, y1 - hw);
-                const rb = this.cartToIso(maxX, y1 + hw);
-
+                const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
+                const lt = this.cartToIso(minX, y1 - hw), lb = this.cartToIso(minX, y1 + hw);
+                const rt = this.cartToIso(maxX, y1 - hw), rb = this.cartToIso(maxX, y1 + hw);
                 const tlt = new Phaser.Math.Vector2(lt.x, lt.y - wallHeight);
                 const tlb = new Phaser.Math.Vector2(lb.x, lb.y - wallHeight);
                 const trt = new Phaser.Math.Vector2(rt.x, rt.y - wallHeight);
                 const trb = new Phaser.Math.Vector2(rb.x, rb.y - wallHeight);
-
-                // Right face (SE)
-                sideFaces.push({ points: [rt, rb, trb, trt], color: stoneSide });
-                // Front face (SW)
-                sideFaces.push({ points: [rb, lb, tlb, trb], color: stoneFront });
-                // Top
+                sideFaces.push({ points: [rt, rb, trb, trt], color: woodSide });
+                sideFaces.push({ points: [rb, lb, tlb, trb], color: woodFront });
                 topFaces.push([tlt, trt, trb, tlb]);
             }
         };
 
-        // Only draw segments toward neighbors with LOWER depth (North and West)
-        // This wall is "in front" so it owns these segments and their tops render last
-        // Segments extend all the way to neighbor's center to connect properly
-        if (nN) addSegment(cx, cy, cx, gridY - 0.5);       // To North neighbor's center
-        if (nW) addSegment(cx, cy, gridX - 0.5, cy);       // To West neighbor's center
+        if (nN) addSegment(cx, cy, cx, gridY - 0.5);
+        if (nW) addSegment(cx, cy, gridX - 0.5, cy);
 
-        // Central pillar
-        const ps = wallThickness * 0.6;
+        // Central post
+        const ps = wallThickness * 0.7;
         const hps = ps / 2;
-
         const pTL = this.cartToIso(cx - hps, cy - hps);
         const pTR = this.cartToIso(cx + hps, cy - hps);
         const pBR = this.cartToIso(cx + hps, cy + hps);
         const pBL = this.cartToIso(cx - hps, cy + hps);
-
         const ptTL = new Phaser.Math.Vector2(pTL.x, pTL.y - wallHeight);
         const ptTR = new Phaser.Math.Vector2(pTR.x, pTR.y - wallHeight);
         const ptBR = new Phaser.Math.Vector2(pBR.x, pBR.y - wallHeight);
         const ptBL = new Phaser.Math.Vector2(pBL.x, pBL.y - wallHeight);
-
-        sideFaces.push({ points: [pTR, pBR, ptBR, ptTR], color: stoneSide });
-        sideFaces.push({ points: [pBR, pBL, ptBL, ptBR], color: stoneFront });
+        sideFaces.push({ points: [pTR, pBR, ptBR, ptTR], color: woodSide });
+        sideFaces.push({ points: [pBR, pBL, ptBL, ptBR], color: woodFront });
         topFaces.push([ptTL, ptTR, ptBR, ptBL]);
 
-        // === RENDER PASS 1: All side faces ===
+        // Render side faces
         for (const face of sideFaces) {
             graphics.fillStyle(face.color, alpha);
             graphics.fillPoints(face.points, true);
         }
 
-        // === RENDER PASS 2: All top faces ===
+        // Render top faces
+        graphics.fillStyle(woodTop, alpha);
+        for (const top of topFaces) {
+            graphics.fillPoints(top, true);
+        }
+
+        // Wood grain lines on front faces
+        graphics.lineStyle(1, 0x4a2a15, alpha * 0.4);
+        const pcx = (ptTL.x + ptBR.x) / 2;
+        const pcy = (ptTL.y + ptBR.y) / 2;
+        graphics.lineBetween(pcx - 2, pcy + wallHeight * 0.3, pcx - 2, pcy + wallHeight * 0.8);
+        graphics.lineBetween(pcx + 1, pcy + wallHeight * 0.2, pcx + 1, pcy + wallHeight * 0.7);
+
+        // Sharpened top (pointed stake)
+        const peakY = pcy - 6;
+        graphics.fillStyle(0x9b7b5a, alpha);
+        graphics.beginPath();
+        graphics.moveTo(pcx, peakY);
+        graphics.lineTo(ptTL.x, ptTL.y);
+        graphics.lineTo(ptTR.x, ptTR.y);
+        graphics.closePath();
+        graphics.fillPath();
+        graphics.beginPath();
+        graphics.moveTo(pcx, peakY);
+        graphics.lineTo(ptTR.x, ptTR.y);
+        graphics.lineTo(ptBR.x, ptBR.y);
+        graphics.closePath();
+        graphics.fillPath();
+        graphics.fillStyle(0x7b5b3a, alpha);
+        graphics.beginPath();
+        graphics.moveTo(pcx, peakY);
+        graphics.lineTo(ptBR.x, ptBR.y);
+        graphics.lineTo(ptBL.x, ptBL.y);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Rope binding
+        const ropeY = pcy + 8;
+        graphics.lineStyle(2, 0x8a7a5a, alpha);
+        graphics.lineBetween(pcx - 4, ropeY, pcx + 4, ropeY);
+        graphics.lineStyle(1, 0x6a5a3a, alpha * 0.6);
+        graphics.lineBetween(pcx - 3, ropeY + 2, pcx + 3, ropeY + 2);
+    }
+
+    // === LEVEL 2: STONE WALL ===
+    private drawWallLevel2(graphics: Phaser.GameObjects.Graphics, gridX: number, gridY: number, alpha: number, tint: number | null, owner: string) {
+        const wallHeight = 20;
+        const wallThickness = 0.3;
+
+        // Stone colors - classic grey
+        const stoneTop = tint ?? 0xd4c4a8;
+        const stoneFront = tint ?? 0xa89878;
+        const stoneSide = tint ?? 0x8a7a68;
+
+        const hasNeighbor = (dx: number, dy: number) => {
+            return this.buildings.some(b =>
+                b.type === 'wall' && b.gridX === gridX + dx && b.gridY === gridY + dy && b.owner === owner
+            );
+        };
+
+        const nN = hasNeighbor(0, -1);
+        const nS = hasNeighbor(0, 1);
+        const nW = hasNeighbor(-1, 0);
+        const nE = hasNeighbor(1, 0);
+
+        const hw = wallThickness / 2;
+        const cx = gridX + 0.5;
+        const cy = gridY + 0.5;
+
+        const sideFaces: { points: Phaser.Math.Vector2[], color: number }[] = [];
+        const topFaces: Phaser.Math.Vector2[][] = [];
+
+        const addSegment = (x1: number, y1: number, x2: number, y2: number) => {
+            const isVertical = Math.abs(y2 - y1) > Math.abs(x2 - x1);
+            if (isVertical) {
+                const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
+                const bl = this.cartToIso(x1 - hw, minY), br = this.cartToIso(x1 + hw, minY);
+                const fl = this.cartToIso(x1 - hw, maxY), fr = this.cartToIso(x1 + hw, maxY);
+                const tbl = new Phaser.Math.Vector2(bl.x, bl.y - wallHeight);
+                const tbr = new Phaser.Math.Vector2(br.x, br.y - wallHeight);
+                const tfl = new Phaser.Math.Vector2(fl.x, fl.y - wallHeight);
+                const tfr = new Phaser.Math.Vector2(fr.x, fr.y - wallHeight);
+                sideFaces.push({ points: [br, fr, tfr, tbr], color: stoneSide });
+                sideFaces.push({ points: [fr, fl, tfl, tfr], color: stoneFront });
+                topFaces.push([tbl, tbr, tfr, tfl]);
+            } else {
+                const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
+                const lt = this.cartToIso(minX, y1 - hw), lb = this.cartToIso(minX, y1 + hw);
+                const rt = this.cartToIso(maxX, y1 - hw), rb = this.cartToIso(maxX, y1 + hw);
+                const tlt = new Phaser.Math.Vector2(lt.x, lt.y - wallHeight);
+                const tlb = new Phaser.Math.Vector2(lb.x, lb.y - wallHeight);
+                const trt = new Phaser.Math.Vector2(rt.x, rt.y - wallHeight);
+                const trb = new Phaser.Math.Vector2(rb.x, rb.y - wallHeight);
+                sideFaces.push({ points: [rt, rb, trb, trt], color: stoneSide });
+                sideFaces.push({ points: [rb, lb, tlb, trb], color: stoneFront });
+                topFaces.push([tlt, trt, trb, tlb]);
+            }
+        };
+
+        if (nN) addSegment(cx, cy, cx, gridY - 0.5);
+        if (nW) addSegment(cx, cy, gridX - 0.5, cy);
+
+        // Central pillar
+        const ps = wallThickness * 0.6;
+        const hps = ps / 2;
+        const pTL = this.cartToIso(cx - hps, cy - hps);
+        const pTR = this.cartToIso(cx + hps, cy - hps);
+        const pBR = this.cartToIso(cx + hps, cy + hps);
+        const pBL = this.cartToIso(cx - hps, cy + hps);
+        const ptTL = new Phaser.Math.Vector2(pTL.x, pTL.y - wallHeight);
+        const ptTR = new Phaser.Math.Vector2(pTR.x, pTR.y - wallHeight);
+        const ptBR = new Phaser.Math.Vector2(pBR.x, pBR.y - wallHeight);
+        const ptBL = new Phaser.Math.Vector2(pBL.x, pBL.y - wallHeight);
+        sideFaces.push({ points: [pTR, pBR, ptBR, ptTR], color: stoneSide });
+        sideFaces.push({ points: [pBR, pBL, ptBL, ptBR], color: stoneFront });
+        topFaces.push([ptTL, ptTR, ptBR, ptBL]);
+
+        // Render side faces
+        for (const face of sideFaces) {
+            graphics.fillStyle(face.color, alpha);
+            graphics.fillPoints(face.points, true);
+        }
+
+        // Render top faces
         graphics.fillStyle(stoneTop, alpha);
         for (const top of topFaces) {
             graphics.fillPoints(top, true);
         }
 
-        // === RENDER PASS 3: Top highlights ===
+        // Top highlights
         graphics.lineStyle(1, 0xe8dcc8, alpha * 0.6);
         graphics.lineBetween(ptTL.x, ptTL.y, ptTR.x, ptTR.y);
         graphics.lineBetween(ptTL.x, ptTL.y, ptBL.x, ptBL.y);
@@ -4934,6 +5035,134 @@ export class MainScene extends Phaser.Scene {
             const pcy = (ptTL.y + ptBR.y) / 2;
             graphics.fillStyle(0xe8dcc8, alpha);
             graphics.fillCircle(pcx, pcy, 2.5);
+        }
+    }
+
+    // === LEVEL 3: FORTIFIED DARK STONE ===
+    private drawWallLevel3(graphics: Phaser.GameObjects.Graphics, gridX: number, gridY: number, alpha: number, tint: number | null, owner: string) {
+        const wallHeight = 24;
+        const wallThickness = 0.35;
+
+        // Dark fortified stone colors
+        const stoneTop = tint ?? 0x7a7a8a;
+        const stoneFront = tint ?? 0x5a5a6a;
+        const stoneSide = tint ?? 0x4a4a5a;
+        const mortarColor = 0x3a3a4a;
+
+        const hasNeighbor = (dx: number, dy: number) => {
+            return this.buildings.some(b =>
+                b.type === 'wall' && b.gridX === gridX + dx && b.gridY === gridY + dy && b.owner === owner
+            );
+        };
+
+        const nN = hasNeighbor(0, -1);
+        const nS = hasNeighbor(0, 1);
+        const nW = hasNeighbor(-1, 0);
+        const nE = hasNeighbor(1, 0);
+
+        const hw = wallThickness / 2;
+        const cx = gridX + 0.5;
+        const cy = gridY + 0.5;
+
+        const sideFaces: { points: Phaser.Math.Vector2[], color: number }[] = [];
+        const topFaces: Phaser.Math.Vector2[][] = [];
+
+        const addSegment = (x1: number, y1: number, x2: number, y2: number) => {
+            const isVertical = Math.abs(y2 - y1) > Math.abs(x2 - x1);
+            if (isVertical) {
+                const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
+                const bl = this.cartToIso(x1 - hw, minY), br = this.cartToIso(x1 + hw, minY);
+                const fl = this.cartToIso(x1 - hw, maxY), fr = this.cartToIso(x1 + hw, maxY);
+                const tbl = new Phaser.Math.Vector2(bl.x, bl.y - wallHeight);
+                const tbr = new Phaser.Math.Vector2(br.x, br.y - wallHeight);
+                const tfl = new Phaser.Math.Vector2(fl.x, fl.y - wallHeight);
+                const tfr = new Phaser.Math.Vector2(fr.x, fr.y - wallHeight);
+                sideFaces.push({ points: [br, fr, tfr, tbr], color: stoneSide });
+                sideFaces.push({ points: [fr, fl, tfl, tfr], color: stoneFront });
+                topFaces.push([tbl, tbr, tfr, tfl]);
+            } else {
+                const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
+                const lt = this.cartToIso(minX, y1 - hw), lb = this.cartToIso(minX, y1 + hw);
+                const rt = this.cartToIso(maxX, y1 - hw), rb = this.cartToIso(maxX, y1 + hw);
+                const tlt = new Phaser.Math.Vector2(lt.x, lt.y - wallHeight);
+                const tlb = new Phaser.Math.Vector2(lb.x, lb.y - wallHeight);
+                const trt = new Phaser.Math.Vector2(rt.x, rt.y - wallHeight);
+                const trb = new Phaser.Math.Vector2(rb.x, rb.y - wallHeight);
+                sideFaces.push({ points: [rt, rb, trb, trt], color: stoneSide });
+                sideFaces.push({ points: [rb, lb, tlb, trb], color: stoneFront });
+                topFaces.push([tlt, trt, trb, tlb]);
+            }
+        };
+
+        if (nN) addSegment(cx, cy, cx, gridY - 0.5);
+        if (nW) addSegment(cx, cy, gridX - 0.5, cy);
+
+        // Central pillar (larger for fortified)
+        const ps = wallThickness * 0.7;
+        const hps = ps / 2;
+        const pTL = this.cartToIso(cx - hps, cy - hps);
+        const pTR = this.cartToIso(cx + hps, cy - hps);
+        const pBR = this.cartToIso(cx + hps, cy + hps);
+        const pBL = this.cartToIso(cx - hps, cy + hps);
+        const ptTL = new Phaser.Math.Vector2(pTL.x, pTL.y - wallHeight);
+        const ptTR = new Phaser.Math.Vector2(pTR.x, pTR.y - wallHeight);
+        const ptBR = new Phaser.Math.Vector2(pBR.x, pBR.y - wallHeight);
+        const ptBL = new Phaser.Math.Vector2(pBL.x, pBL.y - wallHeight);
+        sideFaces.push({ points: [pTR, pBR, ptBR, ptTR], color: stoneSide });
+        sideFaces.push({ points: [pBR, pBL, ptBL, ptBR], color: stoneFront });
+        topFaces.push([ptTL, ptTR, ptBR, ptBL]);
+
+        // Render side faces
+        for (const face of sideFaces) {
+            graphics.fillStyle(face.color, alpha);
+            graphics.fillPoints(face.points, true);
+        }
+
+        // Render top faces
+        graphics.fillStyle(stoneTop, alpha);
+        for (const top of topFaces) {
+            graphics.fillPoints(top, true);
+        }
+
+        // Mortar lines (brick pattern)
+        const pcx = (ptTL.x + ptBR.x) / 2;
+        const pcy = (ptTL.y + ptBR.y) / 2;
+        graphics.lineStyle(1, mortarColor, alpha * 0.5);
+        // Horizontal mortar lines
+        graphics.lineBetween(pcx - 5, pcy + 5, pcx + 5, pcy + 5);
+        graphics.lineBetween(pcx - 5, pcy + 10, pcx + 5, pcy + 10);
+        graphics.lineBetween(pcx - 5, pcy + 15, pcx + 5, pcy + 15);
+        // Vertical mortar lines (offset pattern)
+        graphics.lineBetween(pcx, pcy + 5, pcx, pcy + 10);
+        graphics.lineBetween(pcx - 3, pcy + 10, pcx - 3, pcy + 15);
+        graphics.lineBetween(pcx + 3, pcy + 10, pcx + 3, pcy + 15);
+
+        // Top edge highlights
+        graphics.lineStyle(1, 0x8a8a9a, alpha * 0.7);
+        graphics.lineBetween(ptTL.x, ptTL.y, ptTR.x, ptTR.y);
+        graphics.lineBetween(ptTL.x, ptTL.y, ptBL.x, ptBL.y);
+
+        // Iron reinforcement bands
+        graphics.lineStyle(2, 0x555565, alpha * 0.8);
+        graphics.lineBetween(pcx - 5, pcy + 3, pcx + 5, pcy + 3);
+
+        // Corner iron studs
+        graphics.fillStyle(0x606070, alpha);
+        graphics.fillCircle(ptTL.x, ptTL.y + 2, 2);
+        graphics.fillCircle(ptTR.x, ptTR.y + 2, 2);
+        graphics.fillStyle(0x808090, alpha * 0.5);
+        graphics.fillCircle(ptTL.x - 0.5, ptTL.y + 1.5, 1);
+
+        // Junction decoration with iron cap
+        const neighborCount = (nN ? 1 : 0) + (nS ? 1 : 0) + (nE ? 1 : 0) + (nW ? 1 : 0);
+        if (neighborCount >= 3) {
+            graphics.fillStyle(0x555565, alpha);
+            graphics.fillCircle(pcx, pcy - wallHeight + 2, 4);
+            graphics.fillStyle(0x707080, alpha * 0.6);
+            graphics.fillCircle(pcx - 1, pcy - wallHeight + 1, 2);
+        } else if (neighborCount >= 2) {
+            graphics.fillStyle(0x606070, alpha);
+            graphics.fillCircle(pcx, pcy - wallHeight + 2, 3);
         }
     }
 
@@ -8019,53 +8248,169 @@ export class MainScene extends Phaser.Scene {
             }
 
             case 'ram': {
-                // Large Battering Ram
+                // Battering Ram - wooden siege weapon that points toward target
                 const now = Date.now();
-                const bounce = Math.sin(now / 150) * 2;
-                const woodColor = 0x8b4513;
-                const ironColor = 0x555555;
+                const cos = Math.cos(facingAngle);
+                const sin = Math.sin(facingAngle);
 
-                // Shadow
+                // Charging bounce animation
+                const chargePhase = (now % 400) / 400;
+                const chargeBounce = Math.sin(chargePhase * Math.PI * 2) * 3;
+                const chargeForward = Math.abs(Math.sin(chargePhase * Math.PI)) * 4;
+
+                // Shadow (elongated in direction of travel)
+                graphics.fillStyle(0x000000, 0.35);
+                graphics.beginPath();
+                graphics.ellipse(cos * 2, 6 + sin * 1, 28, 14, facingAngle * 0.3, 0, Math.PI * 2);
+                graphics.fill();
+
+                // === RAM BODY (rotates with facing angle) ===
+                const ramLength = 36;
+                const ramWidth = 10;
+
+                // Calculate ram endpoints
+                const backX = -cos * (ramLength / 2) - cos * chargeForward;
+                const backY = -sin * (ramLength / 2) * 0.5 + chargeBounce - sin * chargeForward * 0.5;
+                const frontX = cos * (ramLength / 2) + cos * chargeForward;
+                const frontY = sin * (ramLength / 2) * 0.5 + chargeBounce + sin * chargeForward * 0.5;
+
+                // Perpendicular offset for width
+                const perpX = -sin * (ramWidth / 2);
+                const perpY = cos * (ramWidth / 2) * 0.5;
+
+                // Main wooden log body
+                graphics.fillStyle(0x5a3a20, 1);
+                graphics.beginPath();
+                graphics.moveTo(backX + perpX, backY + perpY - 8);
+                graphics.lineTo(frontX + perpX, frontY + perpY - 8);
+                graphics.lineTo(frontX - perpX, frontY - perpY - 8);
+                graphics.lineTo(backX - perpX, backY - perpY - 8);
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Wood highlight layer
+                graphics.fillStyle(0x7a5a40, 1);
+                graphics.beginPath();
+                graphics.moveTo(backX + perpX * 0.7, backY + perpY * 0.7 - 10);
+                graphics.lineTo(frontX + perpX * 0.7, frontY + perpY * 0.7 - 10);
+                graphics.lineTo(frontX - perpX * 0.3, frontY - perpY * 0.3 - 10);
+                graphics.lineTo(backX - perpX * 0.3, backY - perpY * 0.3 - 10);
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Wood grain lines
+                graphics.lineStyle(1, 0x4a2a15, 0.5);
+                for (let i = 0; i < 4; i++) {
+                    const t = 0.2 + i * 0.2;
+                    const gx = backX + (frontX - backX) * t;
+                    const gy = backY + (frontY - backY) * t - 9;
+                    graphics.lineBetween(gx + perpX * 0.5, gy + perpY * 0.5, gx - perpX * 0.5, gy - perpY * 0.5);
+                }
+
+                // Iron reinforcement bands
+                graphics.fillStyle(0x4a4a4a, 1);
+                for (const t of [0.25, 0.5, 0.75]) {
+                    const bx = backX + (frontX - backX) * t;
+                    const by = backY + (frontY - backY) * t - 8;
+                    graphics.beginPath();
+                    graphics.moveTo(bx + perpX * 1.1, by + perpY * 1.1);
+                    graphics.lineTo(bx - perpX * 1.1, by - perpY * 1.1);
+                    graphics.lineTo(bx - perpX * 1.1, by - perpY * 1.1 - 3);
+                    graphics.lineTo(bx + perpX * 1.1, by + perpY * 1.1 - 3);
+                    graphics.closePath();
+                    graphics.fillPath();
+                }
+                // Iron band highlights
+                graphics.fillStyle(0x6a6a6a, 0.6);
+                for (const t of [0.25, 0.5, 0.75]) {
+                    const bx = backX + (frontX - backX) * t;
+                    const by = backY + (frontY - backY) * t - 10;
+                    graphics.fillRect(bx - 2, by - 1, 4, 1);
+                }
+
+                // === RAM HEAD (iron-capped point) ===
+                const headLength = 14;
+                const tipX = frontX + cos * headLength + cos * chargeForward;
+                const tipY = frontY + sin * headLength * 0.5 - 8 + sin * chargeForward * 0.5;
+
+                // Iron ram head base
+                graphics.fillStyle(0x3a3a3a, 1);
+                graphics.beginPath();
+                graphics.moveTo(frontX + perpX * 1.2, frontY + perpY * 1.2 - 8);
+                graphics.lineTo(frontX - perpX * 1.2, frontY - perpY * 1.2 - 8);
+                graphics.lineTo(frontX - perpX * 1.2, frontY - perpY * 1.2 - 14);
+                graphics.lineTo(frontX + perpX * 1.2, frontY + perpY * 1.2 - 14);
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Iron ram head point
+                graphics.fillStyle(0x4a4a4a, 1);
+                graphics.beginPath();
+                graphics.moveTo(tipX, tipY);
+                graphics.lineTo(frontX + perpX * 1.2, frontY + perpY * 1.2 - 8);
+                graphics.lineTo(frontX + perpX * 1.2, frontY + perpY * 1.2 - 14);
+                graphics.closePath();
+                graphics.fillPath();
+
+                graphics.fillStyle(0x555555, 1);
+                graphics.beginPath();
+                graphics.moveTo(tipX, tipY);
+                graphics.lineTo(frontX - perpX * 1.2, frontY - perpY * 1.2 - 8);
+                graphics.lineTo(frontX - perpX * 1.2, frontY - perpY * 1.2 - 14);
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Ram head highlight
+                graphics.fillStyle(0x6a6a6a, 0.7);
+                graphics.beginPath();
+                graphics.moveTo(tipX, tipY - 2);
+                graphics.lineTo(frontX, frontY - 12);
+                graphics.lineTo(frontX + perpX * 0.5, frontY + perpY * 0.5 - 10);
+                graphics.closePath();
+                graphics.fillPath();
+
+                // === WHEELS (positioned on sides) ===
+                const wheelOffset = 12;
+                const wheel1X = -cos * wheelOffset + perpX * 1.5;
+                const wheel1Y = -sin * wheelOffset * 0.5 + perpY * 1.5 + 2;
+                const wheel2X = -cos * wheelOffset - perpX * 1.5;
+                const wheel2Y = -sin * wheelOffset * 0.5 - perpY * 1.5 + 2;
+
+                // Wheel shadows
                 graphics.fillStyle(0x000000, 0.3);
-                graphics.fillEllipse(0, 8, 32, 16);
+                graphics.fillEllipse(wheel1X + 1, wheel1Y + 3, 7, 4);
+                graphics.fillEllipse(wheel2X + 1, wheel2Y + 3, 7, 4);
 
-                // Ram body (horizontal log)
-                graphics.fillStyle(0x6a4530, 1);
-                graphics.fillRect(-18, -12 + bounce, 36, 12);
-                graphics.fillStyle(woodColor, 1);
-                graphics.fillRect(-18, -10 + bounce, 36, 8);
+                // Wheels
+                graphics.fillStyle(0x3a2a1a, 1);
+                graphics.fillCircle(wheel1X, wheel1Y, 6);
+                graphics.fillCircle(wheel2X, wheel2Y, 6);
+                graphics.fillStyle(0x4a3a2a, 1);
+                graphics.fillCircle(wheel1X, wheel1Y, 4);
+                graphics.fillCircle(wheel2X, wheel2Y, 4);
+                // Wheel hubs
+                graphics.fillStyle(0x555555, 1);
+                graphics.fillCircle(wheel1X, wheel1Y, 2);
+                graphics.fillCircle(wheel2X, wheel2Y, 2);
+                // Wheel spokes
+                graphics.lineStyle(1, 0x3a2a1a, 0.7);
+                for (let i = 0; i < 4; i++) {
+                    const spokeAngle = now / 200 + i * Math.PI / 2;
+                    graphics.lineBetween(
+                        wheel1X + Math.cos(spokeAngle) * 2, wheel1Y + Math.sin(spokeAngle) * 2,
+                        wheel1X + Math.cos(spokeAngle) * 5, wheel1Y + Math.sin(spokeAngle) * 5
+                    );
+                    graphics.lineBetween(
+                        wheel2X + Math.cos(spokeAngle) * 2, wheel2Y + Math.sin(spokeAngle) * 2,
+                        wheel2X + Math.cos(spokeAngle) * 5, wheel2Y + Math.sin(spokeAngle) * 5
+                    );
+                }
 
-                // Iron bands
-                graphics.fillStyle(ironColor, 1);
-                graphics.fillRect(-12, -13 + bounce, 4, 14);
-                graphics.fillRect(4, -13 + bounce, 4, 14);
+                // === ROPE HANDLES ===
+                graphics.lineStyle(2, 0x8a7a5a, 0.9);
+                const ropeY = chargeBounce - 6;
+                graphics.lineBetween(backX + perpX * 0.8, backY + perpY * 0.8 + ropeY, backX - perpX * 0.8, backY - perpY * 0.8 + ropeY);
 
-                // Front ram head (pointed/heavy iron)
-                const frontX = 18;
-                graphics.fillStyle(ironColor, 1);
-                graphics.beginPath();
-                graphics.moveTo(frontX, -14 + bounce);
-                graphics.lineTo(frontX + 8, -6 + bounce);
-                graphics.lineTo(frontX, 2 + bounce);
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Iron head tip
-                graphics.fillStyle(0x777777, 1);
-                graphics.beginPath();
-                graphics.moveTo(frontX + 2, -10 + bounce);
-                graphics.lineTo(frontX + 6, -6 + bounce);
-                graphics.lineTo(frontX + 2, -2 + bounce);
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Wheels/rollers
-                graphics.fillStyle(0x333333, 1);
-                graphics.fillCircle(-12, 4, 5);
-                graphics.fillCircle(12, 4, 5);
-                graphics.fillStyle(0x444444, 1);
-                graphics.fillCircle(-12, 4, 3);
-                graphics.fillCircle(12, 4, 3);
                 break;
             }
 
