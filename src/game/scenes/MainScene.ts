@@ -270,6 +270,13 @@ export class MainScene extends Phaser.Scene {
                     this.resetVillage();
                 }
             });
+            this.input.keyboard.on('keydown-M', () => {
+                if (this.selectedInWorld) {
+                    this.isMoving = true;
+                    this.selectedBuildingType = null;
+                    this.onPointerMove(this.input.activePointer);
+                }
+            });
         }
 
         this.input.on('gameout', () => {

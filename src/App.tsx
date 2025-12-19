@@ -206,7 +206,6 @@ function App() {
   }, [isBuildingOpen]);
 
   useEffect(() => {
-    Backend.sanitizeWalls('player_home');
     (window as any).refreshBuildingCounts = refreshBuildingCounts;
     (window as any).onBuildingPlaced = (type: string) => {
       const def = (BUILDING_DEFINITIONS as any)[type];
