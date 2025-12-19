@@ -8,10 +8,11 @@ interface InfoPanelProps {
     resources: { gold: number, elixir: number };
     isExiting: boolean;
     onDelete: () => void;
+    onUpgrade: () => void;
     onMove: () => void;
 }
 
-export const InfoPanel: React.FC<InfoPanelProps> = ({ type, level, resources, isExiting, onDelete, onMove }) => {
+export const InfoPanel: React.FC<InfoPanelProps> = ({ type, level, resources, isExiting, onDelete, onUpgrade, onMove }) => {
     const [mountClass, setMountClass] = useState('');
 
     useEffect(() => {
@@ -94,6 +95,7 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ type, level, resources, is
                     <button
                         className={`action-btn-small upgrade ${upgradeDisabled ? 'disabled' : ''}`}
                         disabled={upgradeDisabled}
+                        onClick={onUpgrade}
                     >
                         <div className="icon upgrade-icon"></div>
                         {isMaxLevel ? 'MAX LEVEL' : (

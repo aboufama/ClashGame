@@ -288,6 +288,33 @@ function App() {
     }
   };
 
+  const handleUpgradeBuilding = () => {
+    if (selectedInMap && selectedBuildingInfo) {
+      const def = BUILDING_DEFINITIONS[selectedBuildingInfo.type];
+      const maxLevel = def.maxLevel || 1;
+
+      if (selectedBuildingInfo.level < maxLevel) {
+        const nextLevelStats = getBuildingStats(selectedBuildingInfo.type, selectedBuildingInfo.level + 1);
+
+        if (resources.gold >= nextLevelStats.cost) {
+          // Subtract cost
+          setResources(prev => ({ ...prev, gold: prev.gold - nextLevelStats.cost }));
+
+          // Sync with backend
+          Backend.upgradeBuilding('player_home', selectedInMap);
+
+          // Sync with Phaser
+          const newLevel = (window as any).upgradeSelectedBuilding?.();
+
+          // Update local state to refresh InfoPanel
+          if (newLevel) {
+            setSelectedBuildingInfo(prev => prev ? { ...prev, level: newLevel } : null);
+          }
+        }
+      }
+    }
+  };
+
   const buildingList = Object.values(BUILDING_DEFINITIONS);
 
 
@@ -384,6 +411,7 @@ function App() {
             resources={resources}
             isExiting={isExiting}
             onDelete={handleDeleteBuilding}
+            onUpgrade={handleUpgradeBuilding}
             onMove={() => (window as any).moveSelectedBuilding()}
             key={selectedBuildingInfo.id}
           />

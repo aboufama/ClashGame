@@ -6734,6 +6734,21 @@ export class MainScene extends Phaser.Scene {
             this.isMoving = true;
             this.selectedBuildingType = null;
         };
+
+        (window as any).upgradeSelectedBuilding = () => {
+            if (this.selectedInWorld) {
+                this.selectedInWorld.level = (this.selectedInWorld.level || 1) + 1;
+                const stats = getBuildingStats(this.selectedInWorld.type as BuildingType, this.selectedInWorld.level);
+                this.selectedInWorld.maxHealth = stats.maxHealth;
+                this.selectedInWorld.health = stats.maxHealth;
+                this.selectedInWorld.graphics.clear();
+                if (this.selectedInWorld.baseGraphics) this.selectedInWorld.baseGraphics.clear();
+                this.drawBuildingVisuals(this.selectedInWorld.graphics, this.selectedInWorld.gridX, this.selectedInWorld.gridY, this.selectedInWorld.type, 1, null, this.selectedInWorld, this.selectedInWorld.baseGraphics);
+                this.updateHealthBar(this.selectedInWorld);
+                return this.selectedInWorld.level;
+            }
+            return null;
+        };
         (window as any).deselectBuilding = () => {
             this.selectedInWorld = null;
             this.isMoving = false;
