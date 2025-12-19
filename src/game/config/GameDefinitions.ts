@@ -62,16 +62,52 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         color: 0x333333,
         fireRate: 2500,
         damage: 70,
-        maxLevel: 2,
+        maxLevel: 4,
         levels: [
-            { hp: 800, damage: 70, fireRate: 2500, cost: 250 },      // Level 1
-            { hp: 1000, damage: 95, fireRate: 2000, cost: 500 }      // Level 2 - boosted stats (no range increase)
+            { hp: 800, damage: 70, fireRate: 2500, cost: 250 },       // Level 1 - Basic
+            { hp: 900, damage: 80, fireRate: 2300, cost: 400 },       // Level 2 - Reinforced
+            { hp: 1000, damage: 95, fireRate: 2000, cost: 600 },      // Level 3 - Dual-barrel
+            { hp: 1400, damage: 140, fireRate: 1600, cost: 1000 }     // Level 4 - Heavy Siege Cannon
         ]
     },
     ballista: { id: 'ballista', name: 'Ballista', cost: 350, desc: 'Heavy single-target damage.', width: 2, height: 2, maxHealth: 900, range: 9, category: 'defense', maxCount: 2, color: 0x8b4513, fireRate: 3500, damage: 120, maxLevel: 1 },
     xbow: { id: 'xbow', name: 'X-Bow', cost: 800, desc: 'Rapid fire long-range turret.', width: 2, height: 2, maxHealth: 1500, range: 11, category: 'defense', maxCount: 2, color: 0x8b008b, fireRate: 200, damage: 15, maxLevel: 1 },
-    mine: { id: 'mine', name: 'Gold Mine', cost: 150, desc: 'Produces glorious Gold.', width: 1, height: 1, maxHealth: 600, category: 'resource', maxCount: 8, color: 0xffaa00, productionRate: 2.5, maxLevel: 1 },
-    elixir_collector: { id: 'elixir_collector', name: 'Elixir Collector', cost: 150, desc: 'Pumps magical Elixir.', width: 1, height: 1, maxHealth: 600, category: 'resource', maxCount: 8, color: 0x9b59b6, productionRate: 2.5, maxLevel: 1 },
+    mine: {
+        id: 'mine',
+        name: 'Gold Mine',
+        cost: 150,
+        desc: 'Produces glorious Gold.',
+        width: 1,
+        height: 1,
+        maxHealth: 600,
+        category: 'resource',
+        maxCount: 8,
+        color: 0xffaa00,
+        productionRate: 2.5,
+        maxLevel: 2,
+        levels: [
+            { hp: 600, productionRate: 2.5, cost: 150 },   // Level 1
+            { hp: 720, productionRate: 3.2, cost: 300 }    // Level 2 - +20% HP, +28% production
+        ]
+    },
+    elixir_collector: {
+        id: 'elixir_collector',
+        name: 'Elixir Collector',
+        cost: 150,
+        desc: 'Pumps magical Elixir.',
+        width: 1,
+        height: 1,
+        maxHealth: 600,
+        category: 'resource',
+        maxCount: 8,
+        color: 0x9b59b6,
+        productionRate: 2.5,
+        maxLevel: 2,
+        levels: [
+            { hp: 600, productionRate: 2.5, cost: 150 },   // Level 1
+            { hp: 720, productionRate: 3.2, cost: 300 }    // Level 2 - +20% HP, +28% production
+        ]
+    },
     mortar: { id: 'mortar', name: 'Mortar', cost: 400, desc: 'Splash damage area shell.', width: 2, height: 2, maxHealth: 700, range: 10, minRange: 3, category: 'defense', maxCount: 3, color: 0x555555, fireRate: 4000, damage: 45, maxLevel: 1 },
     tesla: { id: 'tesla', name: 'Tesla Coil', cost: 600, desc: 'Hidden zapping trap.', width: 1, height: 1, maxHealth: 600, range: 6, category: 'defense', maxCount: 3, color: 0x00ccff, fireRate: 1500, damage: 60, maxLevel: 1 },
     wall: { id: 'wall', name: 'Wall', cost: 50, desc: 'Stops enemies cold.', width: 1, height: 1, maxHealth: 500, category: 'defense', maxCount: 100, color: 0xcccccc, maxLevel: 1 },
