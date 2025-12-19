@@ -8226,16 +8226,33 @@ export class MainScene extends Phaser.Scene {
     private shootDragonsBreathAt(db: PlacedBuilding, troop: Troop) {
         const info = BUILDING_DEFINITIONS['dragons_breath'];
         const start = this.cartToIso(db.gridX + info.width / 2, db.gridY + info.height / 2);
-        const targetX = troop.gridX;
-        const targetY = troop.gridY;
         const stats = getBuildingStats('dragons_breath', db.level || 1);
+        const range = stats.range || 13;
+
+        // Find all potential targets in range to distribute pods
+        const potentialTargets = this.troops.filter(t =>
+            t.owner !== db.owner &&
+            t.health > 0 &&
+            Phaser.Math.Distance.Between(db.gridX, db.gridY, t.gridX, t.gridY) <= range
+        );
+
+        // Screenshake for the start of the massive salvo
+        this.cameras.main.shake(150, 0.004);
 
         for (let i = 0; i < 16; i++) {
             this.time.delayedCall(i * 50, () => {
                 if (!db || db.health <= 0) return;
-                const jitterX = (Math.random() - 0.5) * 2.5;
-                const jitterY = (Math.random() - 0.5) * 2.5;
-                this.shootDragonPod(db, start, targetX + jitterX, targetY + jitterY, stats.damage || 25);
+
+                // Cycle through targets if we have them, otherwise fallback to the primary target
+                const target = potentialTargets.length > 0
+                    ? potentialTargets[i % potentialTargets.length]
+                    : troop;
+
+                if (target && target.health > 0) {
+                    const jitterX = (Math.random() - 0.5) * 2.0;
+                    const jitterY = (Math.random() - 0.5) * 2.0;
+                    this.shootDragonPod(db, start, target.gridX + jitterX, target.gridY + jitterY, stats.damage || 25);
+                }
             });
         }
     }

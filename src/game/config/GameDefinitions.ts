@@ -161,7 +161,7 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         width: 4,
         height: 4,
         maxHealth: 2500,
-        range: 9,
+        range: 13,
         category: 'defense',
         maxCount: 1,
         color: 0xcc0000,
