@@ -1965,6 +1965,18 @@ export class MainScene extends Phaser.Scene {
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
 
+        // === CENTRAL PIVOT MECHANISM ===
+        // Heavy iron pivot hub on the wooden platform
+        graphics.fillStyle(0x2a2a2a, alpha);
+        graphics.fillCircle(center.x, baseY, 8);
+        graphics.fillStyle(0x3a3a3a, alpha);
+        graphics.fillCircle(center.x, baseY - 1, 6);
+        graphics.fillStyle(0x4a4a4a, alpha);
+        graphics.fillCircle(center.x, baseY - 2, 4);
+        // Highlight
+        graphics.fillStyle(0x606060, alpha * 0.6);
+        graphics.fillCircle(center.x - 1, baseY - 3, 2);
+
         // === MASSIVE CROSSBOW ARMS ===
         const armLength = 28; // Much bigger arms
         const armWidth = 5;   // Thicker arms
@@ -2132,17 +2144,6 @@ export class MainScene extends Phaser.Scene {
             graphics.lineBetween(rightArmX, rightArmY, stringCenterX, stringCenterY);
         }
 
-        // === CENTRAL PIVOT MECHANISM ===
-        // Heavy iron pivot hub on the wooden platform
-        graphics.fillStyle(0x2a2a2a, alpha);
-        graphics.fillCircle(center.x, baseY, 8);
-        graphics.fillStyle(0x3a3a3a, alpha);
-        graphics.fillCircle(center.x, baseY - 1, 6);
-        graphics.fillStyle(0x4a4a4a, alpha);
-        graphics.fillCircle(center.x, baseY - 2, 4);
-        // Highlight
-        graphics.fillStyle(0x606060, alpha * 0.6);
-        graphics.fillCircle(center.x - 1, baseY - 3, 2);
     }
 
     private drawBallistaLevel2(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
@@ -2241,6 +2242,16 @@ export class MainScene extends Phaser.Scene {
 
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
+
+        // === BRONZE PIVOT MECHANISM ===
+        graphics.fillStyle(0x8b6914, alpha);
+        graphics.fillCircle(center.x, baseY, 10);
+        graphics.fillStyle(0xcd7f32, alpha);
+        graphics.fillCircle(center.x, baseY - 1, 7);
+        graphics.fillStyle(0xdaa520, alpha);
+        graphics.fillCircle(center.x, baseY - 2, 4);
+        graphics.fillStyle(0xffd700, alpha * 0.5);
+        graphics.fillCircle(center.x - 1, baseY - 3, 2);
 
         // === REINFORCED CROSSBOW ARMS ===
         const armLength = 30;
@@ -2400,15 +2411,6 @@ export class MainScene extends Phaser.Scene {
             graphics.lineBetween(rightArmX, rightArmY, stringCenterX, stringCenterY);
         }
 
-        // === BRONZE PIVOT MECHANISM ===
-        graphics.fillStyle(0x8b6914, alpha);
-        graphics.fillCircle(center.x, baseY, 10);
-        graphics.fillStyle(0xcd7f32, alpha);
-        graphics.fillCircle(center.x, baseY - 1, 7);
-        graphics.fillStyle(0xdaa520, alpha);
-        graphics.fillCircle(center.x, baseY - 2, 4);
-        graphics.fillStyle(0xffd700, alpha * 0.5);
-        graphics.fillCircle(center.x - 1, baseY - 3, 2);
     }
 
     private drawXBow(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
@@ -2494,6 +2496,16 @@ export class MainScene extends Phaser.Scene {
             graphics.fillCircle(rx, ry, 2);
         }
 
+        // === CENTRAL PIVOT MECHANISM ===
+        graphics.fillStyle(0x2a2a3a, alpha);
+        graphics.fillCircle(center.x, baseY, 8);
+        graphics.fillStyle(0x3a3a4a, alpha);
+        graphics.fillCircle(center.x, baseY - 1, 6);
+        graphics.fillStyle(0x4a4a5a, alpha);
+        graphics.fillCircle(center.x, baseY - 2, 4);
+        graphics.fillStyle(0x5a5a6a, alpha * 0.6);
+        graphics.fillCircle(center.x - 1, baseY - 3, 2);
+
         // === CROSSBOW BODY ===
         // Define Front (Tip) and Back (Stock) relative to center using angle
         // Front is +d along angle
@@ -2553,16 +2565,6 @@ export class MainScene extends Phaser.Scene {
             graphics.lineStyle(2, 0xffff00, alpha);
             graphics.lineBetween(nockX, nockY, boltTipX, boltTipY);
         }
-
-        // === CENTRAL PIVOT MECHANISM ===
-        graphics.fillStyle(0x2a2a3a, alpha);
-        graphics.fillCircle(center.x, baseY, 8);
-        graphics.fillStyle(0x3a3a4a, alpha);
-        graphics.fillCircle(center.x, baseY - 1, 6);
-        graphics.fillStyle(0x4a4a5a, alpha);
-        graphics.fillCircle(center.x, baseY - 2, 4);
-        graphics.fillStyle(0x5a5a6a, alpha * 0.6);
-        graphics.fillCircle(center.x - 1, baseY - 3, 2);
 
         // Firing Glow
         const firingGlow = 0.3 + Math.sin(time / 50) * 0.2;
@@ -2667,6 +2669,18 @@ export class MainScene extends Phaser.Scene {
             graphics.fillStyle(0x8b008b, alpha);
         }
 
+        // === ENHANCED PIVOT ===
+        graphics.fillStyle(0x6a006a, alpha);
+        graphics.fillCircle(center.x, baseY, 10);
+        graphics.fillStyle(0x8b008b, alpha);
+        graphics.fillCircle(center.x, baseY - 1, 7);
+        graphics.fillStyle(0xda70d6, alpha);
+        graphics.fillCircle(center.x, baseY - 2, 4);
+        // Energy core glow
+        const coreGlow = 0.5 + Math.sin(time / 80) * 0.3;
+        graphics.fillStyle(0xffffff, alpha * coreGlow * 0.5);
+        graphics.fillCircle(center.x, baseY - 2, 2);
+
         // === ENHANCED CROSSBOW BODY ===
         const frontX = center.x + cos * 22;
         const frontY = center.y + heightOffset + sin * 0.5 * 22;
@@ -2750,18 +2764,6 @@ export class MainScene extends Phaser.Scene {
             graphics.lineStyle(1, 0xffffff, alpha * 0.8);
             graphics.lineBetween(nockX, nockY, boltTipX, boltTipY);
         }
-
-        // === ENHANCED PIVOT ===
-        graphics.fillStyle(0x6a006a, alpha);
-        graphics.fillCircle(center.x, baseY, 10);
-        graphics.fillStyle(0x8b008b, alpha);
-        graphics.fillCircle(center.x, baseY - 1, 7);
-        graphics.fillStyle(0xda70d6, alpha);
-        graphics.fillCircle(center.x, baseY - 2, 4);
-        // Energy core glow
-        const coreGlow = 0.5 + Math.sin(time / 80) * 0.3;
-        graphics.fillStyle(0xffffff, alpha * coreGlow * 0.5);
-        graphics.fillCircle(center.x, baseY - 2, 2);
 
         // Enhanced firing glow
         const firingGlow = 0.4 + Math.sin(time / 40) * 0.3;
