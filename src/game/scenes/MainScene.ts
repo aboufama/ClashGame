@@ -5390,7 +5390,7 @@ export class MainScene extends Phaser.Scene {
 
         // Deal damage (smaller splash radius)
         const splashRadius = 2.5;
-        this.troops.forEach(t => {
+        this.troops.slice().forEach(t => {
             const d = Phaser.Math.Distance.Between(t.gridX, t.gridY, targetGx, targetGy);
             if (d < splashRadius && t.owner !== owner) {
                 t.health -= 70;
@@ -5976,7 +5976,7 @@ export class MainScene extends Phaser.Scene {
 
 
         // Damage all troops in range with massive damage
-        this.troops.forEach(t => {
+        this.troops.slice().forEach(t => {
             if (t.owner === magma.owner || t.health <= 0) return;
             const dist = Phaser.Math.Distance.Between(
                 magma.gridX + info.width / 2, magma.gridY + info.height / 2,
@@ -8288,12 +8288,14 @@ export class MainScene extends Phaser.Scene {
                 boom.setDepth(5001);
                 this.tweens.add({ targets: boom, alpha: 0, scale: 2, duration: 150, onComplete: () => boom.destroy() });
 
-                this.troops.forEach(t => {
+                this.troops.slice().forEach(t => {
                     if (t.owner !== db.owner && t.health > 0) {
                         const d = Phaser.Math.Distance.Between(t.gridX, t.gridY, targetGridX, targetGridY);
                         if (d < 1.2) {
                             t.health -= damage;
+                            t.hasTakenDamage = true;
                             this.updateHealthBar(t);
+                            if (t.health <= 0) this.destroyTroop(t);
                         }
                     }
                 });
