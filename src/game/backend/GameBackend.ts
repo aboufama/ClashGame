@@ -260,78 +260,109 @@ export class GameBackend {
         const id = `enemy_${Date.now()}`;
         const world = this.createWorld(id, 'ENEMY');
 
-        // Use simplified placement calls (ignoring return value)
-        const centerX = 8 + Math.floor(Math.random() * 8);
-        const centerY = 8 + Math.floor(Math.random() * 8);
+        const cx = Math.floor(MAP_SIZE / 2);
+        const cy = Math.floor(MAP_SIZE / 2);
 
-        this.placeBuilding(id, 'town_hall', centerX, centerY);
+        // 1. CORE: Town Hall + Elite Defenses
+        this.placeBuilding(id, 'town_hall', cx, cy);
 
-        const defCount = 5 + Math.floor(Math.random() * 3);
-
-
-        for (let i = 0; i < defCount; i++) {
-            const rx = centerX + (Math.random() > 0.5 ? 4 : -4) + Math.floor(Math.random() * 3);
-            const ry = centerY + (Math.random() > 0.5 ? 4 : -4) + Math.floor(Math.random() * 3);
-
-            // Simple weighted random
-            const r = Math.random();
-            const def = r > 0.92 ? 'xbow' :
-                r > 0.82 ? 'prism' :
-                    r > 0.72 ? 'magmavent' :
-                        r > 0.58 ? 'ballista' :
-                            r > 0.42 ? 'tesla' :
-                                r > 0.22 ? 'cannon' : 'mortar';
-
-            this.placeBuilding(id, def, rx, ry);
+        // Add 1-2 Elite Defenses near TH
+        const elites: BuildingType[] = ['dragons_breath', 'prism', 'xbow'];
+        const eliteCount = 2 + Math.floor(Math.random() * 2);
+        for (let i = 0; i < eliteCount; i++) {
+            const ex = cx + (Math.random() > 0.5 ? 2 : -2);
+            const ey = cy + (Math.random() > 0.5 ? 2 : -2);
+            const b = this.placeBuilding(id, elites[Math.floor(Math.random() * elites.length)], ex, ey);
+            if (b) b.level = 3 + Math.floor(Math.random() * 3); // Level 3-5
         }
 
-        // Mines (3 max)
-        for (let i = 0; i < 3; i++) {
-            if (Math.random() > 0.7) continue;
-            const rx = centerX + (Math.random() > 0.5 ? 5 : -5) + Math.floor(Math.random() * 2);
-            const ry = centerY + (Math.random() > 0.5 ? 5 : -5) + Math.floor(Math.random() * 2);
-            this.placeBuilding(id, 'mine', rx, ry);
+        // Inner Core Wall (Tight box)
+        this.generateRectWall(id, cx - 3, cy - 3, 7, 7); // Shrink for MAP_SIZE 25
+
+
+        // 2. INNER RING: Compartments (High Value Defenses + Storage)
+        // DENSITY adjusted for small map
+        const compCount = 3 + Math.floor(Math.random() * 3);
+        const compRadius = 6;
+
+        for (let i = 0; i < compCount; i++) {
+            const angle = (i / compCount) * Math.PI * 2 + (Math.random() * 0.5);
+            const tx = Math.floor(cx + Math.cos(angle) * compRadius);
+            const ty = Math.floor(cy + Math.sin(angle) * compRadius);
+
+            // Determine content: Defense + Resource (Variety++)
+            const roll = Math.random();
+            const defType = (roll > 0.85 ? 'dragons_breath' :
+                roll > 0.7 ? 'magmavent' :
+                    roll > 0.55 ? 'xbow' :
+                        roll > 0.4 ? 'mortar' :
+                            roll > 0.25 ? 'tesla' : 'ballista') as BuildingType;
+            const resType = (Math.random() > 0.5 ? 'mine' : 'elixir_collector') as BuildingType;
+
+            const bDef = this.placeBuilding(id, defType, tx, ty);
+            if (bDef) bDef.level = 2 + Math.floor(Math.random() * 4); // Level 2-5
+
+            // Try to place resource next to it
+            const bRes = this.placeBuilding(id, resType, tx + 1, ty + 1);
+            if (bRes) bRes.level = 1 + Math.floor(Math.random() * 5); // Level 1-5
+
+            // Build Wall Compartment around this cluster
+            this.generateRectWall(id, tx - 2, ty - 2, 5, 5);
         }
-        // Collectors (3 max)
-        for (let i = 0; i < 3; i++) {
-            if (Math.random() > 0.7) continue;
-            const rx = centerX + (Math.random() > 0.5 ? 6 : -6) + Math.floor(Math.random() * 2);
-            const ry = centerY + (Math.random() > 0.5 ? 6 : -6) + Math.floor(Math.random() * 2);
-            this.placeBuilding(id, 'elixir_collector', rx, ry);
+
+        // 3. OUTER LAYER: Scattered Defenses and Trash
+        // Adjusted for small map
+        const outerCount = 12 + Math.floor(Math.random() * 8);
+        for (let i = 0; i < outerCount; i++) {
+            // Random position in outer area
+            const r = 9 + Math.random() * 3; // Radius 9-12
+            const theta = Math.random() * Math.PI * 2;
+            const ox = Math.floor(cx + Math.cos(theta) * r);
+            const oy = Math.floor(cy + Math.sin(theta) * r);
+
+            // Mix with more variety
+            const roll = Math.random();
+            const oType = (roll > 0.9 ? 'magmavent' :
+                roll > 0.8 ? 'mortar' :
+                    roll > 0.7 ? 'tesla' :
+                        roll > 0.5 ? 'cannon' :
+                            roll > 0.3 ? 'ballista' :
+                                roll > 0.15 ? 'army_camp' : 'mine') as BuildingType;
+
+            const b = this.placeBuilding(id, oType, ox, oy);
+            if (b) b.level = 1 + Math.floor(Math.random() * 4); // Level 1-4
         }
 
-        // Walls
-        // Access array directly since placeBuilding pushes to it
-        let minX = MAP_SIZE, minY = MAP_SIZE, maxX = 0, maxY = 0;
-        let hasBuildings = false;
+        // 4. OUTER PERIMETER WALL
+        // Big wall enclosing most things (shrunk for deployment space)
+        this.generateRectWall(id, 3, 3, MAP_SIZE - 7, MAP_SIZE - 7);
 
-        world.buildings.forEach(b => {
-            const info = BUILDING_DEFINITIONS[b.type as BuildingType];
-            if (info) {
-                minX = Math.min(minX, b.gridX);
-                minY = Math.min(minY, b.gridY);
-                maxX = Math.max(maxX, b.gridX + info.width);
-                maxY = Math.max(maxY, b.gridY + info.height);
-                hasBuildings = true;
-            }
-        });
-
-        if (hasBuildings) {
-            const wx1 = Math.max(1, minX - 2);
-            const wy1 = Math.max(1, minY - 2);
-            const wx2 = Math.min(MAP_SIZE - 2, maxX + 1);
-            const wy2 = Math.min(MAP_SIZE - 2, maxY + 1);
-
-            for (let x = wx1; x <= wx2; x++) {
-                for (let y = wy1; y <= wy2; y++) {
-                    if (x === wx1 || x === wx2 || y === wy1 || y === wy2) {
-                        this.placeBuilding(id, 'wall', x, y);
-                    }
-                }
-            }
-        }
+        // 5. Set Large Resources (Fake loot for incentive)
+        world.resources = {
+            gold: Math.floor(50000 + Math.random() * 100000),
+            elixir: Math.floor(50000 + Math.random() * 100000)
+        };
 
         return world;
+    }
+
+    private generateRectWall(id: string, x: number, y: number, w: number, h: number) {
+        // Bounds check/clamping handled by placeBuilding mostly, but let's be safe
+        const safeX = Math.max(0, x);
+        const safeY = Math.max(0, y);
+        const safeW = Math.min(MAP_SIZE - 1 - safeX, w);
+        const safeH = Math.min(MAP_SIZE - 1 - safeY, h);
+
+        // Top & Bottom
+        for (let i = 0; i <= safeW; i++) {
+            this.placeBuilding(id, 'wall', safeX + i, safeY);
+            this.placeBuilding(id, 'wall', safeX + i, safeY + safeH);
+        }
+        // Left & Right
+        for (let j = 0; j <= safeH; j++) {
+            this.placeBuilding(id, 'wall', safeX, safeY + j);
+            this.placeBuilding(id, 'wall', safeX + safeW, safeY + j);
+        }
     }
 }
 

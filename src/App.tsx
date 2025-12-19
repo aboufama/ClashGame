@@ -42,9 +42,9 @@ function App() {
       Backend.updateResources('player_home', resources.gold, resources.elixir);
     }
   }, [resources]);
-  const [army, setArmy] = useState({ warrior: 0, archer: 0, giant: 0, ward: 0, recursion: 0, chronoswarm: 0 });
+  const [army, setArmy] = useState({ warrior: 0, archer: 0, giant: 0, ward: 0, recursion: 0, chronoswarm: 0, ram: 0, stormmage: 0 });
   const [capacity, setCapacity] = useState({ current: 0, max: 20 });
-  const [selectedTroopType, setSelectedTroopType] = useState<'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'chronoswarm'>('warrior');
+  const [selectedTroopType, setSelectedTroopType] = useState<'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'chronoswarm' | 'ram' | 'stormmage'>('warrior');
   const [isTrainingOpen, setIsTrainingOpen] = useState(false);
   const [isBuildingOpen, setIsBuildingOpen] = useState(false);
   const [view, setView] = useState<GameMode>('HOME');
@@ -89,8 +89,8 @@ function App() {
         setBattleStarted(false); // Reset when entering attack mode
 
         // Auto-select first available troop
-        const availableTroops: Array<'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'chronoswarm'> =
-          ['warrior', 'archer', 'giant', 'ward', 'recursion', 'chronoswarm'];
+        const availableTroops: Array<'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'chronoswarm' | 'ram' | 'stormmage'> =
+          ['warrior', 'archer', 'giant', 'ward', 'recursion', 'chronoswarm', 'ram', 'stormmage'];
         const firstAvailable = availableTroops.find(type => army[type] > 0);
         if (firstAvailable) {
           setSelectedTroopType(firstAvailable);
@@ -188,8 +188,10 @@ function App() {
       });
     };
 
-    (window as any).refreshCampCapacity = (count: number) => {
-      setCapacity(prev => ({ ...prev, max: 10 + count * 20 }));
+    (window as any).refreshCampCapacity = (campLevels: number[]) => {
+      // L1 = 20 space, L2+ = 25 space per camp
+      const totalCapacity = 10 + campLevels.reduce((sum, level) => sum + (level >= 2 ? 25 : 20), 0);
+      setCapacity(prev => ({ ...prev, max: totalCapacity }));
     };
   }, [army, selectedTroopType]);
 
@@ -220,7 +222,7 @@ function App() {
     // Actually placement happens later, but we should refresh when re-opening shop)
   };
 
-  const handleTrainTroop = (type: 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'chronoswarm') => {
+  const handleTrainTroop = (type: 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'chronoswarm' | 'ram' | 'stormmage') => {
     const def = TROOP_DEFINITIONS[type];
     const cost = def.cost;
     const space = def.space;
@@ -472,6 +474,16 @@ function App() {
                   className={`troop-sel-btn chronoswarm ${selectedTroopType === 'chronoswarm' ? 'active' : ''}`}
                   onClick={() => setSelectedTroopType('chronoswarm')}>
                   <div className="icon chronoswarm-icon"></div> {army.chronoswarm}
+                </button>
+                <button
+                  className={`troop-sel-btn ram ${selectedTroopType === 'ram' ? 'active' : ''}`}
+                  onClick={() => setSelectedTroopType('ram')}>
+                  <div className="icon ram-icon"></div> {army.ram}
+                </button>
+                <button
+                  className={`troop-sel-btn stormmage ${selectedTroopType === 'stormmage' ? 'active' : ''}`}
+                  onClick={() => setSelectedTroopType('stormmage')}>
+                  <div className="icon stormmage-icon"></div> {army.stormmage}
                 </button>
               </div>
             </div>

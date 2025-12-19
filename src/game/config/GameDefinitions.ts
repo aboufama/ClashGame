@@ -7,7 +7,8 @@ export type BuildingType =
     | 'army_camp' | 'prism' | 'magmavent' | 'dragons_breath';
 
 export type TroopType =
-    | 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'chronoswarm';
+    | 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'chronoswarm'
+    | 'ram' | 'stormmage';
 
 export type ObstacleType =
     | 'rock_small' | 'rock_large' | 'tree_oak' | 'tree_pine' | 'grass_patch';
@@ -17,6 +18,7 @@ export interface BuildingLevelStats {
     damage?: number;
     fireRate?: number;
     productionRate?: number;
+    capacity?: number;
     cost: number;
 }
 
@@ -83,12 +85,12 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         category: 'defense',
         maxCount: 2,
         color: 0x8b4513,
-        fireRate: 3500,
-        damage: 120,
+        fireRate: 1750,
+        damage: 240,
         maxLevel: 2,
         levels: [
-            { hp: 900, damage: 120, fireRate: 3500, cost: 350 },    // Level 1 - Standard
-            { hp: 1050, damage: 140, fireRate: 3200, cost: 550 }    // Level 2 - Reinforced
+            { hp: 900, damage: 240, fireRate: 1750, cost: 350 },    // Level 1 - Standard
+            { hp: 1050, damage: 280, fireRate: 1600, cost: 550 }    // Level 2 - Reinforced
         ]
     },
     xbow: {
@@ -123,10 +125,13 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         maxCount: 8,
         color: 0xffaa00,
         productionRate: 2.5,
-        maxLevel: 2,
+        maxLevel: 5,
         levels: [
-            { hp: 600, productionRate: 2.5, cost: 150 },   // Level 1
-            { hp: 720, productionRate: 3.2, cost: 300 }    // Level 2 - +20% HP, +28% production
+            { hp: 600, productionRate: 2.5, cost: 150 },   // Level 1 - Basic
+            { hp: 720, productionRate: 3.2, cost: 300 },   // Level 2 - Reinforced
+            { hp: 850, productionRate: 4.0, cost: 500 },   // Level 3 - Advanced
+            { hp: 1000, productionRate: 5.0, cost: 750 },  // Level 4 - Masterwork
+            { hp: 1200, productionRate: 7.0, cost: 1200 }  // Level 5 - Industrial (tech leap)
         ]
     },
     elixir_collector: {
@@ -141,16 +146,76 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         maxCount: 8,
         color: 0x9b59b6,
         productionRate: 2.5,
-        maxLevel: 2,
+        maxLevel: 5,
         levels: [
-            { hp: 600, productionRate: 2.5, cost: 150 },   // Level 1
-            { hp: 720, productionRate: 3.2, cost: 300 }    // Level 2 - +20% HP, +28% production
+            { hp: 600, productionRate: 2.5, cost: 150 },   // Level 1 - Basic
+            { hp: 720, productionRate: 3.2, cost: 300 },   // Level 2 - Reinforced
+            { hp: 850, productionRate: 4.0, cost: 500 },   // Level 3 - Advanced
+            { hp: 1000, productionRate: 5.0, cost: 750 },  // Level 4 - Masterwork
+            { hp: 1200, productionRate: 7.0, cost: 1200 }  // Level 5 - Deep Extraction (tech leap)
         ]
     },
-    mortar: { id: 'mortar', name: 'Mortar', cost: 400, desc: 'Splash damage area shell.', width: 2, height: 2, maxHealth: 700, range: 10, minRange: 3, category: 'defense', maxCount: 3, color: 0x555555, fireRate: 4000, damage: 45, maxLevel: 1 },
-    tesla: { id: 'tesla', name: 'Tesla Coil', cost: 600, desc: 'Hidden zapping trap.', width: 1, height: 1, maxHealth: 600, range: 6, category: 'defense', maxCount: 3, color: 0x00ccff, fireRate: 1500, damage: 60, maxLevel: 1 },
+    mortar: {
+        id: 'mortar',
+        name: 'Mortar',
+        cost: 400,
+        desc: 'Splash damage area shell.',
+        width: 2,
+        height: 2,
+        maxHealth: 700,
+        range: 10,
+        minRange: 3,
+        category: 'defense',
+        maxCount: 3,
+        color: 0x555555,
+        fireRate: 4000,
+        damage: 45,
+        maxLevel: 3,
+        levels: [
+            { hp: 700, damage: 45, fireRate: 4000, cost: 400 },    // Level 1 - Standard
+            { hp: 850, damage: 55, fireRate: 3600, cost: 650 },    // Level 2 - Reinforced
+            { hp: 1050, damage: 70, fireRate: 3200, cost: 950 }    // Level 3 - Heavy Artillery
+        ]
+    },
+    tesla: {
+        id: 'tesla',
+        name: 'Tesla Coil',
+        cost: 600,
+        desc: 'Hidden zapping trap.',
+        width: 1,
+        height: 1,
+        maxHealth: 600,
+        range: 6,
+        category: 'defense',
+        maxCount: 3,
+        color: 0x00ccff,
+        fireRate: 1500,
+        damage: 60,
+        maxLevel: 2,
+        levels: [
+            { hp: 600, damage: 60, fireRate: 1500, cost: 600 },   // Level 1 - Standard
+            { hp: 750, damage: 75, fireRate: 1300, cost: 900 }    // Level 2 - Enhanced (ring + thicker base)
+        ]
+    },
     wall: { id: 'wall', name: 'Wall', cost: 50, desc: 'Stops enemies cold.', width: 1, height: 1, maxHealth: 500, category: 'defense', maxCount: 100, color: 0xcccccc, maxLevel: 1 },
-    army_camp: { id: 'army_camp', name: 'Army Camp', cost: 300, desc: 'Houses your army.', width: 3, height: 3, maxHealth: 1000, category: 'military', maxCount: 4, color: 0x884422, maxLevel: 1, capacity: 20 },
+    army_camp: {
+        id: 'army_camp',
+        name: 'Army Camp',
+        cost: 300,
+        desc: 'Houses your army.',
+        width: 3,
+        height: 3,
+        maxHealth: 1000,
+        category: 'military',
+        maxCount: 4,
+        color: 0x884422,
+        maxLevel: 2,
+        capacity: 20,
+        levels: [
+            { hp: 1000, capacity: 20, cost: 300 },    // Level 1 - Basic (20 space, fire only)
+            { hp: 1200, capacity: 25, cost: 500 }     // Level 2 - Upgraded (25 space, with dummy & weapons)
+        ]
+    },
     prism: { id: 'prism', name: 'Prism Tower', cost: 550, desc: 'Beam bounces between foes.', width: 1, height: 1, maxHealth: 1100, range: 8, category: 'defense', maxCount: 1, color: 0xff00ff, fireRate: 50, maxLevel: 1 },
     magmavent: { id: 'magmavent', name: 'Magma Vent', cost: 650, desc: 'Erupts with area damage.', width: 3, height: 3, maxHealth: 1200, range: 6, category: 'defense', maxCount: 1, color: 0xff4400, fireRate: 1500, maxLevel: 1 },
     dragons_breath: {
@@ -187,6 +252,7 @@ export function getBuildingStats(type: BuildingType, level: number = 1): Buildin
         damage: levelStats.damage ?? base.damage,
         fireRate: levelStats.fireRate ?? base.fireRate,
         productionRate: levelStats.productionRate ?? base.productionRate,
+        capacity: levelStats.capacity ?? base.capacity,
         cost: levelStats.cost
     };
 }
@@ -204,6 +270,10 @@ export interface TroopDef {
     color: number;
     boostRadius?: number;
     boostAmount?: number;
+    targetPriority?: 'town_hall' | 'defense';  // Special targeting
+    wallDamageMultiplier?: number;  // Extra damage to walls
+    chainCount?: number;  // For chain attacks
+    chainRange?: number;  // Range for chain to jump
 }
 
 export interface ObstacleDef {
@@ -222,9 +292,11 @@ export const TROOP_DEFINITIONS: Record<TroopType, TroopDef> = {
     warrior: { id: 'warrior', name: 'Warrior', cost: 25, space: 1, desc: 'Fast melee fighter.', health: 100, range: 0.8, damage: 10, speed: 0.003, color: 0xffff00 },
     archer: { id: 'archer', name: 'Archer', cost: 40, space: 1, desc: 'Ranged attacker.', health: 50, range: 4.5, damage: 14.0, speed: 0.0025, color: 0x00ffff },
     giant: { id: 'giant', name: 'Giant', cost: 150, space: 5, desc: 'Tank targeting Defenses.', health: 600, range: 1.0, damage: 16, speed: 0.002, color: 0xff6600 },
-    ward: { id: 'ward', name: 'Ward', cost: 80, space: 3, desc: 'Heals friendly troops.', health: 100, range: 4.0, damage: 9, speed: 0.0025, color: 0x00ff00 },
+    ward: { id: 'ward', name: 'Ward', cost: 80, space: 6, desc: 'Heals friendly troops.', health: 100, range: 4.0, damage: 9, speed: 0.0025, color: 0x00ff00 },
     recursion: { id: 'recursion', name: 'Recursion', cost: 80, space: 3, desc: 'Splits into two copies on death.', health: 150, range: 1.0, damage: 12, speed: 0.003, color: 0xff00ff },
-    chronoswarm: { id: 'chronoswarm', name: 'Speedster', cost: 60, space: 2, desc: 'Speeds up nearby allies.', health: 50, range: 1.5, damage: 5, speed: 0.004, color: 0xffcc00, boostRadius: 4.0, boostAmount: 1.5 }
+    chronoswarm: { id: 'chronoswarm', name: 'Speedster', cost: 60, space: 2, desc: 'Speeds up nearby allies.', health: 50, range: 1.5, damage: 5, speed: 0.004, color: 0xffcc00, boostRadius: 4.0, boostAmount: 1.5 },
+    ram: { id: 'ram', name: 'Battering Ram', cost: 200, space: 8, desc: 'Charges Town Hall. 4x wall damage.', health: 800, range: 1.2, damage: 50, speed: 0.0018, color: 0x8b4513, targetPriority: 'town_hall', wallDamageMultiplier: 4 },
+    stormmage: { id: 'stormmage', name: 'Storm Mage', cost: 180, space: 6, desc: 'Chain lightning hits 4 targets.', health: 200, range: 4.9, damage: 40, speed: 0.002, color: 0x4444ff, chainCount: 4, chainRange: 5 }
 };
 
 export const OBSTACLE_DEFINITIONS: Record<ObstacleType, ObstacleDef> = {

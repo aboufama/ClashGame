@@ -54,26 +54,60 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ type, level, resources, is
                 <div className="info-stats">
                     <div className="stat-row">
                         <span className="stat-label">Health</span>
-                        <span className="stat-value">{stats.maxHealth}</span>
+                        <span className="stat-value">
+                            {stats.maxHealth}
+                            {nextLevelStats && nextLevelStats.maxHealth > stats.maxHealth && (
+                                <span style={{ color: '#44ff44', fontSize: '0.7rem', marginLeft: '4px' }}>
+                                    (+{nextLevelStats.maxHealth - stats.maxHealth})
+                                </span>
+                            )}
+                        </span>
                     </div>
 
                     {/* Defense Specific Stats */}
                     {stats.damage && (
                         <div className="stat-row">
                             <span className="stat-label">Damage</span>
-                            <span className="stat-value">{stats.damage}</span>
+                            <span className="stat-value">
+                                {stats.damage}
+                                {nextLevelStats?.damage && nextLevelStats.damage > stats.damage && (
+                                    <span style={{ color: '#44ff44', fontSize: '0.7rem', marginLeft: '4px' }}>
+                                        (+{nextLevelStats.damage - stats.damage})
+                                    </span>
+                                )}
+                            </span>
                         </div>
                     )}
                     {stats.fireRate && (
                         <div className="stat-row">
                             <span className="stat-label">Speed</span>
-                            <span className="stat-value">{(stats.fireRate / 1000).toFixed(1)}s</span>
+                            <span className="stat-value">
+                                {(stats.fireRate / 1000).toFixed(1)}s
+                                {nextLevelStats?.fireRate && nextLevelStats.fireRate < stats.fireRate && (
+                                    <span style={{ color: '#44ff44', fontSize: '0.7rem', marginLeft: '4px' }}>
+                                        (-{((stats.fireRate - nextLevelStats.fireRate) / 1000).toFixed(1)}s)
+                                    </span>
+                                )}
+                            </span>
                         </div>
                     )}
                     {stats.damage && stats.fireRate && (
                         <div className="stat-row">
                             <span className="stat-label">DPS</span>
-                            <span className="stat-value">{Math.round(stats.damage * (1000 / stats.fireRate))}</span>
+                            <span className="stat-value">
+                                {Math.round(stats.damage * (1000 / stats.fireRate))}
+                                {nextLevelStats?.damage && nextLevelStats?.fireRate && (
+                                    (() => {
+                                        const currentDPS = Math.round(stats.damage * (1000 / stats.fireRate));
+                                        const nextDPS = Math.round(nextLevelStats.damage * (1000 / nextLevelStats.fireRate));
+                                        return nextDPS > currentDPS ? (
+                                            <span style={{ color: '#44ff44', fontSize: '0.7rem', marginLeft: '4px' }}>
+                                                (+{nextDPS - currentDPS})
+                                            </span>
+                                        ) : null;
+                                    })()
+                                )}
+                            </span>
                         </div>
                     )}
                     {stats.range && (
@@ -88,7 +122,14 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ type, level, resources, is
                         <>
                             <div className="stat-row">
                                 <span className="stat-label">Production</span>
-                                <span className="stat-value">{stats.productionRate}/s</span>
+                                <span className="stat-value">
+                                    {stats.productionRate}/s
+                                    {nextLevelStats?.productionRate && nextLevelStats.productionRate > stats.productionRate && (
+                                        <span style={{ color: '#44ff44', fontSize: '0.7rem', marginLeft: '4px' }}>
+                                            (+{(nextLevelStats.productionRate - stats.productionRate).toFixed(1)})
+                                        </span>
+                                    )}
+                                </span>
                             </div>
                             <div className="stat-row">
                                 <span className="stat-label">Offline Rate</span>
@@ -101,7 +142,14 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ type, level, resources, is
                     {stats.capacity && (
                         <div className="stat-row">
                             <span className="stat-label">Housing</span>
-                            <span className="stat-value">+{stats.capacity}</span>
+                            <span className="stat-value">
+                                +{stats.capacity}
+                                {nextLevelStats?.capacity && nextLevelStats.capacity > (stats.capacity ?? 0) && (
+                                    <span style={{ color: '#44ff44', fontSize: '0.7rem', marginLeft: '4px' }}>
+                                        (+{nextLevelStats.capacity - (stats.capacity ?? 0)})
+                                    </span>
+                                )}
+                            </span>
                         </div>
                     )}
 

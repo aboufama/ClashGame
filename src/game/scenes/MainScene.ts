@@ -53,7 +53,7 @@ interface PlacedBuilding {
 
 interface Troop {
     id: string;
-    type: 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'chronoswarm';
+    type: 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'chronoswarm' | 'ram' | 'stormmage';
     gameObject: Phaser.GameObjects.Graphics;
     healthBar: Phaser.GameObjects.Graphics;
     gridX: number;
@@ -91,7 +91,9 @@ const TROOP_STATS = {
     ward: { health: 300, range: 5.0, damage: 9, speed: 0.0015, color: 0x00ff88, space: 3, healRadius: 7.0, healAmount: 5 },
     // Novel units
     recursion: { health: 120, range: 0.8, damage: 8, speed: 0.0025, color: 0x00ffaa, space: 3 }, // Splits into 2 on death (max 2 generations)
-    chronoswarm: { health: 50, range: 1.5, damage: 5, speed: 0.004, color: 0xffcc00, space: 2, boostRadius: 4.0, boostAmount: 1.5 } // 50% speed boost to nearby allies
+    chronoswarm: { health: 50, range: 1.5, damage: 5, speed: 0.004, color: 0xffcc00, space: 2, boostRadius: 4.0, boostAmount: 1.5 }, // 50% speed boost to nearby allies
+    ram: { health: 800, range: 1.2, damage: 50, speed: 0.0018, color: 0x8b4513, space: 8, wallDamageMultiplier: 4, targetPriority: 'town_hall' },
+    stormmage: { health: 200, range: 4.9, damage: 40, speed: 0.002, color: 0x4444ff, space: 6, chainCount: 4, chainRange: 5 }
 };
 
 
@@ -317,7 +319,11 @@ export class MainScene extends Phaser.Scene {
             const remaining = Object.values(army).reduce((a: number, b: any) => a + (typeof b === 'number' ? b : 0), 0) as number;
             const liveTroops = this.troops.filter(t => t.health > 0).length;
 
-            if (remaining === 0 && liveTroops === 0 && !this.raidEndScheduled) {
+            const percent = this.initialEnemyBuildings > 0
+                ? Math.floor((this.destroyedBuildings / this.initialEnemyBuildings) * 100)
+                : 0;
+
+            if (!this.raidEndScheduled && ((remaining <= 0 && liveTroops === 0) || percent >= 100)) {
                 this.raidEndScheduled = true;
                 // Give player 2 seconds to see final state before auto-ending
                 this.time.delayedCall(2000, () => {
@@ -532,8 +538,8 @@ export class MainScene extends Phaser.Scene {
             this.spawnRandomObstacles(12);
         }
 
-        const campCount = this.buildings.filter(b => b.type === 'army_camp').length;
-        (window as any).refreshCampCapacity?.(campCount);
+        const campLevels = this.buildings.filter(b => b.type === 'army_camp').map(b => b.level ?? 1);
+        (window as any).refreshCampCapacity?.(campLevels);
         return true;
     }
 
@@ -605,12 +611,6 @@ export class MainScene extends Phaser.Scene {
         const graphics = this.add.graphics();
         const baseGraphics = this.add.graphics();
         baseGraphics.setDepth(1); // Ensure base is ALWAYS at the bottom
-        this.drawBuildingVisuals(graphics, gridX, gridY, type, 1, null, undefined, baseGraphics);
-
-        // Building depth: use the bottom-most grid coordinate (gridX+width + gridY+height)
-        const depth = (gridX + info.width) + (gridY + info.height);
-        graphics.setDepth(depth * 10);
-
         const building: PlacedBuilding = {
             id, type, gridX, gridY, level, graphics, baseGraphics,
             healthBar: this.add.graphics(),
@@ -618,6 +618,12 @@ export class MainScene extends Phaser.Scene {
             maxHealth: stats.maxHealth || 100,
             owner
         };
+
+        this.drawBuildingVisuals(graphics, gridX, gridY, type, 1, null, building, baseGraphics);
+
+        // Building depth: use the bottom-most grid coordinate (gridX+width + gridY+height)
+        const depth = (gridX + info.width) + (gridY + info.height);
+        graphics.setDepth(depth * 10);
 
         // Initialize cannon angle
         if (type === 'cannon') {
@@ -628,8 +634,8 @@ export class MainScene extends Phaser.Scene {
         this.updateHealthBar(building);
 
         if (type === 'army_camp') {
-            const campCount = this.buildings.filter(b => b.type === 'army_camp').length;
-            (window as any).refreshCampCapacity?.(campCount);
+            const campLevels = this.buildings.filter(b => b.type === 'army_camp').map(b => b.level ?? 1);
+            (window as any).refreshCampCapacity?.(campLevels);
         }
 
         return building;
@@ -745,13 +751,13 @@ export class MainScene extends Phaser.Scene {
                 this.drawMortar(graphics, c1, c2, c3, c4, center, alpha, tint, building);
                 break;
             case 'tesla':
-                this.drawTeslaCoil(graphics, c1, c2, c3, c4, center, alpha, tint);
+                this.drawTeslaCoil(graphics, c1, c2, c3, c4, center, alpha, tint, building);
                 break;
             case 'wall':
                 this.drawWall(graphics, center, gridX, gridY, alpha, tint, building);
                 break;
             case 'army_camp':
-                this.drawArmyCamp(graphics, c1, c2, c3, c4, center, alpha, tint, baseGraphics);
+                this.drawArmyCamp(graphics, c1, c2, c3, c4, center, alpha, tint, baseGraphics, building);
                 break;
             case 'xbow':
                 if (building && building.level >= 2) {
@@ -2765,30 +2771,57 @@ export class MainScene extends Phaser.Scene {
 
     private drawGoldMine(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
         const time = this.time.now;
-        const isLevel2 = building && building.level >= 2;
+        const level = building?.level ?? 1;
+        const isLevel2 = level >= 2;
+        const isLevel3 = level >= 3;
+        const isLevel4 = level >= 4;
+        const isLevel5 = level >= 5;
 
         // === ROCKY GROUND BASE ===
-        graphics.fillStyle(tint ?? (isLevel2 ? 0x7a6a5a : 0x6b5a4a), alpha);
+        const baseColor = isLevel5 ? 0x5a5a5a : (isLevel4 ? 0x8a7a6a : (isLevel3 ? 0x7d6d5d : (isLevel2 ? 0x7a6a5a : 0x6b5a4a)));
+        graphics.fillStyle(tint ?? baseColor, alpha);
         graphics.fillPoints([c1, c2, c3, c4], true);
-        graphics.lineStyle(isLevel2 ? 2 : 1, isLevel2 ? 0x8b7355 : 0x4a3a2a, 0.6 * alpha);
+        const borderColor = isLevel5 ? 0x777777 : (isLevel3 ? 0x9b8365 : (isLevel2 ? 0x8b7355 : 0x4a3a2a));
+        graphics.lineStyle(isLevel5 ? 3 : (isLevel3 ? 2 : (isLevel2 ? 2 : 1)), borderColor, 0.6 * alpha);
         graphics.strokePoints([c1, c2, c3, c4], true, true);
 
-        // Level 2: Gold-trimmed corners
+        // Level 2+: Gold-trimmed corners (L5 uses metal)
         if (isLevel2) {
-            graphics.fillStyle(0xdaa520, alpha * 0.8);
-            graphics.fillCircle(c1.x, c1.y, 3);
-            graphics.fillCircle(c2.x, c2.y, 2);
-            graphics.fillCircle(c3.x, c3.y, 2);
-            graphics.fillCircle(c4.x, c4.y, 2);
+            const cornerColor = isLevel5 ? 0x888888 : (isLevel4 ? 0xeecc00 : (isLevel3 ? 0xe0b000 : 0xdaa520));
+            graphics.fillStyle(cornerColor, alpha * 0.8);
+            graphics.fillCircle(c1.x, c1.y, isLevel5 ? 5 : (isLevel4 ? 4 : 3));
+            graphics.fillCircle(c2.x, c2.y, isLevel5 ? 4 : (isLevel3 ? 3 : 2));
+            graphics.fillCircle(c3.x, c3.y, isLevel5 ? 4 : (isLevel3 ? 3 : 2));
+            graphics.fillCircle(c4.x, c4.y, isLevel5 ? 5 : (isLevel4 ? 4 : 2));
+            // L5: Metal bolt highlights
+            if (isLevel5) {
+                graphics.fillStyle(0xaaaaaa, alpha * 0.6);
+                graphics.fillCircle(c1.x, c1.y - 1, 2);
+                graphics.fillCircle(c3.x, c3.y - 1, 2);
+            }
         }
 
-        // Scattered rocks/dirt texture
-        graphics.fillStyle(0x5a4a3a, alpha * 0.6);
-        graphics.fillCircle(center.x - 15, center.y + 6, 5);
-        graphics.fillCircle(center.x + 12, center.y + 4, 4);
-        graphics.fillCircle(center.x - 8, center.y + 10, 3);
-        graphics.fillStyle(0x7a6a5a, alpha * 0.4);
-        graphics.fillCircle(center.x + 5, center.y + 8, 3);
+        // L4+: Rim highlights (L5 uses steel)
+        if (isLevel4) {
+            graphics.lineStyle(1, isLevel5 ? 0x999999 : 0xcccccc, alpha * 0.5);
+            graphics.lineBetween(c1.x, c1.y, c2.x, c2.y);
+            graphics.lineBetween(c1.x, c1.y, c4.x, c4.y);
+        }
+
+        // Scattered rocks/dirt texture (reduced for L5 industrial)
+        if (!isLevel5) {
+            graphics.fillStyle(0x5a4a3a, alpha * 0.6);
+            graphics.fillCircle(center.x - 15, center.y + 6, 5);
+            graphics.fillCircle(center.x + 12, center.y + 4, 4);
+            graphics.fillCircle(center.x - 8, center.y + 10, 3);
+            graphics.fillStyle(0x7a6a5a, alpha * 0.4);
+            graphics.fillCircle(center.x + 5, center.y + 8, 3);
+        } else {
+            // L5: Metal floor plates
+            graphics.fillStyle(0x666666, alpha * 0.5);
+            graphics.fillRect(center.x - 18, center.y + 3, 10, 6);
+            graphics.fillRect(center.x + 8, center.y + 5, 10, 5);
+        }
 
         // === MINE SHAFT ENTRANCE (dark tunnel) ===
         // Entrance frame - wooden supports
@@ -2849,83 +2882,132 @@ export class MainScene extends Phaser.Scene {
         }
 
         // === HEADFRAME TOWER ===
+        // L5: Metal industrial tower, otherwise wooden
+        const beamColor = isLevel5 ? 0x555555 : 0x4a3a2a;
+        const beamColorLight = isLevel5 ? 0x666666 : 0x5a4a3a;
+        const beamColorDark = isLevel5 ? 0x444444 : 0x4a3a2a;
+
         // Main support beams (A-frame)
-        graphics.fillStyle(0x4a3a2a, alpha);
-        graphics.fillRect(center.x - 20, center.y - 35, 4, 40);
-        graphics.fillRect(center.x - 6, center.y - 35, 4, 40);
+        graphics.fillStyle(beamColor, alpha);
+        graphics.fillRect(center.x - 20, center.y - 35, isLevel5 ? 5 : 4, 40);
+        graphics.fillRect(center.x - 6, center.y - 35, isLevel5 ? 5 : 4, 40);
+
+        // L5: Metal beam highlights
+        if (isLevel5) {
+            graphics.fillStyle(0x777777, alpha * 0.6);
+            graphics.fillRect(center.x - 19, center.y - 35, 1, 40);
+            graphics.fillRect(center.x - 5, center.y - 35, 1, 40);
+        }
 
         // Cross beams
-        graphics.fillStyle(0x5a4a3a, alpha);
-        graphics.fillRect(center.x - 21, center.y - 30, 20, 3);
-        graphics.fillRect(center.x - 21, center.y - 18, 20, 3);
+        graphics.fillStyle(beamColorLight, alpha);
+        graphics.fillRect(center.x - 21, center.y - 30, 20, isLevel5 ? 4 : 3);
+        graphics.fillRect(center.x - 21, center.y - 18, 20, isLevel5 ? 4 : 3);
 
         // Diagonal bracing
-        graphics.lineStyle(2, 0x4a3a2a, alpha);
+        graphics.lineStyle(isLevel5 ? 3 : 2, beamColorDark, alpha);
         graphics.lineBetween(center.x - 19, center.y - 28, center.x - 5, center.y - 16);
         graphics.lineBetween(center.x - 19, center.y - 16, center.x - 5, center.y - 28);
 
-        // Pulley wheel at top
-        graphics.fillStyle(0x555555, alpha);
-        graphics.fillCircle(center.x - 13, center.y - 38, 5);
-        graphics.fillStyle(0x666666, alpha);
-        graphics.fillCircle(center.x - 13, center.y - 38, 3);
+        // Pulley wheel at top (larger for L5)
+        const pulleySize = isLevel5 ? 7 : 5;
+        graphics.fillStyle(isLevel5 ? 0x666666 : 0x555555, alpha);
+        graphics.fillCircle(center.x - 13, center.y - 38, pulleySize);
+        graphics.fillStyle(isLevel5 ? 0x888888 : 0x666666, alpha);
+        graphics.fillCircle(center.x - 13, center.y - 38, pulleySize - 2);
 
         // Animated wheel rotation
-        const wheelAngle = time / 400;
-        graphics.lineStyle(1, 0x444444, alpha);
+        const wheelAngle = time / (isLevel5 ? 300 : 400);  // Faster for L5
+        graphics.lineStyle(isLevel5 ? 2 : 1, isLevel5 ? 0x555555 : 0x444444, alpha);
         for (let i = 0; i < 4; i++) {
             const a = wheelAngle + (i / 4) * Math.PI * 2;
             graphics.lineBetween(
-                center.x - 13 + Math.cos(a) * 4,
-                center.y - 38 + Math.sin(a) * 4,
-                center.x - 13 - Math.cos(a) * 4,
-                center.y - 38 - Math.sin(a) * 4
+                center.x - 13 + Math.cos(a) * (pulleySize - 1),
+                center.y - 38 + Math.sin(a) * (pulleySize - 1),
+                center.x - 13 - Math.cos(a) * (pulleySize - 1),
+                center.y - 38 - Math.sin(a) * (pulleySize - 1)
             );
         }
 
-        // Rope from pulley
-        graphics.lineStyle(1, 0x8b7355, alpha);
+        // L5: Secondary gear
+        if (isLevel5) {
+            graphics.fillStyle(0x666666, alpha);
+            graphics.fillCircle(center.x - 5, center.y - 42, 4);
+            graphics.fillStyle(0x888888, alpha * 0.7);
+            graphics.fillCircle(center.x - 5, center.y - 42, 2);
+            // Gear teeth hint
+            graphics.lineStyle(1, 0x555555, alpha);
+            for (let i = 0; i < 4; i++) {
+                const a = -wheelAngle * 1.5 + (i / 4) * Math.PI * 2;
+                graphics.lineBetween(
+                    center.x - 5 + Math.cos(a) * 3,
+                    center.y - 42 + Math.sin(a) * 3,
+                    center.x - 5 - Math.cos(a) * 3,
+                    center.y - 42 - Math.sin(a) * 3
+                );
+            }
+        }
+
+        // Rope/chain from pulley
+        graphics.lineStyle(isLevel5 ? 2 : 1, isLevel5 ? 0x555555 : 0x8b7355, alpha);
         graphics.lineBetween(center.x - 13, center.y - 33, center.x - 13, center.y - 5);
 
         // === GOLD ORE PILES ===
+        const pileScale = isLevel5 ? 1.5 : (isLevel4 ? 1.3 : (isLevel3 ? 1.15 : (isLevel2 ? 1.0 : 0.85)));
         // Large pile
-        graphics.fillStyle(0x8b7355, alpha);
-        graphics.fillCircle(center.x + 18, center.y - 2, isLevel2 ? 10 : 8);
-        graphics.fillCircle(center.x + 22, center.y + 2, isLevel2 ? 8 : 6);
+        graphics.fillStyle(isLevel5 ? 0xab9375 : (isLevel4 ? 0x9b8365 : 0x8b7355), alpha);
+        graphics.fillCircle(center.x + 18, center.y - 2, 8 * pileScale);
+        graphics.fillCircle(center.x + 22, center.y + 2, 6 * pileScale);
 
-        // Level 2: Extra gold pile
+        // Level 2+: Extra gold pile
         if (isLevel2) {
-            graphics.fillStyle(0x9b8365, alpha);
-            graphics.fillCircle(center.x + 26, center.y - 1, 5);
+            graphics.fillStyle(isLevel5 ? 0xbb9a85 : (isLevel3 ? 0xab9375 : 0x9b8365), alpha);
+            graphics.fillCircle(center.x + 26, center.y - 1, 5 * pileScale);
         }
 
-        // Gold chunks in pile (more for level 2)
-        graphics.fillStyle(0xffd700, alpha);
-        graphics.fillCircle(center.x + 16, center.y - 4, isLevel2 ? 4 : 3);
-        graphics.fillCircle(center.x + 20, center.y - 1, isLevel2 ? 5 : 4);
-        graphics.fillCircle(center.x + 24, center.y + 1, isLevel2 ? 3 : 2);
-        graphics.fillCircle(center.x + 18, center.y, isLevel2 ? 3 : 2);
+        // L3+: Third pile
+        if (isLevel3) {
+            graphics.fillStyle(0x9b8365, alpha);
+            graphics.fillCircle(center.x + 14, center.y + 3, 4 * pileScale);
+        }
 
-        // Level 2: Extra gold chunks
+        // Gold chunks in pile
+        graphics.fillStyle(isLevel5 ? 0xffee00 : (isLevel4 ? 0xffe000 : 0xffd700), alpha);
+        graphics.fillCircle(center.x + 16, center.y - 4, 3 * pileScale);
+        graphics.fillCircle(center.x + 20, center.y - 1, 4 * pileScale);
+        graphics.fillCircle(center.x + 24, center.y + 1, 2.5 * pileScale);
+        graphics.fillCircle(center.x + 18, center.y, 2.5 * pileScale);
+
+        // Level 2+: Extra gold chunks
         if (isLevel2) {
             graphics.fillCircle(center.x + 26, center.y - 2, 3);
             graphics.fillCircle(center.x + 14, center.y - 2, 2);
             graphics.fillCircle(center.x + 22, center.y - 3, 2);
         }
 
-        // Sparkling gold highlights (animated) - more sparkles for level 2
+        // L4+: Refined gold bars (stacked) - more for L5
+        if (isLevel4) {
+            graphics.fillStyle(0xffd700, alpha);
+            graphics.fillRect(center.x + 10, center.y + 4, isLevel5 ? 10 : 8, 3);
+            graphics.fillStyle(0xffe855, alpha);
+            graphics.fillRect(center.x + 11, center.y + 4, isLevel5 ? 8 : 6, 1);
+            graphics.fillStyle(0xeec000, alpha);
+            graphics.fillRect(center.x + 11, center.y + 2, 7, 2);
+        }
+
+        // Sparkling gold highlights (animated)
         const sparkle1 = 0.5 + Math.sin(time / 150) * 0.5;
         const sparkle2 = 0.5 + Math.sin(time / 180 + 1) * 0.5;
         const sparkle3 = 0.5 + Math.sin(time / 200 + 2) * 0.5;
 
-        graphics.fillStyle(0xffff88, alpha * sparkle1);
-        graphics.fillCircle(center.x + 17, center.y - 5, isLevel2 ? 2 : 1.5);
-        graphics.fillStyle(0xffff88, alpha * sparkle2);
-        graphics.fillCircle(center.x + 21, center.y - 2, isLevel2 ? 2 : 1.5);
+        graphics.fillStyle(isLevel4 ? 0xffffaa : 0xffff88, alpha * sparkle1);
+        graphics.fillCircle(center.x + 17, center.y - 5, 1.5 * pileScale);
+        graphics.fillStyle(isLevel4 ? 0xffffaa : 0xffff88, alpha * sparkle2);
+        graphics.fillCircle(center.x + 21, center.y - 2, 1.5 * pileScale);
         graphics.fillStyle(0xffffaa, alpha * sparkle3);
-        graphics.fillCircle(center.x + 19, center.y - 3, isLevel2 ? 1.5 : 1);
+        graphics.fillCircle(center.x + 19, center.y - 3, 1 * pileScale);
 
-        // Level 2: Extra sparkles
+        // Level 2+: Extra sparkles
         if (isLevel2) {
             const sparkle4 = 0.5 + Math.sin(time / 120 + 3) * 0.5;
             const sparkle5 = 0.5 + Math.sin(time / 160 + 4) * 0.5;
@@ -2933,6 +3015,13 @@ export class MainScene extends Phaser.Scene {
             graphics.fillCircle(center.x + 25, center.y - 1, 1.5);
             graphics.fillStyle(0xffffcc, alpha * sparkle5);
             graphics.fillCircle(center.x + 15, center.y - 3, 1);
+        }
+
+        // L3+: More sparkles
+        if (isLevel3) {
+            const sparkle6 = 0.5 + Math.sin(time / 100 + 5) * 0.5;
+            graphics.fillStyle(0xffffdd, alpha * sparkle6);
+            graphics.fillCircle(center.x + 13, center.y + 2, 1.2);
         }
 
         // === LANTERNS ===
@@ -2943,41 +3032,56 @@ export class MainScene extends Phaser.Scene {
         // Lantern glow (animated flicker)
         const flicker = 0.7 + Math.sin(time / 80) * 0.3;
         graphics.fillStyle(0xff8800, alpha * flicker);
-        graphics.fillCircle(center.x - 23, center.y - 8, 3);
+        graphics.fillCircle(center.x - 23, center.y - 8, isLevel3 ? 4 : 3);
         graphics.fillStyle(0xffcc44, alpha * flicker * 0.8);
-        graphics.fillCircle(center.x - 23, center.y - 9, 2);
+        graphics.fillCircle(center.x - 23, center.y - 9, isLevel3 ? 2.5 : 2);
 
         // Small gold coin/nugget detail near entrance
         graphics.fillStyle(0xffd700, alpha);
-        graphics.fillCircle(center.x + 6, center.y + 5, 2);
-        graphics.fillCircle(center.x + 3, center.y + 7, 1.5);
+        graphics.fillCircle(center.x + 6, center.y + 5, isLevel3 ? 2.5 : 2);
+        graphics.fillCircle(center.x + 3, center.y + 7, isLevel3 ? 2 : 1.5);
     }
 
     private drawElixirCollector(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
         // Purple/pink theme for elixir
-        const isLevel2 = building && building.level >= 2;
-        const purpleDark = tint ?? (isLevel2 ? 0x7c4493 : 0x6c3483);
-        const purpleMid = tint ?? (isLevel2 ? 0x9e54bd : 0x8e44ad);
-        const purpleLight = tint ?? (isLevel2 ? 0xb579cd : 0xa569bd);
+        const level = building?.level ?? 1;
+        const isLevel2 = level >= 2;
+        const isLevel3 = level >= 3;
+        const isLevel4 = level >= 4;
+        const isLevel5 = level >= 5;
 
-        // Stone base (enhanced for level 2)
-        graphics.fillStyle(isLevel2 ? 0x6a6a6a : 0x5a5a5a, alpha);
+        const purpleDark = tint ?? (isLevel5 ? 0x9c64b3 : (isLevel4 ? 0x8c54a3 : (isLevel3 ? 0x7c4493 : (isLevel2 ? 0x7c4493 : 0x6c3483))));
+        const purpleMid = tint ?? (isLevel5 ? 0xbe74dd : (isLevel4 ? 0xae64cd : (isLevel3 ? 0x9e54bd : (isLevel2 ? 0x9e54bd : 0x8e44ad))));
+        const purpleLight = tint ?? (isLevel5 ? 0xd599ed : (isLevel4 ? 0xc589dd : (isLevel3 ? 0xb579cd : (isLevel2 ? 0xb579cd : 0xa569bd))));
+
+        // Stone base (enhanced for higher levels)
+        const baseColor = isLevel4 ? 0x7a7a7a : (isLevel3 ? 0x6f6f6f : (isLevel2 ? 0x6a6a6a : 0x5a5a5a));
+        graphics.fillStyle(baseColor, alpha);
         graphics.fillPoints([c1, c2, c3, c4], true);
-        graphics.lineStyle(isLevel2 ? 2 : 1, isLevel2 ? 0x9b59b6 : 0x3a3a3a, 0.5 * alpha);
+        graphics.lineStyle(isLevel3 ? 2 : (isLevel2 ? 2 : 1), isLevel3 ? 0xbb8fce : (isLevel2 ? 0x9b59b6 : 0x3a3a3a), 0.5 * alpha);
         graphics.strokePoints([c1, c2, c3, c4], true, true);
 
-        // Level 2: Purple-trimmed corners
+        // Level 2+: Purple-trimmed corners
         if (isLevel2) {
-            graphics.fillStyle(0xbb8fce, alpha * 0.8);
-            graphics.fillCircle(c1.x, c1.y, 3);
-            graphics.fillCircle(c2.x, c2.y, 2);
-            graphics.fillCircle(c3.x, c3.y, 2);
-            graphics.fillCircle(c4.x, c4.y, 2);
+            const cornerColor = isLevel4 ? 0xd7bde2 : (isLevel3 ? 0xc9a8d8 : 0xbb8fce);
+            graphics.fillStyle(cornerColor, alpha * 0.8);
+            graphics.fillCircle(c1.x, c1.y, isLevel4 ? 4 : 3);
+            graphics.fillCircle(c2.x, c2.y, isLevel3 ? 3 : 2);
+            graphics.fillCircle(c3.x, c3.y, isLevel3 ? 3 : 2);
+            graphics.fillCircle(c4.x, c4.y, isLevel4 ? 4 : 2);
         }
 
-        // Elixir tank (glass container) - larger for level 2
-        const tankHeight = isLevel2 ? 34 : 30;
-        const tankWidth = isLevel2 ? 20 : 18;
+        // L4: Crystal purple rim highlights
+        if (isLevel4) {
+            graphics.lineStyle(1, 0xe8daef, alpha * 0.5);
+            graphics.lineBetween(c1.x, c1.y, c2.x, c2.y);
+            graphics.lineBetween(c1.x, c1.y, c4.x, c4.y);
+        }
+
+        // Elixir tank (glass container) - larger for higher levels
+        const tankScale = isLevel4 ? 1.2 : (isLevel3 ? 1.1 : 1.0);
+        const tankHeight = (isLevel2 ? 34 : 30) * tankScale;
+        const tankWidth = (isLevel2 ? 20 : 18) * tankScale;
 
         // Tank back (darker)
         graphics.fillStyle(purpleDark, alpha * 0.8);
@@ -2988,177 +3092,456 @@ export class MainScene extends Phaser.Scene {
         graphics.fillRect(center.x - tankWidth / 2, center.y - 5 - tankHeight, tankWidth, tankHeight);
 
         // Tank shine (glass reflection)
-        graphics.fillStyle(0xffffff, (isLevel2 ? 0.25 : 0.2) * alpha);
-        graphics.fillRect(center.x - tankWidth / 2 + 3, center.y - 5 - tankHeight + 3, isLevel2 ? 5 : 4, tankHeight - 6);
+        const shineAlpha = isLevel4 ? 0.3 : (isLevel3 ? 0.28 : (isLevel2 ? 0.25 : 0.2));
+        graphics.fillStyle(0xffffff, shineAlpha * alpha);
+        graphics.fillRect(center.x - tankWidth / 2 + 3, center.y - 5 - tankHeight + 3, isLevel3 ? 6 : (isLevel2 ? 5 : 4), tankHeight - 6);
 
-        // Level 2: Secondary shine
+        // Level 2+: Secondary shine
         if (isLevel2) {
-            graphics.fillStyle(0xffffff, 0.15 * alpha);
-            graphics.fillRect(center.x + tankWidth / 2 - 6, center.y - 5 - tankHeight + 5, 2, tankHeight - 10);
+            graphics.fillStyle(0xffffff, (isLevel3 ? 0.18 : 0.15) * alpha);
+            graphics.fillRect(center.x + tankWidth / 2 - 6, center.y - 5 - tankHeight + 5, isLevel3 ? 3 : 2, tankHeight - 10);
         }
 
         // Tank top cap
         graphics.fillStyle(purpleLight, alpha);
         graphics.fillEllipse(center.x, center.y - 5 - tankHeight, tankWidth, tankWidth * 0.5);
 
-        // Level 2: Glowing rim
+        // Level 2+: Glowing rim
         if (isLevel2) {
-            graphics.lineStyle(2, 0xd7bde2, alpha * 0.6);
+            graphics.lineStyle(isLevel4 ? 3 : 2, isLevel4 ? 0xe8daef : 0xd7bde2, alpha * (isLevel3 ? 0.7 : 0.6));
             graphics.strokeEllipse(center.x, center.y - 5 - tankHeight, tankWidth - 2, (tankWidth - 2) * 0.5);
         }
 
         // Pump mechanism on top
         const time = this.time.now / 300;
-        const pumpOffset = Math.sin(time) * (isLevel2 ? 4 : 3);
+        const pumpOffset = Math.sin(time) * (isLevel3 ? 5 : (isLevel2 ? 4 : 3));
 
-        // Pump base (reinforced for level 2)
-        graphics.fillStyle(isLevel2 ? 0x5a5a5a : 0x4a4a4a, alpha);
+        // Pump base (reinforced for higher levels)
+        graphics.fillStyle(isLevel3 ? 0x6a6a6a : (isLevel2 ? 0x5a5a5a : 0x4a4a4a), alpha);
         graphics.fillRect(center.x - 4, center.y - tankHeight - 20, 8, 10);
 
-        // Level 2: Metal bands on pump
-        if (isLevel2) {
-            graphics.fillStyle(0x9b59b6, alpha * 0.7);
+        // L2+: Metal bands on pump
+        if (isLevel2 && !isLevel5) {
+            graphics.fillStyle(isLevel4 ? 0xbb8fce : 0x9b59b6, alpha * 0.7);
             graphics.fillRect(center.x - 5, center.y - tankHeight - 20, 10, 2);
             graphics.fillRect(center.x - 5, center.y - tankHeight - 12, 10, 2);
         }
 
-        // Pump piston (animated up/down)
-        graphics.fillStyle(isLevel2 ? 0x777777 : 0x666666, alpha);
-        graphics.fillRect(center.x - 2, center.y - tankHeight - 25 + pumpOffset, 4, 8);
+        // Pump piston (animated up/down) - L1-L4 only
+        if (!isLevel5) {
+            graphics.fillStyle(isLevel3 ? 0x888888 : (isLevel2 ? 0x777777 : 0x666666), alpha);
+            graphics.fillRect(center.x - 2, center.y - tankHeight - 25 + pumpOffset, 4, 8);
 
-        // Pump handle
-        graphics.lineStyle(2, isLevel2 ? 0x666666 : 0x555555, alpha);
-        graphics.lineBetween(center.x, center.y - tankHeight - 25 + pumpOffset, center.x + 10, center.y - tankHeight - 20 + pumpOffset * 0.5);
+            // Pump handle
+            graphics.lineStyle(2, isLevel3 ? 0x777777 : (isLevel2 ? 0x666666 : 0x555555), alpha);
+            graphics.lineBetween(center.x, center.y - tankHeight - 25 + pumpOffset, center.x + 10, center.y - tankHeight - 20 + pumpOffset * 0.5);
+        } else {
+            // === L5: INDUSTRIAL DEEP EXTRACTION ===
+            // One big central pipe going into the ground with pump on top
 
-        // Elixir bubbles (animated) - more bubbles for level 2
-        const bubbleTime = this.time.now / 200;
-        const bubbleCount = isLevel2 ? 5 : 3;
-        for (let i = 0; i < bubbleCount; i++) {
-            const bubbleY = ((bubbleTime + i * (isLevel2 ? 0.35 : 0.5)) % 1) * tankHeight;
-            const bubbleX = Math.sin(bubbleTime * 2 + i) * (isLevel2 ? 5 : 4);
-            graphics.fillStyle(0xd7bde2, (isLevel2 ? 0.7 : 0.6) * alpha);
-            graphics.fillCircle(center.x + bubbleX, center.y - 5 - bubbleY, isLevel2 ? 2.5 : 2);
+            // Big extraction pipe (main feature)
+            const pipeWidth = 14;
+
+            // Pipe shadow/depth
+            graphics.fillStyle(0x444444, alpha);
+            graphics.fillRect(center.x - pipeWidth / 2 - 1, center.y - 5, pipeWidth + 2, 18);
+
+            // Main pipe body
+            graphics.fillStyle(0x666666, alpha);
+            graphics.fillRect(center.x - pipeWidth / 2, center.y - 5, pipeWidth, 15);
+
+            // Pipe highlight (left edge)
+            graphics.fillStyle(0x888888, alpha * 0.7);
+            graphics.fillRect(center.x - pipeWidth / 2 + 1, center.y - 4, 2, 13);
+
+            // Pipe opening (dark hole going down)
+            graphics.fillStyle(0x222222, alpha);
+            graphics.fillEllipse(center.x, center.y + 8, pipeWidth - 2, 5);
+
+            // Pipe rim (top edge)
+            graphics.fillStyle(0x777777, alpha);
+            graphics.fillEllipse(center.x, center.y - 5, pipeWidth, 5);
+            graphics.fillStyle(0x555555, alpha);
+            graphics.fillEllipse(center.x, center.y - 5, pipeWidth - 4, 3);
+
+            // Connection pipe from tank to main pipe
+            graphics.fillStyle(0x666666, alpha);
+            graphics.fillRect(center.x - 3, center.y - tankHeight - 5, 6, tankHeight);
+            graphics.fillStyle(0x888888, alpha * 0.5);
+            graphics.fillRect(center.x - 2, center.y - tankHeight - 5, 1, tankHeight);
+
+            // Elixir flow inside connection pipe (animated) - only render within pipe bounds
+            const flowOffset = (time / 200) % 1;
+            const pipeTop = center.y - tankHeight - 5;
+            const pipeBottom = center.y - 5;
+            for (let i = 0; i < 3; i++) {
+                const flowY = pipeTop + ((flowOffset + i * 0.33) % 1) * tankHeight;
+                // Only draw if within pipe bounds
+                if (flowY >= pipeTop && flowY <= pipeBottom - 8) {
+                    graphics.fillStyle(purpleMid, alpha * 0.8);
+                    graphics.fillRect(center.x - 1, flowY, 2, 8);
+                }
+            }
+
+            // Industrial pump mechanism on top of tank
+            // Pump housing
+            graphics.fillStyle(0x555555, alpha);
+            graphics.fillRect(center.x - 8, center.y - tankHeight - 18, 16, 14);
+            graphics.fillStyle(0x666666, alpha);
+            graphics.fillRect(center.x - 7, center.y - tankHeight - 17, 14, 12);
+
+            // Pump highlight
+            graphics.fillStyle(0x777777, alpha * 0.6);
+            graphics.fillRect(center.x - 6, center.y - tankHeight - 16, 2, 10);
+
+            // Animated pump piston
+            graphics.fillStyle(0x888888, alpha);
+            graphics.fillRect(center.x - 2, center.y - tankHeight - 25 + pumpOffset, 4, 10);
+
+            // Pump top cap
+            graphics.fillStyle(0x666666, alpha);
+            graphics.fillEllipse(center.x, center.y - tankHeight - 25 + pumpOffset, 6, 2);
+
+            // Purple glow from pipe (elixir being extracted)
+            const glowPulse = 0.4 + Math.sin(time * 3) * 0.2;
+            graphics.fillStyle(purpleLight, alpha * glowPulse);
+            graphics.fillEllipse(center.x, center.y + 6, pipeWidth + 4, 8);
         }
 
-        // Level 2: Glowing elixir particles
+        // Elixir bubbles (animated)
+        const bubbleTime = this.time.now / 200;
+        const bubbleCount = isLevel4 ? 7 : (isLevel3 ? 6 : (isLevel2 ? 5 : 3));
+        for (let i = 0; i < bubbleCount; i++) {
+            const bubbleY = ((bubbleTime + i * (isLevel3 ? 0.25 : (isLevel2 ? 0.35 : 0.5))) % 1) * tankHeight;
+            const bubbleX = Math.sin(bubbleTime * 2 + i) * (isLevel3 ? 6 : (isLevel2 ? 5 : 4));
+            graphics.fillStyle(isLevel4 ? 0xe8daef : 0xd7bde2, (isLevel3 ? 0.8 : (isLevel2 ? 0.7 : 0.6)) * alpha);
+            graphics.fillCircle(center.x + bubbleX, center.y - 5 - bubbleY, isLevel3 ? 3 : (isLevel2 ? 2.5 : 2));
+        }
+
+        // Level 2+: Glowing elixir particles
         if (isLevel2) {
             const glowTime = this.time.now / 150;
-            for (let i = 0; i < 3; i++) {
+            const particleCount = isLevel4 ? 5 : (isLevel3 ? 4 : 3);
+            for (let i = 0; i < particleCount; i++) {
                 const glow = 0.3 + Math.sin(glowTime + i * 2) * 0.3;
                 const px = center.x + Math.sin(glowTime * 0.5 + i * 2.5) * 6;
                 const py = center.y - 5 - tankHeight * 0.5 + Math.cos(glowTime * 0.3 + i) * 8;
-                graphics.fillStyle(0xe8daef, alpha * glow);
-                graphics.fillCircle(px, py, 1.5);
+                graphics.fillStyle(isLevel4 ? 0xf0e8f5 : 0xe8daef, alpha * glow);
+                graphics.fillCircle(px, py, isLevel4 ? 2 : 1.5);
             }
         }
 
-        // Wooden supports (reinforced for level 2)
-        graphics.fillStyle(isLevel2 ? 0x6d5e47 : 0x5d4e37, alpha);
-        graphics.fillRect(center.x - tankWidth / 2 - 3, center.y - 5, isLevel2 ? 4 : 3, 8);
-        graphics.fillRect(center.x + tankWidth / 2 - (isLevel2 ? 1 : 0), center.y - 5, isLevel2 ? 4 : 3, 8);
+        // L4: Magical sparkle effect near top
+        if (isLevel4) {
+            const sparkleTime = this.time.now / 100;
+            for (let i = 0; i < 3; i++) {
+                const sparkle = 0.4 + Math.sin(sparkleTime + i * 1.5) * 0.4;
+                const sx = center.x + Math.cos(sparkleTime * 0.8 + i * 2) * 8;
+                const sy = center.y - 5 - tankHeight + 5 + Math.sin(sparkleTime * 0.5 + i) * 5;
+                graphics.fillStyle(0xffffff, alpha * sparkle * 0.6);
+                graphics.fillCircle(sx, sy, 1);
+            }
+        }
 
-        // Level 2: Metal reinforcement bands on supports
+        // Wooden supports (reinforced for higher levels)
+        graphics.fillStyle(isLevel3 ? 0x7d6e57 : (isLevel2 ? 0x6d5e47 : 0x5d4e37), alpha);
+        graphics.fillRect(center.x - tankWidth / 2 - 3, center.y - 5, isLevel3 ? 5 : (isLevel2 ? 4 : 3), 8);
+        graphics.fillRect(center.x + tankWidth / 2 - (isLevel3 ? 2 : (isLevel2 ? 1 : 0)), center.y - 5, isLevel3 ? 5 : (isLevel2 ? 4 : 3), 8);
+
+        // Level 2+: Metal reinforcement bands on supports
         if (isLevel2) {
-            graphics.fillStyle(0x9b59b6, alpha * 0.6);
-            graphics.fillRect(center.x - tankWidth / 2 - 3, center.y - 3, 4, 2);
-            graphics.fillRect(center.x + tankWidth / 2 - 1, center.y - 3, 4, 2);
+            graphics.fillStyle(isLevel4 ? 0xbb8fce : 0x9b59b6, alpha * (isLevel3 ? 0.7 : 0.6));
+            graphics.fillRect(center.x - tankWidth / 2 - 3, center.y - 3, isLevel3 ? 5 : 4, 2);
+            graphics.fillRect(center.x + tankWidth / 2 - (isLevel3 ? 2 : 1), center.y - 3, isLevel3 ? 5 : 4, 2);
+        }
+
+        // L4: Extra elixir pipe on side
+        if (isLevel4) {
+            graphics.fillStyle(0x9b59b6, alpha * 0.8);
+            graphics.fillRect(center.x + tankWidth / 2 + 2, center.y - tankHeight * 0.6, 3, 15);
+            graphics.fillStyle(0xbb8fce, alpha * 0.5);
+            graphics.fillRect(center.x + tankWidth / 2 + 3, center.y - tankHeight * 0.6 + 2, 1, 11);
         }
     }
 
 
     private drawMortar(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
         const time = this.time.now;
+        const level = building?.level ?? 1;
+        const isLevel2 = level >= 2;
+        const isLevel3 = level >= 3;
+        const size = isLevel3 ? 1.2 : (isLevel2 ? 1.12 : 1.0);
 
-        // Subtle rotation for aiming (use ballista angle system)
+        // Recoil animation - reduced movement + scale shrink for perspective effect
+        const timeSinceFire = building?.lastFireTime ? (time - building.lastFireTime) : 10000;
+        const recoilDuration = 400;
+        let recoil = 0;
+        let recoilScale = 1.0;
+        if (timeSinceFire < recoilDuration) {
+            const t = timeSinceFire / recoilDuration;
+            const recoilAmount = Math.sin(t * Math.PI);
+            recoil = recoilAmount * 5;
+            recoilScale = 1.0 - recoilAmount * 0.08;
+        }
+
+        // Subtle rotation - based on horizontal direction to target in screen space
         const aimAngle = building?.ballistaAngle ?? 0;
-        const aimOffsetX = Math.cos(aimAngle) * 2;
-        const aimOffsetY = Math.sin(aimAngle) * 1;
+        const horizontalAim = Math.cos(aimAngle);
 
-        // === STONE BASE ===
-        graphics.fillStyle(tint ?? 0x6a6a6a, alpha);
+        // Snap to 7 discrete positions
+        let rotationDeg = 0;
+        if (horizontalAim > 0.9) rotationDeg = 30;
+        else if (horizontalAim > 0.6) rotationDeg = 20;
+        else if (horizontalAim > 0.25) rotationDeg = 10;
+        else if (horizontalAim < -0.9) rotationDeg = -30;
+        else if (horizontalAim < -0.6) rotationDeg = -20;
+        else if (horizontalAim < -0.25) rotationDeg = -10;
+
+        // Colors - varies by level
+        const stoneBase = tint ?? (isLevel3 ? 0x5a5a5a : (isLevel2 ? 0x4a4540 : 0x5a5550));
+        const stoneDark = isLevel3 ? 0x4a4a4a : (isLevel2 ? 0x3a3530 : 0x4a4540);
+        const stoneLight = isLevel3 ? 0x7a7a7a : 0x6a6560;
+        const ironColor = isLevel3 ? 0x4a4a4a : (isLevel2 ? 0x3a3a3a : 0x4a4a4a);
+        const ironDark = isLevel3 ? 0x3a3a3a : (isLevel2 ? 0x2a2a2a : 0x3a3a3a);
+        const ironLight = isLevel3 ? 0x6a6a6a : (isLevel2 ? 0x4a4a4a : 0x5a5a5a);
+        const ironHighlight = isLevel3 ? 0xcccccc : null; // White/silver highlight for L3
+        const dirtColor = isLevel3 ? 0x4a4038 : 0x3a3020;
+
+        // Emplacement dimensions
+        const pitRadius = 22 * size;
+        const pitY = center.y + 2;
+        const baseElevation = isLevel3 ? 4 : 0; // L3 has elevated base
+
+        // ============================================
+        // STONE BASE PLATFORM
+        // ============================================
+        // L3: Draw elevated platform sides first
+        if (isLevel3) {
+            graphics.fillStyle(stoneDark, alpha);
+            // Front side of elevation
+            graphics.beginPath();
+            graphics.moveTo(c2.x, c2.y);
+            graphics.lineTo(c3.x, c3.y);
+            graphics.lineTo(c3.x, c3.y + baseElevation);
+            graphics.lineTo(c2.x, c2.y + baseElevation);
+            graphics.closePath();
+            graphics.fillPath();
+            // Right side
+            graphics.beginPath();
+            graphics.moveTo(c3.x, c3.y);
+            graphics.lineTo(c4.x, c4.y);
+            graphics.lineTo(c4.x, c4.y + baseElevation);
+            graphics.lineTo(c3.x, c3.y + baseElevation);
+            graphics.closePath();
+            graphics.fillPath();
+        }
+
+        // Main platform top
+        graphics.fillStyle(stoneBase, alpha);
         graphics.fillPoints([c1, c2, c3, c4], true);
-        graphics.lineStyle(2, 0x4a4a4a, 0.7 * alpha);
-        graphics.strokePoints([c1, c2, c3, c4], true, true);
 
-        // Raised stone platform (isometric ellipse)
-        graphics.fillStyle(0x5a5a5a, alpha);
-        graphics.fillEllipse(center.x, center.y - 2, 40, 24);
-        graphics.lineStyle(2, 0x3a3a3a, alpha);
-        graphics.strokeEllipse(center.x, center.y - 2, 40, 24);
+        // Edge highlights
+        graphics.lineStyle(2, stoneLight, alpha * 0.6);
+        graphics.lineBetween(c1.x, c1.y, c2.x, c2.y);
+        graphics.lineBetween(c1.x, c1.y, c4.x, c4.y);
+        graphics.lineStyle(2, stoneDark, alpha * 0.6);
+        graphics.lineBetween(c2.x, c2.y, c3.x, c3.y);
+        graphics.lineBetween(c3.x, c3.y, c4.x, c4.y);
 
-        // === MORTAR TUBE (short, fat barrel with subtle aiming) ===
-        // Barrel base
-        const barrelCenterX = center.x + aimOffsetX;
-        const barrelCenterY = center.y + aimOffsetY;
+        // L3: Stone rim around edge + decorative garnishes
+        if (isLevel3) {
+            graphics.lineStyle(3, 0x6a6a6a, alpha * 0.8);
+            graphics.strokePoints([c1, c2, c3, c4], true, true);
 
-        // Barrel body (tapered sides going up)
-        graphics.fillStyle(0x4a4a4a, alpha);
+            // Corner rivets/stones
+            graphics.fillStyle(0x7a7a7a, alpha);
+            graphics.fillCircle(c1.x, c1.y, 3);
+            graphics.fillCircle(c2.x, c2.y, 3);
+            graphics.fillCircle(c3.x, c3.y, 3);
+            graphics.fillCircle(c4.x, c4.y, 3);
+            // Inner highlight on rivets
+            graphics.fillStyle(0x9a9a9a, alpha * 0.8);
+            graphics.fillCircle(c1.x - 1, c1.y - 1, 1.5);
+            graphics.fillCircle(c2.x - 1, c2.y - 1, 1.5);
+            graphics.fillCircle(c3.x - 1, c3.y - 1, 1.5);
+            graphics.fillCircle(c4.x - 1, c4.y - 1, 1.5);
+
+            // Small decorative stones near emplacement
+            graphics.fillStyle(0x5a5a5a, alpha * 0.7);
+            graphics.fillCircle(center.x - 22, center.y - 8, 2.5);
+            graphics.fillCircle(center.x + 20, center.y - 6, 2);
+            graphics.fillCircle(center.x - 18, center.y + 10, 2);
+            graphics.fillCircle(center.x + 22, center.y + 8, 2.5);
+        }
+
+        // ============================================
+        // DIRT EMPLACEMENT (the pit the mortar sits in)
+        // ============================================
+        // Outer dirt ring
+        graphics.fillStyle(dirtColor, alpha);
+        graphics.fillEllipse(center.x, pitY, pitRadius * 2.2, pitRadius * 1.0);
+
+        // Inner dark pit
+        graphics.fillStyle(0x1a1510, alpha);
+        graphics.fillEllipse(center.x, pitY + 2, pitRadius * 1.8, pitRadius * 0.8);
+
+        // Deep shadow
+        graphics.fillStyle(0x0a0a08, alpha);
+        graphics.fillEllipse(center.x, pitY + 4, pitRadius * 1.4, pitRadius * 0.6);
+
+        // ============================================
+        // MORTAR BARREL (recoils into pit with scale shrink + ROTATION)
+        // Rotation is achieved by offsetting top more than bottom
+        // ============================================
+        const barrelY = center.y - 8 * size + recoil;
+        const barrelWidth = 20 * size * recoilScale;
+
+        // Tilt multiplier - how much each vertical level gets offset
+        // Bottom = 0 (stays centered), Top = full rotation offset
+        const tiltAmount = rotationDeg * 0.12; // Max ~3.6px at ±30 degrees
+
+        // Barrel base (bottom, goes into pit) - minimal tilt
+        graphics.fillStyle(ironDark, alpha);
+        graphics.fillEllipse(center.x + tiltAmount * 0.1, barrelY + 14 * size * recoilScale, barrelWidth * 0.8, barrelWidth * 0.35);
+        graphics.fillEllipse(center.x + tiltAmount * 0.2, barrelY + 10 * size * recoilScale, barrelWidth * 0.9, barrelWidth * 0.4);
+
+        // Main barrel body - progressive tilt
+        graphics.fillStyle(ironColor, alpha);
+        graphics.fillEllipse(center.x + tiltAmount * 0.35, barrelY + 6 * size * recoilScale, barrelWidth, barrelWidth * 0.45);
+        graphics.fillEllipse(center.x + tiltAmount * 0.5, barrelY + 2 * size * recoilScale, barrelWidth * 1.1, barrelWidth * 0.5);
+        graphics.fillEllipse(center.x + tiltAmount * 0.65, barrelY - 2 * size * recoilScale, barrelWidth * 1.2, barrelWidth * 0.55);
+
+        // Iron bands - also tilt
+        graphics.lineStyle(2, ironDark, alpha);
+        graphics.strokeEllipse(center.x + tiltAmount * 0.25, barrelY + 8 * size * recoilScale, barrelWidth * 0.85, barrelWidth * 0.38);
+        graphics.strokeEllipse(center.x + tiltAmount * 0.5, barrelY, barrelWidth * 1.1, barrelWidth * 0.5);
+
+        // Level 2+: Extra reinforcement band
+        if (isLevel2) {
+            graphics.lineStyle(2, 0x2a2a2a, alpha);
+            graphics.strokeEllipse(center.x + tiltAmount * 0.4, barrelY + 4 * size * recoilScale, barrelWidth * 0.95, barrelWidth * 0.43);
+        }
+
+        // Barrel rim (top) - maximum tilt
+        graphics.fillStyle(ironLight, alpha);
+        graphics.fillEllipse(center.x + tiltAmount * 0.85, barrelY - 6 * size * recoilScale, barrelWidth * 1.3, barrelWidth * 0.6);
+
+        // Level 3: Single beefy shiny rim highlight
+        if (ironHighlight) {
+            graphics.lineStyle(3, ironHighlight, alpha * 0.85);
+            graphics.strokeEllipse(center.x + tiltAmount * 0.85, barrelY - 7 * size * recoilScale, barrelWidth * 1.38, barrelWidth * 0.64);
+        }
+
+        // Inner rim
+        graphics.fillStyle(ironColor, alpha);
+        graphics.fillEllipse(center.x + tiltAmount * 0.85, barrelY - 6 * size * recoilScale, barrelWidth * 1.1, barrelWidth * 0.5);
+
+        // Bore hole
+        graphics.fillStyle(0x0a0a0a, alpha);
+        graphics.fillEllipse(center.x + tiltAmount * 0.9, barrelY - 6 * size * recoilScale, barrelWidth * 0.85, barrelWidth * 0.38);
+
+        // Bore depth
+        graphics.fillStyle(0x000000, alpha * 0.8);
+        graphics.fillEllipse(center.x + tiltAmount * 1.0, barrelY - 4 * size * recoilScale, barrelWidth * 0.7, barrelWidth * 0.32);
+
+        // ============================================
+        // FRONT DIRT EDGE (covers barrel bottom - the masking layer)
+        // ============================================
+        graphics.fillStyle(dirtColor, alpha);
         graphics.beginPath();
-        graphics.moveTo(barrelCenterX - 13, barrelCenterY - 6);
-        graphics.lineTo(barrelCenterX - 9, barrelCenterY - 32);
-        graphics.lineTo(barrelCenterX + 9, barrelCenterY - 32);
-        graphics.lineTo(barrelCenterX + 13, barrelCenterY - 6);
+        // Draw front arc of the dirt emplacement
+        for (let i = 0; i <= 16; i++) {
+            const angle = (i / 32) * Math.PI * 2;
+            const px = center.x + Math.cos(angle) * pitRadius * 1.1;
+            const py = pitY + Math.sin(angle) * pitRadius * 0.5;
+            if (i === 0) graphics.moveTo(px, py);
+            else graphics.lineTo(px, py);
+        }
+        // Inner edge
+        for (let i = 16; i >= 0; i--) {
+            const angle = (i / 32) * Math.PI * 2;
+            const px = center.x + Math.cos(angle) * pitRadius * 0.7;
+            const py = pitY + Math.sin(angle) * pitRadius * 0.32;
+            graphics.lineTo(px, py);
+        }
         graphics.closePath();
         graphics.fillPath();
 
-        // Barrel front highlight (lit side)
-        graphics.fillStyle(0x5a5a5a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(barrelCenterX + 3, barrelCenterY - 6);
-        graphics.lineTo(barrelCenterX + 5, barrelCenterY - 32);
-        graphics.lineTo(barrelCenterX + 9, barrelCenterY - 32);
-        graphics.lineTo(barrelCenterX + 13, barrelCenterY - 6);
-        graphics.closePath();
-        graphics.fillPath();
+        // Dirt texture on front edge
+        graphics.fillStyle(0x2a2518, alpha * 0.5);
+        graphics.fillCircle(center.x + 8, pitY + pitRadius * 0.35, 3);
+        graphics.fillCircle(center.x - 6, pitY + pitRadius * 0.4, 2);
+        graphics.fillCircle(center.x + 2, pitY + pitRadius * 0.38, 2.5);
 
-        // Barrel top rim (ellipse ring)
-        graphics.fillStyle(0x4a4a4a, alpha);
-        graphics.fillEllipse(barrelCenterX, barrelCenterY - 32, 10, 5);
-
-        // Metal reinforcement bands (curved on barrel)
-        graphics.lineStyle(2, 0x555555, alpha);
-        graphics.beginPath();
-        graphics.arc(barrelCenterX, barrelCenterY - 14, 12, Math.PI * 0.2, Math.PI * 0.8);
-        graphics.strokePath();
-        graphics.beginPath();
-        graphics.arc(barrelCenterX, barrelCenterY - 24, 9, Math.PI * 0.2, Math.PI * 0.8);
-        graphics.strokePath();
-
-
-
-        // === ANIMATED SMOKE ===
-        const smoke1Y = (time / 40) % 30;
-        const smoke1Alpha = Math.max(0, 1 - smoke1Y / 30) * 0.25;
-        graphics.fillStyle(0x999999, alpha * smoke1Alpha);
-        graphics.fillCircle(barrelCenterX + Math.sin(time / 200) * 2, barrelCenterY - 35 - smoke1Y, 3 + smoke1Y * 0.12);
+        // ============================================
+        // SMOKE EFFECT ON FIRING
+        // ============================================
+        if (timeSinceFire < 300) {
+            const t = timeSinceFire / 300;
+            const smokeAlpha = (1 - t) * 0.5;
+            graphics.fillStyle(0x888888, alpha * smokeAlpha);
+            graphics.fillCircle(center.x + Math.sin(time / 40) * 4, barrelY - 12 - t * 20, 4 + t * 6);
+            graphics.fillCircle(center.x - 4 + Math.cos(time / 50) * 3, barrelY - 18 - t * 25, 3 + t * 5);
+            graphics.fillCircle(center.x + 3 + Math.sin(time / 60) * 2, barrelY - 24 - t * 28, 2.5 + t * 4);
+        }
     }
 
-    private drawTeslaCoil(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null) {
+    private drawTeslaCoil(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
         const time = this.time.now;
+        const level = building?.level ?? 1;
+        const isLevel2 = level >= 2;
 
-        // Stone base platform
-        graphics.fillStyle(0x5a5a5a, alpha);
+        // Stone base platform (thicker for L2)
+        graphics.fillStyle(isLevel2 ? 0x6a6a6a : 0x5a5a5a, alpha);
         graphics.fillPoints([c1, c2, c3, c4], true);
-        graphics.lineStyle(1, 0x3a3a3a, 0.5 * alpha);
+        graphics.lineStyle(isLevel2 ? 2 : 1, isLevel2 ? 0x4a4a4a : 0x3a3a3a, 0.5 * alpha);
         graphics.strokePoints([c1, c2, c3, c4], true, true);
 
-        // Wooden support post
-        graphics.fillStyle(0x4a3a2a, alpha);
-        graphics.fillRect(center.x - 4, center.y - 35, 8, 35);
-        graphics.lineStyle(1, 0x2a1a0a, 0.5 * alpha);
-        graphics.strokeRect(center.x - 4, center.y - 35, 8, 35);
+        // L2: Raised platform edge
+        if (isLevel2) {
+            graphics.fillStyle(0x555555, alpha * 0.8);
+            graphics.fillRect(center.x - 16, center.y + 2, 32, 4);
+        }
 
-        // Metal coil rings with subtle glow
-        for (let i = 0; i < 3; i++) {
-            const ringY = center.y - 10 - i * 8;
+        // Wooden support post (thicker for L2)
+        const postWidth = isLevel2 ? 10 : 8;
+        graphics.fillStyle(isLevel2 ? 0x5a4a3a : 0x4a3a2a, alpha);
+        graphics.fillRect(center.x - postWidth / 2, center.y - 35, postWidth, 35);
+        graphics.lineStyle(1, 0x2a1a0a, 0.5 * alpha);
+        graphics.strokeRect(center.x - postWidth / 2, center.y - 35, postWidth, 35);
+
+        // Metal coil rings with subtle glow (more rings for L2)
+        const ringCount = isLevel2 ? 4 : 3;
+        for (let i = 0; i < ringCount; i++) {
+            const ringY = center.y - 10 - i * (isLevel2 ? 7 : 8);
             const ringGlow = 0.3 + Math.sin(time / 150 + i) * 0.1;
-            graphics.fillStyle(0x6a6a6a, alpha);
-            graphics.fillEllipse(center.x, ringY, 12, 4);
+            const ringSize = isLevel2 ? 14 : 12;
+            graphics.fillStyle(isLevel2 ? 0x7a7a7a : 0x6a6a6a, alpha);
+            graphics.fillEllipse(center.x, ringY, ringSize, 4);
             graphics.lineStyle(1, 0x3a3a3a, alpha);
-            graphics.strokeEllipse(center.x, ringY, 12, 4);
+            graphics.strokeEllipse(center.x, ringY, ringSize, 4);
             // Electric glow on rings
-            graphics.lineStyle(1, 0x00ccff, alpha * ringGlow);
-            graphics.strokeEllipse(center.x, ringY, 13, 5);
+            graphics.lineStyle(isLevel2 ? 2 : 1, 0x00ccff, alpha * ringGlow);
+            graphics.strokeEllipse(center.x, ringY, ringSize + 1, 5);
+        }
+
+        // L2: Electrical ring around the base
+        if (isLevel2) {
+            const ringPulse = 0.5 + Math.sin(time / 100) * 0.3;
+            graphics.lineStyle(3, 0x00ccff, alpha * ringPulse * 0.6);
+            graphics.strokeEllipse(center.x, center.y - 2, 24, 8);
+            graphics.lineStyle(1, 0x88ffff, alpha * ringPulse * 0.8);
+            graphics.strokeEllipse(center.x, center.y - 2, 22, 7);
+
+            // Occasional sparks from ring
+            const sparkSeed = Math.floor(time / 80);
+            if (sparkSeed % 3 === 0) {
+                const sparkAngle = (time / 50) % (Math.PI * 2);
+                const sx = center.x + Math.cos(sparkAngle) * 12;
+                const sy = center.y - 2 + Math.sin(sparkAngle) * 4;
+                graphics.fillStyle(0xffffff, alpha * 0.8);
+                graphics.fillCircle(sx, sy, 2);
+            }
         }
 
         // Glowing electric orb
@@ -3549,147 +3932,236 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
-    // === DRAGON'S BREATH - Ancient Chinese/Steampunk Firecracker Salvo Launcher ===
+    // === DRAGON'S BREATH - Subtle Asian-Themed Firecracker Battery ===
     private drawDragonsBreath(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding, baseGraphics?: Phaser.GameObjects.Graphics) {
         const time = this.time.now || 0;
         const g = baseGraphics || graphics;
 
-        // Firing state
+        // Firing state - extended salvo time for 16 pods
         const timeSinceFire = building?.lastFireTime ? (time - building.lastFireTime) : 100000;
-        const salvoActive = timeSinceFire < 800;
-        const salvoPhase = salvoActive ? timeSinceFire / 800 : 0;
+        const fireRate = 3000; // Full reload cycle
+        const salvoActive = timeSinceFire < 800; // Firing phase
+        const reloadPhase = timeSinceFire >= 800 ? Math.min(1, (timeSinceFire - 800) / (fireRate - 800)) : 0;
 
-        // === ORNATE STONE PLATFORM (Chinese temple style) ===
-        // Main platform with red lacquer appearance
-        g.fillStyle(tint ?? 0x8b1a1a, alpha);
+        // === ELEGANT STONE PLATFORM (Subtle Asian Temple Style) ===
+        // Main platform - dark slate with subtle red undertone
+        const baseColor = tint ?? 0x3a2a2a;
+        g.fillStyle(baseColor, alpha);
         g.fillPoints([c1, c2, c3, c4], true);
 
-        // Gold trim border (3 layers for depth)
-        g.lineStyle(4, 0xffd700, alpha);
-        g.strokePoints([c1, c2, c3, c4], true, true);
+        // Subtle inner pattern - darker stone tiles
+        g.fillStyle(0x2a1a1a, alpha * 0.5);
+        const inset = 8;
+        const inner1 = new Phaser.Math.Vector2(c1.x, c1.y + inset);
+        const inner2 = new Phaser.Math.Vector2(c2.x + inset * 0.5, c2.y);
+        const inner3 = new Phaser.Math.Vector2(c3.x, c3.y - inset);
+        const inner4 = new Phaser.Math.Vector2(c4.x - inset * 0.5, c4.y);
+        g.fillPoints([inner1, inner2, inner3, inner4], true);
+
+        // Elegant gold trim border (single refined line)
         g.lineStyle(2, 0xb8860b, alpha * 0.8);
-        const inset1 = 4;
-        const i1 = new Phaser.Math.Vector2(c1.x, c1.y + inset1);
-        const i2 = new Phaser.Math.Vector2(c2.x + inset1 * 0.5, c2.y);
-        const i3 = new Phaser.Math.Vector2(c3.x, c3.y - inset1);
-        const i4 = new Phaser.Math.Vector2(c4.x - inset1 * 0.5, c4.y);
-        g.strokePoints([i1, i2, i3, i4], true, true);
+        g.strokePoints([c1, c2, c3, c4], true, true);
 
-        // Decorative corner ornaments (Chinese cloud motifs)
-        g.fillStyle(0xffd700, alpha * 0.9);
-        g.fillCircle(c1.x, c1.y, 5);
-        g.fillCircle(c2.x, c2.y, 5);
-        g.fillCircle(c3.x, c3.y, 5);
-        g.fillCircle(c4.x, c4.y, 5);
-        g.fillStyle(0xcc0000, alpha);
-        g.fillCircle(c1.x, c1.y, 3);
-        g.fillCircle(c2.x, c2.y, 3);
-        g.fillCircle(c3.x, c3.y, 3);
-        g.fillCircle(c4.x, c4.y, 3);
-
-        // Dragon scale pattern on base (isometric texture)
-        g.fillStyle(0x6a1010, alpha * 0.4);
-        for (let row = 0; row < 3; row++) {
-            for (let col = 0; col < 4; col++) {
-                const scaleX = center.x - 30 + col * 18 + (row % 2) * 9;
-                const scaleY = center.y - 5 + row * 8;
-                g.fillEllipse(scaleX, scaleY, 8, 4);
-            }
+        // Corner ornaments - jade-gold studs
+        const corners = [c1, c2, c3, c4];
+        for (const corner of corners) {
+            g.fillStyle(0x4a6a4a, alpha * 0.9); // Jade green
+            g.fillCircle(corner.x, corner.y, 4);
+            g.fillStyle(0xb8860b, alpha); // Gold center
+            g.fillCircle(corner.x, corner.y, 2);
         }
 
-        // === FIRECRACKER LAUNCH PODS (Spread 4x4 Grid - 1 per tile) ===
-        const podBaseY = center.y - 12;
-        const spacingX = 20; // Spread across the 4x4 base
-        const spacingY = 10;
-        const gridOffsetX = -30;
-        const gridOffsetY = -15;
+        // Bamboo accent borders (subtle wooden frame)
+        g.lineStyle(1, 0x5a4a3a, alpha * 0.6);
+        g.lineBetween(c1.x, c1.y, c2.x, c2.y);
+        g.lineBetween(c4.x, c4.y, c3.x, c3.y);
+
+        // === 16 SILO HOLES (4x4 Grid - evenly spread) ===
 
         for (let row = 0; row < 4; row++) {
             for (let col = 0; col < 4; col++) {
+                // Calculate center of each tile in the 4x4 grid
+                const tileGridX = building ? building.gridX + col + 0.5 : col + 0.5;
+                const tileGridY = building ? building.gridY + row + 0.5 : row + 0.5;
+                const tileCenter = this.cartToIso(tileGridX, tileGridY);
+
                 const podIndex = row * 4 + col;
-                // Isometric grid calculation for pod positions
-                const podX = center.x + gridOffsetX + (col * spacingX) - (row * 0);
-                const podY = podBaseY + gridOffsetY + (row * spacingY) + (col * spacingY * 0.5);
 
-                // Corrected isometric grid positioning for 4x4
-                const isoX = center.x + (col - 1.5) * 20 - (row - 1.5) * 20;
-                const isoY = center.y - 15 + (col - 1.5) * 10 + (row - 1.5) * 10;
+                // Silo hole (dark pit)
+                graphics.fillStyle(0x1a0a0a, alpha);
+                graphics.fillEllipse(tileCenter.x, tileCenter.y + 2, 14, 7);
 
-                // Staggered firing animation
+                // Silo rim (brass ring)
+                graphics.lineStyle(2, 0x6a4a2a, alpha);
+                graphics.strokeEllipse(tileCenter.x, tileCenter.y + 2, 14, 7);
+
+                // === FIRECRACKER POD STATE ===
+                // Staggered firing: each pod fires 40ms apart
                 const podFireDelay = podIndex * 40;
                 const podTimeSinceFire = timeSinceFire - podFireDelay;
-                const podFiring = podTimeSinceFire > 0 && podTimeSinceFire < 200;
-                const podRecoil = podFiring ? Math.sin((podTimeSinceFire / 200) * Math.PI) * 4 : 0;
 
-                // Pod tube shadow
-                graphics.fillStyle(0x1a1a1a, alpha * 0.4);
-                graphics.fillEllipse(isoX + 2, isoY + 5, 8, 4);
+                // States: 
+                // -100 to 0: Fuse glowing
+                // 0 to 200: Firing (rocket launches)
+                // 200 to 800: Empty (pod fired, gone)
+                // 800+: Reloading (pod rises from silo)
 
-                // Brass pod tube (pointing upward)
-                const tubeHeight = 22;
-                const tubeTop = isoY - tubeHeight + podRecoil;
+                const isFuseGlowing = salvoActive && podTimeSinceFire > -100 && podTimeSinceFire <= 0;
+                const isFiring = podTimeSinceFire > 0 && podTimeSinceFire < 200;
+                const isEmpty = podTimeSinceFire >= 200 && timeSinceFire < 800;
+                const isReloading = timeSinceFire >= 800;
 
-                // Tube body
-                graphics.fillStyle(0x8b5a2b, alpha);
-                graphics.fillRect(isoX - 5, tubeTop, 10, tubeHeight);
+                // Calculate pod position (rises from silo during reload)
+                let podHeight = 28; // Full height above platform
+                let podVisible = true;
 
-                // Copper sheen
-                graphics.fillStyle(0xcd7f32, alpha * 0.7);
-                graphics.fillRect(isoX - 4, tubeTop + 2, 4, tubeHeight - 4);
+                if (isEmpty) {
+                    // Pod is gone (fired away)
+                    podVisible = false;
+                } else if (isReloading) {
+                    // Pod rises from silo over reload period
+                    // Pods reload in reverse order (last fired = first to reload visually, or same order)
+                    const podReloadDelay = podIndex * 50; // Staggered reload
+                    const podReloadTime = (timeSinceFire - 800) - podReloadDelay;
+                    const reloadDuration = 1500;
 
-                // Red paper wrapper (firecracker style)
-                graphics.fillStyle(0xcc0000, alpha);
-                graphics.fillRect(isoX - 4, tubeTop + 4, 8, tubeHeight - 8);
-
-                // Gold band at top
-                graphics.fillStyle(0xffd700, alpha);
-                graphics.fillRect(isoX - 5, tubeTop, 10, 3);
-                graphics.fillRect(isoX - 5, tubeTop + tubeHeight - 3, 10, 3);
-
-                // Fuse (glowing when about to fire)
-                const fuseGlow = salvoActive && podTimeSinceFire > -100 && podTimeSinceFire < 50;
-                graphics.fillStyle(fuseGlow ? 0xff6600 : 0x3a3a3a, alpha);
-                graphics.fillRect(isoX - 1, tubeTop - 3, 2, 4);
-
-                if (fuseGlow) {
-                    graphics.fillStyle(0xffff00, alpha * (0.5 + Math.sin(time / 30 + podIndex) * 0.5));
-                    graphics.fillCircle(isoX, tubeTop - 4, 2);
+                    if (podReloadTime < 0) {
+                        podVisible = false;
+                    } else if (podReloadTime < reloadDuration) {
+                        // Rising animation
+                        const riseProgress = podReloadTime / reloadDuration;
+                        podHeight = riseProgress * 28;
+                        podVisible = true;
+                    } else {
+                        podHeight = 28;
+                        podVisible = true;
+                    }
+                } else if (isFiring) {
+                    // Slight upward recoil during firing
+                    const fireProgress = podTimeSinceFire / 200;
+                    podHeight = 28 + Math.sin(fireProgress * Math.PI) * 4;
                 }
 
-                if (podFiring) {
-                    const flashIntensity = 1 - (podTimeSinceFire / 200);
-                    graphics.fillStyle(0xffff00, alpha * flashIntensity * 0.8);
-                    graphics.fillCircle(isoX, tubeTop - 6, 8 * flashIntensity);
-                    graphics.fillStyle(0xff6600, alpha * flashIntensity * 0.6);
-                    graphics.fillCircle(isoX, tubeTop - 10, 10 * flashIntensity);
+                if (podVisible) {
+                    const baseY = tileCenter.y + 2;
+                    const topY = baseY - podHeight;
+
+                    // === LARGE FIRECRACKER ROCKET ===
+                    const rocketWidth = 10;
+                    const rocketHeight = podHeight - 4;
+
+                    // Rocket body (red with gold bands)
+                    graphics.fillStyle(0xcc2222, alpha);
+                    graphics.fillRect(tileCenter.x - rocketWidth / 2, topY, rocketWidth, rocketHeight);
+
+                    // Paper texture lines
+                    graphics.lineStyle(1, 0xaa1111, alpha * 0.5);
+                    for (let i = 1; i < 4; i++) {
+                        const lineY = topY + (rocketHeight * i / 4);
+                        graphics.lineBetween(tileCenter.x - rocketWidth / 2, lineY, tileCenter.x + rocketWidth / 2, lineY);
+                    }
+
+                    // Gold decorative bands
+                    graphics.fillStyle(0xffd700, alpha);
+                    graphics.fillRect(tileCenter.x - rocketWidth / 2 - 1, topY, rocketWidth + 2, 4);
+                    graphics.fillRect(tileCenter.x - rocketWidth / 2 - 1, topY + rocketHeight - 4, rocketWidth + 2, 4);
+
+                    // Middle gold band with dragon motif
+                    const midY = topY + rocketHeight / 2;
+                    graphics.fillStyle(0xb8860b, alpha);
+                    graphics.fillRect(tileCenter.x - rocketWidth / 2, midY - 2, rocketWidth, 4);
+
+                    // Tiny dragon/swirl symbol
+                    graphics.fillStyle(0x880000, alpha);
+                    graphics.fillCircle(tileCenter.x, midY, 2);
+
+                    // Rocket tip (conical - gold/brass)
+                    graphics.fillStyle(0xb8860b, alpha);
+                    graphics.beginPath();
+                    graphics.moveTo(tileCenter.x, topY - 6);
+                    graphics.lineTo(tileCenter.x - rocketWidth / 2, topY);
+                    graphics.lineTo(tileCenter.x + rocketWidth / 2, topY);
+                    graphics.closePath();
+                    graphics.fillPath();
+
+                    // Tip highlight
+                    graphics.fillStyle(0xffd700, alpha * 0.6);
+                    graphics.beginPath();
+                    graphics.moveTo(tileCenter.x, topY - 6);
+                    graphics.lineTo(tileCenter.x - 2, topY);
+                    graphics.lineTo(tileCenter.x, topY - 2);
+                    graphics.closePath();
+                    graphics.fillPath();
+
+                    // Fuse at top
+                    const fuseColor = isFuseGlowing ? 0xff6600 : 0x3a3a3a;
+                    graphics.fillStyle(fuseColor, alpha);
+                    graphics.fillRect(tileCenter.x - 1, topY - 10, 2, 5);
+
+                    // Fuse spark/glow
+                    if (isFuseGlowing) {
+                        const sparkIntensity = 0.5 + Math.sin(time / 30 + podIndex) * 0.5;
+                        graphics.fillStyle(0xffff00, alpha * sparkIntensity);
+                        graphics.fillCircle(tileCenter.x, topY - 10, 3);
+                        graphics.fillStyle(0xffffff, alpha * sparkIntensity * 0.5);
+                        graphics.fillCircle(tileCenter.x, topY - 10, 1.5);
+                    }
+
+                    // === LAUNCH SMOKE FROM SILO ===
+                    if (isFiring) {
+                        const fireProgress = podTimeSinceFire / 200;
+                        const smokeIntensity = Math.sin(fireProgress * Math.PI);
+
+                        // Smoke billowing from silo hole
+                        for (let s = 0; s < 5; s++) {
+                            const smokeAge = (fireProgress * 5 + s * 0.2) % 1;
+                            const smokeX = tileCenter.x + Math.sin(time / 50 + s * 2 + podIndex) * (6 + smokeAge * 10);
+                            const smokeY = baseY - smokeAge * 20;
+                            const smokeSize = 4 + smokeAge * 8;
+                            const smokeAlpha = (1 - smokeAge) * smokeIntensity * 0.6;
+
+                            graphics.fillStyle(0x888888, alpha * smokeAlpha);
+                            graphics.fillCircle(smokeX, smokeY, smokeSize);
+                        }
+
+                        // Muzzle flash at silo
+                        graphics.fillStyle(0xff6600, alpha * smokeIntensity * 0.5);
+                        graphics.fillEllipse(tileCenter.x, baseY, 12 + smokeIntensity * 6, 6 + smokeIntensity * 3);
+                        graphics.fillStyle(0xffff00, alpha * smokeIntensity * 0.3);
+                        graphics.fillEllipse(tileCenter.x, baseY, 8, 4);
+                    }
+                }
+
+                // === LOADING SMOKE (during reload phase) ===
+                if (isReloading) {
+                    const podReloadDelay = podIndex * 50;
+                    const podReloadTime = (timeSinceFire - 800) - podReloadDelay;
+
+                    if (podReloadTime > 0 && podReloadTime < 500) {
+                        const steamProgress = podReloadTime / 500;
+                        const steamAlpha = (1 - steamProgress) * 0.3;
+                        const steamOffset = Math.sin(time / 100 + podIndex) * 3;
+
+                        graphics.fillStyle(0xaaaaaa, alpha * steamAlpha);
+                        graphics.fillCircle(tileCenter.x + steamOffset, tileCenter.y - 5 - steamProgress * 15, 3 + steamProgress * 4);
+                    }
                 }
             }
         }
 
-        // === STEAM/SMOKE EFFECTS ===
-        if (!salvoActive) {
-            for (let i = 0; i < 4; i++) {
-                const steamCycle = ((time / 3000) + i * 0.25) % 1;
-                const steamX = center.x + (i - 1.5) * 20 + Math.sin(time / 500 + i) * 5;
-                const steamY = center.y - 15 - steamCycle * 30;
-                const steamAlpha = (1 - steamCycle) * 0.2;
-                graphics.fillStyle(0xcccccc, alpha * steamAlpha);
-                graphics.fillCircle(steamX, steamY, 4 + steamCycle * 6);
+        // === SUBTLE AMBIENT EFFECTS ===
+        // Small wisps of incense/steam (idle state only)
+        if (!salvoActive && reloadPhase >= 1) {
+            for (let i = 0; i < 2; i++) {
+                const wispsTime = (time / 4000 + i * 0.5) % 1;
+                const wispX = center.x + Math.sin(time / 800 + i * 3) * 15;
+                const wispY = center.y - 20 - wispsTime * 25;
+                const wispAlpha = (1 - wispsTime) * 0.15;
+
+                graphics.fillStyle(0xcccccc, alpha * wispAlpha);
+                graphics.fillCircle(wispX, wispY, 2 + wispsTime * 3);
             }
         }
-
-        // === BRASS CONTROL MECHANISMS ===
-        graphics.fillStyle(0xb8860b, alpha);
-        graphics.fillCircle(center.x - 45, center.y + 10, 6);
-        graphics.fillCircle(center.x + 45, center.y + 10, 6);
-        graphics.fillStyle(0x2a2a2a, alpha);
-        graphics.fillCircle(center.x - 45, center.y + 10, 4);
-        graphics.fillCircle(center.x + 45, center.y + 10, 4);
-
-        const dialAngle = salvoActive ? salvoPhase * Math.PI : Math.sin(time / 1000) * 0.5;
-        graphics.lineStyle(1, 0xff4400, alpha);
-        graphics.lineBetween(center.x - 45, center.y + 10, center.x - 45 + Math.cos(dialAngle) * 3, center.y + 10 - Math.sin(dialAngle) * 3);
-        graphics.lineBetween(center.x + 45, center.y + 10, center.x + 45 + Math.cos(dialAngle) * 3, center.y + 10 - Math.sin(dialAngle) * 3);
     }
 
     // === RUBBLE SYSTEM (Destroyed Building Remains) ===
@@ -4465,9 +4937,11 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
-    private drawArmyCamp(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, baseGraphics?: Phaser.GameObjects.Graphics) {
+    private drawArmyCamp(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, baseGraphics?: Phaser.GameObjects.Graphics, building?: PlacedBuilding) {
         const time = this.time.now;
-        const g = baseGraphics || graphics; // Draw floor on baseGraphics if available
+        const g = baseGraphics || graphics;
+        const level = building?.level ?? 1;
+        const isLevel2 = level >= 2;
 
         const info = BUILDINGS['army_camp'];
         const ringRadiusX = 15 * info.width;
@@ -4493,15 +4967,24 @@ export class MainScene extends Phaser.Scene {
             g.fillCircle(center.x + ox, center.y + 5 + oy, 2 + (i % 2));
         }
 
-        // Simple border
-        g.lineStyle(2, 0x8b7355, alpha * 0.7);
+        // Simple border - L2 has slightly nicer border
+        g.lineStyle(isLevel2 ? 3 : 2, isLevel2 ? 0x6d5535 : 0x8b7355, alpha * 0.7);
         g.strokePoints([c1, c2, c3, c4], true, true);
+
+        // L2: Corner posts
+        if (isLevel2) {
+            g.fillStyle(0x5d4e37, alpha);
+            g.fillCircle(c1.x, c1.y, 3);
+            g.fillCircle(c2.x, c2.y, 3);
+            g.fillCircle(c3.x, c3.y, 3);
+            g.fillCircle(c4.x, c4.y, 3);
+        }
 
         // === CENTRAL CAMPFIRE ===
         const fireX = center.x;
         const fireY = center.y + 8;
 
-        // Fire pit stones (ring) - Move to ground layer
+        // Fire pit stones (ring)
         g.fillStyle(0x555555, alpha);
         for (let i = 0; i < 8; i++) {
             const angle = (i / 8) * Math.PI * 2;
@@ -4510,11 +4993,11 @@ export class MainScene extends Phaser.Scene {
             g.fillEllipse(stoneX, stoneY, 5, 3);
         }
 
-        // Fire pit inner (ash/coals) - Ground layer
+        // Fire pit inner (ash/coals)
         g.fillStyle(0x2a2020, alpha);
         g.fillEllipse(fireX, fireY, 10, 5);
 
-        // Glowing coals - Ground layer
+        // Glowing coals
         const coalGlow = 0.5 + Math.sin(time / 200) * 0.2;
         g.fillStyle(0x881100, alpha * coalGlow);
         g.fillEllipse(fireX, fireY, 8, 4);
@@ -4531,7 +5014,7 @@ export class MainScene extends Phaser.Scene {
         graphics.fillStyle(0xff4400, alpha * 0.15 * flame1);
         graphics.fillEllipse(fireX, fireY, 25, 12);
 
-        // Back flames (draw first)
+        // Back flames
         graphics.fillStyle(0xdd4400, alpha * flame3);
         graphics.beginPath();
         graphics.moveTo(fireX - 6, fireY);
@@ -4596,95 +5079,97 @@ export class MainScene extends Phaser.Scene {
             }
         }
 
-        // === TRAINING DUMMY (left side) ===
-        const dummyX = center.x - 35;
-        const dummyY = center.y - 5;
+        // === LEVEL 2+: TRAINING DUMMY AND WEAPON RACK ===
+        if (isLevel2) {
+            const dummyX = center.x - 35;
+            const dummyY = center.y - 5;
 
-        // Dummy post
-        graphics.fillStyle(0x5d4e37, alpha);
-        graphics.fillRect(dummyX - 2, dummyY - 25, 4, 30);
-        graphics.fillStyle(0x3d2e17, alpha);
-        graphics.fillRect(dummyX + 1, dummyY - 25, 1, 30);
+            // Dummy post
+            graphics.fillStyle(0x5d4e37, alpha);
+            graphics.fillRect(dummyX - 2, dummyY - 25, 4, 30);
+            graphics.fillStyle(0x3d2e17, alpha);
+            graphics.fillRect(dummyX + 1, dummyY - 25, 1, 30);
 
-        // Dummy body (straw-stuffed sack)
-        graphics.fillStyle(0xc4a060, alpha);
-        graphics.fillEllipse(dummyX, dummyY - 18, 8, 12);
-        graphics.fillStyle(0xa48040, alpha * 0.6);
-        graphics.fillEllipse(dummyX + 2, dummyY - 18, 5, 10);
+            // Dummy body (straw-stuffed sack)
+            graphics.fillStyle(0xc4a060, alpha);
+            graphics.fillEllipse(dummyX, dummyY - 18, 8, 12);
+            graphics.fillStyle(0xa48040, alpha * 0.6);
+            graphics.fillEllipse(dummyX + 2, dummyY - 18, 5, 10);
 
-        // Dummy head
-        graphics.fillStyle(0xc4a060, alpha);
-        graphics.fillCircle(dummyX, dummyY - 32, 6);
-        graphics.fillStyle(0xa48040, alpha * 0.5);
-        graphics.fillCircle(dummyX + 1, dummyY - 32, 4);
+            // Dummy head
+            graphics.fillStyle(0xc4a060, alpha);
+            graphics.fillCircle(dummyX, dummyY - 32, 6);
+            graphics.fillStyle(0xa48040, alpha * 0.5);
+            graphics.fillCircle(dummyX + 1, dummyY - 32, 4);
 
-        // Dummy arms (wooden crossbar)
-        graphics.fillStyle(0x5d4e37, alpha);
-        graphics.fillRect(dummyX - 10, dummyY - 22, 20, 3);
+            // Dummy arms (wooden crossbar)
+            graphics.fillStyle(0x5d4e37, alpha);
+            graphics.fillRect(dummyX - 10, dummyY - 22, 20, 3);
 
-        // Straw detail
-        graphics.lineStyle(1, 0x8a7030, alpha * 0.6);
-        graphics.lineBetween(dummyX - 4, dummyY - 10, dummyX - 6, dummyY - 5);
-        graphics.lineBetween(dummyX + 3, dummyY - 10, dummyX + 5, dummyY - 6);
-        graphics.lineBetween(dummyX, dummyY - 10, dummyX, dummyY - 4);
+            // Straw detail
+            graphics.lineStyle(1, 0x8a7030, alpha * 0.6);
+            graphics.lineBetween(dummyX - 4, dummyY - 10, dummyX - 6, dummyY - 5);
+            graphics.lineBetween(dummyX + 3, dummyY - 10, dummyX + 5, dummyY - 6);
+            graphics.lineBetween(dummyX, dummyY - 10, dummyX, dummyY - 4);
 
-        // === WEAPON RACK (right side) ===
-        const rackX = center.x + 35;
-        const rackY = center.y;
+            // === WEAPON RACK (right side) ===
+            const rackX = center.x + 35;
+            const rackY = center.y;
 
-        // Rack frame (A-frame)
-        graphics.fillStyle(0x5d4e37, alpha);
-        // Left leg
-        graphics.beginPath();
-        graphics.moveTo(rackX - 10, rackY + 5);
-        graphics.lineTo(rackX - 8, rackY - 20);
-        graphics.lineTo(rackX - 5, rackY - 20);
-        graphics.lineTo(rackX - 7, rackY + 5);
-        graphics.closePath();
-        graphics.fillPath();
+            // Rack frame (A-frame)
+            graphics.fillStyle(0x5d4e37, alpha);
+            // Left leg
+            graphics.beginPath();
+            graphics.moveTo(rackX - 10, rackY + 5);
+            graphics.lineTo(rackX - 8, rackY - 20);
+            graphics.lineTo(rackX - 5, rackY - 20);
+            graphics.lineTo(rackX - 7, rackY + 5);
+            graphics.closePath();
+            graphics.fillPath();
 
-        // Right leg
-        graphics.beginPath();
-        graphics.moveTo(rackX + 10, rackY + 5);
-        graphics.lineTo(rackX + 8, rackY - 20);
-        graphics.lineTo(rackX + 5, rackY - 20);
-        graphics.lineTo(rackX + 7, rackY + 5);
-        graphics.closePath();
-        graphics.fillPath();
+            // Right leg
+            graphics.beginPath();
+            graphics.moveTo(rackX + 10, rackY + 5);
+            graphics.lineTo(rackX + 8, rackY - 20);
+            graphics.lineTo(rackX + 5, rackY - 20);
+            graphics.lineTo(rackX + 7, rackY + 5);
+            graphics.closePath();
+            graphics.fillPath();
 
-        // Cross bar
-        graphics.fillRect(rackX - 9, rackY - 18, 18, 3);
-        graphics.fillStyle(0x3d2e17, alpha);
-        graphics.fillRect(rackX - 9, rackY - 16, 18, 1);
+            // Cross bar
+            graphics.fillRect(rackX - 9, rackY - 18, 18, 3);
+            graphics.fillStyle(0x3d2e17, alpha);
+            graphics.fillRect(rackX - 9, rackY - 16, 18, 1);
 
-        // Weapons on rack
-        // Sword 1
-        graphics.fillStyle(0x888888, alpha);
-        graphics.fillRect(rackX - 7, rackY - 30, 2, 14);
-        graphics.fillStyle(0x5d4e37, alpha);
-        graphics.fillRect(rackX - 8, rackY - 17, 4, 3);
-        graphics.fillStyle(0xccaa00, alpha);
-        graphics.fillRect(rackX - 7, rackY - 17, 2, 1);
+            // Weapons on rack
+            // Sword 1
+            graphics.fillStyle(0x888888, alpha);
+            graphics.fillRect(rackX - 7, rackY - 30, 2, 14);
+            graphics.fillStyle(0x5d4e37, alpha);
+            graphics.fillRect(rackX - 8, rackY - 17, 4, 3);
+            graphics.fillStyle(0xccaa00, alpha);
+            graphics.fillRect(rackX - 7, rackY - 17, 2, 1);
 
-        // Sword 2
-        graphics.fillStyle(0x777777, alpha);
-        graphics.fillRect(rackX + 1, rackY - 28, 2, 12);
-        graphics.fillStyle(0x5d4e37, alpha);
-        graphics.fillRect(rackX, rackY - 17, 4, 3);
-        graphics.fillStyle(0xccaa00, alpha);
-        graphics.fillRect(rackX + 1, rackY - 17, 2, 1);
+            // Sword 2
+            graphics.fillStyle(0x777777, alpha);
+            graphics.fillRect(rackX + 1, rackY - 28, 2, 12);
+            graphics.fillStyle(0x5d4e37, alpha);
+            graphics.fillRect(rackX, rackY - 17, 4, 3);
+            graphics.fillStyle(0xccaa00, alpha);
+            graphics.fillRect(rackX + 1, rackY - 17, 2, 1);
 
-        // Axe
-        graphics.fillStyle(0x5d4e37, alpha);
-        graphics.fillRect(rackX + 6, rackY - 32, 2, 16);
-        graphics.fillStyle(0x666666, alpha);
-        graphics.beginPath();
-        graphics.moveTo(rackX + 5, rackY - 32);
-        graphics.lineTo(rackX + 11, rackY - 30);
-        graphics.lineTo(rackX + 11, rackY - 26);
-        graphics.lineTo(rackX + 5, rackY - 24);
-        graphics.closePath();
-        graphics.fillPath();
+            // Axe
+            graphics.fillStyle(0x5d4e37, alpha);
+            graphics.fillRect(rackX + 6, rackY - 32, 2, 16);
+            graphics.fillStyle(0x666666, alpha);
+            graphics.beginPath();
+            graphics.moveTo(rackX + 5, rackY - 32);
+            graphics.lineTo(rackX + 11, rackY - 30);
+            graphics.lineTo(rackX + 11, rackY - 26);
+            graphics.lineTo(rackX + 5, rackY - 24);
+            graphics.closePath();
+            graphics.fillPath();
+        }
     }
 
     private drawGenericBuilding(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, _center: Phaser.Math.Vector2, info: any, alpha: number, tint: number | null) {
@@ -5015,20 +5500,30 @@ export class MainScene extends Phaser.Scene {
 
                             if (troop.type === 'archer') {
                                 this.showArcherProjectile(troop, troop.target, stats.damage);
+                            } else if (troop.type === 'stormmage') {
+                                this.showStormLightning(troop, troop.target, stats.damage);
                             } else {
-                                // Melee: immediate damage
-                                troop.target.health -= stats.damage;
+                                // Melee: immediate damage (Warrior, Giant, Ram)
+                                let finalDamage = stats.damage;
+                                if (troop.type === 'ram' && troop.target.type === 'wall') {
+                                    finalDamage *= (stats as any).wallDamageMultiplier || 4;
+                                }
+
+                                troop.target.health -= finalDamage;
                                 this.showHitEffect(troop.target.graphics);
                                 this.updateHealthBar(troop.target);
 
                                 const currentPos = this.cartToIso(troop.gridX, troop.gridY);
                                 const targetPos = this.cartToIso(bx + tw / 2, by + th / 2);
                                 const angle = Math.atan2(targetPos.y - currentPos.y, targetPos.x - currentPos.x);
+
+                                // Ram gets a bigger punch animation
+                                const punchDist = troop.type === 'ram' ? 18 : 10;
                                 this.tweens.add({
                                     targets: troop.gameObject,
-                                    x: currentPos.x + Math.cos(angle) * 10,
-                                    y: currentPos.y + Math.sin(angle) * 10,
-                                    duration: 50,
+                                    x: currentPos.x + Math.cos(angle) * punchDist,
+                                    y: currentPos.y + Math.sin(angle) * (punchDist * 0.5),
+                                    duration: troop.type === 'ram' ? 100 : 50,
                                     yoyo: true
                                 });
 
@@ -5055,15 +5550,25 @@ export class MainScene extends Phaser.Scene {
         const angle = Math.atan2(end.y - start.y, end.x - start.x);
         mortar.ballistaAngle = angle;
 
+        // Level-based scaling - L3 is 1.3x bigger
+        const level = mortar.level ?? 1;
+        const shellScale = level >= 3 ? 1.3 : 1.0;
+        const shellRadius = 8 * shellScale;
+
         // Mortar shell - starts invisible, appears as it leaves barrel
         const ball = this.add.graphics();
         ball.fillStyle(0x3a3a3a, 1);
-        ball.fillCircle(0, 0, 8);
+        ball.fillCircle(0, 0, shellRadius);
         ball.fillStyle(0x5a5a5a, 1);
-        ball.fillCircle(-2, -2, 3);
-        ball.setPosition(start.x, start.y - 35); // Start at barrel opening
+        ball.fillCircle(-2 * shellScale, -2 * shellScale, 3 * shellScale);
+        // L3: Add highlight to shell
+        if (level >= 3) {
+            ball.fillStyle(0xaaaaaa, 0.6);
+            ball.fillCircle(-3 * shellScale, -3 * shellScale, 2);
+        }
+        ball.setPosition(start.x, start.y - 35);
         ball.setDepth(5000);
-        ball.setAlpha(0); // Start invisible
+        ball.setAlpha(0);
 
         const midY = (start.y + end.y) / 2 - 350;
 
@@ -5072,9 +5577,9 @@ export class MainScene extends Phaser.Scene {
 
         const flash = this.add.graphics();
         flash.fillStyle(0xff8800, 0.8);
-        flash.fillCircle(0, 0, 8);
+        flash.fillCircle(0, 0, 8 * shellScale);
         flash.fillStyle(0xffcc00, 0.6);
-        flash.fillCircle(0, 0, 5);
+        flash.fillCircle(0, 0, 5 * shellScale);
         flash.setPosition(start.x, start.y - 35);
         flash.setDepth(5001);
         this.tweens.add({
@@ -5105,36 +5610,70 @@ export class MainScene extends Phaser.Scene {
             },
             onComplete: () => {
                 ball.destroy();
-                this.createMortarExplosion(end.x, end.y, mortar.owner, troop.gridX, troop.gridY);
+                this.createMortarExplosion(end.x, end.y, mortar.owner, troop.gridX, troop.gridY, level);
             }
         });
     }
 
-    private createMortarExplosion(x: number, y: number, owner: 'PLAYER' | 'ENEMY', targetGx: number, targetGy: number) {
-        this.cameras.main.shake(100, 0.002); // Reduced shake
+    private createMortarExplosion(x: number, y: number, owner: 'PLAYER' | 'ENEMY', targetGx: number, targetGy: number, level: number = 1) {
+        const scale = level >= 3 ? 1.3 : 1.0;
+        this.cameras.main.shake(100, 0.002 * scale);
 
-        // Ground crater/scorch mark
-        const crater = this.add.graphics();
-        crater.fillStyle(0x2a1a0a, 0.6);
-        crater.fillEllipse(x, y + 5, 40, 20);
-        crater.setDepth(1);
-        this.tweens.add({ targets: crater, alpha: 0, duration: 2000, delay: 500, onComplete: () => crater.destroy() });
+        // Ground crater/scorch mark (L1-L2 only, L3 uses cracks instead)
+        if (level < 3) {
+            const crater = this.add.graphics();
+            crater.fillStyle(0x2a1a0a, 0.6);
+            crater.fillEllipse(x, y + 5, 40 * scale, 20 * scale);
+            crater.setDepth(1);
+            this.tweens.add({ targets: crater, alpha: 0, duration: 2000, delay: 500, onComplete: () => crater.destroy() });
+        }
+
+        // L3: Ground cracks radiating from impact (no circular crater)
+        if (level >= 3) {
+            const cracks = this.add.graphics();
+            cracks.lineStyle(2, 0x1a1a1a, 0.7);
+            cracks.setDepth(1);
+            // Draw 6 cracks radiating outward
+            for (let i = 0; i < 6; i++) {
+                const angle = (i / 6) * Math.PI * 2 + Math.random() * 0.3;
+                const length = 25 + Math.random() * 20;
+                const midX = x + Math.cos(angle) * length * 0.5;
+                const midY = y + Math.sin(angle) * length * 0.3; // Flatten for isometric
+                const endX = x + Math.cos(angle) * length;
+                const endY = y + Math.sin(angle) * length * 0.5;
+                cracks.beginPath();
+                cracks.moveTo(x, y);
+                // Jagged crack line
+                cracks.lineTo(midX + (Math.random() - 0.5) * 8, midY + (Math.random() - 0.5) * 4);
+                cracks.lineTo(endX, endY);
+                cracks.strokePath();
+                // Branch cracks
+                if (Math.random() > 0.5) {
+                    const branchAngle = angle + (Math.random() - 0.5) * 0.8;
+                    cracks.beginPath();
+                    cracks.moveTo(midX, midY);
+                    cracks.lineTo(midX + Math.cos(branchAngle) * 12, midY + Math.sin(branchAngle) * 6);
+                    cracks.strokePath();
+                }
+            }
+            this.tweens.add({ targets: cracks, alpha: 0, duration: 3000, delay: 800, onComplete: () => cracks.destroy() });
+        }
 
         // Initial flash
-        const flash = this.add.circle(x, y, 5, 0xffffcc, 1);
+        const flash = this.add.circle(x, y, 5 * scale, 0xffffcc, 1);
         flash.setDepth(10001);
-        this.tweens.add({ targets: flash, radius: 50, alpha: 0, duration: 100, onComplete: () => flash.destroy() });
+        this.tweens.add({ targets: flash, radius: 50 * scale, alpha: 0, duration: 100, onComplete: () => flash.destroy() });
 
         // Primary shockwave ring
         const shock = this.add.graphics();
         shock.lineStyle(4, 0xff6600, 0.8);
-        shock.strokeCircle(x, y, 10);
+        shock.strokeCircle(x, y, 10 * scale);
         shock.setDepth(10000);
         this.tweens.add({
             targets: shock, alpha: 0, duration: 400,
             onUpdate: (tween) => {
                 shock.clear();
-                const r = 10 + tween.progress * 70;
+                const r = 10 * scale + tween.progress * 70 * scale;
                 shock.lineStyle(4 - tween.progress * 3, 0xff6600, 0.8 - tween.progress * 0.8);
                 shock.strokeCircle(x, y, r);
             },
@@ -5145,25 +5684,26 @@ export class MainScene extends Phaser.Scene {
         this.time.delayedCall(50, () => {
             const shock2 = this.add.graphics();
             shock2.lineStyle(2, 0xffaa00, 0.5);
-            shock2.strokeCircle(x, y, 15);
+            shock2.strokeCircle(x, y, 15 * scale);
             shock2.setDepth(9999);
             this.tweens.add({
                 targets: shock2, alpha: 0, duration: 350,
                 onUpdate: (tween) => {
                     shock2.clear();
                     shock2.lineStyle(2, 0xffaa00, 0.5 - tween.progress * 0.5);
-                    shock2.strokeCircle(x, y, 15 + tween.progress * 60);
+                    shock2.strokeCircle(x, y, 15 * scale + tween.progress * 60 * scale);
                 },
                 onComplete: () => shock2.destroy()
             });
         });
 
         // Fire particles (pixelated rectangles)
-        for (let i = 0; i < 12; i++) {
-            const angle = (i / 12) * Math.PI * 2;
-            const dist = 15 + Math.random() * 25;
+        const fireCount = level >= 3 ? 16 : 12;
+        for (let i = 0; i < fireCount; i++) {
+            const angle = (i / fireCount) * Math.PI * 2;
+            const dist = (15 + Math.random() * 25) * scale;
             const fireColors = [0xff4400, 0xff6600, 0xff8800, 0xffaa00];
-            const fireSize = 6 + Math.floor(Math.random() * 8);
+            const fireSize = (6 + Math.floor(Math.random() * 8)) * scale;
             const fire = this.add.graphics();
             fire.fillStyle(fireColors[Math.floor(Math.random() * 4)], 0.9);
             fire.fillRect(-fireSize / 2, -fireSize / 2, fireSize, fireSize);
@@ -5172,7 +5712,7 @@ export class MainScene extends Phaser.Scene {
             this.tweens.add({
                 targets: fire,
                 x: x + Math.cos(angle) * dist,
-                y: y + Math.sin(angle) * dist * 0.5 - 30 - Math.random() * 40,
+                y: y + Math.sin(angle) * dist * 0.5 - 30 * scale - Math.random() * 40 * scale,
                 alpha: 0, scale: 0.2,
                 duration: 300 + Math.random() * 200,
                 ease: 'Quad.easeOut',
@@ -5939,6 +6479,178 @@ export class MainScene extends Phaser.Scene {
         });
     }
 
+    private showStormLightning(troop: Troop, target: PlacedBuilding, damage: number) {
+        // Redraw to show attack pose (could be facing change or effect)
+        const start = this.cartToIso(troop.gridX, troop.gridY);
+        const info = BUILDINGS[target.type];
+        const end = this.cartToIso(target.gridX + info.width / 2, target.gridY + info.height / 2);
+
+        // Face target
+        const angle = Math.atan2(end.y - start.y, end.x - start.x);
+        troop.facingAngle = angle;
+        this.redrawTroop(troop);
+
+        // Calculate chain targets
+        const chainCount = TROOP_STATS.stormmage.chainCount || 4;
+        const chainRange = TROOP_STATS.stormmage.chainRange || 5;
+        const targets = this.findChainTargets(target, chainCount, chainRange, troop.owner);
+
+        // Initial Zap Visual (Troop -> First Target)
+        // Start from staff tip (offset)
+        const staffTipX = start.x + Math.cos(angle - Math.PI / 4) * 8;
+        const staffTipY = start.y + Math.sin(angle - Math.PI / 4) * 8 - 25;
+        this.drawLightningBolt(staffTipX, staffTipY, end.x, end.y - 15, 0x00ffff);
+
+        // Apply damage to primary
+        this.applyLightningDamage(target, damage);
+
+        // Chain logic (Target -> Next -> Next)
+        let previous = target;
+        // Use 80% damage for subsequent hits
+        let currentDamage = damage * 0.8;
+
+        targets.forEach((nextTarget, index) => {
+            this.time.delayedCall(100 * (index + 1), () => {
+                if (nextTarget.health > 0 && (previous.health > 0 || index === 0)) { // Allow chaining from dead primary
+                    const pInfo = BUILDINGS[previous.type];
+                    // Get center of previous, or its last known pos if dead (approx)
+                    const pPos = this.cartToIso(previous.gridX + pInfo.width / 2, previous.gridY + pInfo.height / 2);
+
+                    const nInfo = BUILDINGS[nextTarget.type];
+                    const nPos = this.cartToIso(nextTarget.gridX + nInfo.width / 2, nextTarget.gridY + nInfo.height / 2);
+
+                    this.drawLightningBolt(pPos.x, pPos.y - 15, nPos.x, nPos.y - 15, 0x00ccff);
+                    this.applyLightningDamage(nextTarget, currentDamage);
+
+                    currentDamage *= 0.8; // Further decay
+                    previous = nextTarget;
+                }
+            });
+        });
+    }
+
+    private findChainTargets(startNode: PlacedBuilding, count: number, range: number, attackerOwner: string): PlacedBuilding[] {
+        const found: PlacedBuilding[] = [];
+        let current = startNode;
+        // Find all enemies excluding the start node and walls
+        const enemies = this.buildings.filter(b => b.owner !== attackerOwner && b.health > 0 && b.id !== startNode.id && b.type !== 'wall');
+
+        // Simple greedy chain
+        for (let i = 0; i < count; i++) {
+            // Find closest unvisited enemy to 'current'
+            let nearest: PlacedBuilding | null = null;
+            let minDist = range;
+
+            const infoCurr = BUILDINGS[current.type];
+
+            for (const enemy of enemies) {
+                if (found.includes(enemy)) continue;
+
+                const infoEnemy = BUILDINGS[enemy.type];
+                const dist = Phaser.Math.Distance.Between(
+                    current.gridX + infoCurr.width / 2, current.gridY + infoCurr.height / 2,
+                    enemy.gridX + infoEnemy.width / 2, enemy.gridY + infoEnemy.height / 2
+                );
+
+                if (dist < minDist) {
+                    minDist = dist;
+                    nearest = enemy;
+                }
+            }
+
+            if (nearest) {
+                found.push(nearest);
+                current = nearest;
+            } else {
+                break; // No more targets in range
+            }
+        }
+        return found;
+    }
+
+    private drawLightningBolt(x1: number, y1: number, x2: number, y2: number, color: number) {
+        const graphics = this.add.graphics();
+        graphics.setDepth(20000);
+
+        // Draw main bolt
+        graphics.lineStyle(2, color, 1);
+        graphics.beginPath();
+        graphics.moveTo(x1, y1);
+
+        const dist = Phaser.Math.Distance.Between(x1, y1, x2, y2);
+        // Ensure steps is at least 2 to prevent loops
+        const steps = Math.max(Math.floor(dist / 10), 2);
+        const angle = Math.atan2(y2 - y1, x2 - x1);
+
+        let cx = x1;
+        let cy = y1;
+
+        for (let i = 1; i < steps; i++) {
+            const progress = i / steps;
+            const tx = x1 + (x2 - x1) * progress;
+            const ty = y1 + (y2 - y1) * progress;
+
+            // Jitter perpendicular to line
+            const jitter = (Math.random() - 0.5) * 15;
+            const px = tx + Math.cos(angle + Math.PI / 2) * jitter;
+            const py = ty + Math.sin(angle + Math.PI / 2) * jitter;
+
+            graphics.lineTo(px, py);
+            cx = px;
+            cy = py;
+
+            // Occasional fork logic
+            if (Math.random() > 0.7) {
+                const forkLen = 15;
+                const forkAngle = angle + (Math.random() - 0.5);
+                const fx = cx + Math.cos(forkAngle) * forkLen;
+                const fy = cy + Math.sin(forkAngle) * forkLen;
+
+                const fork = this.add.graphics();
+                fork.setDepth(20000);
+                fork.lineStyle(1, color, 0.7);
+                fork.lineBetween(cx, cy, fx, fy);
+                this.tweens.add({
+                    targets: fork,
+                    alpha: 0,
+                    duration: 150,
+                    onComplete: () => fork.destroy()
+                });
+            }
+        }
+        graphics.lineTo(x2, y2);
+        graphics.strokePath();
+
+        // Glow effect
+        graphics.lineStyle(6, color, 0.3);
+        graphics.strokePath();
+
+        // Fast Fade out
+        this.tweens.add({
+            targets: graphics,
+            alpha: 0,
+            duration: 200,
+            onComplete: () => graphics.destroy()
+        });
+    }
+
+    private applyLightningDamage(target: PlacedBuilding, damage: number) {
+        if (target && target.health > 0) {
+            target.health -= damage;
+            this.showHitEffect(target.graphics, 0x00ffff); // Cyan hit flash
+            this.updateHealthBar(target);
+
+            if (target.health <= 0) {
+                this.destroyBuilding(target);
+                // Clear targets targeting this dead building
+                this.troops.forEach(t => {
+                    if (t.target && t.target.id === target.id) {
+                        t.target = null;
+                    }
+                });
+            }
+        }
+    }
 
     private shootBallistaAt(ballista: PlacedBuilding, troop: Troop) {
         const info = BUILDINGS['ballista'];
@@ -5984,7 +6696,7 @@ export class MainScene extends Phaser.Scene {
                 bolt.closePath();
                 bolt.fillPath();
                 // Fletching (smaller) - Grey for Level 2+, Red for Level 1
-                const fletchColor = (ballista.level >= 2) ? 0x444444 : 0xcc3333;
+                const fletchColor = (ballista.level && ballista.level >= 2) ? 0x444444 : 0xcc3333;
                 bolt.fillStyle(fletchColor, 1);
                 bolt.beginPath();
                 bolt.moveTo(-16, 0);
@@ -6181,7 +6893,7 @@ export class MainScene extends Phaser.Scene {
         arrow.closePath();
         arrow.fillPath();
         // Fletching - Grey for Level 2+, Red for Level 1
-        const fletchColor = (xbow.level >= 2) ? 0x444444 : 0xcc4444;
+        const fletchColor = (xbow.level && xbow.level >= 2) ? 0x444444 : 0xcc4444;
         arrow.fillStyle(fletchColor, 0.8);
         arrow.beginPath();
         arrow.moveTo(-6, 0);
@@ -6334,13 +7046,16 @@ export class MainScene extends Phaser.Scene {
                     const time = this.time.now;
 
                     // Pathfinding - Staggered updates & Fanning
-                    if (!troop.path || time >= (troop.nextPathTime || 0)) {
+                    // Ram skips A* pathfinding to "charge straight"
+                    if (troop.type !== 'ram' && (!troop.path || time >= (troop.nextPathTime || 0))) {
                         let finalTarget: any = troop.target;
 
                         troop.path = this.findPath(troop, finalTarget) || undefined;
                         troop.lastPathTime = time;
                         const interval = troop.type === 'ward' ? 250 : 500;
                         troop.nextPathTime = time + interval + Math.random() * interval;
+                    } else if (troop.type === 'ram') {
+                        troop.path = undefined;
                     }
 
                     let moveDir = new Phaser.Math.Vector2(0, 0);
@@ -6384,9 +7099,27 @@ export class MainScene extends Phaser.Scene {
                         moveDir.set(dx, dy).normalize();
                         validMove = true;
                     } else {
-                        // Fallback steering
+                        // Fallback steering (Direct to target)
                         moveDir.set(tx - troop.gridX, ty - troop.gridY).normalize();
                         validMove = true;
+
+                        // RAM SPECIAL: Check for walls ahead in straight line
+                        if (troop.type === 'ram') {
+                            const lookAhead = 0.8;
+                            const checkX = Math.floor(troop.gridX + moveDir.x * lookAhead);
+                            const checkY = Math.floor(troop.gridY + moveDir.y * lookAhead);
+
+                            const wallAhead = this.buildings.find(b =>
+                                b.type === 'wall' && b.owner !== troop.owner && b.health > 0 &&
+                                checkX >= b.gridX && checkX < b.gridX + BUILDINGS[b.type].width &&
+                                checkY >= b.gridY && checkY < b.gridY + BUILDINGS[b.type].height
+                            );
+
+                            if (wallAhead) {
+                                troop.target = wallAhead;
+                                return; // Stop moving this frame, start attacking next frame (since now dist <= range usually)
+                            }
+                        }
                     }
 
                     if (validMove) {
@@ -6503,8 +7236,16 @@ export class MainScene extends Phaser.Scene {
         } else if (troop.type === 'ward') {
             // Ward: Assistance Mode (No walls)
             targets = nonWallBuildings;
+        } else if (troop.type === 'ram') {
+            // Ram: Prioritize Town Hall
+            const th = enemies.find(b => b.type === 'town_hall');
+            if (th) {
+                targets = [th];
+            } else {
+                targets = nonWallBuildings;
+            }
         } else {
-            // Regular: Prioritize Non-Walls
+            // Regular/StormMage: Prioritize Non-Walls
             targets = nonWallBuildings;
         }
 
@@ -6533,7 +7274,9 @@ export class MainScene extends Phaser.Scene {
             if (b.health <= 0) return;
             const isTarget = (b.id === target.id);
             // Wall Cost 5000. Blocked 999999. Target 0.
-            const cost = isTarget ? 0 : (b.type === 'wall' ? 5000 : 999999);
+            let wallCost = 5000;
+            if (troop.type === 'ram') wallCost = 50; // Rams plow through walls
+            const cost = isTarget ? 0 : (b.type === 'wall' ? wallCost : 999999);
             const info = BUILDINGS[b.type];
             for (let x = b.gridX; x < b.gridX + info.width; x++) {
                 for (let y = b.gridY; y < b.gridY + info.height; y++) {
@@ -6798,8 +7541,8 @@ export class MainScene extends Phaser.Scene {
 
         } else {
             if (b.type === 'army_camp') {
-                const campCount = this.buildings.filter(bc => bc.type === 'army_camp').length;
-                (window as any).refreshCampCapacity?.(campCount);
+                const campLevels = this.buildings.filter(bc => bc.type === 'army_camp').map(bc => bc.level ?? 1);
+                (window as any).refreshCampCapacity?.(campLevels);
             }
             // Remove from backend when player building is deleted
             if (b.owner === 'PLAYER') {
@@ -6898,8 +7641,13 @@ export class MainScene extends Phaser.Scene {
         t.healthBar.destroy();
     }
 
-    private showHitEffect(_graphics: Phaser.GameObjects.Graphics) {
-        // No visual effect - buildings should not change opacity when hit
+    private showHitEffect(graphics: Phaser.GameObjects.Graphics, color: number = 0xffffff) {
+        // Simple distinct tint flash if possible, or just ignore for now as requested by user previously
+        // But for lightning we might want a blue tint.
+        if (color !== 0xffffff) {
+            // If we wanted to tint, we'd need to ensure the graphics object supports it nicely or overlay.
+            // For now, let's just leave it empty or minimal to avoid visual clutter as per previous preference.
+        }
     }
 
     private updateResources(time: number) {
@@ -6995,7 +7743,7 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
-    private drawTroopVisual(graphics: Phaser.GameObjects.Graphics, type: 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'chronoswarm', owner: 'PLAYER' | 'ENEMY', facingAngle: number = 0) {
+    private drawTroopVisual(graphics: Phaser.GameObjects.Graphics, type: 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'chronoswarm' | 'ram' | 'stormmage', owner: 'PLAYER' | 'ENEMY', facingAngle: number = 0) {
         const isPlayer = owner === 'PLAYER';
 
         switch (type) {
@@ -7267,6 +8015,116 @@ export class MainScene extends Phaser.Scene {
                 graphics.fillStyle(0xffffff, 0.9);
                 graphics.fillCircle(-2, -3, 1.5);
                 graphics.fillCircle(2, -3, 1.5);
+                break;
+            }
+
+            case 'ram': {
+                // Large Battering Ram
+                const now = Date.now();
+                const bounce = Math.sin(now / 150) * 2;
+                const woodColor = 0x8b4513;
+                const ironColor = 0x555555;
+
+                // Shadow
+                graphics.fillStyle(0x000000, 0.3);
+                graphics.fillEllipse(0, 8, 32, 16);
+
+                // Ram body (horizontal log)
+                graphics.fillStyle(0x6a4530, 1);
+                graphics.fillRect(-18, -12 + bounce, 36, 12);
+                graphics.fillStyle(woodColor, 1);
+                graphics.fillRect(-18, -10 + bounce, 36, 8);
+
+                // Iron bands
+                graphics.fillStyle(ironColor, 1);
+                graphics.fillRect(-12, -13 + bounce, 4, 14);
+                graphics.fillRect(4, -13 + bounce, 4, 14);
+
+                // Front ram head (pointed/heavy iron)
+                const frontX = 18;
+                graphics.fillStyle(ironColor, 1);
+                graphics.beginPath();
+                graphics.moveTo(frontX, -14 + bounce);
+                graphics.lineTo(frontX + 8, -6 + bounce);
+                graphics.lineTo(frontX, 2 + bounce);
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Iron head tip
+                graphics.fillStyle(0x777777, 1);
+                graphics.beginPath();
+                graphics.moveTo(frontX + 2, -10 + bounce);
+                graphics.lineTo(frontX + 6, -6 + bounce);
+                graphics.lineTo(frontX + 2, -2 + bounce);
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Wheels/rollers
+                graphics.fillStyle(0x333333, 1);
+                graphics.fillCircle(-12, 4, 5);
+                graphics.fillCircle(12, 4, 5);
+                graphics.fillStyle(0x444444, 1);
+                graphics.fillCircle(-12, 4, 3);
+                graphics.fillCircle(12, 4, 3);
+                break;
+            }
+
+            case 'stormmage': {
+                // Mysterious wizard with electric aura
+                const now = Date.now();
+                const robeColor = isPlayer ? 0x4444ff : 0xaa2222;
+                const capeColor = isPlayer ? 0x2222aa : 0x771111;
+                const glowColor = 0x00ffff;
+
+                // Static electricity particles
+                for (let i = 0; i < 3; i++) {
+                    const angle = (now / 100 + i * 2) % (Math.PI * 2);
+                    const dist = 12 + Math.sin(now / 200 + i) * 4;
+                    const px = Math.cos(angle) * dist;
+                    const py = Math.sin(angle) * dist * 0.6 - 15;
+                    graphics.fillStyle(glowColor, 0.4 + Math.sin(now / 50 + i) * 0.3);
+                    graphics.fillCircle(px, py, 1.5);
+                }
+
+                // Shadow
+                graphics.fillStyle(0x000000, 0.3);
+                graphics.fillEllipse(0, 5, 16, 7);
+
+                // Robe
+                graphics.fillStyle(capeColor, 1);
+                graphics.fillCircle(0, 0, 9);
+                graphics.fillStyle(robeColor, 1);
+                graphics.fillCircle(0, -1, 8);
+
+                // Hood/Face area
+                graphics.fillStyle(0x1a1a1a, 1);
+                graphics.fillCircle(0, -8, 6);
+
+                // Glowing eyes
+                const eyeGlow = 0.6 + Math.sin(now / 100) * 0.4;
+                graphics.fillStyle(glowColor, eyeGlow);
+                graphics.fillCircle(-2, -9, 1.5);
+                graphics.fillCircle(2, -9, 1.5);
+
+                // Magical staff
+                graphics.lineStyle(2, 0x4a3a2a, 1);
+                graphics.lineBetween(8, -25, 8, 5);
+
+                // Staff tip (electric crystal)
+                const crystalGlow = 0.5 + Math.sin(now / 80) * 0.5;
+                graphics.fillStyle(glowColor, 0.3 * crystalGlow);
+                graphics.fillCircle(8, -25, 8);
+                graphics.fillStyle(0xffffff, 0.9);
+                graphics.fillCircle(8, -25, 3);
+
+                // Arcs on staff
+                if (Math.random() > 0.8) {
+                    graphics.lineStyle(1, 0xffffff, 0.8);
+                    graphics.beginPath();
+                    graphics.moveTo(8, -25);
+                    graphics.lineTo(8 + (Math.random() - 0.5) * 10, -25 + (Math.random() - 0.5) * 10);
+                    graphics.strokePath();
+                }
                 break;
             }
 
@@ -7894,6 +8752,13 @@ export class MainScene extends Phaser.Scene {
                 if (this.selectedInWorld.baseGraphics) this.selectedInWorld.baseGraphics.clear();
                 this.drawBuildingVisuals(this.selectedInWorld.graphics, this.selectedInWorld.gridX, this.selectedInWorld.gridY, this.selectedInWorld.type, 1, null, this.selectedInWorld, this.selectedInWorld.baseGraphics);
                 this.updateHealthBar(this.selectedInWorld);
+
+                // Refresh camp capacity if an army camp was upgraded
+                if (this.selectedInWorld.type === 'army_camp') {
+                    const campLevels = this.buildings.filter(b => b.type === 'army_camp').map(b => b.level ?? 1);
+                    (window as any).refreshCampCapacity?.(campLevels);
+                }
+
                 return this.selectedInWorld.level;
             }
             return null;
@@ -7928,8 +8793,8 @@ export class MainScene extends Phaser.Scene {
             this.placeDefaultVillage();
         }
         this.centerCamera();
-        const campCount = this.buildings.filter(b => b.type === 'army_camp').length;
-        (window as any).refreshCampCapacity?.(campCount);
+        const campLevels = this.buildings.filter(b => b.type === 'army_camp').map(b => b.level ?? 1);
+        (window as any).refreshCampCapacity?.(campLevels);
     }
 
 
@@ -7994,8 +8859,8 @@ export class MainScene extends Phaser.Scene {
         this.placeDefaultVillage();
 
         // Refresh camp capacity state in React
-        const campCount = this.buildings.filter(b => b.type === 'army_camp').length;
-        (window as any).refreshCampCapacity?.(campCount);
+        const campLevels = this.buildings.filter(b => b.type === 'army_camp').map(b => b.level ?? 1);
+        (window as any).refreshCampCapacity?.(campLevels);
     }
 
     private generateEnemyVillage() {
@@ -8103,34 +8968,156 @@ export class MainScene extends Phaser.Scene {
 
     private shootDragonPod(db: PlacedBuilding, start: { x: number, y: number }, targetGridX: number, targetGridY: number, damage: number) {
         const end = this.cartToIso(targetGridX, targetGridY);
+
+        // Create firecracker rocket graphics
         const pod = this.add.graphics();
-        pod.fillStyle(0xff3300, 1);
-        pod.fillCircle(0, 0, 4);
-        pod.setPosition(start.x + (Math.random() - 0.5) * 30, start.y - 40);
+        const startX = start.x + (Math.random() - 0.5) * 60; // Spread out launch positions
+        const startY = start.y - 30;
+        pod.setPosition(startX, startY);
         pod.setDepth(5000);
 
-        const midY = (start.y + end.y) / 2 - 250;
+        // Draw the firecracker rocket shape (drawn vertically, then rotated via setRotation)
+        const drawRocket = () => {
+            pod.clear();
+
+            // Rocket body (red)
+            pod.fillStyle(0xcc2222, 1);
+            pod.fillRect(-4, -10, 8, 18);
+
+            // Gold bands
+            pod.fillStyle(0xffd700, 1);
+            pod.fillRect(-5, -10, 10, 3);
+            pod.fillRect(-5, 5, 10, 3);
+
+            // Gold tip
+            pod.fillStyle(0xb8860b, 1);
+            pod.beginPath();
+            pod.moveTo(0, -14);
+            pod.lineTo(-4, -10);
+            pod.lineTo(4, -10);
+            pod.closePath();
+            pod.fillPath();
+
+            // Exhaust flame
+            pod.fillStyle(0xff6600, 0.9);
+            pod.beginPath();
+            pod.moveTo(-3, 8);
+            pod.lineTo(0, 16);
+            pod.lineTo(3, 8);
+            pod.closePath();
+            pod.fillPath();
+
+            pod.fillStyle(0xffff00, 0.8);
+            pod.beginPath();
+            pod.moveTo(-2, 8);
+            pod.lineTo(0, 12);
+            pod.lineTo(2, 8);
+            pod.closePath();
+            pod.fillPath();
+        };
+
+        // Initial draw
+        drawRocket();
+
+        const midY = (start.y + end.y) / 2 - 200; // Arc height
         const dist = Phaser.Math.Distance.Between(start.x, start.y, end.x, end.y);
+        let lastX = startX;
+        let lastY = startY;
 
         this.tweens.add({
             targets: pod,
             x: end.x,
-            duration: dist / 0.35 + Math.random() * 150,
+            duration: dist / 0.4 + Math.random() * 100,
             ease: 'Linear',
             onUpdate: (tween) => {
                 const t = tween.progress;
-                pod.y = (1 - t) * (1 - t) * (start.y - 40) + 2 * (1 - t) * t * midY + t * t * end.y;
-                if (Math.random() > 0.7) {
-                    const spark = this.add.circle(pod.x, pod.y, 2, 0xffaa00, 0.8);
-                    spark.setDepth(4999);
-                    this.tweens.add({ targets: spark, alpha: 0, scale: 2, duration: 200, onComplete: () => spark.destroy() });
+                // Bezier curve for arc
+                pod.y = (1 - t) * (1 - t) * startY + 2 * (1 - t) * t * midY + t * t * end.y;
+
+                // Calculate angle for rocket orientation and rotate the graphics object
+                const angle = Math.atan2(pod.y - lastY, pod.x - lastX);
+                pod.setRotation(angle + Math.PI / 2);
+                drawRocket();
+
+                // Dense smoke trail
+                if (Math.random() > 0.4) {
+                    const smoke = this.add.graphics();
+                    const smokeSize = 3 + Math.random() * 4;
+                    smoke.fillStyle(0x666666, 0.5);
+                    smoke.fillCircle(0, 0, smokeSize);
+                    smoke.setPosition(pod.x + (Math.random() - 0.5) * 6, pod.y + 8);
+                    smoke.setDepth(4998);
+
+                    this.tweens.add({
+                        targets: smoke,
+                        y: smoke.y + 15,
+                        x: smoke.x + (Math.random() - 0.5) * 20,
+                        alpha: 0,
+                        scale: 2.5,
+                        duration: 400,
+                        ease: 'Quad.easeOut',
+                        onComplete: () => smoke.destroy()
+                    });
                 }
+
+                // Fire sparks
+                if (Math.random() > 0.7) {
+                    const spark = this.add.graphics();
+                    spark.fillStyle(0xffaa00, 0.9);
+                    spark.fillRect(-1, -1, 2, 2);
+                    spark.setPosition(pod.x + (Math.random() - 0.5) * 4, pod.y + 10);
+                    spark.setDepth(4999);
+                    this.tweens.add({
+                        targets: spark,
+                        alpha: 0,
+                        y: spark.y + 10,
+                        scale: 0.5,
+                        duration: 150,
+                        onComplete: () => spark.destroy()
+                    });
+                }
+
+                lastX = pod.x;
+                lastY = pod.y;
             },
             onComplete: () => {
                 pod.destroy();
-                const boom = this.add.circle(end.x, end.y, 15, 0xff6600, 0.7);
+
+                // Explosion effect
+                const boom = this.add.graphics();
+                boom.fillStyle(0xff4400, 0.8);
+                boom.fillCircle(0, 0, 12);
+                boom.setPosition(end.x, end.y);
                 boom.setDepth(5001);
-                this.tweens.add({ targets: boom, alpha: 0, scale: 2, duration: 150, onComplete: () => boom.destroy() });
+                this.tweens.add({ targets: boom, alpha: 0, scale: 2.5, duration: 200, onComplete: () => boom.destroy() });
+
+                // Inner flash
+                const flash = this.add.graphics();
+                flash.fillStyle(0xffff00, 0.9);
+                flash.fillCircle(0, 0, 6);
+                flash.setPosition(end.x, end.y);
+                flash.setDepth(5002);
+                this.tweens.add({ targets: flash, alpha: 0, scale: 2, duration: 100, onComplete: () => flash.destroy() });
+
+                // Debris sparks
+                for (let i = 0; i < 6; i++) {
+                    const debris = this.add.graphics();
+                    debris.fillStyle(0xff6600, 0.8);
+                    debris.fillRect(-1, -1, 2, 2);
+                    debris.setPosition(end.x, end.y);
+                    debris.setDepth(5000);
+
+                    const angle = Math.random() * Math.PI * 2;
+                    const dist = 15 + Math.random() * 20;
+                    this.tweens.add({
+                        targets: debris,
+                        x: end.x + Math.cos(angle) * dist,
+                        y: end.y + Math.sin(angle) * dist * 0.5,
+                        alpha: 0,
+                        duration: 300,
+                        onComplete: () => debris.destroy()
+                    });
+                }
 
                 this.troops.slice().forEach(t => {
                     if (t.owner !== db.owner && t.health > 0) {
