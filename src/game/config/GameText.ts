@@ -1,0 +1,16 @@
+export const BUILDING_TEXTS: Record<string, { flavor: string; details: string }> = {
+    town_hall: { flavor: "The heart of the village.", details: "Protects resources. Losing this grants the enemy a victory star." },
+    mine: { flavor: "Gold rush.", details: "Extracts Gold from the ground. Keep these running to fund your army." },
+    elixir_collector: { flavor: "Pure magic.", details: "Pumps Elixir from ley lines. Required for training troops and research." },
+    cannon: { flavor: "Keep the fuse dry.", details: "A basic point defense. Fires heavy cast iron balls at ground targets." },
+    archer_tower: { flavor: "Eyes in the sky.", details: "Versatile tower that shoots arrows at both Air and Ground units." },
+    barracks: { flavor: "Discipline and glory.", details: "The primary recruitment center. Train Warriors, Archers, and other units here." },
+    army_camp: { flavor: "Rest and recover.", details: "Provides housing space for your army. Upgrade to field more troops." },
+    wall: { flavor: "Good fences.", details: "A simple barrier to slow down ground troops. Directs enemy flow." },
+    mortar: { flavor: "Incoming!", details: "Lobs explosive shells with splash damage. Ineffective at close range, deadly at long range." },
+    ballista: { flavor: "Precision engineering.", details: "Launches heavy bolts. Deals extreme damage to single targets." },
+    xbow: { flavor: "Supersonic.", details: "Rapid-fire crossbow. Overwhelms enemies with a hail of bolts." },
+    tesla: { flavor: "Shocking.", details: "Hidden underground. Pops up to zap up to 3 enemies with chain lightning." },
+    magmavent: { flavor: "Liquid fire.", details: "Erupts continuously, creating a hazardous zone of area damage." },
+    prism: { flavor: "Focused light.", details: "Channels a continuous laser beam. Deals ramping damage to a single target." }
+};

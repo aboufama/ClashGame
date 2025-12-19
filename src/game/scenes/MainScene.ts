@@ -1,43 +1,21 @@
 
 import Phaser from 'phaser';
+import { Backend } from '../backend/GameBackend';
+import type { SerializedBuilding } from '../data/Models';
+import { BUILDING_DEFINITIONS, OBSTACLE_DEFINITIONS, getBuildingStats, type BuildingType, type ObstacleType } from '../config/GameDefinitions';
+import { LootSystem } from '../systems/LootSystem';
 
-interface BuildingInfo {
-    type: string;
-    color: number;
-    width: number; // in grid cells
-    height: number; // in grid cells
-    name: string;
-}
+const BUILDINGS = BUILDING_DEFINITIONS as any;
+const OBSTACLES = OBSTACLE_DEFINITIONS as any;
 
-// Building categories for targeting
-type BuildingCategory = 'defense' | 'resource' | 'military' | 'other';
 
-interface BuildingInfoExt extends BuildingInfo {
-    category: BuildingCategory;
-}
-
-const BUILDINGS: Record<string, BuildingInfoExt> = {
-    town_hall: { type: 'town_hall', color: 0x3366ff, width: 2, height: 2, name: 'Town Hall', category: 'other' },
-    barracks: { type: 'barracks', color: 0xff3333, width: 1, height: 1, name: 'Barracks', category: 'military' },
-    cannon: { type: 'cannon', color: 0x333333, width: 1, height: 1, name: 'Cannon', category: 'defense' },
-    ballista: { type: 'ballista', color: 0x8b4513, width: 1, height: 1, name: 'Ballista', category: 'defense' },
-    xbow: { type: 'xbow', color: 0x8b008b, width: 2, height: 2, name: 'X-Bow', category: 'defense' },
-    mine: { type: 'mine', color: 0xffaa00, width: 1, height: 1, name: 'Gold Mine', category: 'resource' },
-    elixir_collector: { type: 'elixir_collector', color: 0x9b59b6, width: 1, height: 1, name: 'Elixir Collector', category: 'resource' },
-    mortar: { type: 'mortar', color: 0x555555, width: 2, height: 2, name: 'Mortar', category: 'defense' },
-    tesla: { type: 'tesla', color: 0x00ccff, width: 1, height: 1, name: 'Tesla Coil', category: 'defense' },
-    wall: { type: 'wall', color: 0xcccccc, width: 1, height: 1, name: 'Wall', category: 'defense' },
-    army_camp: { type: 'army_camp', color: 0x884422, width: 3, height: 3, name: 'Army Camp', category: 'military' },
-    // Novel defenses
-    prism: { type: 'prism', color: 0xff00ff, width: 1, height: 1, name: 'Prism Tower', category: 'defense' }, // Beam bounces between enemies
-    magmavent: { type: 'magmavent', color: 0xff4400, width: 2, height: 2, name: 'Magma Vent', category: 'defense' }, // Periodic area eruptions
-};
 
 
 
 interface PlacedBuilding {
     id: string;
     type: string;
+    level: number; // Added level property
     gridX: number;
     gridY: number;
     graphics: Phaser.GameObjects.Graphics;
@@ -46,6 +24,7 @@ interface PlacedBuilding {
     health: number;
     maxHealth: number;
     owner: 'PLAYER' | 'ENEMY';
+    loot?: { gold: number, elixir: number };
     // Ballista-specific properties
     ballistaAngle?: number;        // Current angle in radians (0 = facing right/east)
     ballistaTargetAngle?: number;  // Target angle to smoothly rotate towards
@@ -53,6 +32,23 @@ interface PlacedBuilding {
     ballistaBoltLoaded?: boolean;   // Whether a bolt is ready to fire
     lastFireTime?: number;
     isFiring?: boolean;
+    // Idle swivel for rotating defenses
+    idleSwiveTime?: number;        // Time accumulator for idle swivel
+    idleTargetAngle?: number;      // Random idle target angle
+    // Cannon barrel recoil (0-1, 0 = normal, 1 = full recoil)
+    cannonRecoilOffset?: number;
+    // Prism Tower - Continuous laser properties
+    prismTarget?: Troop;           // Current target being lasered
+    prismLaserGraphics?: Phaser.GameObjects.Graphics; // The continuous laser beam
+    prismLaserCore?: Phaser.GameObjects.Graphics;     // Inner core of laser
+    prismChargingUp?: boolean;     // Whether it's charging up
+    prismChargeTime?: number;      // When charging started
+    // Range indicator
+    rangeIndicator?: Phaser.GameObjects.Graphics;
+    prismTrailLastPos?: { x: number, y: number }; // Track last scorch position for connected trail
+    lastTrailTime?: number;     // For specialized smoke trails
+    lastSmokeTime?: number;     // For defensive smoke effects
+    baseGraphics?: Phaser.GameObjects.Graphics; // Separate graphics for ground-level base (prevents clipping)
 }
 
 interface Troop {
@@ -78,12 +74,21 @@ interface Troop {
     recursionGen?: number; // For recursion (0 = original, 1 = first split, 2 = final)
 }
 
+interface PlacedObstacle {
+    id: string;
+    type: ObstacleType;
+    gridX: number;
+    gridY: number;
+    graphics: Phaser.GameObjects.Graphics;
+    animOffset: number; // For subtle idle animations
+}
+
 
 const TROOP_STATS = {
     warrior: { health: 100, range: 0.8, damage: 10, speed: 0.003, color: 0xffff00, space: 1 },
-    archer: { health: 50, range: 4.5, damage: 3.5, speed: 0.0025, color: 0x00ffff, space: 1 },
-    giant: { health: 500, range: 0.8, damage: 10, speed: 0.001, color: 0xff8800, space: 5 },
-    ward: { health: 300, range: 5.0, damage: 3, speed: 0.0015, color: 0x00ff88, space: 3, healRadius: 7.0, healAmount: 8 },
+    archer: { health: 50, range: 4.5, damage: 14.0, speed: 0.0025, color: 0x00ffff, space: 1 },
+    giant: { health: 500, range: 0.8, damage: 20, speed: 0.001, color: 0xff8800, space: 5 },
+    ward: { health: 300, range: 5.0, damage: 9, speed: 0.0015, color: 0x00ff88, space: 3, healRadius: 7.0, healAmount: 5 },
     // Novel units
     recursion: { health: 120, range: 0.8, damage: 8, speed: 0.0025, color: 0x00ffaa, space: 3 }, // Splits into 2 on death (max 2 generations)
     chronoswarm: { health: 50, range: 1.5, damage: 5, speed: 0.004, color: 0xffcc00, space: 2, boostRadius: 4.0, boostAmount: 1.5 } // 50% speed boost to nearby allies
@@ -94,11 +99,77 @@ const TROOP_STATS = {
 
 export type GameMode = 'HOME' | 'ATTACK';
 
+const fragShader = `
+precision mediump float;
+uniform sampler2D uMainSampler;
+uniform vec2 uResolution;
+uniform float uSize;
+uniform float uZoom;
+uniform vec2 uScroll;
+varying vec2 outTexCoord;
+
+void main()
+{
+    if (uSize <= 1.0) {
+        gl_FragColor = texture2D(uMainSampler, outTexCoord);
+    } else {
+        // 1. Convert screen UV to logical world coordinates
+        // outTexCoord is [0, 1]. uResolution is [width, height] in screen pixels.
+        vec2 worldPos = (outTexCoord * uResolution) / uZoom + uScroll;
+        
+        // 2. Snap the world position to the logical 'LO-FI' grid
+        // This makes the pixelation 'stick' to world objects.
+        vec2 snappedWorldPos = floor(worldPos / uSize) * uSize;
+        
+        // 3. To prevent shimmering, we MUST sample from the center of the world-pixel
+        snappedWorldPos += uSize * 0.5;
+        
+        // 4. Project the snapped world position back to the source buffer's pixel coordinates
+        vec2 sourcePixelPos = (snappedWorldPos - uScroll) * uZoom;
+        
+        // 5. STABILITY STEP: Snap the source sampling position to the source texture's pixel grid.
+        // This prevents the GPU from interpolating between pixels as the camera moves sub-pixel.
+        vec2 crispSourcePos = floor(sourcePixelPos) + 0.5;
+        
+        // 6. Convert back to UV for sampling
+        vec2 sampleUV = crispSourcePos / uResolution;
+        
+        // Clamp to avoid sampling outside texture bounds
+        sampleUV = clamp(sampleUV, 1.5 / uResolution, 1.0 - 1.5 / uResolution);
+        
+        gl_FragColor = texture2D(uMainSampler, sampleUV);
+    }
+}
+`;
+
+class PixelatePipeline extends Phaser.Renderer.WebGL.Pipelines.PostFXPipeline {
+    static size: number = 1.0;
+    static zoom: number = 1.0;
+    static scroll: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
+
+    constructor(game: Phaser.Game) {
+        super({
+            game,
+            fragShader,
+            name: 'Pixelate'
+        });
+    }
+    onPreRender() {
+        this.set1f('uSize', PixelatePipeline.size);
+        this.set1f('uZoom', PixelatePipeline.zoom);
+        this.set2f('uScroll', PixelatePipeline.scroll.x, PixelatePipeline.scroll.y);
+        this.set2f('uResolution', this.renderer.width, this.renderer.height);
+    }
+}
+
+
 export class MainScene extends Phaser.Scene {
     private tileWidth = 64;
     private tileHeight = 32;
     private mapSize = 25;
     private buildings: PlacedBuilding[] = [];
+    private rubble: { gridX: number; gridY: number; width: number; height: number; graphics: Phaser.GameObjects.Graphics; createdAt: number }[] = [];
+    private obstacles: PlacedObstacle[] = [];
     private troops: Troop[] = [];
     private ghostBuilding!: Phaser.GameObjects.Graphics;
     private deploymentGraphics!: Phaser.GameObjects.Graphics;
@@ -120,11 +191,22 @@ export class MainScene extends Phaser.Scene {
     // Battle stats tracking
     private initialEnemyBuildings = 0;
     private lastDeployTime = 0;
+    private lastGrassGrowTime = 0;
 
     private destroyedBuildings = 0;
     private goldLooted = 0;
     private elixirLooted = 0;
     private hasDeployed = false;
+    private raidEndScheduled = false; // Prevent multiple end calls
+
+    // Range indicator for clicked buildings in attack mode
+    private attackModeSelectedBuilding: PlacedBuilding | null = null;
+
+    // Manual firing interactions
+    private isManualFiring = false;
+    private selectionGraphics!: Phaser.GameObjects.Graphics;
+
+    private cameraSensitivity = 1.0;
 
 
     constructor() {
@@ -137,18 +219,39 @@ export class MainScene extends Phaser.Scene {
         this.cameras.main.setBackgroundColor('#2d2d2d');
         this.cameras.main.setZoom(1);
 
+        // Register and apply pixelation pipeline
+        const renderer = this.game.renderer as Phaser.Renderer.WebGL.WebGLRenderer;
+        if (renderer.pipelines) {
+            if (!renderer.pipelines.has('Pixelate')) {
+                renderer.pipelines.addPostPipeline('Pixelate', PixelatePipeline);
+            }
+            this.cameras.main.setPostPipeline('Pixelate');
+        }
+
+        (window as any).setPixelation = (size: number) => {
+            PixelatePipeline.size = size;
+        };
+
+        (window as any).setSensitivity = (val: number) => {
+            this.cameraSensitivity = val;
+        };
+
+        // Initialize at 1.5
+        PixelatePipeline.size = 1.5;
+
         this.input.on('pointerdown', this.onPointerDown, this);
         this.input.on('pointermove', this.onPointerMove, this);
         this.input.on('pointerup', this.onPointerUp, this);
 
         this.input.on('wheel', (_pointer: any, _gameObjects: any, _deltaX: number, deltaY: number, _deltaZ: number) => {
-            const newZoom = this.cameras.main.zoom - deltaY * 0.001;
+            const newZoom = this.cameras.main.zoom - deltaY * 0.002;
             this.cameras.main.setZoom(Phaser.Math.Clamp(newZoom, 0.3, 3));
         });
 
         this.createIsoGrid();
         this.createUI();
 
+        this.selectionGraphics = this.add.graphics();
         this.ghostBuilding = this.add.graphics();
         this.ghostBuilding.setVisible(false);
 
@@ -173,6 +276,15 @@ export class MainScene extends Phaser.Scene {
             }
         });
 
+        // Right-click to cancel building placement/movement
+        this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+            if (pointer.rightButtonDown()) {
+                if (this.selectedBuildingType || this.isMoving) {
+                    this.cancelPlacement();
+                }
+            }
+        });
+
         // Try to load saved base, otherwise place default
         if (!this.loadSavedBase()) {
             this.placeDefaultVillage();
@@ -191,21 +303,28 @@ export class MainScene extends Phaser.Scene {
         this.isMoving = false;
         this.ghostBuilding.clear();
         this.ghostBuilding.setVisible(false);
+        this.selectedInWorld = null;
+        this.clearBuildingRangeIndicator();
         (window as any).onPlacementCancelled?.();
     }
 
     update(time: number, delta: number) {
+        PixelatePipeline.zoom = this.cameras.main.zoom;
+        PixelatePipeline.scroll.set(this.cameras.main.scrollX, this.cameras.main.scrollY);
         // Auto-end raid if all troops dead and no reserves
         if (this.mode === 'ATTACK' && this.hasDeployed) {
             const army = (window as any).getArmy ? (window as any).getArmy() : { warrior: 0, archer: 0, giant: 0, ward: 0 };
             const remaining = army.warrior + army.archer + army.giant + army.ward;
             const liveTroops = this.troops.filter(t => t.health > 0).length;
 
-            if (remaining === 0 && liveTroops === 0) {
-                // Call UI to end raid
-                if ((window as any).onRaidEnded) {
-                    (window as any).onRaidEnded(this.goldLooted, this.elixirLooted);
-                }
+            if (remaining === 0 && liveTroops === 0 && !this.raidEndScheduled) {
+                this.raidEndScheduled = true;
+                // Give player 3 seconds to see final stats before auto-ending
+                this.time.delayedCall(3000, () => {
+                    if ((window as any).onRaidEnded) {
+                        (window as any).onRaidEnded(this.goldLooted, this.elixirLooted);
+                    }
+                });
             }
         }
         this.handleCameraMovement(delta);
@@ -215,16 +334,77 @@ export class MainScene extends Phaser.Scene {
         this.updateSelectionHighlight();
         this.updateDeploymentHighlight();
         this.updateBuildingAnimations(time);
+        this.updateObstacleAnimations(time);
+        this.growGrass(time);
+        this.updateRubbleAnimations(time);
+        this.updateTooltip();
+
+        // Manual firing loop for HOME mode interactions
+        if (this.mode === 'HOME' && this.isManualFiring && this.selectedInWorld) {
+            this.updateManualFire(time);
+        }
+    }
+
+    private updateManualFire(time: number) {
+        const def = this.selectedInWorld;
+        if (!def || !BUILDINGS[def.type] || BUILDINGS[def.type].category !== 'defense') return;
+
+        const stats = BUILDINGS[def.type];
+        const interval = stats.fireRate || 2000;
+
+        // Initial delay setup if not set (first shot is instant-ish)
+        if (def.lastFireTime === undefined) {
+            def.lastFireTime = -99999; // Ensure ready immediately
+        }
+
+        if (time < (def as any).lastFireTime + interval) return;
+
+        def.lastFireTime = time;
+
+        // Get target position
+        const pointer = this.input.activePointer;
+        const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+        const cardPos = this.isoToCart(worldPoint.x, worldPoint.y);
+
+        // CREATE DUMMY TARGET
+        const dummyTarget = {
+            gridX: cardPos.x,
+            gridY: cardPos.y,
+            id: 'dummy_target',
+            type: 'warrior',
+            health: 100,
+            owner: 'ENEMY'
+        } as Troop;
+
+        // Trigger shot
+        if (def.type === 'cannon') this.shootAt(def, dummyTarget);
+        else if (def.type === 'ballista') this.shootBallistaAt(def, dummyTarget);
+        else if (def.type === 'xbow') this.shootXBowAt(def, dummyTarget);
+        else if (def.type === 'mortar') this.shootMortarAt(def, dummyTarget);
+        else if (def.type === 'tesla') this.shootTeslaAt(def, dummyTarget);
+        else if (def.type === 'magmavent') this.shootMagmaEruption(def);
+        else if (def.type === 'prism') this.shootPrismContinuousLaser(def, dummyTarget, time);
     }
 
     private updateBuildingAnimations(_time: number) {
         // Redraw all buildings for idle animations
         this.buildings.forEach(b => {
             if (b.owner === 'PLAYER' || this.mode === 'ATTACK') {
-                // Smoothly interpolate ballista and xbow angle towards target
-                if ((b.type === 'ballista' || b.type === 'xbow') && b.ballistaTargetAngle !== undefined) {
+                // Smoothly interpolate ballista, xbow, and cannon angle towards target
+                // OR towards mouse if selected in HOME mode
+                let targetAngle = b.ballistaTargetAngle;
+
+                if (this.mode === 'HOME' && this.selectedInWorld === b &&
+                    (b.type === 'ballista' || b.type === 'xbow' || b.type === 'cannon')) {
+                    const info = BUILDINGS[b.type];
+                    const center = this.cartToIso(b.gridX + info.width / 2, b.gridY + info.height / 2);
+                    const pointer = this.input.activePointer;
+                    const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+                    targetAngle = Math.atan2(worldPoint.y - (center.y - 14), worldPoint.x - center.x);
+                }
+
+                if ((b.type === 'ballista' || b.type === 'xbow' || b.type === 'cannon') && targetAngle !== undefined) {
                     const currentAngle = b.ballistaAngle ?? 0;
-                    const targetAngle = b.ballistaTargetAngle;
 
                     // Calculate shortest rotation direction
                     let diff = targetAngle - currentAngle;
@@ -240,6 +420,43 @@ export class MainScene extends Phaser.Scene {
                     }
                 }
 
+                // === IDLE SWIVEL for rotating defenses ===
+                // When not firing, slowly swivel to random angles for life
+                if ((b.type === 'ballista' || b.type === 'xbow' || b.type === 'cannon') && !b.isFiring) {
+                    // Initialize idle behavior
+                    if (b.idleSwiveTime === undefined) {
+                        b.idleSwiveTime = Math.random() * 5000; // Random start offset
+                        b.idleTargetAngle = Math.random() * Math.PI * 2;
+                    }
+
+                    b.idleSwiveTime += 16; // Approximate frame time
+
+                    // Change idle target angle every 3-6 seconds
+                    const idleChangeInterval = 3000 + Math.random() * 3000;
+                    if (b.idleSwiveTime > idleChangeInterval) {
+                        b.idleSwiveTime = 0;
+                        // Small random angle change (not full rotation)
+                        const currentIdle = b.idleTargetAngle ?? 0;
+                        b.idleTargetAngle = currentIdle + (Math.random() - 0.5) * Math.PI * 0.5;
+                    }
+
+                    // Only apply idle swivel if no combat target
+                    if (b.ballistaTargetAngle === undefined && b.idleTargetAngle !== undefined) {
+                        const currentAngle = b.ballistaAngle ?? 0;
+                        let diff = b.idleTargetAngle - currentAngle;
+                        while (diff > Math.PI) diff -= Math.PI * 2;
+                        while (diff < -Math.PI) diff += Math.PI * 2;
+
+                        // Very slow idle rotation
+                        const idleRotationSpeed = 0.02;
+                        if (Math.abs(diff) > 0.01) {
+                            b.ballistaAngle = currentAngle + diff * idleRotationSpeed;
+                        } else {
+                            b.ballistaAngle = b.idleTargetAngle;
+                        }
+                    }
+                }
+
                 // Transparency near cursor (ghost building)
                 let alpha = 1;
                 if (this.mode === 'HOME' && this.selectedBuildingType) {
@@ -249,42 +466,75 @@ export class MainScene extends Phaser.Scene {
 
                 // All buildings now have animations for a lively feel
                 b.graphics.clear();
-                this.drawBuildingVisuals(b.graphics, b.gridX, b.gridY, b.type, alpha, null, b);
+                b.baseGraphics?.clear();
+                this.drawBuildingVisuals(b.graphics, b.gridX, b.gridY, b.type, alpha, null, b, b.baseGraphics);
+
+                // MAGMA VENT: Constant thin black smoke trail
+                if (b.type === 'magmavent') {
+                    if (this.time.now > (b.lastTrailTime || 0) + 150) {
+                        this.createSmokeTrailEffect(b.gridX + 1.5, b.gridY + 1.5);
+                        b.lastTrailTime = this.time.now;
+                    }
+                }
             }
         });
     }
 
+    private createSmokeTrailEffect(gridX: number, gridY: number) {
+        const pos = this.cartToIso(gridX, gridY);
+        const smoke = this.add.graphics();
+        smoke.fillStyle(0x111111, 0.5); // Darker, slightly transparent black
+        const size = 3 + Math.random() * 2;
+        smoke.fillRect(-size / 2, -size / 2, size, size);
+        smoke.setPosition(pos.x, pos.y - 25);
+        smoke.setDepth(29999);
 
-    private saveBase() {
-        if (this.mode !== 'HOME') return;
-        const baseData = this.buildings
-            .filter(b => b.owner === 'PLAYER')
-            .map(b => ({
-                type: b.type,
-                gridX: b.gridX,
-                gridY: b.gridY
-            }));
-        localStorage.setItem('clashIsoBase', JSON.stringify(baseData));
+        this.tweens.add({
+            targets: smoke,
+            x: pos.x + (Math.random() - 0.5) * 5,
+            y: pos.y - 120 - Math.random() * 50,
+            alpha: 0,
+            angle: Math.random() * 360,
+            scale: 2.5,
+            duration: 2000 + Math.random() * 1000,
+            onComplete: () => smoke.destroy()
+        });
     }
 
+
+    // Persistent state is now managed by Backend service automatically on modification
+
     private loadSavedBase(): boolean {
-        const saved = localStorage.getItem('clashIsoBase');
-        if (!saved) return false;
+        // Load player home world from Backend
+        let world = Backend.getWorld('player_home');
 
-        try {
-            const baseData = JSON.parse(saved) as Array<{ type: string, gridX: number, gridY: number }>;
-            if (!Array.isArray(baseData) || baseData.length === 0) return false;
-
-            baseData.forEach(b => {
-                this.placeBuilding(b.gridX, b.gridY, b.type, 'PLAYER');
-            });
-
-            const campCount = this.buildings.filter(b => b.type === 'army_camp').length;
-            (window as any).refreshCampCapacity?.(campCount);
-            return true;
-        } catch {
-            return false;
+        // If world doesn't exist, create it (empty)
+        if (!world) {
+            world = Backend.createWorld('player_home', 'PLAYER');
         }
+
+        // If newly created or empty, return false to trigger default village placement
+        if (world.buildings.length === 0) return false;
+
+        this.buildings = []; // Clear current
+        world.buildings.forEach(b => {
+            this.instantiateBuilding(b, 'PLAYER');
+        });
+
+        // Load obstacles from backend, or spawn some if none exist
+        this.obstacles = [];
+        if (world.obstacles && world.obstacles.length > 0) {
+            world.obstacles.forEach(o => {
+                this.placeObstacle(o.gridX, o.gridY, o.type);
+            });
+        } else {
+            // Existing base has no obstacles - spawn some!
+            this.spawnRandomObstacles(12);
+        }
+
+        const campCount = this.buildings.filter(b => b.type === 'army_camp').length;
+        (window as any).refreshCampCapacity?.(campCount);
+        return true;
     }
 
 
@@ -344,33 +594,34 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
-    private placeBuilding(gridX: number, gridY: number, type: string, owner: 'PLAYER' | 'ENEMY' = 'PLAYER') {
+    private instantiateBuilding(data: SerializedBuilding, owner: 'PLAYER' | 'ENEMY') {
+        const { gridX, gridY, type, id, level = 1 } = data;
         const info = BUILDINGS[type];
         if (!info) return;
 
+        // Calculate stats based on level
+        const stats = getBuildingStats(type as BuildingType, level);
+
         const graphics = this.add.graphics();
-        this.drawBuildingVisuals(graphics, gridX, gridY, type);
+        const baseGraphics = this.add.graphics();
+        baseGraphics.setDepth(1); // Ensure base is ALWAYS at the bottom
+        this.drawBuildingVisuals(graphics, gridX, gridY, type, 1, null, undefined, baseGraphics);
 
         // Building depth: use the bottom-most grid coordinate (gridX+width + gridY+height)
         const depth = (gridX + info.width) + (gridY + info.height);
         graphics.setDepth(depth * 10);
 
         const building: PlacedBuilding = {
-            id: Phaser.Utils.String.UUID(),
-            type: type,
-            gridX: gridX,
-            gridY: gridY,
-            graphics: graphics,
+            id, type, gridX, gridY, level, graphics, baseGraphics,
             healthBar: this.add.graphics(),
-            health: type === 'wall' ? 800 : type === 'town_hall' ? 1000 : 100,
-            maxHealth: type === 'wall' ? 800 : type === 'town_hall' ? 1000 : 100,
-            owner: owner
+            health: stats.maxHealth || 100,
+            maxHealth: stats.maxHealth || 100,
+            owner
         };
 
+        // Initialize cannon angle
         if (type === 'cannon') {
-            building.barrelGraphics = this.add.graphics();
-            building.barrelGraphics.setDepth(graphics.depth + 1);
-            this.drawCannonBarrel(building, 0);
+            building.ballistaAngle = Math.PI / 4; // Default facing bottom-right
         }
 
         this.buildings.push(building);
@@ -381,68 +632,54 @@ export class MainScene extends Phaser.Scene {
             (window as any).refreshCampCapacity?.(campCount);
         }
 
-        // Save base when building is placed
-        if (owner === 'PLAYER') {
-            this.saveBase();
-        }
-
         return building;
     }
 
+    private placeBuilding(gridX: number, gridY: number, type: string, owner: 'PLAYER' | 'ENEMY' = 'PLAYER'): boolean {
+        // Remove any obstacles that overlap with this building
+        const info = BUILDINGS[type];
+        if (info) {
+            this.removeOverlappingObstacles(gridX, gridY, info.width, info.height);
+        }
 
-    private drawCannonBarrel(cannon: PlacedBuilding, angle: number) {
-        if (!cannon.barrelGraphics) return;
-        cannon.barrelGraphics.clear();
-        const info = BUILDINGS['cannon'];
-        const pos = this.cartToIso(cannon.gridX + info.width / 2, cannon.gridY + info.height / 2);
-        const g = cannon.barrelGraphics;
-
-        // Simple rotating cannon barrel using angle math (like xbow)
-        const cos = Math.cos(angle);
-        const sin = Math.sin(angle);
-        const heightOffset = -12;
-        const barrelLength = 18;
-
-        // Barrel tip position
-        const tipX = pos.x + cos * barrelLength;
-        const tipY = pos.y + heightOffset + sin * 0.5 * barrelLength;
-
-        // Draw barrel shadow
-        g.lineStyle(8, 0x1a1a1a, 1);
-        g.lineBetween(pos.x, pos.y + heightOffset + 2, tipX, tipY + 2);
-
-        // Draw main barrel body
-        g.lineStyle(6, 0x3a3a3a, 1);
-        g.lineBetween(pos.x, pos.y + heightOffset, tipX, tipY);
-
-        // Barrel highlight
-        g.lineStyle(3, 0x5a5a5a, 1);
-        g.lineBetween(pos.x, pos.y + heightOffset - 1, tipX, tipY - 1);
-
-        // Muzzle (end of barrel)
-        g.fillStyle(0x2a2a2a, 1);
-        g.fillCircle(tipX, tipY, 5);
-        g.fillStyle(0x111111, 1);
-        g.fillCircle(tipX, tipY, 2.5);
-
-        // Barrel rings
-        const ring1X = pos.x + cos * 6;
-        const ring1Y = pos.y + heightOffset + sin * 0.5 * 6;
-        const ring2X = pos.x + cos * 12;
-        const ring2Y = pos.y + heightOffset + sin * 0.5 * 12;
-
-        g.fillStyle(0x6a6a6a, 1);
-        g.fillCircle(ring1X, ring1Y, 4);
-        g.fillCircle(ring2X, ring2Y, 4);
-
-        // Central pivot
-        g.fillStyle(0x2a2a2a, 1);
-        g.fillCircle(pos.x, pos.y + heightOffset, 5);
-        g.fillStyle(0x4a4a4a, 1);
-        g.fillCircle(pos.x, pos.y + heightOffset, 3);
+        if (owner === 'PLAYER') {
+            // Backend Validation & Placement
+            const data = Backend.placeBuilding('player_home', type as BuildingType, gridX, gridY);
+            if (data) {
+                this.instantiateBuilding(data, 'PLAYER');
+                (window as any).onBuildingPlaced?.(type);
+                return true;
+            }
+        } else {
+            // For Enemy (Manual placement, e.g. from old generators if still used)
+            // We create a temp serialized object
+            const data: SerializedBuilding = {
+                id: Phaser.Utils.String.UUID(),
+                type: type as BuildingType,
+                gridX, gridY, level: 1
+            };
+            this.instantiateBuilding(data, 'ENEMY');
+            return true;
+        }
+        return false;
     }
 
+    private removeOverlappingObstacles(gridX: number, gridY: number, width: number, height: number) {
+        const toRemove: string[] = [];
 
+        for (const o of this.obstacles) {
+            const oInfo = OBSTACLES[o.type];
+            // Check overlap
+            const overlapX = Math.max(0, Math.min(gridX + width, o.gridX + oInfo.width) - Math.max(gridX, o.gridX));
+            const overlapY = Math.max(0, Math.min(gridY + height, o.gridY + oInfo.height) - Math.max(gridY, o.gridY));
+            if (overlapX > 0 && overlapY > 0) {
+                toRemove.push(o.id);
+            }
+        }
+
+        // Remove overlapping obstacles
+        toRemove.forEach(id => this.removeObstacle(id));
+    }
 
 
 
@@ -463,7 +700,7 @@ export class MainScene extends Phaser.Scene {
         return true;
     }
 
-    private drawBuildingVisuals(graphics: Phaser.GameObjects.Graphics, gridX: number, gridY: number, type: string, alpha: number = 1, tint: number | null = null, building?: PlacedBuilding) {
+    private drawBuildingVisuals(graphics: Phaser.GameObjects.Graphics, gridX: number, gridY: number, type: string, alpha: number = 1, tint: number | null = null, building?: PlacedBuilding, baseGraphics?: Phaser.GameObjects.Graphics) {
         const info = BUILDINGS[type];
         const c1 = this.cartToIso(gridX, gridY);
         const c2 = this.cartToIso(gridX + info.width, gridY);
@@ -474,13 +711,13 @@ export class MainScene extends Phaser.Scene {
         // Building-specific premium visuals
         switch (type) {
             case 'town_hall':
-                this.drawTownHall(graphics, c1, c2, c3, c4, center, alpha, tint);
+                this.drawTownHall(graphics, c1, c2, c3, c4, center, alpha, tint, baseGraphics);
                 break;
             case 'barracks':
                 this.drawBarracks(graphics, c1, c2, c3, c4, center, alpha, tint);
                 break;
             case 'cannon':
-                this.drawCannonBase(graphics, c1, c2, c3, c4, center, alpha, tint);
+                this.drawCannon(graphics, c1, c2, c3, c4, center, alpha, tint, building);
                 break;
             case 'ballista':
                 this.drawBallista(graphics, c1, c2, c3, c4, center, alpha, tint, building);
@@ -492,7 +729,7 @@ export class MainScene extends Phaser.Scene {
                 this.drawElixirCollector(graphics, c1, c2, c3, c4, center, alpha, tint);
                 break;
             case 'mortar':
-                this.drawMortarBuilding(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                this.drawMortar(graphics, c1, c2, c3, c4, center, alpha, tint, building);
                 break;
             case 'tesla':
                 this.drawTeslaCoil(graphics, c1, c2, c3, c4, center, alpha, tint);
@@ -501,7 +738,7 @@ export class MainScene extends Phaser.Scene {
                 this.drawWall(graphics, center, gridX, gridY, alpha, tint, building);
                 break;
             case 'army_camp':
-                this.drawArmyCamp(graphics, c1, c2, c3, c4, center, alpha, tint);
+                this.drawArmyCamp(graphics, c1, c2, c3, c4, center, alpha, tint, baseGraphics);
                 break;
             case 'xbow':
                 this.drawXBow(graphics, c1, c2, c3, c4, center, alpha, tint, building);
@@ -510,7 +747,7 @@ export class MainScene extends Phaser.Scene {
                 this.drawPrismTower(graphics, c1, c2, c3, c4, center, alpha, tint, building);
                 break;
             case 'magmavent':
-                this.drawMagmaVent(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                this.drawMagmaVent(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics);
                 break;
 
             default:
@@ -518,9 +755,10 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
-
-    private drawTownHall(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null) {
+    private drawTownHall(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, baseGraphics?: Phaser.GameObjects.Graphics) {
         const time = this.time.now;
+        const g = baseGraphics || graphics; // Draw floor on baseGraphics
+
         const height = 65;
         const t1 = new Phaser.Math.Vector2(c1.x, c1.y - height);
         const t2 = new Phaser.Math.Vector2(c2.x, c2.y - height);
@@ -528,17 +766,23 @@ export class MainScene extends Phaser.Scene {
         const t4 = new Phaser.Math.Vector2(c4.x, c4.y - height);
 
         // === ORNATE STONE FOUNDATION ===
-        graphics.fillStyle(tint ?? 0x7a6a5a, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
-        graphics.lineStyle(2, 0x5a4a3a, 0.6 * alpha);
-        graphics.strokePoints([c1, c2, c3, c4], true, true);
+        g.fillStyle(tint ?? 0x7a6a5a, alpha);
+        g.fillPoints([c1, c2, c3, c4], true);
 
-        // Foundation stone texture
-        graphics.fillStyle(0x6a5a4a, alpha * 0.4);
+        // Foundation borders
+        g.lineStyle(2, 0x5a4a3a, alpha);
+        g.strokePoints([c1, c2, c3, c4], true, true);
+
+        // Red carpet leading to door
+        g.fillStyle(0xaa2222, alpha);
+        g.fillCircle(center.x, center.y, 10);
+
+        // Foundation stone texture (moved to baseGraphics)
+        g.fillStyle(0x6a5a4a, alpha * 0.4);
         for (let i = 0; i < 6; i++) {
             const px = center.x + Math.sin(i * 2.3) * 20;
             const py = center.y + Math.cos(i * 1.7) * 12;
-            graphics.fillCircle(px, py, 3 + Math.sin(i) * 1.5);
+            g.fillCircle(px, py, 3 + Math.sin(i) * 1.5);
         }
 
         // === MAGNIFICENT WALLS ===
@@ -881,24 +1125,178 @@ export class MainScene extends Phaser.Scene {
     }
 
 
-    private drawCannonBase(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null) {
-        // Stone platform
-        graphics.fillStyle(tint ?? 0x6a6a6a, alpha);
+    // === BEAUTIFUL ARTSY ROTATING CANNON ===
+    private drawCannon(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
+        // Get the rotation angle from building (same system as ballista/xbow)
+        const angle = building?.ballistaAngle ?? Math.PI / 4; // Default facing bottom-right (isometric forward)
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+
+        // === STONE FOUNDATION PLATFORM ===
+        // Main stone base (isometric diamond)
+        graphics.fillStyle(tint ?? 0x7a7a7a, alpha);
         graphics.fillPoints([c1, c2, c3, c4], true);
 
-        // Platform edges
-        graphics.lineStyle(1, 0x888888, 0.6 * alpha);
+        // Stone texture - lighter edges for 3D effect
+        graphics.lineStyle(2, 0x9a9a9a, alpha * 0.8);
         graphics.lineBetween(c1.x, c1.y, c2.x, c2.y);
         graphics.lineBetween(c1.x, c1.y, c4.x, c4.y);
-        graphics.lineStyle(1, 0x3a3a3a, 0.6 * alpha);
+        graphics.lineStyle(2, 0x4a4a4a, alpha * 0.8);
         graphics.lineBetween(c2.x, c2.y, c3.x, c3.y);
         graphics.lineBetween(c3.x, c3.y, c4.x, c4.y);
 
-        // Circular turret base (isometric ellipse)
-        graphics.fillStyle(0x5a5a5a, alpha);
-        graphics.fillEllipse(center.x, center.y - 2, 18, 10);
-        graphics.lineStyle(1, 0x3a3a3a, alpha);
-        graphics.strokeEllipse(center.x, center.y - 2, 18, 10);
+        // Stone decorative details
+        graphics.fillStyle(0x6a6a6a, alpha * 0.6);
+        graphics.fillCircle(center.x - 10, center.y + 6, 3);
+        graphics.fillCircle(center.x + 8, center.y + 4, 2);
+
+        // === WOODEN ROTATING BASE (Isometric ellipse) ===
+        const baseRadiusX = 22;
+        const baseRadiusY = 13; // Squashed for isometric view
+        const baseY = center.y - 3;
+
+        // Wood shadow underneath
+        graphics.fillStyle(0x1a1008, alpha * 0.5);
+        graphics.fillEllipse(center.x + 2, baseY + 4, baseRadiusX, baseRadiusY);
+
+        // Main wooden base
+        graphics.fillStyle(0x5a4030, alpha);
+        graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+
+        // Wood grain rings
+        graphics.lineStyle(2, 0x4a3020, alpha * 0.6);
+        graphics.strokeEllipse(center.x, baseY, baseRadiusX - 4, baseRadiusY - 2);
+        graphics.lineStyle(1, 0x3a2515, alpha * 0.4);
+        graphics.strokeEllipse(center.x, baseY, baseRadiusX - 8, baseRadiusY - 5);
+
+        // Metal reinforcement ring on wooden base
+        graphics.lineStyle(3, 0x444444, alpha);
+        graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+        graphics.lineStyle(1, 0x666666, alpha * 0.6);
+        graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
+
+
+
+        // === ROTATING CANNON BARREL ===
+        const barrelHeight = -14; // Height above base
+        const barrelLength = 28;  // Length of barrel
+        const barrelWidth = 10;   // Thickness
+
+        // Apply recoil offset (pulls barrel back in opposite direction of firing)
+        const recoilAmount = (building?.cannonRecoilOffset ?? 0) * 8; // Max 8 pixels recoil
+        const recoilOffsetX = -cos * recoilAmount;
+        const recoilOffsetY = -sin * 0.5 * recoilAmount;
+
+        // Calculate barrel end position based on angle (with recoil)
+        const barrelTipX = center.x + cos * barrelLength + recoilOffsetX;
+        const barrelTipY = center.y + barrelHeight + sin * 0.5 * barrelLength + recoilOffsetY;
+
+        // Barrel shadow on ground
+        graphics.fillStyle(0x1a1a1a, alpha * 0.3);
+        graphics.fillEllipse(center.x + cos * (barrelLength * 0.5) + 3, center.y + 4, barrelLength * 0.6, 5);
+
+        // === BARREL CARRIAGE (holds the barrel) ===
+        // Two side supports from the rotating base
+        const supportOffsetX = -sin * 8;
+        const supportOffsetY = cos * 4;
+
+        // Left support
+        graphics.fillStyle(0x4a3525, alpha);
+        graphics.beginPath();
+        graphics.moveTo(center.x - supportOffsetX, baseY - supportOffsetY);
+        graphics.lineTo(center.x - supportOffsetX * 0.5, center.y + barrelHeight + 4);
+        graphics.lineTo(center.x + cos * 5 - supportOffsetX * 0.5, center.y + barrelHeight + sin * 2.5 + 4);
+        graphics.lineTo(center.x + cos * 5, center.y + barrelHeight + sin * 2.5);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Right support
+        graphics.fillStyle(0x3a2515, alpha);
+        graphics.beginPath();
+        graphics.moveTo(center.x + supportOffsetX, baseY + supportOffsetY);
+        graphics.lineTo(center.x + supportOffsetX * 0.5, center.y + barrelHeight + 4);
+        graphics.lineTo(center.x + cos * 5 + supportOffsetX * 0.5, center.y + barrelHeight + sin * 2.5 + 4);
+        graphics.lineTo(center.x + cos * 5, center.y + barrelHeight + sin * 2.5);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // === CONDITIONAL RENDER ORDER ===
+        // If pointing down (sin >= 0), barrel is in front, so draw pivot FIRST (behind barrel)
+        // If pointing up (sin < 0), barrel is behind, so draw pivot LAST (on top of barrel)
+
+        const drawPivot = () => {
+            // === CENTRAL PIVOT MECHANISM ===
+            const pivotX = center.x + recoilOffsetX;
+            const pivotY = center.y + barrelHeight + 3 + recoilOffsetY;
+
+            graphics.fillStyle(0x333333, alpha);
+            graphics.fillCircle(pivotX, pivotY, 8);
+            graphics.fillStyle(0x444444, alpha);
+            graphics.fillCircle(pivotX, pivotY, 6);
+            graphics.fillStyle(0x555555, alpha);
+            graphics.fillCircle(pivotX, pivotY, 4);
+            graphics.fillStyle(0x666666, alpha * 0.7);
+            graphics.fillCircle(pivotX - 1, pivotY - 1, 2);
+        };
+
+        if (sin >= 0) drawPivot();
+
+        // === BARREL BASE ===
+        // Large reinforced base where barrel meets carriage (with recoil)
+        // Moved here to be BEHIND the barrel body
+        const baseJointX = center.x + cos * 3 + recoilOffsetX;
+        const baseJointY = center.y + barrelHeight + sin * 1.5 + recoilOffsetY;
+        graphics.fillStyle(0x555555, alpha);
+        graphics.fillEllipse(baseJointX, baseJointY, 14, 8);
+        graphics.fillStyle(0x444444, alpha);
+        graphics.fillEllipse(baseJointX, baseJointY, 10, 6);
+        graphics.fillStyle(0x333333, alpha);
+        graphics.fillEllipse(baseJointX, baseJointY, 6, 4);
+
+        // === MAIN BARREL BODY ===
+        // Draw the barrel as multiple layers for depth
+        // Barrel base point (with recoil)
+        const barrelBaseX = center.x + recoilOffsetX;
+        const barrelBaseY = center.y + barrelHeight + recoilOffsetY;
+
+        // Barrel outer shadow
+        graphics.lineStyle(barrelWidth + 4, 0x1a1a1a, alpha);
+        graphics.lineBetween(barrelBaseX, barrelBaseY + 2, barrelTipX, barrelTipY + 2);
+
+        // Barrel main body - dark iron
+        graphics.lineStyle(barrelWidth, 0x2a2a2a, alpha);
+        graphics.lineBetween(barrelBaseX, barrelBaseY, barrelTipX, barrelTipY);
+
+        // Barrel highlight strip (top)
+        graphics.lineStyle(barrelWidth - 4, 0x3a3a3a, alpha);
+        graphics.lineBetween(center.x, center.y + barrelHeight - 1, barrelTipX, barrelTipY - 1);
+
+        // Bright highlight
+        graphics.lineStyle(2, 0x5a5a5a, alpha * 0.8);
+        graphics.lineBetween(barrelBaseX, barrelBaseY - 2, barrelTipX, barrelTipY - 2);
+
+        // === DECORATIVE BARREL BANDS (iron) ===
+        const bands = [0.15, 0.4, 0.7, 0.9];
+        for (const t of bands) {
+            const bandX = center.x + cos * barrelLength * t + recoilOffsetX;
+            const bandY = center.y + barrelHeight + sin * 0.5 * barrelLength * t + recoilOffsetY;
+
+            // Iron bands
+            graphics.fillStyle(0x4a4a4a, alpha);
+            graphics.fillEllipse(bandX, bandY, 7, 4);
+            graphics.fillStyle(0x5a5a5a, alpha * 0.6);
+            graphics.fillCircle(bandX - 1, bandY - 1, 1.5);
+            graphics.lineStyle(1, 0x333333, alpha);
+            graphics.strokeEllipse(bandX, bandY, 7, 4);
+        }
+
+        // Barrel Base moved before barrel body
+
+
+        // Muzzle removed - barrel just ends with the line strokes
+
+        // If pointing up (sin < 0), draw pivot LAST (on top of barrel)
+        if (sin < 0) drawPivot();
     }
 
     private drawBallista(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
@@ -1229,8 +1627,9 @@ export class MainScene extends Phaser.Scene {
         }
 
         // === CENTRAL PIVOT / MECH ===
-        graphics.fillStyle(0x222222, alpha);
-        graphics.fillCircle(center.x, center.y + heightOffset, 6);
+        // Removed black circle as requested
+        // graphics.fillStyle(0x222222, alpha);
+        // graphics.fillCircle(center.x, center.y + heightOffset, 6);
 
         // Firing Glow
         const firingGlow = 0.3 + Math.sin(time / 50) * 0.2;
@@ -1463,7 +1862,7 @@ export class MainScene extends Phaser.Scene {
     }
 
 
-    private drawMortarBuilding(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
+    private drawMortar(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
         const time = this.time.now;
 
         // Subtle rotation for aiming (use ballista angle system)
@@ -1743,102 +2142,843 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
-    // === MAGMA VENT - Periodic area eruptions ===
-    private drawMagmaVent(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, _building?: PlacedBuilding) {
-        const time = this.time.now;
+    // === MAGMA VENT - STEAMPUNK/TECH REDESIGN ===
+    private drawMagmaVent(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding, baseGraphics?: Phaser.GameObjects.Graphics) {
+        const time = this.time.now || 0;
+        const _building = building;
 
-        // Cracked volcanic rock base (isometric diamond)
-        graphics.fillStyle(tint ?? 0x2a2020, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
+        const g = baseGraphics || graphics; // Use baseGraphics for base
 
-        // Lava cracks in ground (following isometric angles)
-        const crackGlow = 0.6 + Math.sin(time / 200) * 0.2;
-        graphics.lineStyle(2, 0xff4400, alpha * crackGlow);
-        // Cracks follow isometric diagonals
-        graphics.lineBetween(c1.x, c1.y, center.x, center.y);
-        graphics.lineBetween(c2.x, c2.y, center.x, center.y);
-        graphics.lineBetween(c3.x, c3.y, center.x, center.y);
-        graphics.lineBetween(c4.x, c4.y, center.x, center.y);
+        // Eruption state
+        const timeSinceFire = _building?.lastFireTime ? (time - _building.lastFireTime) : 100000;
+        const attackDuration = 1200;
+        const isErupting = timeSinceFire < attackDuration;
+        const eruptIntensity = isErupting ? Math.sin((timeSinceFire / attackDuration) * Math.PI) : 0; // 0 to 1 to 0
 
-        // Additional crack details
-        graphics.lineStyle(1, 0xff6600, alpha * crackGlow * 0.7);
-        const midSE = { x: (c2.x + c3.x) / 2, y: (c2.y + c3.y) / 2 };
-        const midSW = { x: (c3.x + c4.x) / 2, y: (c3.y + c4.y) / 2 };
-        graphics.lineBetween(midSE.x, midSE.y, center.x + 5, center.y + 3);
-        graphics.lineBetween(midSW.x, midSW.y, center.x - 5, center.y + 3);
+        // === BASE PLATFORM (Metal grating) ===
+        // Dark metallic base
+        const baseColor = isErupting
+            ? Phaser.Display.Color.GetColor(
+                Phaser.Math.Interpolation.Linear([0x2a, 0x55, 0x2a], (timeSinceFire / attackDuration)),
+                Phaser.Math.Interpolation.Linear([0x2a, 0x22, 0x2a], (timeSinceFire / attackDuration)),
+                Phaser.Math.Interpolation.Linear([0x2a, 0x00, 0x2a], (timeSinceFire / attackDuration))
+            )
+            : 0x2a2a2a;
 
-        // Central volcanic cone (isometric)
-        const coneHeight = 25;
-        // SE face (dark)
+        g.fillStyle(tint ?? baseColor, alpha);
+        g.fillPoints([c1, c2, c3, c4], true);
+
+        // Steel rim
+        g.lineStyle(2, 0x555555, alpha);
+        g.strokePoints([c1, c2, c3, c4], true, true);
+
+        // Grating lines - glow orange when erupting
+        const gratingColor = isErupting ? 0xff6600 : 0x3a3a3a;
+        const gratingAlpha = isErupting ? 0.8 : 0.5;
+
+        g.lineStyle(isErupting ? 2 : 1, gratingColor, alpha * gratingAlpha);
+        for (let i = 0; i < 4; i++) {
+            const r = (i + 1) / 5;
+            // Cross hatching
+            const startX = c1.x + (c2.x - c1.x) * r;
+            const startY = c1.y + (c2.y - c1.y) * r;
+            const endX = c4.x + (c3.x - c4.x) * r;
+            const endY = c4.y + (c3.y - c4.y) * r;
+            g.lineBetween(startX, startY, endX, endY);
+
+            const sX = c1.x + (c4.x - c1.x) * r;
+            const sY = c1.y + (c4.y - c1.y) * r;
+            const eX = c2.x + (c3.x - c2.x) * r;
+            const eY = c2.y + (c3.y - c2.y) * r;
+            g.lineBetween(sX, sY, eX, eY);
+        }
+        // === VOLCANIC ROCKS (Surrounding the vent) ===
+        graphics.fillStyle(0x2a1a10, alpha); // Dark reddish rock
+
+        // Large Left Rock
+        const leftRockOrigin = { x: center.x - 35, y: center.y + 5 };
+        graphics.fillPoints([
+            { x: leftRockOrigin.x + 0, y: leftRockOrigin.y + 0 },
+            { x: leftRockOrigin.x + 15, y: leftRockOrigin.y - 8 },
+            { x: leftRockOrigin.x + 25, y: leftRockOrigin.y + 0 },
+            { x: leftRockOrigin.x + 10, y: leftRockOrigin.y + 10 },
+            { x: leftRockOrigin.x - 5, y: leftRockOrigin.y + 5 }
+        ], true);
+        // Rock highlight
         graphics.fillStyle(0x3a2a20, alpha);
-        graphics.beginPath();
-        graphics.moveTo(center.x + 20, center.y + 10);
-        graphics.lineTo(center.x + 5, center.y - coneHeight);
-        graphics.lineTo(center.x, center.y - 5);
-        graphics.closePath();
-        graphics.fillPath();
+        graphics.fillRect(center.x - 32, center.y + 2, 8, 4);
 
-        // SW face (lighter)
-        graphics.fillStyle(0x4a3a30, alpha);
-        graphics.beginPath();
-        graphics.moveTo(center.x - 20, center.y + 10);
-        graphics.lineTo(center.x - 5, center.y - coneHeight);
-        graphics.lineTo(center.x, center.y - 5);
-        graphics.closePath();
-        graphics.fillPath();
+        // Large Right Rock
+        graphics.fillStyle(0x2a1a10, alpha);
+        const rightRockOrigin = { x: center.x + 25, y: center.y - 5 };
+        graphics.fillPoints([
+            { x: rightRockOrigin.x + 0, y: rightRockOrigin.y + 0 },
+            { x: rightRockOrigin.x + 15, y: rightRockOrigin.y - 5 },
+            { x: rightRockOrigin.x + 20, y: rightRockOrigin.y + 5 },
+            { x: rightRockOrigin.x + 5, y: rightRockOrigin.y + 15 },
+            { x: rightRockOrigin.x - 5, y: rightRockOrigin.y + 5 }
+        ], true);
+        // Rock highlight
+        graphics.fillStyle(0x3a2a20, alpha);
+        graphics.fillRect(center.x + 30, center.y - 2, 8, 4);
 
-        // Front face
-        graphics.fillStyle(0x5a4a40, alpha);
-        graphics.beginPath();
-        graphics.moveTo(center.x - 20, center.y + 10);
-        graphics.lineTo(center.x - 5, center.y - coneHeight);
-        graphics.lineTo(center.x + 5, center.y - coneHeight);
-        graphics.lineTo(center.x + 20, center.y + 10);
-        graphics.closePath();
-        graphics.fillPath();
+        // Back Rock Cluster
+        graphics.fillStyle(0x2a1a10, alpha);
+        const backRockOrigin = { x: center.x - 10, y: center.y - 25 };
+        graphics.fillPoints([
+            { x: backRockOrigin.x + 0, y: backRockOrigin.y + 0 },
+            { x: backRockOrigin.x + 20, y: backRockOrigin.y - 5 },
+            { x: backRockOrigin.x + 25, y: backRockOrigin.y + 8 },
+            { x: backRockOrigin.x + 5, y: backRockOrigin.y + 12 },
+            { x: backRockOrigin.x - 5, y: backRockOrigin.y + 5 }
+        ], true);
 
-        // Crater opening (isometric ellipse at top)
-        graphics.fillStyle(0x1a0a00, alpha);
-        graphics.fillEllipse(center.x, center.y - coneHeight, 12, 6);
-
-        // Lava pool in crater
-        const lavaGlow = 0.7 + Math.sin(time / 150) * 0.3;
-        graphics.fillStyle(0xff2200, alpha * lavaGlow);
-        graphics.fillEllipse(center.x, center.y - coneHeight, 8, 4);
-        graphics.fillStyle(0xff6600, alpha * lavaGlow);
-        graphics.fillEllipse(center.x - 1, center.y - coneHeight - 1, 5, 2.5);
-        graphics.fillStyle(0xffaa00, alpha * lavaGlow * 0.8);
-        graphics.fillEllipse(center.x, center.y - coneHeight, 3, 1.5);
-
-        // Eruption effect (periodic)
-        const eruptionCycle = (time % 3000) / 3000;
-        if (eruptionCycle < 0.3) {
-            const eruptIntensity = Math.sin(eruptionCycle / 0.3 * Math.PI);
-
-            // Lava spray particles
-            for (let i = 0; i < 8; i++) {
-                const particlePhase = (eruptionCycle * 3 + i * 0.1) % 1;
-                const particleY = center.y - coneHeight - particlePhase * 40 * eruptIntensity;
-                const particleX = center.x + Math.sin(i * 2.5 + time / 50) * (10 * particlePhase);
-                const particleAlpha = (1 - particlePhase) * eruptIntensity;
-
-                graphics.fillStyle(0xff4400, alpha * particleAlpha);
-                graphics.fillCircle(particleX, particleY, 3 - particlePhase * 2);
-            }
-
-            // Glow during eruption
-            graphics.fillStyle(0xff4400, alpha * 0.2 * eruptIntensity);
-            graphics.fillEllipse(center.x, center.y - coneHeight - 10, 30, 20);
+        // Glowing fissures on rocks when erupting
+        if (isErupting) {
+            graphics.fillStyle(0xff4400, alpha * eruptIntensity * 0.5);
+            graphics.fillRect(center.x - 28, center.y + 6, 6, 2); // Left rock crack
+            graphics.fillRect(center.x + 32, center.y + 5, 4, 2); // Right rock crack
         }
 
-        // Smoke wisps
-        for (let i = 0; i < 3; i++) {
-            const smokePhase = ((time / 2000) + i * 0.33) % 1;
-            const smokeY = center.y - coneHeight - 10 - smokePhase * 30;
-            const smokeX = center.x + Math.sin(time / 300 + i * 2) * 8 * smokePhase;
-            const smokeAlpha = (1 - smokePhase) * 0.3;
-            graphics.fillStyle(0x666666, alpha * smokeAlpha);
-            graphics.fillCircle(smokeX, smokeY, 4 + smokePhase * 6);
+        // === CONTAINMENT RING (Copper/brass outer ring) ===
+        const ringY = center.y - 5;
+
+        // Outer containment ring - back half
+        graphics.fillStyle(0x8b5a2b, alpha); // Copper
+        graphics.beginPath();
+        graphics.moveTo(center.x - 22, ringY + 8);
+        graphics.lineTo(center.x - 20, ringY - 8);
+        graphics.lineTo(center.x + 20, ringY - 8);
+        graphics.lineTo(center.x + 22, ringY + 8);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Ring highlight (shiny copper)
+        graphics.fillStyle(0xcd7f32, alpha * 0.8);
+        graphics.fillRect(center.x - 18, ringY - 6, 36, 4);
+
+        // === LAVA CHAMBER (Central pit with tech housing) ===
+        // Dark inner chamber
+        graphics.fillStyle(0x1a0a00, alpha);
+        graphics.fillRect(center.x - 14, ringY - 4, 28, 10);
+
+        // Lava pool (pixelated glow)
+        const lavaGlow = isErupting ? (0.8 + Math.sin(time / 50) * 0.2) : (0.4 + Math.sin(time / 200) * 0.1);
+        graphics.fillStyle(0xff2200, alpha * lavaGlow);
+        graphics.fillRect(center.x - 10, ringY - 2, 20, 6);
+        graphics.fillStyle(0xff6600, alpha * lavaGlow);
+        graphics.fillRect(center.x - 6, ringY - 1, 12, 4);
+        graphics.fillStyle(0xffaa00, alpha * lavaGlow * 0.8);
+        graphics.fillRect(center.x - 3, ringY, 6, 2);
+
+        // === STEAM PIPES (Left and right) ===
+        // Left pipe
+        graphics.fillStyle(0x6a4a3a, alpha);
+        graphics.fillRect(center.x - 26, ringY - 15, 6, 20);
+        graphics.fillStyle(0x8b6a5a, alpha);
+        graphics.fillRect(center.x - 25, ringY - 14, 4, 18);
+
+        // Right pipe
+        graphics.fillStyle(0x6a4a3a, alpha);
+        graphics.fillRect(center.x + 20, ringY - 15, 6, 20);
+        graphics.fillStyle(0x8b6a5a, alpha);
+        graphics.fillRect(center.x + 21, ringY - 14, 4, 18);
+
+        // Pipe caps (brass) - glow when erupting
+        const capColor = isErupting ? 0xff8800 : 0xb8860b;
+        graphics.fillStyle(capColor, alpha);
+        graphics.fillRect(center.x - 27, ringY - 18, 8, 4);
+        graphics.fillRect(center.x + 19, ringY - 18, 8, 4);
+
+        // === PRESSURE GAUGES ===
+        // Left gauge housing
+        graphics.fillStyle(0x4a4a4a, alpha);
+        graphics.fillRect(center.x - 32, ringY - 8, 8, 8);
+        graphics.fillStyle(0x2a2a2a, alpha);
+        graphics.fillRect(center.x - 31, ringY - 7, 6, 6);
+        // Gauge needle (moves with pressure)
+        const needleAngle = isErupting ? eruptIntensity : 0.2;
+        graphics.fillStyle(0xff4400, alpha);
+        graphics.fillRect(center.x - 29 + needleAngle * 2, ringY - 5, 2, 3);
+
+        // Right gauge
+        graphics.fillStyle(0x4a4a4a, alpha);
+        graphics.fillRect(center.x + 24, ringY - 8, 8, 8);
+        graphics.fillStyle(0x2a2a2a, alpha);
+        graphics.fillRect(center.x + 25, ringY - 7, 6, 6);
+        graphics.fillStyle(0x00ff00, alpha * (isErupting ? 0.3 : 0.8));
+        graphics.fillRect(center.x + 27, ringY - 5, 2, 3);
+
+        // === RIVETS (Industrial detail) ===
+        graphics.fillStyle(isErupting ? 0x8a6a5a : 0x5a5a5a, alpha);
+        const rivetPositions = [
+            [-20, ringY + 6], [20, ringY + 6],
+            [-18, ringY - 10], [18, ringY - 10],
+            [-24, ringY], [24, ringY]
+        ];
+        for (const [rx, ry] of rivetPositions) {
+            graphics.fillRect(center.x + rx - 1, ry - 1, 3, 3);
+        }
+
+        // === CONTROL PANEL (Front) ===
+        graphics.fillStyle(0x3a3a3a, alpha);
+        graphics.fillRect(center.x - 8, ringY + 6, 16, 6);
+        // Buttons/lights
+        graphics.fillStyle(isErupting ? 0xff0000 : 0x440000, alpha);
+        graphics.fillRect(center.x - 5, ringY + 8, 3, 3);
+        graphics.fillStyle(0x004400, alpha);
+        graphics.fillRect(center.x + 2, ringY + 8, 3, 3);
+
+        // === IDLE SMOKE (Small wisps from pipes) ===
+        const smokeCount = isErupting ? 0 : 2; // Only show idle smoke when not erupting
+        for (let i = 0; i < smokeCount; i++) {
+            const pipeX = i === 0 ? center.x - 23 : center.x + 23;
+            const smokeCycle = 4000;
+            const smokePhase = ((time / smokeCycle) + i * 0.5) % 1;
+            const smokeY = ringY - 18 - smokePhase * 20;
+            const smokeX = pipeX + Math.sin(time / 600 + i) * 4 * smokePhase;
+            const smokeAlpha = (1 - smokePhase) * 0.2;
+            const smokeSize = Math.floor(2 + smokePhase * 3);
+
+            graphics.fillStyle(0x888888, alpha * smokeAlpha);
+            graphics.fillRect(smokeX - smokeSize / 2, smokeY - smokeSize / 2, smokeSize, smokeSize);
+        }
+    }
+
+    // === RUBBLE SYSTEM (Destroyed Building Remains) ===
+    private createRubble(gridX: number, gridY: number, width: number, height: number) {
+        const graphics = this.add.graphics();
+        this.drawRubble(graphics, gridX, gridY, width, height);
+
+        // Very low depth so rubble renders UNDER troops and other elements
+        graphics.setDepth(5);
+
+        this.rubble.push({ gridX, gridY, width, height, graphics, createdAt: Date.now() });
+    }
+
+    private drawRubble(graphics: Phaser.GameObjects.Graphics, gridX: number, gridY: number, width: number, height: number, time: number = 0, fireIntensity: number = 1) {
+        const c1 = this.cartToIso(gridX, gridY);
+        const c2 = this.cartToIso(gridX + width, gridY);
+        const c3 = this.cartToIso(gridX + width, gridY + height);
+        const c4 = this.cartToIso(gridX, gridY + height);
+        const center = this.cartToIso(gridX + width / 2, gridY + height / 2);
+
+        // Base rubble pile (dark shadow)
+        graphics.fillStyle(0x2a2a2a, 0.5);
+        graphics.fillPoints([c1, c2, c3, c4], true);
+
+        // Debris count scales with building size
+        const debrisCount = width * height * 5;
+        const seed = gridX * 1000 + gridY; // Consistent random per location
+        const isLarge = width >= 3 || height >= 3;
+
+        // For large rubble (3x3), add significant structural pieces
+        if (isLarge) {
+            // Collapsed wall sections
+            for (let i = 0; i < 4; i++) {
+                const rand1 = Math.sin(seed + i * 11.11) * 0.5 + 0.5;
+                const rand2 = Math.cos(seed + i * 12.22) * 0.5 + 0.5;
+                const wx = center.x + (rand1 - 0.5) * width * 30;
+                const wy = center.y + (rand2 - 0.5) * height * 15;
+                const wallAngle = rand1 * Math.PI * 0.5;
+                const wallLen = 15 + rand1 * 10;
+                const wallHeight = 8 + rand2 * 6;
+
+                // Wall segment (collapsed stone wall piece)
+                graphics.fillStyle(0x6a6a6a, 0.9);
+                graphics.beginPath();
+                graphics.moveTo(wx - wallLen * 0.5, wy);
+                graphics.lineTo(wx + wallLen * 0.5, wy);
+                graphics.lineTo(wx + wallLen * 0.4, wy - wallHeight);
+                graphics.lineTo(wx - wallLen * 0.3, wy - wallHeight * 0.8);
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Shadow
+                graphics.fillStyle(0x3a3a3a, 0.4);
+                graphics.beginPath();
+                graphics.moveTo(wx - wallLen * 0.5, wy);
+                graphics.lineTo(wx + wallLen * 0.5, wy);
+                graphics.lineTo(wx + wallLen * 0.6, wy + 4);
+                graphics.lineTo(wx - wallLen * 0.4, wy + 3);
+                graphics.closePath();
+                graphics.fillPath();
+            }
+
+            // Large broken pillars/columns
+            for (let i = 0; i < 2; i++) {
+                const rand1 = Math.sin(seed + i * 20.1) * 0.5 + 0.5;
+                const rand2 = Math.cos(seed + i * 21.2) * 0.5 + 0.5;
+                const px = center.x + (rand1 - 0.5) * width * 20;
+                const py = center.y + (rand2 - 0.5) * height * 10;
+
+                // Fallen pillar
+                graphics.fillStyle(0x8a7a6a, 0.9);
+                graphics.fillRect(px - 12, py - 4, 24, 8);
+                graphics.fillStyle(0x9a8a7a, 1);
+                graphics.fillRect(px - 10, py - 6, 20, 4);
+            }
+        }
+
+        // Scattered stone chunks
+        for (let i = 0; i < debrisCount; i++) {
+            const rand1 = Math.sin(seed + i * 1.23) * 0.5 + 0.5;
+            const rand2 = Math.cos(seed + i * 2.34) * 0.5 + 0.5;
+            const rand3 = Math.sin(seed + i * 3.45) * 0.5 + 0.5;
+
+            const px = center.x + (rand1 - 0.5) * width * 32;
+            const py = center.y + (rand2 - 0.5) * height * 16;
+            const size = isLarge ? (4 + rand3 * 8) : (3 + rand3 * 6);
+
+            // Stone colors vary
+            const stoneColors = [0x8a8a8a, 0x6a6a6a, 0x5a5a5a, 0x7a6a5a, 0x9a8a7a];
+            const colorIdx = Math.floor(rand1 * stoneColors.length);
+
+            graphics.fillStyle(stoneColors[colorIdx], 0.9);
+            // Draw irregular stone shapes
+            graphics.beginPath();
+            graphics.moveTo(px, py - size * 0.6);
+            graphics.lineTo(px + size * 0.5, py - size * 0.2);
+            graphics.lineTo(px + size * 0.4, py + size * 0.4);
+            graphics.lineTo(px - size * 0.3, py + size * 0.5);
+            graphics.lineTo(px - size * 0.5, py);
+            graphics.closePath();
+            graphics.fillPath();
+        }
+
+        // Broken wood beams (for larger buildings)
+        if (width >= 2 || height >= 2) {
+            const beamCount = isLarge ? 6 : Math.floor((width + height) / 2);
+            for (let i = 0; i < beamCount; i++) {
+                const rand1 = Math.sin(seed + i * 5.67 + 100) * 0.5 + 0.5;
+                const rand2 = Math.cos(seed + i * 6.78 + 100) * 0.5 + 0.5;
+                const rand3 = Math.sin(seed + i * 7.89 + 100) * 0.5 + 0.5;
+
+                const bx = center.x + (rand1 - 0.5) * width * 26;
+                const by = center.y + (rand2 - 0.5) * height * 13;
+                const angle = rand3 * Math.PI;
+                const length = isLarge ? (12 + rand1 * 18) : (8 + rand1 * 12);
+
+                graphics.lineStyle(isLarge ? 4 : 3, 0x5a3a2a, 0.8);
+                graphics.lineBetween(
+                    bx - Math.cos(angle) * length,
+                    by - Math.sin(angle) * length * 0.5,
+                    bx + Math.cos(angle) * length,
+                    by + Math.sin(angle) * length * 0.5
+                );
+
+                // Charred ends for large rubble (pixelated)
+                if (isLarge) {
+                    graphics.fillStyle(0x2a1a0a, 0.7);
+                    const cx = bx - Math.cos(angle) * length;
+                    const cy = by - Math.sin(angle) * length * 0.5;
+                    graphics.fillRect(cx - 2, cy - 2, 5, 5);
+                }
+            }
+        }
+
+        // Dust/ash patches - use rectangles for pixelated look
+        for (let i = 0; i < debrisCount / 2; i++) {
+            const rand1 = Math.sin(seed + i * 9.01 + 200) * 0.5 + 0.5;
+            const rand2 = Math.cos(seed + i * 0.12 + 200) * 0.5 + 0.5;
+
+            const dx = center.x + (rand1 - 0.5) * width * 28;
+            const dy = center.y + (rand2 - 0.5) * height * 14;
+            const size = 4 + rand1 * 4;
+
+            graphics.fillStyle(0x4a4a4a, 0.3);
+            graphics.fillRect(dx - size / 2, dy - size / 2, size, size);
+        }
+
+        // BURNING EFFECTS for large (3x3) rubble - fades out over time
+        // All effects use rectangles for consistent pixelation
+        if (isLarge && time > 0) {
+            // Fire spots - fade out based on fireIntensity
+            if (fireIntensity > 0.05) {
+                for (let i = 0; i < 4; i++) {
+                    const rand1 = Math.sin(seed + i * 30.3) * 0.5 + 0.5;
+                    const rand2 = Math.cos(seed + i * 31.4) * 0.5 + 0.5;
+                    const fx = center.x + (rand1 - 0.5) * width * 20;
+                    const fy = center.y + (rand2 - 0.5) * height * 10;
+
+                    const flicker = Math.sin(time / 100 + i * 2) * 0.3 + 0.7;
+                    const fireSize = Math.floor((6 + Math.sin(time / 150 + i) * 3) * fireIntensity);
+
+                    // Orange glow base (rectangle)
+                    const glowSize = fireSize + 6;
+                    graphics.fillStyle(0xff6600, 0.4 * flicker * fireIntensity);
+                    graphics.fillRect(fx - glowSize / 2, fy - glowSize / 2, glowSize, glowSize);
+
+                    // Fire core (rectangle)
+                    graphics.fillStyle(0xff4400, 0.7 * flicker * fireIntensity);
+                    graphics.fillRect(fx - fireSize / 2, fy - 2 - fireSize / 2, fireSize, fireSize);
+
+                    // Yellow flame tip (small rectangle)
+                    const tipSize = Math.max(2, fireSize * 0.5);
+                    const tipY = fy - 5 - Math.sin(time / 80 + i) * 2;
+                    graphics.fillStyle(0xffaa00, 0.8 * flicker * fireIntensity);
+                    graphics.fillRect(fx - tipSize / 2, tipY - tipSize / 2, tipSize, tipSize);
+                }
+
+                // Rising embers - small pixel particles
+                for (let i = 0; i < 6; i++) {
+                    const rand1 = Math.sin(seed + i * 40.4) * 0.5 + 0.5;
+                    const rand2 = Math.cos(seed + i * 41.5) * 0.5 + 0.5;
+                    const emberCycle = ((time / 2000) + rand1) % 1;
+
+                    const ex = center.x + (rand1 - 0.5) * width * 15 + Math.sin(time / 300 + i) * 5;
+                    const ey = center.y + (rand2 - 0.5) * height * 8 - emberCycle * 30;
+                    const emberAlpha = (1 - emberCycle) * 0.8 * fireIntensity;
+
+                    graphics.fillStyle(0xff6600, emberAlpha);
+                    graphics.fillRect(ex - 1, ey - 1, 3, 3); // 3x3 pixel ember
+                }
+            }
+
+            // Smoke wisps - INCREASE as fire fades out (smoldering effect)
+            // Use rectangles for pixelated smoke
+            const smokeIntensity = 1 - fireIntensity * 0.5; // More smoke as fire fades
+            const smokeCount = fireIntensity > 0.3 ? 3 : 5; // More smoke when fire is low
+            for (let i = 0; i < smokeCount; i++) {
+                const rand1 = Math.sin(seed + i * 50.5) * 0.5 + 0.5;
+                const rand2 = Math.cos(seed + i * 51.6) * 0.5 + 0.5;
+                const smokeCycle = ((time / 3000) + rand1) % 1;
+
+                const sx = center.x + (rand1 - 0.5) * width * 12 + Math.sin(time / 500 + i) * 8;
+                const sy = center.y + (rand2 - 0.5) * height * 6 - smokeCycle * 50;
+                const smokeAlpha = (1 - smokeCycle) * 0.3 * smokeIntensity;
+                const smokeSize = Math.floor((4 + smokeCycle * 10) * smokeIntensity);
+
+                graphics.fillStyle(0x555555, smokeAlpha);
+                graphics.fillRect(sx - smokeSize / 2, sy - smokeSize / 2, smokeSize, smokeSize);
+            }
+        }
+    }
+
+    private growGrass(time: number) {
+        if (this.mode !== 'HOME') return;
+        // Grow every 1000ms (Reduced rate: 2x slower and sparser)
+        if (time < this.lastGrassGrowTime + 1000) return;
+        this.lastGrassGrowTime = time;
+
+        const grass = this.obstacles.filter(o => o.type === 'grass_patch');
+        const maxGrass = this.mapSize * this.mapSize * 0.07; // 7% limit (sparser)
+
+        if (grass.length >= maxGrass) return;
+
+
+
+        // Spread logic: Pick random grass, try neighbor (high probability)
+        const spreadChance = grass.length > 5 ? 0.9 : 0.4; // If established, spread mostly
+
+        if (grass.length > 0 && Math.random() < spreadChance) {
+            const parent = grass[Math.floor(Math.random() * grass.length)];
+            const neighbors = [
+                { x: parent.gridX + 1, y: parent.gridY },
+                { x: parent.gridX - 1, y: parent.gridY },
+                { x: parent.gridX, y: parent.gridY + 1 },
+                { x: parent.gridX, y: parent.gridY - 1 }
+            ];
+            const spot = neighbors[Math.floor(Math.random() * neighbors.length)];
+            // placeObstacle checks validity (bounds + optimization)
+            this.placeObstacle(spot.x, spot.y, 'grass_patch');
+        } else {
+            // Spontaneous generation
+            const x = Math.floor(Math.random() * (this.mapSize - 4)) + 2;
+            const y = Math.floor(Math.random() * (this.mapSize - 4)) + 2;
+            this.placeObstacle(x, y, 'grass_patch');
+        }
+    }
+
+    private updateRubbleAnimations(time: number) {
+        const now = Date.now();
+        this.rubble.forEach(r => {
+            // Only animate large rubble (3x3)
+            if (r.width >= 3 || r.height >= 3) {
+                r.graphics.clear();
+
+                // Fire fades out over time: full for 15s, then fades over 30s
+                const age = (now - r.createdAt) / 1000; // Age in seconds
+                let fireIntensity = 1;
+                if (age > 15) {
+                    // Fade from 1 to 0 between 15s and 45s
+                    fireIntensity = Math.max(0, 1 - (age - 15) / 30);
+                }
+
+                this.drawRubble(r.graphics, r.gridX, r.gridY, r.width, r.height, time, fireIntensity);
+            }
+        });
+    }
+
+    private clearRubble() {
+        this.rubble.forEach(r => r.graphics.destroy());
+        this.rubble = [];
+    }
+
+    // === OBSTACLE SYSTEM (Rocks, Trees, Grass) ===
+    private placeObstacle(gridX: number, gridY: number, type: ObstacleType): boolean {
+        const info = OBSTACLES[type];
+        if (!info) return false;
+
+        // Check if position is valid (not overlapping buildings or other obstacles)
+        if (!this.isObstaclePositionValid(gridX, gridY, info.width, info.height)) return false;
+
+        const graphics = this.add.graphics();
+        const animOffset = Math.random() * 1000;
+
+        const obstacle: PlacedObstacle = {
+            id: Phaser.Utils.String.UUID(),
+            type,
+            gridX,
+            gridY,
+            graphics,
+            animOffset
+        };
+
+        this.drawObstacle(obstacle);
+
+        const depth = (gridX + info.width) + (gridY + info.height);
+        graphics.setDepth(depth * 10);
+
+        this.obstacles.push(obstacle);
+
+        // Persist to backend if in HOME mode
+        if (this.mode === 'HOME') {
+            Backend.placeObstacle('player_home', type, gridX, gridY);
+        }
+        return true;
+    }
+
+    private isObstaclePositionValid(gridX: number, gridY: number, width: number, height: number): boolean {
+        if (gridX < 0 || gridY < 0 || gridX + width > this.mapSize || gridY + height > this.mapSize) return false;
+
+        // Check buildings
+        for (const b of this.buildings) {
+            const bInfo = BUILDINGS[b.type];
+            const overlapX = Math.max(0, Math.min(gridX + width, b.gridX + bInfo.width) - Math.max(gridX, b.gridX));
+            const overlapY = Math.max(0, Math.min(gridY + height, b.gridY + bInfo.height) - Math.max(gridY, b.gridY));
+            if (overlapX > 0 && overlapY > 0) return false;
+        }
+
+        // Check other obstacles
+        for (const o of this.obstacles) {
+            const oInfo = OBSTACLES[o.type];
+            const overlapX = Math.max(0, Math.min(gridX + width, o.gridX + oInfo.width) - Math.max(gridX, o.gridX));
+            const overlapY = Math.max(0, Math.min(gridY + height, o.gridY + oInfo.height) - Math.max(gridY, o.gridY));
+            if (overlapX > 0 && overlapY > 0) return false;
+        }
+
+        return true;
+    }
+
+    private drawObstacle(obstacle: PlacedObstacle, time: number = 0) {
+        const info = OBSTACLES[obstacle.type];
+        const center = this.cartToIso(obstacle.gridX + info.width / 2, obstacle.gridY + info.height / 2);
+
+        obstacle.graphics.clear();
+
+        switch (obstacle.type) {
+            case 'rock_small':
+                this.drawSmallRock(obstacle.graphics, center);
+                break;
+            case 'rock_large':
+                this.drawLargeRock(obstacle.graphics, center);
+                break;
+            case 'tree_oak':
+                this.drawOakTree(obstacle.graphics, center, time + obstacle.animOffset);
+                break;
+            case 'tree_pine':
+                this.drawPineTree(obstacle.graphics, center, time + obstacle.animOffset);
+                break;
+            case 'grass_patch':
+                this.drawGrassPatch(obstacle.graphics, center, time + obstacle.animOffset);
+                break;
+        }
+    }
+
+    private drawSmallRock(graphics: Phaser.GameObjects.Graphics, center: Phaser.Math.Vector2) {
+        const x = center.x;
+        const y = center.y;
+
+        // Ground contact shadow (very subtle, touching the rock)
+        graphics.fillStyle(0x3a3a3a, 0.25);
+        graphics.fillEllipse(x, y + 2, 16, 5);
+
+        // Flat stone base sitting ON the ground (isometric diamond shape)
+        graphics.fillStyle(0x6a6a6a, 1);
+        graphics.beginPath();
+        graphics.moveTo(x, y - 4); // top
+        graphics.lineTo(x + 10, y + 1); // right
+        graphics.lineTo(x, y + 6); // bottom
+        graphics.lineTo(x - 10, y + 1); // left
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Top surface (lighter, slightly raised)
+        graphics.fillStyle(0x8a8a8a, 1);
+        graphics.beginPath();
+        graphics.moveTo(x, y - 6); // top
+        graphics.lineTo(x + 8, y - 1); // right
+        graphics.lineTo(x, y + 3); // bottom
+        graphics.lineTo(x - 8, y - 1); // left
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Highlight on top-left edge
+        graphics.fillStyle(0x9a9a9a, 0.7);
+        graphics.beginPath();
+        graphics.moveTo(x - 6, y - 2);
+        graphics.lineTo(x, y - 5);
+        graphics.lineTo(x + 2, y - 3);
+        graphics.lineTo(x - 4, y);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Small texture details (crevices)
+        graphics.lineStyle(1, 0x5a5a5a, 0.6);
+        graphics.lineBetween(x - 3, y, x + 3, y + 1);
+    }
+
+    private drawLargeRock(graphics: Phaser.GameObjects.Graphics, center: Phaser.Math.Vector2) {
+        const x = center.x;
+        const y = center.y;
+
+        // Ground contact shadow (subtle, directly under rocks)
+        graphics.fillStyle(0x3a3a3a, 0.2);
+        graphics.fillEllipse(x, y + 6, 40, 12);
+
+        // Main stone slab (flat isometric, sitting on ground)
+        graphics.fillStyle(0x5a5a5a, 1);
+        graphics.beginPath();
+        graphics.moveTo(x, y - 8); // top
+        graphics.lineTo(x + 18, y); // right
+        graphics.lineTo(x, y + 10); // bottom
+        graphics.lineTo(x - 18, y); // left
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Top surface of main slab (lighter)
+        graphics.fillStyle(0x7a7a7a, 1);
+        graphics.beginPath();
+        graphics.moveTo(x, y - 10); // top
+        graphics.lineTo(x + 15, y - 2); // right
+        graphics.lineTo(x, y + 6); // bottom
+        graphics.lineTo(x - 15, y - 2); // left
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Second smaller stone (overlapping, slight offset)
+        graphics.fillStyle(0x6a6a6a, 1);
+        graphics.beginPath();
+        graphics.moveTo(x + 8, y - 12); // top
+        graphics.lineTo(x + 18, y - 6); // right
+        graphics.lineTo(x + 10, y); // bottom
+        graphics.lineTo(x, y - 6); // left
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Top of second stone
+        graphics.fillStyle(0x8a8a8a, 1);
+        graphics.beginPath();
+        graphics.moveTo(x + 8, y - 14);
+        graphics.lineTo(x + 16, y - 8);
+        graphics.lineTo(x + 10, y - 3);
+        graphics.lineTo(x + 2, y - 8);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Third small stone (bottom left area)
+        graphics.fillStyle(0x5a5a5a, 1);
+        graphics.beginPath();
+        graphics.moveTo(x - 10, y + 2);
+        graphics.lineTo(x - 4, y + 6);
+        graphics.lineTo(x - 8, y + 10);
+        graphics.lineTo(x - 14, y + 6);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Highlight on main stone
+        graphics.fillStyle(0x9a9a9a, 0.6);
+        graphics.beginPath();
+        graphics.moveTo(x - 10, y - 4);
+        graphics.lineTo(x, y - 8);
+        graphics.lineTo(x + 4, y - 6);
+        graphics.lineTo(x - 6, y - 2);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Moss patch between stones
+        graphics.fillStyle(0x4a6a4a, 0.5);
+        graphics.fillCircle(x - 4, y + 3, 3);
+        graphics.fillCircle(x + 6, y - 3, 2);
+
+        // Crevice details
+        graphics.lineStyle(1, 0x4a4a4a, 0.5);
+        graphics.lineBetween(x - 8, y, x + 4, y + 2);
+        graphics.lineBetween(x + 2, y - 4, x + 8, y - 2);
+    }
+
+    private drawOakTree(graphics: Phaser.GameObjects.Graphics, center: Phaser.Math.Vector2, time: number) {
+        const x = center.x;
+        const y = center.y;
+        const sway = Math.sin(time / 800) * 2;
+
+        // Shadow
+        graphics.fillStyle(0x333333, 0.3);
+        graphics.fillEllipse(x + 5, y + 20, 40, 16);
+
+        // Trunk
+        graphics.fillStyle(0x5a3a2a, 1);
+        graphics.beginPath();
+        graphics.moveTo(x - 6, y + 15);
+        graphics.lineTo(x - 4 + sway * 0.3, y - 15);
+        graphics.lineTo(x + 4 + sway * 0.3, y - 15);
+        graphics.lineTo(x + 6, y + 15);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Trunk bark detail
+        graphics.lineStyle(1, 0x4a2a1a, 0.6);
+        graphics.lineBetween(x - 2, y + 10, x - 1 + sway * 0.2, y - 10);
+        graphics.lineBetween(x + 2, y + 12, x + 1 + sway * 0.2, y - 8);
+
+        // Foliage layers (bottom to top)
+        const foliageColors = [0x2a6a2a, 0x3a8a3a, 0x4a9a4a];
+        const foliageLayers = [
+            { yOff: -20, size: 24, sway: sway * 0.5 },
+            { yOff: -30, size: 20, sway: sway * 0.7 },
+            { yOff: -40, size: 16, sway: sway * 1.0 }
+        ];
+
+        foliageLayers.forEach((layer, i) => {
+            graphics.fillStyle(foliageColors[i], 1);
+            graphics.fillEllipse(x + layer.sway, y + layer.yOff, layer.size, layer.size * 0.6);
+        });
+
+        // Highlight spots on top layer
+        graphics.fillStyle(0x5aaa5a, 0.5);
+        graphics.fillCircle(x - 4 + sway, y - 42, 4);
+        graphics.fillCircle(x + 6 + sway, y - 38, 3);
+    }
+
+    private drawPineTree(graphics: Phaser.GameObjects.Graphics, center: Phaser.Math.Vector2, time: number) {
+        const x = center.x;
+        const y = center.y;
+        const sway = Math.sin(time / 700) * 1.5;
+
+        // Shadow
+        graphics.fillStyle(0x333333, 0.3);
+        graphics.fillEllipse(x + 3, y + 12, 20, 8);
+
+        // Trunk
+        graphics.fillStyle(0x5a3a2a, 1);
+        graphics.beginPath();
+        graphics.moveTo(x - 3, y + 10);
+        graphics.lineTo(x - 2 + sway * 0.2, y - 10);
+        graphics.lineTo(x + 2 + sway * 0.2, y - 10);
+        graphics.lineTo(x + 3, y + 10);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Pine layers (triangular)
+        const pineColors = [0x1a5a2a, 0x2a6a3a, 0x3a7a4a];
+        const layers = [
+            { yOff: -5, width: 18, height: 12, sway: sway * 0.3 },
+            { yOff: -15, width: 14, height: 12, sway: sway * 0.6 },
+            { yOff: -25, width: 10, height: 12, sway: sway * 0.9 },
+            { yOff: -34, width: 6, height: 10, sway: sway * 1.2 }
+        ];
+
+        layers.forEach((layer, i) => {
+            graphics.fillStyle(pineColors[Math.min(i, 2)], 1);
+            graphics.beginPath();
+            graphics.moveTo(x + layer.sway, y + layer.yOff - layer.height);
+            graphics.lineTo(x + layer.width / 2 + layer.sway * 0.5, y + layer.yOff);
+            graphics.lineTo(x - layer.width / 2 + layer.sway * 0.5, y + layer.yOff);
+            graphics.closePath();
+            graphics.fillPath();
+        });
+    }
+
+    private drawGrassPatch(graphics: Phaser.GameObjects.Graphics, center: Phaser.Math.Vector2, time: number) {
+        const x = center.x;
+        const y = center.y;
+
+        // Draw multiple grass blades
+        for (let i = 0; i < 8; i++) {
+            const bx = x + (i - 4) * 4 + Math.sin(i * 2) * 3;
+            const by = y + Math.cos(i * 3) * 4;
+            const sway = Math.sin(time / 500 + i * 0.5) * 2;
+            const height = 10 + Math.sin(i * 1.5) * 4;
+
+            const grassColor = i % 2 === 0 ? 0x4a8a4a : 0x5a9a5a;
+            graphics.lineStyle(2, grassColor, 0.9);
+            graphics.beginPath();
+            graphics.moveTo(bx, by);
+            graphics.lineTo(bx + sway, by - height);
+            graphics.strokePath();
+        }
+
+        // Ground accent
+        graphics.fillStyle(0x3a6a3a, 0.3);
+        graphics.fillEllipse(x, y + 2, 16, 6);
+    }
+
+    private updateObstacleAnimations(time: number) {
+        this.obstacles.forEach(obstacle => {
+            if (obstacle.type === 'tree_oak' || obstacle.type === 'tree_pine' || obstacle.type === 'grass_patch') {
+                this.drawObstacle(obstacle, time);
+            }
+        });
+    }
+
+    private removeObstacle(obstacleId: string): boolean {
+        const index = this.obstacles.findIndex(o => o.id === obstacleId);
+        if (index === -1) return false;
+
+        const obstacle = this.obstacles[index];
+        obstacle.graphics.destroy();
+        this.obstacles.splice(index, 1);
+
+        // Persist to backend if in HOME mode
+        if (this.mode === 'HOME') {
+            Backend.removeObstacle('player_home', obstacleId);
+        }
+        return true;
+    }
+
+    private clearObstacles() {
+        this.obstacles.forEach(o => o.graphics.destroy());
+        this.obstacles = [];
+    }
+
+    private spawnRandomObstacles(count: number = 12) {
+        // Weighted types - grass appears 5x more often
+        const types: ObstacleType[] = [
+            'rock_small', 'rock_large',
+            'tree_oak', 'tree_pine',
+            'grass_patch', 'grass_patch', 'grass_patch', 'grass_patch', 'grass_patch' // 5x grass
+        ];
+        let placed = 0;
+        let attempts = 0;
+
+        while (placed < count && attempts < count * 10) {
+            const type = types[Math.floor(Math.random() * types.length)];
+            const info = OBSTACLES[type];
+            const gridX = Math.floor(Math.random() * (this.mapSize - info.width - 4)) + 2;
+            const gridY = Math.floor(Math.random() * (this.mapSize - info.height - 4)) + 2;
+
+            // Avoid center of map (where town hall usually goes)
+            const centerDist = Math.abs(gridX - 12) + Math.abs(gridY - 12);
+            if (centerDist < 6) {
+                attempts++;
+                continue;
+            }
+
+            if (this.placeObstacle(gridX, gridY, type)) {
+                placed++;
+            }
+            attempts++;
         }
     }
 
@@ -1978,56 +3118,62 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
-    private drawArmyCamp(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null) {
+    private drawArmyCamp(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, baseGraphics?: Phaser.GameObjects.Graphics) {
         const time = this.time.now;
+        const g = baseGraphics || graphics; // Draw floor on baseGraphics if available
+
+        const info = BUILDINGS['army_camp'];
+        const ringRadiusX = 15 * info.width;
+        const ringRadiusY = 7.5 * info.height;
 
         // === TRAINING GROUND BASE ===
         // Packed dirt/sand arena floor
-        graphics.fillStyle(tint ?? 0xb8a080, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
+        g.fillStyle(tint ?? 0xb8a080, alpha);
+        g.fillPoints([c1, c2, c3, c4], true);
 
         // Inner training circle (worn area)
-        graphics.fillStyle(0xa89070, alpha * 0.8);
-        graphics.fillEllipse(center.x, center.y + 5, 55, 28);
-
+        g.lineStyle(2, 0xa89070, 0.5 * alpha);
+        g.strokeEllipse(center.x, center.y, ringRadiusX * 2, ringRadiusY * 2);
+        g.fillStyle(0xa89070, 0.3 * alpha);
+        g.fillEllipse(center.x, center.y, ringRadiusX * 2, ringRadiusY * 2);
         // Ground texture - packed earth patterns
-        graphics.fillStyle(0x9a8060, alpha * 0.5);
+        g.fillStyle(0x9a8060, alpha * 0.5);
         for (let i = 0; i < 12; i++) {
             const angle = (i / 12) * Math.PI * 2;
             const dist = 20 + (i % 3) * 12;
             const ox = Math.cos(angle) * dist * 0.8;
             const oy = Math.sin(angle) * dist * 0.4;
-            graphics.fillCircle(center.x + ox, center.y + 5 + oy, 2 + (i % 2));
+            g.fillCircle(center.x + ox, center.y + 5 + oy, 2 + (i % 2));
         }
 
         // Simple border
-        graphics.lineStyle(2, 0x8b7355, alpha * 0.7);
-        graphics.strokePoints([c1, c2, c3, c4], true, true);
+        g.lineStyle(2, 0x8b7355, alpha * 0.7);
+        g.strokePoints([c1, c2, c3, c4], true, true);
 
         // === CENTRAL CAMPFIRE ===
         const fireX = center.x;
         const fireY = center.y + 8;
 
-        // Fire pit stones (ring)
-        graphics.fillStyle(0x555555, alpha);
+        // Fire pit stones (ring) - Move to ground layer
+        g.fillStyle(0x555555, alpha);
         for (let i = 0; i < 8; i++) {
             const angle = (i / 8) * Math.PI * 2;
             const stoneX = fireX + Math.cos(angle) * 12;
             const stoneY = fireY + Math.sin(angle) * 6;
-            graphics.fillEllipse(stoneX, stoneY, 5, 3);
+            g.fillEllipse(stoneX, stoneY, 5, 3);
         }
 
-        // Fire pit inner (ash/coals)
-        graphics.fillStyle(0x2a2020, alpha);
-        graphics.fillEllipse(fireX, fireY, 10, 5);
+        // Fire pit inner (ash/coals) - Ground layer
+        g.fillStyle(0x2a2020, alpha);
+        g.fillEllipse(fireX, fireY, 10, 5);
 
-        // Glowing coals
+        // Glowing coals - Ground layer
         const coalGlow = 0.5 + Math.sin(time / 200) * 0.2;
-        graphics.fillStyle(0x881100, alpha * coalGlow);
-        graphics.fillEllipse(fireX, fireY, 8, 4);
-        graphics.fillStyle(0xcc3300, alpha * coalGlow * 0.7);
-        graphics.fillEllipse(fireX - 2, fireY, 4, 2);
-        graphics.fillEllipse(fireX + 3, fireY + 1, 3, 1.5);
+        g.fillStyle(0x881100, alpha * coalGlow);
+        g.fillEllipse(fireX, fireY, 8, 4);
+        g.fillStyle(0xcc3300, alpha * coalGlow * 0.7);
+        g.fillEllipse(fireX - 2, fireY, 4, 2);
+        g.fillEllipse(fireX + 3, fireY + 1, 3, 1.5);
 
         // Main flame animation
         const flame1 = Math.sin(time / 60) * 0.3 + 0.7;
@@ -2194,7 +3340,7 @@ export class MainScene extends Phaser.Scene {
         graphics.fillPath();
     }
 
-    private drawGenericBuilding(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, _center: Phaser.Math.Vector2, info: BuildingInfo, alpha: number, tint: number | null) {
+    private drawGenericBuilding(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, _center: Phaser.Math.Vector2, info: any, alpha: number, tint: number | null) {
         const color = tint ?? info.color;
         const height = 30 * Math.max(info.width, info.height);
         const t1 = new Phaser.Math.Vector2(c1.x, c1.y - height);
@@ -2227,6 +3373,7 @@ export class MainScene extends Phaser.Scene {
 
 
     private updateHealthBar(item: PlacedBuilding | Troop) {
+        if (!item.healthBar) return; // Safely ignore dummy targets without health bars
         const bar = item.healthBar;
         bar.clear();
 
@@ -2337,35 +3484,48 @@ export class MainScene extends Phaser.Scene {
     }
 
     private updateCombat(time: number) {
-        const defenses = this.buildings.filter(b => (b.type === 'cannon' || b.type === 'mortar' || b.type === 'tesla' || b.type === 'ballista' || b.type === 'xbow') && b.health > 0);
+        // Include prism and magmavent in defenses
+        const defenses = this.buildings.filter(b => (b.type === 'cannon' || b.type === 'mortar' || b.type === 'tesla' || b.type === 'ballista' || b.type === 'xbow' || b.type === 'prism' || b.type === 'magmavent') && b.health > 0);
         defenses.forEach(defense => {
             let nearestTroop: Troop | null = null;
-            // X-Bow has HUGE range (35), ballista 22, mortar 12, tesla 7, cannon 10
-            let minDist = defense.type === 'xbow' ? 35 : defense.type === 'mortar' ? 12 : defense.type === 'ballista' ? 22 : defense.type === 'tesla' ? 7 : 10;
-            // X-Bow fires 5x per second (200ms), ballista 3500ms, mortar 4000ms, tesla 1500ms, cannon 1000ms
-            const interval = defense.type === 'xbow' ? 200 : defense.type === 'mortar' ? 4000 : defense.type === 'ballista' ? 3500 : defense.type === 'tesla' ? 1500 : 1000;
-            if (!(defense as any).lastFireTime) (defense as any).lastFireTime = 0;
-            if (time < (defense as any).lastFireTime + interval) return;
+            const stats = getBuildingStats(defense.type as BuildingType, defense.level || 1);
+            let minDist = stats.range || 7;
+            const interval = stats.fireRate || 2500;
+
+            // Initial delay for non-continuous defenses (not prism laser)
+            const needsInitialDelay = defense.type !== 'prism' && defense.type !== 'magmavent';
+            if (!defense.lastFireTime) {
+                // Set initial fire time - continuous defenses fire immediately, others have 1.5s delay
+                defense.lastFireTime = needsInitialDelay ? time : (time - interval);
+            }
+
+            // Check if enough time has passed since last shot
+            if (time < (defense.lastFireTime || 0) + interval) return;
 
             this.troops.forEach(troop => {
                 if (troop.owner !== defense.owner && troop.health > 0) {
                     const dist = Phaser.Math.Distance.Between(defense.gridX, defense.gridY, troop.gridX, troop.gridY);
                     if (dist < minDist) {
-                        if (defense.type === 'mortar' && dist < 5) return; // Larger mortar dead zone
+                        if (stats.minRange && dist < stats.minRange) return; // Dead zone check
                         minDist = dist; nearestTroop = troop;
                     }
                 }
             });
 
             if (nearestTroop) {
-                (defense as any).lastFireTime = time;
+                defense.lastFireTime = time;
                 if (defense.type === 'mortar') this.shootMortarAt(defense, nearestTroop);
                 else if (defense.type === 'tesla') this.shootTeslaAt(defense, nearestTroop);
                 else if (defense.type === 'ballista') this.shootBallistaAt(defense, nearestTroop);
                 else if (defense.type === 'xbow') this.shootXBowAt(defense, nearestTroop);
-                else if (defense.type === 'prism') this.shootPrismAt(defense, nearestTroop);
-                else if (defense.type === 'magmavent') this.shootMagmaAt(defense);
+                else if (defense.type === 'prism') this.shootPrismContinuousLaser(defense, nearestTroop, time);
+                else if (defense.type === 'magmavent') this.shootMagmaEruption(defense);
                 else this.shootAt(defense, nearestTroop);
+            } else {
+                // No target - clean up prism laser if it exists
+                if (defense.type === 'prism') {
+                    this.cleanupPrismLaser(defense);
+                }
             }
         });
 
@@ -2373,23 +3533,48 @@ export class MainScene extends Phaser.Scene {
         this.troops.forEach(troop => {
             if (troop.health <= 0) return;
 
-            // Ward passive healing aura
+
+
             if (troop.type === 'ward') {
+                // --- PASSIVE WARD HEAL ---
                 const wardStats = TROOP_STATS.ward;
-                this.troops.forEach(ally => {
-                    if (ally === troop || ally.owner !== troop.owner || ally.health <= 0) return;
-                    const dist = Phaser.Math.Distance.Between(troop.gridX, troop.gridY, ally.gridX, ally.gridY);
-                    if (dist <= wardStats.healRadius && ally.health < ally.maxHealth) {
-                        ally.health = Math.min(ally.maxHealth, ally.health + wardStats.healAmount * 0.016);
-                        this.updateHealthBar(ally);
-                    }
-                });
+                const healDelay = 500; // Heal every 0.5 seconds
+                if (!(troop as any).lastPassiveHeal || time > (troop as any).lastPassiveHeal + healDelay) {
+                    (troop as any).lastPassiveHeal = time;
+
+                    this.troops.forEach(other => {
+                        if (other.owner === troop.owner && other.health > 0 && other.health < other.maxHealth) {
+                            const d = Phaser.Math.Distance.Between(troop.gridX, troop.gridY, other.gridX, other.gridY);
+                            if (d <= wardStats.healRadius) {
+                                other.health = Math.min(other.maxHealth, other.health + wardStats.healAmount);
+                                this.updateHealthBar(other);
+
+                                // Small green puff of health
+                                const pos = this.cartToIso(other.gridX, other.gridY);
+                                const flash = this.add.circle(pos.x, pos.y - 12, 5, 0x00ff88, 0.5);
+                                flash.setDepth(other.gameObject.depth + 1);
+                                this.tweens.add({
+                                    targets: flash,
+                                    y: pos.y - 25,
+                                    alpha: 0,
+                                    scale: 1.5,
+                                    duration: 500,
+                                    onComplete: () => flash.destroy()
+                                });
+                            }
+                        }
+                    });
+                }
+
+                // Retarget if follow target is dead (Ward doesn't 'heal' single targets anymore, just follows/attacks)
+                if (troop.target && troop.target.health <= 0) {
+                    troop.target = null;
+                }
             }
 
             if (!troop.target || troop.target.health <= 0) {
                 if (troop.type === 'ward') {
-                    troop.target = this.findNearestHighHPAlly(troop);
-                    if (!troop.target) troop.target = this.findNearestEnemyBuilding(troop);
+                    troop.target = this.findWardTarget(troop);
                 } else {
                     troop.target = this.findNearestEnemyBuilding(troop);
                 }
@@ -2410,28 +3595,77 @@ export class MainScene extends Phaser.Scene {
                 const stats = TROOP_STATS[troop.type];
                 const isEnemy = b.owner !== troop.owner;
 
-                if (dist <= stats.range + 0.1 && isEnemy) {
+                if (troop.type === 'ward' && time > troop.lastAttackTime + troop.attackDelay) {
+                    // Ward specialized attack behavior (Grand Warden style)
+                    const wardStats = TROOP_STATS.ward;
+                    const enemies = this.buildings.filter(b => b.owner !== troop.owner && b.health > 0);
+                    let attackTarget: PlacedBuilding | null = null;
+
+                    // 1. If targeting an enemy directly, use it
+                    if (isEnemy && dist <= wardStats.range + 0.1) {
+                        attackTarget = troop.target;
+                    }
+                    // 2. Otherwise ASSIST the leader if they have an enemy target
+                    else {
+                        const leader = troop.target;
+                        if (leader && leader.target && leader.target.owner !== troop.owner) {
+                            const targetBuilding = leader.target as PlacedBuilding;
+                            const tInfo = BUILDINGS[targetBuilding.type];
+                            const tdx = Math.max(targetBuilding.gridX - troop.gridX, 0, troop.gridX - (targetBuilding.gridX + (tInfo?.width || 1)));
+                            const tdy = Math.max(targetBuilding.gridY - troop.gridY, 0, troop.gridY - (targetBuilding.gridY + (tInfo?.height || 1)));
+                            const tdist = Math.sqrt(tdx * tdx + tdy * tdy);
+
+                            if (tdist <= wardStats.range) {
+                                attackTarget = targetBuilding;
+                            }
+                        }
+
+                        // 3. If no leader target, find nearest building in range (PRIORITIZE NON-WALLS)
+                        if (!attackTarget) {
+                            const buildings = enemies.filter(b => b.type !== 'wall');
+                            let minDist = wardStats.range;
+                            buildings.forEach(b => {
+                                const info = BUILDINGS[b.type];
+                                const bdx = Math.max(b.gridX - troop.gridX, 0, troop.gridX - (b.gridX + info.width));
+                                const bdy = Math.max(b.gridY - troop.gridY, 0, troop.gridY - (b.gridY + info.height));
+                                const bd = Math.sqrt(bdx * bdx + bdy * bdy);
+                                if (bd <= minDist) {
+                                    minDist = bd;
+                                    attackTarget = b;
+                                }
+                            });
+                        }
+                    }
+
+                    if (attackTarget) {
+                        troop.lastAttackTime = time;
+                        this.showWardLaser(troop, attackTarget, wardStats.damage);
+
+                        // Apply damage directly if it's the target loop handling it
+                        if (attackTarget.health > 0) {
+                            attackTarget.health -= (wardStats.damage * 0.2); // Small tick damage per pulse handled by laser visuals usually, but adding solid hit here
+                            this.updateHealthBar(attackTarget);
+                            if (attackTarget.health <= 0) {
+                                this.destroyBuilding(attackTarget);
+                            }
+                        }
+                    }
+                } else if (dist <= stats.range + 0.1) {
                     if (time > troop.lastAttackTime + troop.attackDelay) {
-                        // Ward assistance rule: Never target walls on its own
-                        if (troop.type === 'ward' && b.type === 'wall') {
-                            // Skip attack if ward hasn't found an ally to assist on this wall
-                        } else {
+                        // ATTACK LOGIC (Non-Ward Enemies)
+                        if (isEnemy && troop.type !== 'ward') {
                             troop.lastAttackTime = time;
 
-                            // Ranged attackers - damage on projectile hit
                             if (troop.type === 'archer') {
                                 this.showArcherProjectile(troop, troop.target, stats.damage);
-                            } else if (troop.type === 'ward') {
-                                this.showWardLaser(troop, troop.target, stats.damage);
                             } else {
                                 // Melee: immediate damage
                                 troop.target.health -= stats.damage;
                                 this.showHitEffect(troop.target.graphics);
                                 this.updateHealthBar(troop.target);
 
-                                // Lunge effect for melee
-                                const targetPos = this.cartToIso(bx + tw / 2, by + th / 2);
                                 const currentPos = this.cartToIso(troop.gridX, troop.gridY);
+                                const targetPos = this.cartToIso(bx + tw / 2, by + th / 2);
                                 const angle = Math.atan2(targetPos.y - currentPos.y, targetPos.x - currentPos.x);
                                 this.tweens.add({
                                     targets: troop.gameObject,
@@ -2447,49 +3681,6 @@ export class MainScene extends Phaser.Scene {
                                 }
                             }
                         }
-                    }
-                } else if (troop.type === 'ward' && !isEnemy && time > troop.lastAttackTime + troop.attackDelay) {
-                    // Ward specialized attack behavior (Grand Warden style)
-                    const wardStats = TROOP_STATS.ward;
-                    const enemies = this.buildings.filter(b => b.owner !== troop.owner && b.health > 0);
-                    let attackTarget: PlacedBuilding | null = null;
-
-                    // 1. ASSIST the leader if they have an enemy target
-                    const leader = troop.target;
-                    if (leader && leader.target && leader.target.owner !== troop.owner) {
-                        const targetBuilding = leader.target as PlacedBuilding;
-                        const tInfo = BUILDINGS[targetBuilding.type];
-                        const tdx = Math.max(targetBuilding.gridX - troop.gridX, 0, troop.gridX - (targetBuilding.gridX + (tInfo?.width || 1)));
-                        const tdy = Math.max(targetBuilding.gridY - troop.gridY, 0, troop.gridY - (targetBuilding.gridY + (tInfo?.height || 1)));
-                        const tdist = Math.sqrt(tdx * tdx + tdy * tdy);
-
-                        // Ward will help with ANYTHING (including walls) that the leader is hitting
-                        if (tdist <= wardStats.range) {
-                            attackTarget = targetBuilding;
-                        }
-                    }
-
-                    // 2. If no leader target in range, find nearest building (PRIORITIZE NON-WALLS)
-                    if (!attackTarget) {
-                        const buildings = enemies.filter(b => b.type !== 'wall');
-                        let minDist = wardStats.range;
-                        buildings.forEach(b => {
-                            const info = BUILDINGS[b.type];
-                            const bdx = Math.max(b.gridX - troop.gridX, 0, troop.gridX - (b.gridX + info.width));
-                            const bdy = Math.max(b.gridY - troop.gridY, 0, troop.gridY - (b.gridY + info.height));
-                            const bd = Math.sqrt(bdx * bdx + bdy * bdy);
-                            if (bd <= minDist) {
-                                minDist = bd;
-                                attackTarget = b;
-                            }
-                        });
-                    }
-
-                    // Ward NEVER targets walls independently.
-
-                    if (attackTarget) {
-                        troop.lastAttackTime = time;
-                        this.showWardLaser(troop, attackTarget, wardStats.damage);
                     }
                 }
             }
@@ -2519,7 +3710,9 @@ export class MainScene extends Phaser.Scene {
 
         const midY = (start.y + end.y) / 2 - 350;
 
-        // Muzzle flash effect
+        // Muzzle flash and smoke effect
+        this.createSmokeEffect(start.x, start.y - 35, 6, 0.8, 1000);
+
         const flash = this.add.graphics();
         flash.fillStyle(0xff8800, 0.8);
         flash.fillCircle(0, 0, 8);
@@ -2543,8 +3736,9 @@ export class MainScene extends Phaser.Scene {
             ease: 'Linear'
         });
 
+        const dist = Phaser.Math.Distance.Between(start.x, start.y, end.x, end.y);
         this.tweens.add({
-            targets: ball, x: end.x, duration: 1400, ease: 'Linear',
+            targets: ball, x: end.x, duration: dist / 0.3, ease: 'Linear',
             onUpdate: (tween) => {
                 const t = tween.progress;
                 ball.y = (1 - t) * (1 - t) * (start.y - 35) + 2 * (1 - t) * t * midY + t * t * end.y;
@@ -2560,7 +3754,7 @@ export class MainScene extends Phaser.Scene {
     }
 
     private createMortarExplosion(x: number, y: number, owner: 'PLAYER' | 'ENEMY', targetGx: number, targetGy: number) {
-        this.cameras.main.shake(200, 0.005);
+        this.cameras.main.shake(100, 0.002); // Reduced shake
 
         // Ground crater/scorch mark
         const crater = this.add.graphics();
@@ -2607,12 +3801,16 @@ export class MainScene extends Phaser.Scene {
             });
         });
 
-        // Fire particles (orange/yellow core)
+        // Fire particles (pixelated rectangles)
         for (let i = 0; i < 12; i++) {
             const angle = (i / 12) * Math.PI * 2;
             const dist = 15 + Math.random() * 25;
             const fireColors = [0xff4400, 0xff6600, 0xff8800, 0xffaa00];
-            const fire = this.add.circle(x, y, 6 + Math.random() * 8, fireColors[Math.floor(Math.random() * 4)], 0.9);
+            const fireSize = 6 + Math.floor(Math.random() * 8);
+            const fire = this.add.graphics();
+            fire.fillStyle(fireColors[Math.floor(Math.random() * 4)], 0.9);
+            fire.fillRect(-fireSize / 2, -fireSize / 2, fireSize, fireSize);
+            fire.setPosition(x, y);
             fire.setDepth(10002);
             this.tweens.add({
                 targets: fire,
@@ -2625,18 +3823,16 @@ export class MainScene extends Phaser.Scene {
             });
         }
 
-        // Smoke plume
+        // Smoke plume (pixelated rectangles)
         for (let i = 0; i < 8; i++) {
             const delay = i * 30;
             this.time.delayedCall(delay, () => {
                 const smokeColors = [0x444444, 0x555555, 0x666666];
-                const smoke = this.add.circle(
-                    x + (Math.random() - 0.5) * 30,
-                    y,
-                    8 + Math.random() * 12,
-                    smokeColors[Math.floor(Math.random() * 3)],
-                    0.6
-                );
+                const smokeSize = 8 + Math.floor(Math.random() * 12);
+                const smoke = this.add.graphics();
+                smoke.fillStyle(smokeColors[Math.floor(Math.random() * 3)], 0.6);
+                smoke.fillRect(-smokeSize / 2, -smokeSize / 2, smokeSize, smokeSize);
+                smoke.setPosition(x + (Math.random() - 0.5) * 30, y);
                 smoke.setDepth(9998);
                 this.tweens.add({
                     targets: smoke,
@@ -2695,71 +3891,108 @@ export class MainScene extends Phaser.Scene {
         if (cannon.isFiring) return;
         cannon.isFiring = true;
 
+        // Capture target reference at the start
+        const targetTroop = troop;
+
         const info = BUILDINGS['cannon'];
         const start = this.cartToIso(cannon.gridX + info.width / 2, cannon.gridY + info.height / 2);
-        const end = this.cartToIso(troop.gridX, troop.gridY);
-        const angle = Math.atan2(end.y - (start.y - 20), end.x - start.x);
-        this.drawCannonBarrel(cannon, angle);
+        const end = this.cartToIso(targetTroop.gridX, targetTroop.gridY);
+        const angle = Math.atan2(end.y - (start.y - 14), end.x - start.x);
 
-        // Barrel recoil animation
-        if (cannon.barrelGraphics) {
-            const recoilDist = 6;
-            const recoilX = -Math.cos(angle) * recoilDist;
-            const recoilY = -Math.sin(angle) * recoilDist;
-            const originalX = cannon.barrelGraphics.x;
-            const originalY = cannon.barrelGraphics.y;
-
-            this.tweens.add({
-                targets: cannon.barrelGraphics,
-                x: originalX + recoilX,
-                y: originalY + recoilY,
-                duration: 50,
-                ease: 'Power2',
-                yoyo: true,
-                hold: 30
-            });
-        }
+        // Set target angle for smooth rotation (same system as ballista/xbow)
+        cannon.ballistaTargetAngle = angle;
 
         const ballDepth = cannon.graphics.depth + 50;
 
-        // Muzzle flash
+        // Calculate barrel tip position for muzzle flash
+        const barrelLength = 28;
+        const barrelHeight = -14;
+        const barrelTipX = start.x + Math.cos(angle) * barrelLength;
+        const barrelTipY = start.y + barrelHeight + Math.sin(angle) * 0.5 * barrelLength;
+
+        // Muzzle flash at barrel tip - pixelated rectangles
         const flash = this.add.graphics();
         flash.fillStyle(0xffcc00, 0.9);
-        flash.fillCircle(start.x + Math.cos(angle) * 12, start.y - 20 + Math.sin(angle) * 12, 10);
-        flash.fillStyle(0xffffff, 0.8);
-        flash.fillCircle(start.x + Math.cos(angle) * 10, start.y - 20 + Math.sin(angle) * 10, 5);
+        flash.fillRect(barrelTipX - 12, barrelTipY - 12, 24, 24);
+        flash.fillStyle(0xffffff, 0.9);
+        flash.fillRect(barrelTipX - 6, barrelTipY - 6, 12, 12);
         flash.setDepth(ballDepth + 10);
-        this.tweens.add({ targets: flash, alpha: 0, scale: 1.5, duration: 80, onComplete: () => flash.destroy() });
+        this.tweens.add({ targets: flash, alpha: 0, duration: 100, onComplete: () => flash.destroy() });
 
-        // Cannonball
+        // Gunpowder smoke - pixelated rectangles
+        for (let i = 0; i < 3; i++) {
+            const smoke = this.add.graphics();
+            const smokeSize = 4 + Math.floor(Math.random() * 4);
+            const smokeAngle = angle + (Math.random() - 0.5) * 0.5;
+            const dist = 10 + Math.random() * 15;
+            const sx = barrelTipX + Math.cos(smokeAngle) * dist * 0.2; // Start near tip
+            const sy = barrelTipY + Math.sin(smokeAngle) * dist * 0.2;
+
+            smoke.fillStyle(0xdddddd, 0.6);
+            smoke.fillRect(-smokeSize / 2, -smokeSize / 2, smokeSize, smokeSize);
+            smoke.setPosition(sx, sy);
+            smoke.setDepth(ballDepth + 20); // Above flash
+
+            this.tweens.add({
+                targets: smoke,
+                x: sx + Math.cos(smokeAngle) * dist,
+                y: sy + Math.sin(smokeAngle) * dist * 0.5 - 10 - Math.random() * 10, // Drift up
+                alpha: 0,
+                scale: 1.5,
+                duration: 400 + Math.random() * 300,
+                onComplete: () => smoke.destroy()
+            });
+        }
+
+        // === BARREL RECOIL ===
+        // Set recoil to max and tween back to 0
+        cannon.cannonRecoilOffset = 1;
+        this.tweens.add({
+            targets: cannon,
+            cannonRecoilOffset: 0,
+            duration: 200,
+            ease: 'Back.easeOut'
+        });
+
+        // Cannonball (pixelated rectangle)
         const ball = this.add.graphics();
         ball.fillStyle(0x1a1a1a, 1);
-        ball.fillCircle(0, 0, 7);
+        ball.fillRect(-7, -7, 14, 14);
         ball.fillStyle(0x3a3a3a, 1);
-        ball.fillCircle(-2, -2, 4);
-        ball.setPosition(start.x, start.y - 20);
+        ball.fillRect(-6, -6, 8, 8);
+        ball.setPosition(barrelTipX, barrelTipY);
         ball.setDepth(ballDepth);
 
-        // Faster projectile: 150ms
+        // Projectile flies to target
+        const dist = Phaser.Math.Distance.Between(barrelTipX, barrelTipY, end.x, end.y);
         this.tweens.add({
-            targets: ball, x: end.x, y: end.y, duration: 150, ease: 'Quad.easeIn',
+            targets: ball, x: end.x, y: end.y, duration: dist / 0.8, ease: 'Quad.easeIn',
             onComplete: () => {
                 ball.destroy();
                 cannon.isFiring = false;
 
-                // Impact effect
+                // Impact effect (pixelated rectangle)
                 const impact = this.add.graphics();
                 impact.fillStyle(0x8b7355, 0.6);
-                impact.fillEllipse(end.x, end.y + 3, 15, 8);
-                impact.setDepth(ballDepth - 10); // Draw below ball/smoke but above ground
+                impact.fillRect(end.x - 8, end.y, 16, 8);
+                impact.setDepth(ballDepth - 10);
                 this.tweens.add({ targets: impact, alpha: 0, duration: 300, onComplete: () => impact.destroy() });
 
-                // Damage (ensure validity)
-                if (troop && troop.health > 0) {
-                    troop.health -= 15;
-                    troop.hasTakenDamage = true;
-                    this.updateHealthBar(troop);
-                    if (troop.health <= 0) this.destroyTroop(troop);
+                // Apply damage to captured target (3x damage: 45)
+                if (targetTroop && targetTroop.health > 0) {
+                    targetTroop.health -= 45;
+                    targetTroop.hasTakenDamage = true;
+                    this.updateHealthBar(targetTroop);
+
+                    // Hit flash effect (pixelated rectangle)
+                    const troopPos = this.cartToIso(targetTroop.gridX, targetTroop.gridY);
+                    const hitFlash = this.add.graphics();
+                    hitFlash.fillStyle(0xffffff, 0.6);
+                    hitFlash.fillRect(troopPos.x - 8, troopPos.y - 18, 16, 16);
+                    hitFlash.setDepth(ballDepth + 5);
+                    this.tweens.add({ targets: hitFlash, alpha: 0, duration: 80, onComplete: () => hitFlash.destroy() });
+
+                    if (targetTroop.health <= 0) this.destroyTroop(targetTroop);
                 }
             }
         });
@@ -2770,8 +4003,11 @@ export class MainScene extends Phaser.Scene {
         const start = this.cartToIso(tesla.gridX + 0.5, tesla.gridY + 0.5);
         start.y -= 40; // From the orb
 
-        // Orb pulse effect
-        const orbPulse = this.add.circle(start.x, start.y, 12, 0x88eeff, 0.6);
+        // Orb pulse effect (pixelated rectangle)
+        const orbPulse = this.add.graphics();
+        orbPulse.fillStyle(0x88eeff, 0.6);
+        orbPulse.fillRect(-12, -12, 24, 24);
+        orbPulse.setPosition(start.x, start.y);
         orbPulse.setDepth(10001);
         this.tweens.add({ targets: orbPulse, scale: 1.5, alpha: 0, duration: 150, onComplete: () => orbPulse.destroy() });
 
@@ -2874,120 +4110,357 @@ export class MainScene extends Phaser.Scene {
         });
     }
 
-    // === PRISM TOWER - Bouncing beam attack ===
-    private shootPrismAt(prism: PlacedBuilding, troop: Troop) {
-        const start = this.cartToIso(prism.gridX + 0.5, prism.gridY + 0.5);
-        start.y -= 50; // From the crystal tip
+    // === PRISM TOWER - CONTINUOUS CRAZY LASER BEAM ===
+    private shootPrismContinuousLaser(prism: PlacedBuilding, target: Troop, time: number) {
+        const info = BUILDINGS['prism'];
+        const start = this.cartToIso(prism.gridX + info.width / 2, prism.gridY + info.height / 2);
+        start.y -= 55; // From the crystal tip
+        const end = this.cartToIso(target.gridX, target.gridY);
 
-        const bounceCount = 4;
-        const bounceRadius = 6;
-        let targets: Troop[] = [troop];
+        // Calculate beam thickness based on time for pulsing effect
+        const pulseThickness = 8 + Math.sin(time / 30) * 4;
+        const coreThickness = 3 + Math.sin(time / 20) * 1.5;
 
-        // Find bounce targets
-        for (let i = 1; i < bounceCount; i++) {
-            const prev = targets[i - 1];
-            const next = this.troops.find(t =>
-                t.owner !== prism.owner && t.health > 0 && !targets.includes(t) &&
-                Phaser.Math.Distance.Between(prev.gridX, prev.gridY, t.gridX, t.gridY) < bounceRadius
-            );
-            if (next) targets.push(next);
-            else break;
+        // Rainbow cycling color
+        const hue = (time / 10) % 360;
+        const beamColor = Phaser.Display.Color.HSLToColor(hue / 360, 1, 0.5).color;
+        const glowColor = Phaser.Display.Color.HSLToColor(hue / 360, 1, 0.7).color;
+
+        // Create or update the laser graphics
+        if (!prism.prismLaserGraphics) {
+            prism.prismLaserGraphics = this.add.graphics();
+            prism.prismLaserGraphics.setDepth(10000);
+        }
+        if (!prism.prismLaserCore) {
+            prism.prismLaserCore = this.add.graphics();
+            prism.prismLaserCore.setDepth(10001);
         }
 
-        // Rainbow beam colors
-        const colors = [0xff0000, 0xff8800, 0xffff00, 0x00ff00, 0x00ffff, 0x0088ff, 0xff00ff];
-        let lastPos = start;
+        // Clear and redraw laser every frame
+        prism.prismLaserGraphics.clear();
+        prism.prismLaserCore.clear();
 
-        targets.forEach((t, idx) => {
-            const end = this.cartToIso(t.gridX, t.gridY);
-            const beamColor = colors[idx % colors.length];
+        // Outer glow beam
+        prism.prismLaserGraphics.lineStyle(pulseThickness + 8, glowColor, 0.3);
+        prism.prismLaserGraphics.lineBetween(start.x, start.y, end.x, end.y);
 
-            // Draw prismatic beam
-            const beam = this.add.graphics();
-            beam.lineStyle(4, beamColor, 0.8);
-            beam.setDepth(10000);
-            beam.lineBetween(lastPos.x, lastPos.y, end.x, end.y);
+        // Main beam with multiple layers for intense effect
+        prism.prismLaserGraphics.lineStyle(pulseThickness, beamColor, 0.9);
+        prism.prismLaserGraphics.lineBetween(start.x, start.y, end.x, end.y);
 
-            // Inner white core
-            const core = this.add.graphics();
-            core.lineStyle(1, 0xffffff, 1);
-            core.setDepth(10001);
-            core.lineBetween(lastPos.x, lastPos.y, end.x, end.y);
+        // Inner bright core
+        prism.prismLaserCore.lineStyle(coreThickness, 0xffffff, 1);
+        prism.prismLaserCore.lineBetween(start.x, start.y, end.x, end.y);
 
-            // Prismatic sparkle at impact
-            const sparkle = this.add.graphics();
-            sparkle.fillStyle(beamColor, 0.8);
-            sparkle.setDepth(10002);
-            for (let s = 0; s < 6; s++) {
-                const sparkAngle = (s / 6) * Math.PI * 2;
-                const sparkDist = 8;
-                sparkle.fillCircle(end.x + Math.cos(sparkAngle) * sparkDist, end.y + Math.sin(sparkAngle) * sparkDist * 0.5, 2);
+
+        // Crazy sparkle particles along beam
+        const angle = Math.atan2(end.y - start.y, end.x - start.x);
+
+        // Spawn particles every few frames
+        if (time % 50 < 20) {
+            for (let i = 0; i < 3; i++) {
+                const t = Math.random();
+                const px = start.x + (end.x - start.x) * t + (Math.random() - 0.5) * 15;
+                const py = start.y + (end.y - start.y) * t + (Math.random() - 0.5) * 10;
+
+                const particle = this.add.graphics();
+                const particleColor = Phaser.Display.Color.HSLToColor(((hue + Math.random() * 60) % 360) / 360, 1, 0.5).color;
+                particle.fillStyle(particleColor, 1);
+                particle.fillCircle(0, 0, 2 + Math.random() * 3);
+                particle.setPosition(px, py);
+                particle.setDepth(10002);
+
+                // Particles fly outward
+                const perpAngle = angle + Math.PI / 2 * (Math.random() > 0.5 ? 1 : -1);
+                this.tweens.add({
+                    targets: particle,
+                    x: px + Math.cos(perpAngle) * (20 + Math.random() * 20),
+                    y: py + Math.sin(perpAngle) * (10 + Math.random() * 10),
+                    alpha: 0,
+                    scale: 0.2,
+                    duration: 200 + Math.random() * 150,
+                    ease: 'Quad.easeOut',
+                    onComplete: () => particle.destroy()
+                });
             }
+        }
 
-            // Fade out effects
+        // SCORCH MARKS / CHASM TRAIL (Jagged Pen-like Trail)
+        // Reset trail if target changed significantly (or initialization)
+        if (!prism.prismTrailLastPos) {
+            prism.prismTrailLastPos = {
+                x: end.x + (Math.random() - 0.5) * 10,
+                y: end.y + (Math.random() - 0.5) * 10
+            };
+        } else if (prism.prismTarget !== target && prism.prismTarget?.id !== target.id) {
+            // Target switched, reset pos
+            prism.prismTrailLastPos = {
+                x: end.x + (Math.random() - 0.5) * 10,
+                y: end.y + (Math.random() - 0.5) * 10
+            };
+        }
+
+        // Calculate Jagged Current Target for the segment end
+        const jaggedEndX = end.x + (Math.random() - 0.5) * 6;
+        const jaggedEndY = end.y + (Math.random() - 0.5) * 6;
+
+        const distLast = Phaser.Math.Distance.Between(prism.prismTrailLastPos.x, prism.prismTrailLastPos.y, jaggedEndX, jaggedEndY);
+
+        if (distLast > 2) {
+            // MOVING: Draw connected segment
+            const scorch = this.add.graphics();
+
+            scorch.lineStyle(6, 0x0a0505, 0.7); // Thick, dark charcoal
+            scorch.lineBetween(prism.prismTrailLastPos.x, prism.prismTrailLastPos.y, jaggedEndX, jaggedEndY);
+            scorch.setDepth(5);
+
+            // Persist for a while, then fade out slowly
             this.tweens.add({
-                targets: [beam, core, sparkle],
+                targets: scorch,
                 alpha: 0,
-                duration: 200,
-                delay: idx * 50,
-                onComplete: () => { beam.destroy(); core.destroy(); sparkle.destroy(); }
+                duration: 4000,
+                ease: 'Quad.easeIn',
+                onComplete: () => scorch.destroy()
             });
 
-            // Damage decreases with each bounce
-            const damage = 20 / (idx + 1);
-            t.health -= damage;
-            t.hasTakenDamage = true;
-            this.updateHealthBar(t);
-            if (t.health <= 0) this.destroyTroop(t);
+            // Update last pos to the JAGGED point to ensure exact continuity
+            prism.prismTrailLastPos = { x: jaggedEndX, y: jaggedEndY };
 
-            lastPos = end;
+        } else if (time % 200 < 20) {
+            // STATIONARY: Random scratch around target (static)
+            const scratch = this.add.graphics();
+            scratch.lineStyle(4, 0x0a0505, 0.6);
+
+            const sx = end.x + (Math.random() - 0.5) * 15;
+            const sy = end.y + (Math.random() - 0.5) * 15;
+            scratch.lineBetween(sx, sy, sx + (Math.random() - 0.5) * 12, sy + (Math.random() - 0.5) * 8);
+
+            scratch.setDepth(5);
+
+            this.tweens.add({
+                targets: scratch,
+                alpha: 0,
+                duration: 2500,
+                onComplete: () => scratch.destroy()
+            });
+        }
+
+        // Impact sparkles at target
+        const impactGlow = this.add.graphics();
+        impactGlow.fillStyle(beamColor, 0.6);
+        impactGlow.fillCircle(end.x, end.y, 12 + Math.sin(time / 25) * 5);
+        impactGlow.setDepth(10003);
+        this.tweens.add({
+            targets: impactGlow,
+            alpha: 0,
+            duration: 60,
+            onComplete: () => impactGlow.destroy()
         });
+
+        // Crystal charging glow
+        const crystalGlow = this.add.graphics();
+        crystalGlow.fillStyle(0xffffff, 0.4 + Math.sin(time / 15) * 0.3);
+        crystalGlow.fillCircle(start.x, start.y, 10);
+        crystalGlow.setDepth(10002);
+        this.tweens.add({
+            targets: crystalGlow,
+            alpha: 0,
+            duration: 50,
+            onComplete: () => crystalGlow.destroy()
+        });
+
+        // Deal continuous damage (3 DPS * 50ms tick = ~0.15 damage per tick)
+        const damagePerTick = 3;
+        target.health -= damagePerTick;
+        target.hasTakenDamage = true;
+        this.updateHealthBar(target);
+        if (target.health <= 0) {
+            this.destroyTroop(target);
+            this.cleanupPrismLaser(prism);
+        }
+
+        prism.prismTarget = target;
     }
 
-    // === MAGMA VENT - Area eruption attack ===
-    private shootMagmaAt(magma: PlacedBuilding) {
-        const info = BUILDINGS['magmavent'];
+    // Clean up prism laser graphics when no target
+    private cleanupPrismLaser(prism: PlacedBuilding) {
+        if (prism.prismLaserGraphics) {
+            prism.prismLaserGraphics.destroy();
+            prism.prismLaserGraphics = undefined;
+        }
+        if (prism.prismLaserCore) {
+            prism.prismLaserCore.destroy();
+            prism.prismLaserCore = undefined;
+        }
+        prism.prismTarget = undefined;
+        prism.prismTrailLastPos = undefined;
+    }
+
+    // === MAGMA VENT - MASSIVE VOLCANIC ERUPTION ===
+    private shootMagmaEruption(magma: PlacedBuilding) {
+        magma.lastFireTime = this.time.now;
+        const info = BUILDING_DEFINITIONS['magmavent'];
         const center = this.cartToIso(magma.gridX + info.width / 2, magma.gridY + info.height / 2);
-        center.y -= 25; // From crater
+        center.y -= 30; // From crater
 
-        const aoeRadius = 4; // Grid units
-        const damage = 15;
+        // Very subtle screen shake
+        this.cameras.main.shake(250, 0.002);
 
-        // Eruption visual - lava spray
-        for (let i = 0; i < 12; i++) {
-            const angle = (i / 12) * Math.PI * 2;
-            const dist = 20 + Math.random() * 30;
-            const lavaParticle = this.add.graphics();
-            lavaParticle.fillStyle(0xff4400 + Math.floor(Math.random() * 0x4400), 1);
-            lavaParticle.fillCircle(0, 0, 4 + Math.random() * 3);
-            lavaParticle.setPosition(center.x, center.y);
-            lavaParticle.setDepth(10000);
+        const aoeRadius = info.range || 6;
+        const damage = info.damage || 60;
 
-            this.tweens.add({
-                targets: lavaParticle,
-                x: center.x + Math.cos(angle) * dist,
-                y: center.y + Math.sin(angle) * dist * 0.5 + 20,
-                alpha: 0,
-                scale: 0.3,
-                duration: 400 + Math.random() * 200,
-                ease: 'Quad.easeOut',
-                onComplete: () => lavaParticle.destroy()
+        // Manual Circular Smoke Clouds (as requested)
+        for (let i = 0; i < 6; i++) {
+            this.time.delayedCall(i * 100, () => {
+                const smoke = this.add.graphics();
+                const size = 15 + Math.random() * 15;
+                smoke.fillStyle(0x888888, 0.4);
+                smoke.fillCircle(0, 0, size);
+                smoke.setPosition(center.x + (Math.random() - 0.5) * 20, center.y - 10);
+                smoke.setDepth(30000); // High depth to ensure visibility over buildings
+
+                this.tweens.add({
+                    targets: smoke,
+                    y: center.y - 80 - Math.random() * 60,
+                    x: smoke.x + (Math.random() - 0.5) * 40,
+                    scale: 1.5,
+                    alpha: 0,
+                    duration: 2000 + Math.random() * 1000,
+                    onComplete: () => smoke.destroy()
+                });
             });
         }
 
-        // Area glow
+        // Central explosion flash (pixelated rectangle)
+        const flash = this.add.graphics();
+        flash.setPosition(center.x, center.y);
+        flash.fillStyle(0xff6600, 0.8);
+        flash.fillRect(-15, -15, 30, 30);
+        flash.setDepth(30001); // High depth
+        this.tweens.add({
+            targets: flash,
+            scale: 2,
+            alpha: 0,
+            duration: 150,
+            onComplete: () => flash.destroy()
+        });
+
+        // === AOE INDICATOR - Shows damage radius ===
+        // Using SQRT2 for proper isometric circle-to-ellipse mapping
+        const aoePixelsX = aoeRadius * this.tileWidth * 0.5 * Math.SQRT2;
+        const aoePixelsY = aoeRadius * this.tileHeight * 0.5 * Math.SQRT2;
+
+        const aoeIndicator = this.add.graphics();
+        aoeIndicator.fillStyle(0xff4400, 0.25);
+        // Reverted to Ellipse as requested
+        aoeIndicator.fillEllipse(center.x, center.y + 20, aoePixelsX * 2, aoePixelsY * 2);
+        aoeIndicator.lineStyle(3, 0xff6600, 0.8);
+        aoeIndicator.strokeEllipse(center.x, center.y + 20, aoePixelsX * 2, aoePixelsY * 2);
+        aoeIndicator.setDepth(5); // Ground level
+        this.tweens.add({
+            targets: aoeIndicator,
+            alpha: 0,
+            duration: 1200,
+            ease: 'Quad.easeOut',
+            onComplete: () => aoeIndicator.destroy()
+        });
+
+        // Flying lava rocks (Increased debris count and range)
+        for (let i = 0; i < 20; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            // Increased range: goes farther
+            const dist = 40 + Math.random() * 60;
+            const peakHeight = 40 + Math.random() * 50;
+
+            const rock = this.add.graphics();
+            // Consistent lava colors (Orange/Red/Yellow range)
+            const rockColors = [0xff2200, 0xff4400, 0xff6600, 0xff8800];
+            rock.fillStyle(rockColors[Math.floor(Math.random() * rockColors.length)], 1);
+            const rockSize = 3 + Math.floor(Math.random() * 3);
+            rock.fillRect(-rockSize / 2, -rockSize / 2, rockSize, rockSize);
+            // Hot glowing core
+            rock.fillStyle(0xffff00, 0.6);
+            rock.fillRect(-rockSize / 4, -rockSize / 4, rockSize / 2, rockSize / 2);
+            rock.setPosition(center.x, center.y);
+            rock.setDepth(30002); // High depth
+
+            const endX = center.x + Math.cos(angle) * dist;
+            const endY = center.y + Math.sin(angle) * dist * 0.5 + 30;
+
+            // Parabolic arc
+            this.tweens.add({
+                targets: rock,
+                x: endX,
+                duration: 600 + Math.random() * 400,
+                ease: 'Linear',
+                onUpdate: (tween) => {
+                    const t = tween.progress;
+                    rock.y = center.y - Math.sin(t * Math.PI) * peakHeight + t * (endY - center.y);
+
+                    // Trail particles
+                    if (Math.random() > 0.8) {
+                        const trail = this.add.graphics();
+                        trail.fillStyle(0xff4400, 0.8);
+                        trail.fillRect(-1, -1, 2, 2);
+                        trail.setPosition(rock.x, rock.y);
+                        trail.setDepth(30001);
+                        this.tweens.add({
+                            targets: trail,
+                            alpha: 0,
+                            scale: 0.3,
+                            duration: 150,
+                            onComplete: () => trail.destroy()
+                        });
+                    }
+                },
+                onComplete: () => {
+                    // Ground burn mark (stays longer)
+                    const scorch = this.add.graphics();
+                    scorch.fillStyle(0x331100, 0.7); // Dark char
+                    scorch.fillEllipse(endX, endY, 12, 6);
+                    scorch.setDepth(4); // Ground level
+
+                    // Fading ember inside
+                    const ember = this.add.graphics();
+                    ember.fillStyle(0xff4400, 0.8);
+                    ember.fillRect(endX - 2, endY - 1, 4, 2);
+                    ember.setDepth(5);
+                    this.tweens.add({
+                        targets: ember,
+                        alpha: 0,
+                        duration: 800,
+                        onComplete: () => ember.destroy()
+                    });
+
+                    this.tweens.add({
+                        targets: scorch,
+                        alpha: 0,
+                        duration: 4000, // Lasts much longer
+                        onComplete: () => scorch.destroy()
+                    });
+                    rock.destroy();
+                }
+            });
+        }
+
+
+
+        // Area damage glow (subtle) - ground level
         const aoeGlow = this.add.graphics();
-        aoeGlow.fillStyle(0xff4400, 0.3);
-        aoeGlow.fillEllipse(center.x, center.y + 20, aoeRadius * 32, aoeRadius * 16);
-        aoeGlow.setDepth(9999);
+        aoeGlow.fillStyle(0xff4400, 0.2);
+        aoeGlow.fillEllipse(center.x, center.y + 25, aoePixelsX * 2.2, aoePixelsY * 2.2);
+        aoeGlow.setDepth(4); // Below everything
         this.tweens.add({
             targets: aoeGlow,
             alpha: 0,
-            duration: 500,
+            duration: 800,
             onComplete: () => aoeGlow.destroy()
         });
 
-        // Damage all troops in range
+        // Light smoke (removed old one in favor of createSmokeEffect)
+
+
+        // Damage all troops in range with massive damage
         this.troops.forEach(t => {
             if (t.owner === magma.owner || t.health <= 0) return;
             const dist = Phaser.Math.Distance.Between(
@@ -2995,8 +4468,25 @@ export class MainScene extends Phaser.Scene {
                 t.gridX, t.gridY
             );
             if (dist <= aoeRadius) {
-                t.health -= damage * (1 - dist / aoeRadius * 0.5); // More damage at center
+                // More damage at center (100% at center, 50% at edge)
+                const damageMult = 1 - (dist / aoeRadius * 0.5);
+                t.health -= damage * damageMult;
                 t.hasTakenDamage = true;
+
+                // Hit flash on troop
+                const hitFlash = this.add.graphics();
+                hitFlash.fillStyle(0xff4400, 0.8);
+                const troopPos = this.cartToIso(t.gridX, t.gridY);
+                hitFlash.fillCircle(troopPos.x, troopPos.y, 15);
+                hitFlash.setDepth(10006);
+                this.tweens.add({
+                    targets: hitFlash,
+                    alpha: 0,
+                    scale: 2,
+                    duration: 150,
+                    onComplete: () => hitFlash.destroy()
+                });
+
                 this.updateHealthBar(t);
                 if (t.health <= 0) this.destroyTroop(t);
             }
@@ -3155,8 +4645,7 @@ export class MainScene extends Phaser.Scene {
                 bolt.setRotation(angle);
                 bolt.setDepth(20000);
 
-                // Trail for bolt
-                let lastTrailTime = 0;
+
 
                 // Release the string (tension snaps back to 0)
                 this.tweens.add({
@@ -3170,26 +4659,46 @@ export class MainScene extends Phaser.Scene {
                 });
 
                 // Animate bolt flying to target
+                const dist = Phaser.Math.Distance.Between(start.x, start.y, end.x, end.y);
+                let lastTrailTime = 0;
+
                 this.tweens.add({
                     targets: bolt,
                     x: end.x,
                     y: end.y,
-                    duration: 300,
-                    ease: 'Power1',
-                    onUpdate: () => {
+                    duration: dist / 1.2,
+                    ease: 'Linear',
+                    onUpdate: (tween: Phaser.Tweens.Tween) => {
+                        // White trail particles at TAIL - Aggressive
                         const now = this.time.now;
-                        if (now - lastTrailTime > 20) {
+                        if (now - lastTrailTime > 10) {
                             lastTrailTime = now;
                             const trail = this.add.graphics();
-                            trail.lineStyle(4, 0x8b6914, 0.5);
-                            trail.lineBetween(-8, 0, 8, 0);
-                            trail.setPosition(bolt.x, bolt.y);
-                            trail.setRotation(angle);
-                            trail.setDepth(19998);
-                            this.tweens.add({ targets: trail, alpha: 0, duration: 60, onComplete: () => trail.destroy() });
+                            trail.fillStyle(0xffffff, 0.7);
+                            trail.fillCircle(0, 0, 3);
+
+                            // Calculate tail position (bolt is ~30px long, tail at -16 local)
+                            // Responsive offset: Starts at 0, grows to 70 based on travel
+                            const traveled = tween.progress * dist;
+                            const currentOffset = Math.min(traveled, 70);
+
+                            const rot = bolt.rotation;
+                            const tailX = bolt.x - Math.cos(rot) * currentOffset;
+                            const tailY = bolt.y - Math.sin(rot) * currentOffset;
+
+                            trail.setPosition(tailX, tailY);
+                            trail.setDepth(19999);
+                            this.tweens.add({
+                                targets: trail,
+                                alpha: 0,
+                                scale: 0.2,
+                                duration: 300,
+                                onComplete: () => trail.destroy()
+                            });
                         }
                     },
                     onComplete: () => {
+                        this.cameras.main.shake(100, 0.0005, true);
                         bolt.destroy();
                         // Deal damage
                         if (targetTroop && targetTroop.health > 0) {
@@ -3198,25 +4707,81 @@ export class MainScene extends Phaser.Scene {
                             this.updateHealthBar(targetTroop);
                             if (targetTroop.health <= 0) this.destroyTroop(targetTroop);
                         }
-                        // Impact effect
+
+                        // === EXPLOSION EFFECT ===
+                        // Initial flash
+                        const flash = this.add.graphics();
+                        flash.fillStyle(0xffffcc, 0.9);
+                        flash.fillCircle(0, 0, 15);
+                        flash.setPosition(end.x, end.y);
+                        flash.setDepth(20002);
+                        this.tweens.add({
+                            targets: flash,
+                            scale: 2, alpha: 0,
+                            duration: 80,
+                            onComplete: () => flash.destroy()
+                        });
+
+                        // Shockwave ring
+                        const shock = this.add.graphics();
+                        shock.lineStyle(3, 0xff8800, 0.7);
+                        shock.strokeCircle(0, 0, 8);
+                        shock.setPosition(end.x, end.y);
+                        shock.setDepth(20001);
+                        this.tweens.add({
+                            targets: shock,
+                            alpha: 0,
+                            duration: 200,
+                            onUpdate: (tween) => {
+                                shock.clear();
+                                const r = 8 + tween.progress * 30;
+                                shock.lineStyle(3 - tween.progress * 2, 0xff8800, 0.7 - tween.progress * 0.7);
+                                shock.strokeCircle(0, 0, r);
+                            },
+                            onComplete: () => shock.destroy()
+                        });
+
+                        // Fire/explosion particles
+                        for (let i = 0; i < 6; i++) {
+                            const particle = this.add.graphics();
+                            const pAngle = Math.random() * Math.PI * 2;
+                            const pDist = 15 + Math.random() * 20;
+                            particle.fillStyle(0xff6600 + Math.floor(Math.random() * 0x3300), 0.9);
+                            particle.fillCircle(0, 0, 4 + Math.random() * 4);
+                            particle.setPosition(end.x, end.y);
+                            particle.setDepth(20000);
+
+                            this.tweens.add({
+                                targets: particle,
+                                x: end.x + Math.cos(pAngle) * pDist,
+                                y: end.y + Math.sin(pAngle) * pDist * 0.5 - 10,
+                                scale: 0.3,
+                                alpha: 0,
+                                duration: 200 + Math.random() * 100,
+                                ease: 'Quad.easeOut',
+                                onComplete: () => particle.destroy()
+                            });
+                        }
+
+                        // Main impact glow
                         const impact = this.add.graphics();
-                        impact.fillStyle(0x8b4513, 0.9);
-                        impact.fillCircle(0, 0, 10);
-                        impact.fillStyle(0xffcc00, 0.5);
+                        impact.fillStyle(0xff4400, 0.8);
+                        impact.fillCircle(0, 0, 12);
+                        impact.fillStyle(0xffcc00, 0.6);
                         impact.fillCircle(0, 0, 6);
                         impact.setPosition(end.x, end.y);
                         impact.setDepth(19999);
                         this.tweens.add({
                             targets: impact,
-                            scale: 2.5, alpha: 0,
-                            duration: 250,
+                            scale: 2, alpha: 0,
+                            duration: 200,
                             onComplete: () => impact.destroy()
                         });
                     }
                 });
 
-                // Reload bolt after a delay
-                this.time.delayedCall(800, () => {
+                // Reload bolt after a delay (match fire rate of 3500ms - windup)
+                this.time.delayedCall(3000, () => {
                     ballista.ballistaBoltLoaded = true;
                 });
             }
@@ -3270,28 +4835,15 @@ export class MainScene extends Phaser.Scene {
         arrow.setRotation(angle);
         arrow.setDepth(20000);
 
-        // Trail
-        let lastTrailTime = 0;
 
+
+        const dist = Phaser.Math.Distance.Between(start.x, start.y, end.x, end.y);
         this.tweens.add({
             targets: arrow,
             x: end.x,
             y: end.y,
-            duration: 150, // Very fast
+            duration: dist / 1.5, // Constant speed (1500 px/s)
             ease: 'Linear',
-            onUpdate: () => {
-                const now = this.time.now;
-                if (now - lastTrailTime > 30) {
-                    lastTrailTime = now;
-                    const trail = this.add.graphics();
-                    trail.lineStyle(1.5, 0xccaa88, 0.4);
-                    trail.lineBetween(-4, 0, 4, 0);
-                    trail.setPosition(arrow.x, arrow.y);
-                    trail.setRotation(angle);
-                    trail.setDepth(19998);
-                    this.tweens.add({ targets: trail, alpha: 0, duration: 50, onComplete: () => trail.destroy() });
-                }
-            },
             onComplete: () => {
                 arrow.destroy();
                 // Deal smaller damage (15 per arrow, but fires 5x per second = 75 DPS)
@@ -3314,37 +4866,53 @@ export class MainScene extends Phaser.Scene {
         });
     }
 
-    private showWardLaser(troop: Troop, target: PlacedBuilding, damage: number) {
+    private showWardLaser(troop: Troop, target: Troop | PlacedBuilding, damage: number) {
         const start = this.cartToIso(troop.gridX, troop.gridY);
-        const info = BUILDINGS[target.type];
-        const end = this.cartToIso(target.gridX + info.width / 2, target.gridY + info.height / 2);
-        const targetBuilding = target;
+
+        const isBuilding = ('type' in target && !!BUILDINGS[target.type]);
+        const width = isBuilding ? BUILDINGS[target.type].width : 0.5;
+        const height = isBuilding ? BUILDINGS[target.type].height : 0.5;
+
+        const end = this.cartToIso(target.gridX + width / 2, target.gridY + height / 2);
 
         const angle = Math.atan2(end.y - start.y, end.x - start.x);
         troop.facingAngle = angle;
         this.redrawTroop(troop);
 
+        // Green for heal (negative damage), Cyan for attack
+        const color = damage < 0 ? 0x00ff00 : 0x88ffcc;
+
         const laser = this.add.graphics();
-        laser.lineStyle(4, 0x88ffcc, 0.9);
+        laser.lineStyle(4, color, 0.9);
         laser.lineBetween(start.x + 7, start.y - 17, end.x, end.y - 20);
         laser.lineStyle(2, 0xffffff, 0.6);
         laser.lineBetween(start.x + 7, start.y - 17, end.x, end.y - 20);
         laser.setDepth(25000);
 
-        const orb = this.add.circle(start.x + 7, start.y - 17, 6, 0x88ffcc, 0.8);
+        const orb = this.add.circle(start.x + 7, start.y - 17, 6, color, 0.8);
         orb.setDepth(25001);
 
-        // DEAL DAMAGE IMMEDIATELY ON LASER SPAWN
-        if (targetBuilding && targetBuilding.health > 0) {
-            targetBuilding.health -= damage;
-            this.showHitEffect(targetBuilding.graphics);
-            this.updateHealthBar(targetBuilding);
+        // DEAL DAMAGE IMMEDIATELY ON LASER SPAWN (Attack Mode Only)
+        if (damage > 0 && 'health' in target && target.health > 0) {
+            target.health -= damage;
 
-            if (targetBuilding.health <= 0) {
-                this.destroyBuilding(targetBuilding);
-                this.troops.forEach(t => {
-                    if (t.target && t.target.id === targetBuilding.id) t.target = null;
-                });
+            // Only buildings show hit effect/health bar update this way
+            if ('graphics' in target) {
+                this.showHitEffect(target.graphics);
+                this.updateHealthBar(target);
+
+                if (target.health <= 0) {
+                    // It's a building
+                    if ('type' in target && BUILDINGS[target.type]) {
+                        this.destroyBuilding(target as PlacedBuilding);
+                        this.troops.forEach(t => {
+                            if (t.target && t.target.id === target.id) t.target = null;
+                        });
+                    } else {
+                        // Troop death (if Ward attacks troops in future)
+                        this.destroyTroop(target as unknown as Troop);
+                    }
+                }
             }
         }
 
@@ -3408,30 +4976,7 @@ export class MainScene extends Phaser.Scene {
 
                     // Pathfinding - Staggered updates & Fanning
                     if (!troop.path || time >= (troop.nextPathTime || 0)) {
-                        // Ward Stay Behind Logic:
-                        // If following an ally, target a spot behind them relative to their own target.
                         let finalTarget: any = troop.target;
-                        if (troop.type === 'ward' && !isBuilding && troop.target.target) {
-                            const ally = troop.target;
-                            const allyTarget = ally.target;
-                            const itw = ('type' in allyTarget && BUILDINGS[allyTarget.type]) ? BUILDINGS[allyTarget.type].width : 0.5;
-                            const ith = ('type' in allyTarget && BUILDINGS[allyTarget.type]) ? BUILDINGS[allyTarget.type].height : 0.5;
-                            const atx = allyTarget.gridX + itw / 2;
-                            const aty = allyTarget.gridY + ith / 2;
-
-                            const dx = ally.gridX - atx;
-                            const dy = ally.gridY - aty;
-                            const len = Math.sqrt(dx * dx + dy * dy);
-                            if (len > 0.5) {
-                                // Target 1.5 tiles behind the ally
-                                finalTarget = {
-                                    gridX: ally.gridX + (dx / len) * 1.5,
-                                    gridY: ally.gridY + (dy / len) * 1.5,
-                                    id: 'offset-' + ally.id,
-                                    health: 1 // Dummy
-                                };
-                            }
-                        }
 
                         troop.path = this.findPath(troop, finalTarget) || undefined;
                         troop.lastPathTime = time;
@@ -3579,6 +5124,13 @@ export class MainScene extends Phaser.Scene {
         const isWall = (b: PlacedBuilding) => b.type === 'wall';
         const isDefense = (b: PlacedBuilding) => BUILDINGS[b.type].category === 'defense';
 
+        // Check if only walls remain - if so, don't target anything (battle is essentially over)
+        const nonWallBuildings = enemies.filter(b => !isWall(b));
+        if (nonWallBuildings.length === 0) {
+            // Only walls left - don't target them, let the battle end
+            return null;
+        }
+
         let targets: PlacedBuilding[] = [];
 
         if (troop.type === 'giant') {
@@ -3587,31 +5139,17 @@ export class MainScene extends Phaser.Scene {
             targets = enemies.filter(b => !isWall(b) && isDefense(b));
             if (targets.length === 0) {
                 // 2. Any Non-Wall (Act as if no logic/Warriors)
-                targets = enemies.filter(b => !isWall(b));
-                if (targets.length === 0) {
-                    // 3. Walls (Absolute last resort - only if NO other buildings exist)
-                    targets = enemies.filter(b => isWall(b));
-                    if (targets.length === 0) return null;
-                }
+                targets = nonWallBuildings;
             }
         } else if (troop.type === 'ward') {
-            // Ward: Assistance Mode (No walls unless assisting or absolute last resort)
-            targets = enemies.filter(b => !isWall(b));
-            if (targets.length === 0) {
-                // Only target walls if allies are already targetting them (handled in combat loop)
-                // As fallback for movement, only pick walls if NOTHING else exists.
-                targets = enemies.filter(b => isWall(b));
-                if (targets.length === 0) return null;
-            }
+            // Ward: Assistance Mode (No walls)
+            targets = nonWallBuildings;
         } else {
             // Regular: Prioritize Non-Walls
-            targets = enemies.filter(b => !isWall(b));
-            if (targets.length === 0) {
-                // Fallback to walls if nothing else remains
-                targets = enemies.filter(b => isWall(b));
-                if (targets.length === 0) return null;
-            }
+            targets = nonWallBuildings;
         }
+
+        if (targets.length === 0) return null;
 
         let nearest: PlacedBuilding | null = null;
         let minDist = Infinity;
@@ -3624,24 +5162,7 @@ export class MainScene extends Phaser.Scene {
         return nearest;
     }
 
-    private findNearestHighHPAlly(troop: Troop): Troop | null {
-        // Higher prioritization for giants (tanks)
-        const tanks = this.troops.filter(t => t.owner === troop.owner && t !== troop && t.health > 0 && t.type === 'giant');
-        if (tanks.length > 0) {
-            // Pick nearest tank
-            return tanks.sort((a, b) => {
-                const dA = Phaser.Math.Distance.Between(troop.gridX, troop.gridY, a.gridX, a.gridY);
-                const dB = Phaser.Math.Distance.Between(troop.gridX, troop.gridY, b.gridX, b.gridY);
-                return dA - dB;
-            })[0];
-        }
-        // Fallback to any high HP ally (e.g. ward following ward or archer if no giants)
-        const allies = this.troops.filter(t => t.owner === troop.owner && t !== troop && t.health > 0);
-        if (allies.length > 0) {
-            return allies.sort((a, b) => b.maxHealth - a.maxHealth)[0];
-        }
-        return null;
-    }
+
 
     private findPath(troop: Troop, target: any): Phaser.Math.Vector2[] | null {
         const width = this.mapSize;
@@ -3734,12 +5255,27 @@ export class MainScene extends Phaser.Scene {
         const index = this.buildings.findIndex(x => x.id === b.id);
         if (index === -1) return;
 
+        // Cleanup graphics
+        b.graphics.destroy();
+        if (b.baseGraphics) b.baseGraphics.destroy();
+
+        // Clean up prism laser if this is a prism tower
+        if (b.type === 'prism') {
+            this.cleanupPrismLaser(b);
+        }
+
+        // Clean up range indicator if this building was selected
+        if (b.rangeIndicator) {
+            b.rangeIndicator.destroy();
+        }
+
         const info = BUILDINGS[b.type];
         const pos = this.cartToIso(b.gridX + info.width / 2, b.gridY + info.height / 2);
         const size = Math.max(info.width, info.height);
 
         // Screen shake proportional to building size
-        this.cameras.main.shake(150 + size * 100, 0.003 + size * 0.002);
+        const shakeIntensity = (0.003 + size * 0.002) * (this.mode === 'HOME' ? 0.2 : 1.0);
+        this.cameras.main.shake(150 + size * 100, shakeIntensity);
 
         // Initial flash
         const flash = this.add.circle(pos.x, pos.y - 20, 10 * size, 0xffffcc, 0.8);
@@ -3774,17 +5310,15 @@ export class MainScene extends Phaser.Scene {
             });
         }
 
-        // Dust cloud
+        // Dust cloud (pixelated rectangles)
         for (let i = 0; i < 6 + size * 2; i++) {
             this.time.delayedCall(i * 30, () => {
                 const dustColors = [0x8b7355, 0x9b8365, 0x7b6345];
-                const dust = this.add.circle(
-                    pos.x + (Math.random() - 0.5) * 40 * size,
-                    pos.y - 10,
-                    8 + Math.random() * 10,
-                    dustColors[Math.floor(Math.random() * 3)],
-                    0.6
-                );
+                const dustSize = 8 + Math.floor(Math.random() * 10);
+                const dust = this.add.graphics();
+                dust.fillStyle(dustColors[Math.floor(Math.random() * 3)], 0.6);
+                dust.fillRect(-dustSize / 2, -dustSize / 2, dustSize, dustSize);
+                dust.setPosition(pos.x + (Math.random() - 0.5) * 40 * size, pos.y - 10);
                 dust.setDepth(29999);
                 this.tweens.add({
                     targets: dust,
@@ -3799,18 +5333,16 @@ export class MainScene extends Phaser.Scene {
 
         // Type-specific effects
         if (b.type === 'town_hall') {
-            // Massive fire and explosion
+            // Massive fire and explosion (pixelated rectangles)
             for (let i = 0; i < 25; i++) {
                 const delay = i * 40;
                 this.time.delayedCall(delay, () => {
                     const fireColors = [0xff4400, 0xff6600, 0xff8800, 0xffaa00];
-                    const fire = this.add.circle(
-                        pos.x + (Math.random() - 0.5) * 80,
-                        pos.y - 10 - (Math.random() * 40),
-                        8 + Math.random() * 15,
-                        fireColors[Math.floor(Math.random() * 4)],
-                        0.9
-                    );
+                    const fireSize = 8 + Math.floor(Math.random() * 15);
+                    const fire = this.add.graphics();
+                    fire.fillStyle(fireColors[Math.floor(Math.random() * 4)], 0.9);
+                    fire.fillRect(-fireSize / 2, -fireSize / 2, fireSize, fireSize);
+                    fire.setPosition(pos.x + (Math.random() - 0.5) * 80, pos.y - 10 - (Math.random() * 40));
                     fire.setDepth(30000);
                     this.tweens.add({
                         targets: fire,
@@ -3859,6 +5391,14 @@ export class MainScene extends Phaser.Scene {
             }
         }
 
+        // Create rubble at the building location (attack mode only)
+        if (this.mode === 'ATTACK') {
+            const info = BUILDINGS[b.type];
+            if (info) {
+                this.createRubble(b.gridX, b.gridY, info.width, info.height);
+            }
+        }
+
         b.graphics.destroy();
         if (b.barrelGraphics) b.barrelGraphics.destroy();
         b.healthBar.destroy();
@@ -3879,20 +5419,13 @@ export class MainScene extends Phaser.Scene {
             if (b.owner === 'ENEMY') {
                 if (b.type !== 'wall') this.destroyedBuildings++;
 
-                // Award loot based on building type
-                const lootValues: Record<string, { gold: number, elixir: number }> = {
-                    town_hall: { gold: 200, elixir: 200 },
-                    barracks: { gold: 50, elixir: 50 },
-                    cannon: { gold: 30, elixir: 0 },
-                    mortar: { gold: 50, elixir: 0 },
-                    tesla: { gold: 75, elixir: 0 },
-                    mine: { gold: 100, elixir: 0 },
-                    elixir_collector: { gold: 0, elixir: 100 },
-                    army_camp: { gold: 25, elixir: 25 },
-                };
-                const loot = lootValues[b.type] || { gold: 20, elixir: 20 };
-                this.goldLooted += loot.gold;
-                this.elixirLooted += loot.elixir;
+                // Award loot if available
+                if (b.loot) {
+                    this.goldLooted += b.loot.gold;
+                    this.elixirLooted += b.loot.elixir;
+                }
+
+                this.updateBattleStats();
 
                 this.updateBattleStats();
             }
@@ -3909,9 +5442,9 @@ export class MainScene extends Phaser.Scene {
                 const campCount = this.buildings.filter(bc => bc.type === 'army_camp').length;
                 (window as any).refreshCampCapacity?.(campCount);
             }
-            // Save base when player building is deleted
+            // Remove from backend when player building is deleted
             if (b.owner === 'PLAYER') {
-                this.saveBase();
+                Backend.removeBuilding('player_home', b.id);
             }
         }
     }
@@ -3927,6 +5460,7 @@ export class MainScene extends Phaser.Scene {
 
 
     private destroyTroop(t: Troop) {
+        if (t.id === 'dummy_target') return; // Ignore dummy targets used for fun shooting
         const pos = this.cartToIso(t.gridX, t.gridY);
 
         // RECURSION SPLIT: Spawn two smaller recursions on death if generation < 2
@@ -3954,20 +5488,26 @@ export class MainScene extends Phaser.Scene {
             }
         }
 
-        // Death explosion effect
-        const flash = this.add.circle(pos.x, pos.y, 6, 0xffffff, 0.8);
+        // Death explosion effect (pixelated rectangle)
+        const flash = this.add.graphics();
+        flash.fillStyle(0xffffff, 0.8);
+        flash.fillRect(-6, -6, 12, 12);
+        flash.setPosition(pos.x, pos.y);
         flash.setDepth(30001);
         this.tweens.add({ targets: flash, scale: 2, alpha: 0, duration: 100, onComplete: () => flash.destroy() });
 
-        // Particle burst
+        // Particle burst (pixelated rectangles)
         const particleColors = t.type === 'warrior' ? [0xffff00, 0xffcc00] :
             t.type === 'archer' ? [0x00ccff, 0x0088cc] :
-            t.type === 'recursion' ? [0x00ffaa, 0x00cc88] :
-            t.type === 'chronoswarm' ? [0xffcc00, 0xffaa00] :
-                [0xff8800, 0xcc6600];
+                t.type === 'recursion' ? [0x00ffaa, 0x00cc88] :
+                    t.type === 'chronoswarm' ? [0xffcc00, 0xffaa00] :
+                        [0xff8800, 0xcc6600];
         for (let i = 0; i < 8; i++) {
             const angle = (i / 8) * Math.PI * 2;
-            const particle = this.add.circle(pos.x, pos.y, 3, particleColors[i % 2], 0.9);
+            const particle = this.add.graphics();
+            particle.fillStyle(particleColors[i % 2], 0.9);
+            particle.fillRect(-3, -3, 6, 6);
+            particle.setPosition(pos.x, pos.y);
             particle.setDepth(30000);
             this.tweens.add({
                 targets: particle,
@@ -3980,8 +5520,11 @@ export class MainScene extends Phaser.Scene {
             });
         }
 
-        // Smoke puff
-        const smoke = this.add.circle(pos.x, pos.y, 10, 0x666666, 0.5);
+        // Smoke puff (pixelated rectangle)
+        const smoke = this.add.graphics();
+        smoke.fillStyle(0x666666, 0.5);
+        smoke.fillRect(-10, -10, 20, 20);
+        smoke.setPosition(pos.x, pos.y);
         smoke.setDepth(29999);
         this.tweens.add({
             targets: smoke,
@@ -3996,13 +5539,8 @@ export class MainScene extends Phaser.Scene {
         t.healthBar.destroy();
     }
 
-    private showHitEffect(graphics: Phaser.GameObjects.Graphics) {
-        // Flash white then back
-        const originalAlpha = graphics.alpha;
-        graphics.setAlpha(0.3);
-        this.time.delayedCall(30, () => {
-            graphics.setAlpha(originalAlpha);
-        });
+    private showHitEffect(_graphics: Phaser.GameObjects.Graphics) {
+        // No visual effect - buildings should not change opacity when hit
     }
 
     private updateResources(time: number) {
@@ -4021,6 +5559,10 @@ export class MainScene extends Phaser.Scene {
 
 
     private spawnTroop(gx: number, gy: number, type: 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'chronoswarm' = 'warrior', owner: 'PLAYER' | 'ENEMY' = 'PLAYER', recursionGen: number = 0) {
+        // Bounds check - STRICT
+        if (gx < 0 || gy < 0 || gx >= this.mapSize || gy >= this.mapSize) {
+            return;
+        }
         const stats = TROOP_STATS[type];
         const pos = this.cartToIso(gx, gy);
 
@@ -4439,6 +5981,32 @@ export class MainScene extends Phaser.Scene {
 
             if (this.mode === 'ATTACK') {
                 const bounds = this.getBuildingsBounds('ENEMY');
+
+                // Check if clicking on an enemy building to show its range
+                const clickedBuilding = this.buildings.find(b => {
+                    if (b.owner !== 'ENEMY' || b.health <= 0) return false;
+                    const info = BUILDINGS[b.type];
+                    return gridPosSnap.x >= b.gridX && gridPosSnap.x < b.gridX + info.width &&
+                        gridPosSnap.y >= b.gridY && gridPosSnap.y < b.gridY + info.height;
+                });
+
+                if (clickedBuilding) {
+                    // Show range indicator for this building
+                    this.showBuildingRangeIndicator(clickedBuilding);
+                    // Flash the red zone
+                    this.tweens.add({
+                        targets: this.deploymentGraphics,
+                        alpha: 0.8,
+                        duration: 100,
+                        yoyo: true,
+                        onComplete: () => this.deploymentGraphics.setAlpha(0.3)
+                    });
+                    return;
+                }
+
+                // Clear any existing range indicator when clicking elsewhere
+                this.clearBuildingRangeIndicator();
+
                 if (bounds && gridPosFloat.x >= bounds.minX && gridPosFloat.x <= bounds.maxX && gridPosFloat.y >= bounds.minY && gridPosFloat.y <= bounds.maxY) {
                     // Flash the red zone
                     this.tweens.add({
@@ -4448,34 +6016,51 @@ export class MainScene extends Phaser.Scene {
                         yoyo: true,
                         onComplete: () => this.deploymentGraphics.setAlpha(0.3)
                     });
-                    return; // Forbidden zone
+                    // Don't return - allow dragging even in forbidden zone
                 }
+
                 const army = (window as any).getArmy();
                 const selectedType = (window as any).getSelectedTroopType();
-                if (selectedType && army[selectedType] > 0) {
+                if (selectedType && army[selectedType] > 0 && (!bounds || !(gridPosFloat.x >= bounds.minX && gridPosFloat.x <= bounds.maxX && gridPosFloat.y >= bounds.minY && gridPosFloat.y <= bounds.maxY))) {
                     this.spawnTroop(gridPosFloat.x, gridPosFloat.y, selectedType, 'PLAYER');
                     (window as any).deployTroop(selectedType);
                     this.lastDeployTime = this.time.now;
+                    return; // Don't start dragging when deploying
                 }
 
+                // Enable camera dragging in attack mode
+                this.isDragging = true;
+                this.dragOrigin.set(pointer.x, pointer.y);
                 return;
             }
 
             if (this.isMoving && this.selectedInWorld) {
                 if (this.isPositionValid(gridPosSnap.x, gridPosSnap.y, this.selectedInWorld.type, this.selectedInWorld.id)) {
+                    // Clear any obstacles at the new position
+                    const info = BUILDINGS[this.selectedInWorld.type];
+                    this.removeOverlappingObstacles(gridPosSnap.x, gridPosSnap.y, info.width, info.height);
+
                     this.selectedInWorld.gridX = gridPosSnap.x;
                     this.selectedInWorld.gridY = gridPosSnap.y;
                     this.selectedInWorld.graphics.clear();
-                    this.drawBuildingVisuals(this.selectedInWorld.graphics, gridPosSnap.x, gridPosSnap.y, this.selectedInWorld.type);
+                    this.drawBuildingVisuals(this.selectedInWorld.graphics, gridPosSnap.x, gridPosSnap.y, this.selectedInWorld.type, 1, null, this.selectedInWorld);
                     const depth = (gridPosSnap.x + BUILDINGS[this.selectedInWorld.type].width) + (gridPosSnap.y + BUILDINGS[this.selectedInWorld.type].height);
                     this.selectedInWorld.graphics.setDepth(depth * 10);
+                    // For ballista/xbow, update barrel graphics depth
                     if (this.selectedInWorld.barrelGraphics) {
                         this.selectedInWorld.barrelGraphics.setDepth(this.selectedInWorld.graphics.depth + 1);
-                        if (this.selectedInWorld.type === 'cannon') this.drawCannonBarrel(this.selectedInWorld, 0);
                     }
                     this.updateHealthBar(this.selectedInWorld);
+                    // Update range indicator to follow the moved building
+                    if (this.selectedInWorld.rangeIndicator) {
+                        this.showBuildingRangeIndicator(this.selectedInWorld);
+                    }
                     this.isMoving = false;
                     this.ghostBuilding.setVisible(false);
+                    // Persist move in backend
+                    if (this.selectedInWorld.owner === 'PLAYER') {
+                        Backend.moveBuilding('player_home', this.selectedInWorld.id, gridPosSnap.x, gridPosSnap.y);
+                    }
                 }
                 return;
             }
@@ -4487,12 +6072,29 @@ export class MainScene extends Phaser.Scene {
 
             if (this.selectedBuildingType) {
                 if (this.isPositionValid(gridPosSnap.x, gridPosSnap.y, this.selectedBuildingType)) {
-                    this.placeBuilding(gridPosSnap.x, gridPosSnap.y, this.selectedBuildingType, 'PLAYER');
+                    const type = this.selectedBuildingType;
+                    const success = this.placeBuilding(gridPosSnap.x, gridPosSnap.y, type, 'PLAYER');
 
-                    if (this.selectedBuildingType !== 'wall') {
-                        this.selectedBuildingType = null;
-                        this.ghostBuilding.setVisible(false);
-                        (window as any).onPlacementCancelled?.();
+                    if (success) {
+                        // Successful placement effect
+                        const info = BUILDINGS[type];
+                        const pos = this.cartToIso(gridPosSnap.x + info.width / 2, gridPosSnap.y + info.height / 2);
+                        this.createSmokeEffect(pos.x, pos.y, 8);
+
+                        if (type !== 'wall') {
+                            this.selectedBuildingType = null;
+                            this.ghostBuilding.setVisible(false);
+                            (window as any).onPlacementCancelled?.();
+                        }
+                    } else {
+                        // Shake the ghost building to indicate failure (likely max limit reached)
+                        this.tweens.add({
+                            targets: this.ghostBuilding,
+                            x: this.ghostBuilding.x + 5,
+                            duration: 50,
+                            yoyo: true,
+                            repeat: 3
+                        });
                     }
                 }
                 return;
@@ -4504,11 +6106,40 @@ export class MainScene extends Phaser.Scene {
                     gridPosSnap.y >= b.gridY && gridPosSnap.y < b.gridY + info.height && b.owner === 'PLAYER';
             });
             if (clicked) {
+                // If clicking a different building, clear previous range indicator
+                if (this.selectedInWorld !== clicked) {
+                    this.clearBuildingRangeIndicator();
+                }
                 this.selectedInWorld = clicked;
-                (window as any).onBuildingSelected?.(clicked.id);
+                (window as any).onBuildingSelected?.({ id: clicked.id, type: clicked.type, level: clicked.level || 1 });
+                // Show range indicator for defensive buildings in home mode too
+                this.showBuildingRangeIndicator(clicked);
             } else {
+                // Check if we have a defense selected that should shoot AND input is within range
+                if (this.selectedInWorld &&
+                    ['cannon', 'ballista', 'xbow', 'mortar', 'tesla', 'magmavent', 'prism'].includes(this.selectedInWorld.type)) {
+
+                    const info = BUILDINGS[this.selectedInWorld.type];
+                    const centerX = this.selectedInWorld.gridX + info.width / 2;
+                    const centerY = this.selectedInWorld.gridY + info.height / 2;
+                    const dist = Phaser.Math.Distance.Between(gridPosFloat.x, gridPosFloat.y, centerX, centerY);
+
+                    if (dist <= (info.range || 10)) {
+                        // Start manual firing sequence
+                        this.isManualFiring = true;
+                        return; // Don't deselect!
+                    }
+                }
+
+                // Clicking elsewhere - deselect
+                if (this.selectedInWorld && this.selectedInWorld.type === 'prism') {
+                    this.cleanupPrismLaser(this.selectedInWorld);
+                }
                 this.selectedInWorld = null;
                 (window as any).onBuildingSelected?.(null);
+                // Clear range indicator when clicking elsewhere
+                this.clearBuildingRangeIndicator();
+                this.isManualFiring = false;
                 this.isDragging = true;
                 this.dragOrigin.set(pointer.x, pointer.y);
             }
@@ -4544,15 +6175,16 @@ export class MainScene extends Phaser.Scene {
                         this.spawnTroop(gridPosFloat.x, gridPosFloat.y, selectedType, 'PLAYER');
                         (window as any).deployTroop(selectedType);
                         this.lastDeployTime = now;
+                        return; // Don't drag camera when actually deploying
                     }
                 }
             }
-            return; // Don't drag camera while deploying
         }
 
+
         if (this.isDragging) {
-            const dx = pointer.x - this.dragOrigin.x;
-            const dy = pointer.y - this.dragOrigin.y;
+            const dx = (pointer.x - this.dragOrigin.x) * this.cameraSensitivity;
+            const dy = (pointer.y - this.dragOrigin.y) * this.cameraSensitivity;
             this.cameras.main.scrollX -= dx / this.cameras.main.zoom;
             this.cameras.main.scrollY -= dy / this.cameras.main.zoom;
             this.dragOrigin.set(pointer.x, pointer.y);
@@ -4561,76 +6193,243 @@ export class MainScene extends Phaser.Scene {
         this.ghostBuilding.clear();
         if (this.selectedBuildingType || (this.isMoving && this.selectedInWorld)) {
             const type = this.selectedBuildingType || this.selectedInWorld?.type;
-            const ignoreId = this.isMoving ? this.selectedInWorld?.id : null;
             if (type && gridPosSnap.x >= 0 && gridPosSnap.x < this.mapSize && gridPosSnap.y >= 0 && gridPosSnap.y < this.mapSize) {
                 this.ghostBuilding.setVisible(true);
-                const isValid = this.isPositionValid(gridPosSnap.x, gridPosSnap.y, type, ignoreId);
-                this.drawBuildingVisuals(this.ghostBuilding, gridPosSnap.x, gridPosSnap.y, type, 0.5, isValid ? null : 0xff0000);
 
-                // Ghost depth should match what placed building would have
-                const info = BUILDINGS[type];
-                if (info) {
-                    const depth = (gridPosSnap.x + info.width) + (gridPosSnap.y + info.height);
-                    this.ghostBuilding.setDepth(depth * 10);
-                } else {
-                    this.ghostBuilding.setDepth(20000);
-                }
+                this.drawBuildingVisuals(this.ghostBuilding, gridPosSnap.x, gridPosSnap.y, type, 0.5, null);
+
+                // Ghost depth should be on top of everything for visibility
+                this.ghostBuilding.setDepth(200000);
             } else { this.ghostBuilding.setVisible(false); }
         }
     }
 
-    private onPointerUp() { this.isDragging = false; }
+    private onPointerUp() {
+        this.isDragging = false;
+        this.isManualFiring = false;
+        if (this.selectedInWorld && this.selectedInWorld.type === 'prism') {
+            this.cleanupPrismLaser(this.selectedInWorld);
+        }
+    }
+
+    private updateTooltip() {
+        // Disabled: User requested legacy tooltip removal. UI now handles info via selection panel.
+        (window as any).updateGameTooltip?.(null);
+    }
+
+
+
+    // === BUILDING RANGE INDICATOR ===
+    private showBuildingRangeIndicator(building: PlacedBuilding) {
+        // Only show range for defensive buildings
+        const info = BUILDINGS[building.type];
+        if (info.category !== 'defense' || building.type === 'wall') return;
+
+        // Clear any existing indicator
+        this.clearBuildingRangeIndicator();
+
+        // Get the range for this building type
+        // Get range from centralized stats
+        const range = info.range || 0;
+        const deadZone = info.minRange || 0;
+
+        if (range === 0) return;
+
+        // Calculate center position
+        const center = this.cartToIso(building.gridX + info.width / 2, building.gridY + info.height / 2);
+
+        // Create range indicator graphics
+        const rangeGraphics = this.add.graphics();
+        rangeGraphics.setDepth(5);
+
+        // Calculate isometric ellipse size (range in pixels)
+        // Note: We need Math.SQRT2 factor because isometric projection of a grid-circle 
+        // creates an ellipse where the major axis corresponds to the grid diagonal.
+        const radiusX = range * this.tileWidth * 0.5 * Math.SQRT2;
+        const radiusY = range * this.tileHeight * 0.5 * Math.SQRT2;
+
+        // Draw subtle filled area
+        rangeGraphics.fillStyle(0x4488ff, 0.08);
+        rangeGraphics.fillEllipse(center.x, center.y, radiusX * 2, radiusY * 2);
+
+        // Draw dashed outline (simulate with multiple arcs)
+        rangeGraphics.lineStyle(2, 0x4488ff, 0.4);
+        const dashCount = 24;
+        const dashGap = 0.4; // Gap ratio
+        for (let i = 0; i < dashCount; i++) {
+            const startAngle = (i / dashCount) * Math.PI * 2;
+            const endAngle = ((i + (1 - dashGap)) / dashCount) * Math.PI * 2;
+
+            // Draw arc segment as a series of lines
+            rangeGraphics.beginPath();
+            const steps = 5;
+            for (let j = 0; j <= steps; j++) {
+                const t = startAngle + (endAngle - startAngle) * (j / steps);
+                const x = center.x + Math.cos(t) * radiusX;
+                const y = center.y + Math.sin(t) * radiusY;
+                if (j === 0) {
+                    rangeGraphics.moveTo(x, y);
+                } else {
+                    rangeGraphics.lineTo(x, y);
+                }
+            }
+            rangeGraphics.strokePath();
+        }
+
+        // Add a subtle glow
+        rangeGraphics.lineStyle(4, 0x4488ff, 0.15);
+        rangeGraphics.strokeEllipse(center.x, center.y, radiusX * 2, radiusY * 2);
+
+        // === DEAD ZONE INDICATOR ===
+        if (deadZone > 0) {
+            const deadRadiusX = deadZone * this.tileWidth * 0.5;
+            const deadRadiusY = deadZone * this.tileHeight * 0.5;
+
+            // Draw dead zone filled area (red, more opaque)
+            rangeGraphics.fillStyle(0xff4444, 0.15);
+            rangeGraphics.fillEllipse(center.x, center.y, deadRadiusX * 2, deadRadiusY * 2);
+
+            // Draw dead zone dashed outline (red)
+            rangeGraphics.lineStyle(2, 0xff4444, 0.5);
+            for (let i = 0; i < dashCount; i++) {
+                const startAngle = (i / dashCount) * Math.PI * 2;
+                const endAngle = ((i + (1 - dashGap)) / dashCount) * Math.PI * 2;
+
+                rangeGraphics.beginPath();
+                const steps = 5;
+                for (let j = 0; j <= steps; j++) {
+                    const t = startAngle + (endAngle - startAngle) * (j / steps);
+                    const x = center.x + Math.cos(t) * deadRadiusX;
+                    const y = center.y + Math.sin(t) * deadRadiusY;
+                    if (j === 0) {
+                        rangeGraphics.moveTo(x, y);
+                    } else {
+                        rangeGraphics.lineTo(x, y);
+                    }
+                }
+                rangeGraphics.strokePath();
+            }
+        }
+
+        building.rangeIndicator = rangeGraphics;
+        this.attackModeSelectedBuilding = building;
+
+        // Add subtle pulse animation
+        this.tweens.add({
+            targets: rangeGraphics,
+            alpha: 0.6,
+            duration: 800,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+        });
+    }
+
+    private clearBuildingRangeIndicator() {
+        if (this.attackModeSelectedBuilding?.rangeIndicator) {
+            this.attackModeSelectedBuilding.rangeIndicator.destroy();
+            this.attackModeSelectedBuilding.rangeIndicator = undefined;
+        }
+        this.attackModeSelectedBuilding = null;
+    }
 
     private handleCameraMovement(delta: number) {
         if (!this.cursorKeys) return;
-        const speed = 0.5 * delta;
+        const speed = 0.5 * delta * this.cameraSensitivity;
         if (this.cursorKeys.left?.isDown) this.cameras.main.scrollX -= speed;
         else if (this.cursorKeys.right?.isDown) this.cameras.main.scrollX += speed;
         if (this.cursorKeys.up?.isDown) this.cameras.main.scrollY -= speed;
         else if (this.cursorKeys.down?.isDown) this.cameras.main.scrollY += speed;
     }
 
-    private updateSelectionHighlight() { }
+    private updateSelectionHighlight() {
+        if (!this.selectionGraphics) return;
+        this.selectionGraphics.clear();
+
+        if (this.mode === 'HOME' && this.selectedInWorld) {
+            const b = this.selectedInWorld;
+            const info = BUILDINGS[b.type];
+
+            // Draw bright border around base
+            const p1 = this.cartToIso(b.gridX, b.gridY);
+            const p2 = this.cartToIso(b.gridX + info.width, b.gridY);
+            const p3 = this.cartToIso(b.gridX + info.width, b.gridY + info.height);
+            const p4 = this.cartToIso(b.gridX, b.gridY + info.height);
+
+            this.selectionGraphics.lineStyle(4, 0x00ffff, 1); // Bright Cyan
+            this.selectionGraphics.beginPath();
+            this.selectionGraphics.moveTo(p1.x, p1.y);
+            this.selectionGraphics.lineTo(p2.x, p2.y);
+            this.selectionGraphics.lineTo(p3.x, p3.y);
+            this.selectionGraphics.lineTo(p4.x, p4.y);
+            this.selectionGraphics.closePath();
+            this.selectionGraphics.strokePath();
+
+            // Subtle, slow pulsing opacity (0.6 to 1.0)
+            this.selectionGraphics.setAlpha(0.8 + 0.2 * Math.sin(this.time.now / 800));
+
+            // Layer BEHIND the building base (simulate on ground)
+            // UPDATE: User wants it OVERLAPPING other objects (high visibility)
+            // We set it to max depth.
+            this.selectionGraphics.setDepth(200000);
+        }
+    }
 
     private showCloudTransition(onMidpoint: () => void) {
         // Show React overlay to cover UI - CSS animation handles timing
         (window as any).showCloudOverlay?.();
 
-        const width = this.scale.width;
-        const height = this.scale.height;
-        const cloudCount = 40;
         const cloudSprites: Phaser.GameObjects.Arc[] = [];
-        for (let i = 0; i < cloudCount; i++) {
-            const x = Math.random() * width;
-            const y = Math.random() * height;
-            const radius = 250 + Math.random() * 150;
-            const cloud = this.add.circle(x, y, 0, 0xffffff, 0.95);
-            cloud.setScrollFactor(0);
-            cloud.setDepth(100000);
-            cloudSprites.push(cloud);
-            this.tweens.add({
-                targets: cloud, radius: radius, duration: 800, ease: 'Back.easeOut', delay: i * 30,
-                onComplete: () => {
-                    if (cloudSprites.indexOf(cloud) === cloudCount - 1) {
-                        onMidpoint();
-                        cloudSprites.forEach((c, idx) => {
-                            this.tweens.add({
-                                targets: c, radius: 0, alpha: 0, duration: 500, delay: idx * 25,
-                                onComplete: () => {
-                                    c.destroy();
-                                    // Hide overlay after last cloud fades
-                                    if (idx === cloudCount - 1) {
-                                        this.time.delayedCall(100, () => {
-                                            (window as any).hideCloudOverlay?.();
-                                        });
-                                    }
+
+        // for (let i = 0; i < cloudCount; i++) {
+        //     const row = Math.floor(i / 7);
+        //     const col = i % 7;
+        //     const x = (col / 6) * width + (Math.random() - 0.5) * 100;
+        //     const y = (row / 7) * height + (Math.random() - 0.5) * 100;
+        //     const r = 100 + Math.random() * 100;
+        //
+        //     const cloud = this.add.circle(x, y, 0, 0xffffff, 1);
+        //     cloud.setScrollFactor(0);
+        //     cloud.setDepth(1000000);
+        //     cloudSprites.push(cloud);
+        //
+        //     this.tweens.add({
+        //         targets: cloud,
+        //         radius: r,
+        //         duration: 400 + Math.random() * 200,
+        //         delay: (row + col) * 40,
+        //         ease: 'Quad.easeOut'
+        //     });
+        // });
+
+
+        // Wait for screen to be fully obscured (approximately after most tweens finish)
+        this.time.delayedCall(750, () => {
+            onMidpoint();
+
+            // Hold for a moment to ensure state swap happens behind cover
+            this.time.delayedCall(1700, () => {
+                if (cloudSprites.length === 0) {
+                    (window as any).hideCloudOverlay?.();
+                } else {
+                    cloudSprites.forEach((c, idx) => {
+                        this.tweens.add({
+                            targets: c,
+                            radius: 0,
+                            alpha: 0,
+                            duration: 500,
+                            delay: idx * 10,
+                            onComplete: () => {
+                                c.destroy();
+                                if (idx === cloudSprites.length - 1) {
+                                    (window as any).hideCloudOverlay?.();
                                 }
-                            });
+                            }
                         });
-                    }
+                    });
                 }
             });
-        }
+        });
     }
 
 
@@ -4652,8 +6451,63 @@ export class MainScene extends Phaser.Scene {
                 this.destroyedBuildings = 0;
                 this.goldLooted = 0;
                 this.elixirLooted = 0;
+                this.raidEndScheduled = false; // Reset for new raid
                 this.updateBattleStats();
                 (window as any).setGameMode?.('ATTACK');
+            });
+        };
+
+        (window as any).startPracticeAttack = () => {
+            this.showCloudTransition(() => {
+                this.mode = 'ATTACK';
+                this.clearScene();
+                // Load player's own base as the enemy
+                const playerWorld = Backend.getWorld('player_home');
+                if (playerWorld && playerWorld.buildings.length > 0) {
+                    // Distribute loot
+                    const lootMap = LootSystem.calculateLootDistribution(playerWorld.buildings, playerWorld.resources.gold, playerWorld.resources.elixir);
+                    playerWorld.buildings.forEach(b => {
+                        const inst = this.instantiateBuilding(b, 'ENEMY'); // Load as enemy so defenses work
+                        if (inst) inst.loot = lootMap.get(b.id);
+                    });
+                } else {
+                    // Fallback to default village if no saved base
+                    this.placeDefaultVillage();
+                    // Convert all to enemy
+                    this.buildings.forEach(b => b.owner = 'ENEMY');
+                }
+                this.centerCamera();
+                // Initialize battle stats
+                this.initialEnemyBuildings = this.buildings.filter(b => b.owner === 'ENEMY' && b.type !== 'wall').length;
+                this.destroyedBuildings = 0;
+                this.goldLooted = 0;
+                this.elixirLooted = 0;
+                this.raidEndScheduled = false;
+                this.updateBattleStats();
+                (window as any).setGameMode?.('ATTACK');
+            });
+        };
+
+        // Find new map (skip current enemy base)
+        (window as any).findNewMap = () => {
+            // Only allow if no troops have been deployed yet
+            const deployedTroops = this.troops.filter(t => t.owner === 'PLAYER').length;
+            if (deployedTroops > 0) {
+                // Could show feedback here, but for now just don't do anything
+                return;
+            }
+
+            this.showCloudTransition(() => {
+                // Clear and regenerate enemy village
+                this.clearScene();
+                this.generateEnemyVillage();
+                this.centerCamera();
+                // Reset battle stats for new village
+                this.initialEnemyBuildings = this.buildings.filter(b => b.owner === 'ENEMY' && b.type !== 'wall').length;
+                this.destroyedBuildings = 0;
+                this.goldLooted = 0;
+                this.elixirLooted = 0;
+                this.updateBattleStats();
             });
         };
 
@@ -4674,9 +6528,24 @@ export class MainScene extends Phaser.Scene {
             this.selectedInWorld = null;
             this.isMoving = false;
         };
+
+        // Obstacle management
+        (window as any).getObstacles = () => {
+            return this.obstacles.map(o => ({
+                id: o.id,
+                type: o.type,
+                gridX: o.gridX,
+                gridY: o.gridY,
+                ...OBSTACLES[o.type]
+            }));
+        };
+        (window as any).clearObstacle = (obstacleId: string) => {
+            return this.removeObstacle(obstacleId);
+        };
     }
 
     public goHome() {
+        this.cancelPlacement();
         this.mode = 'HOME';
         this.hasDeployed = false;
         this.clearScene();
@@ -4693,12 +6562,19 @@ export class MainScene extends Phaser.Scene {
     private clearScene() {
         this.buildings.forEach(b => {
             b.graphics.destroy();
+            if (b.baseGraphics) b.baseGraphics.destroy();
             if (b.barrelGraphics) b.barrelGraphics.destroy();
+            if (b.prismLaserGraphics) b.prismLaserGraphics.destroy();
+            if (b.prismLaserCore) b.prismLaserCore.destroy();
+            if (b.rangeIndicator) b.rangeIndicator.destroy();
             b.healthBar.destroy();
         });
         this.troops.forEach(t => { t.gameObject.destroy(); t.healthBar.destroy(); });
         this.buildings = [];
         this.troops = [];
+        this.attackModeSelectedBuilding = null;
+        this.clearRubble();
+        this.clearObstacles();
     }
 
     private placeDefaultVillage() {
@@ -4723,6 +6599,9 @@ export class MainScene extends Phaser.Scene {
         // Army
         this.placeBuilding(5, 10, 'barracks', 'PLAYER');
         this.placeBuilding(16, 9, 'army_camp', 'PLAYER');
+
+        // Spawn random wildlife/obstacles
+        this.spawnRandomObstacles(15);
     }
 
     public resetVillage() {
@@ -4745,74 +6624,71 @@ export class MainScene extends Phaser.Scene {
     }
 
     private generateEnemyVillage() {
-        const centerX = 8 + Math.floor(Math.random() * 8);
-        const centerY = 8 + Math.floor(Math.random() * 8);
-        this.placeBuilding(centerX, centerY, 'town_hall', 'ENEMY');
+        const enemyWorld = Backend.generateEnemyWorld();
+        // Give fake resources for loot
+        enemyWorld.resources = {
+            gold: Math.floor(10000 + Math.random() * 40000),
+            elixir: Math.floor(10000 + Math.random() * 40000)
+        };
 
-        // Place defenses including ballista, prism, and magmavent
-        const defCount = 5 + Math.floor(Math.random() * 3);
-        for (let i = 0; i < defCount; i++) {
-            const rx = centerX + (Math.random() > 0.5 ? 4 : -4) + Math.floor(Math.random() * 3);
-            const ry = centerY + (Math.random() > 0.5 ? 4 : -4) + Math.floor(Math.random() * 3);
-            const r = Math.random();
-            // Include new defenses: prism (chain lightning) and magmavent (area damage)
-            const def = r > 0.92 ? 'xbow' :
-                       r > 0.82 ? 'prism' :
-                       r > 0.72 ? 'magmavent' :
-                       r > 0.58 ? 'ballista' :
-                       r > 0.42 ? 'tesla' :
-                       r > 0.22 ? 'cannon' : 'mortar';
-            if (this.isPositionValid(rx, ry, def)) this.placeBuilding(rx, ry, def, 'ENEMY');
-        }
+        const lootMap = LootSystem.calculateLootDistribution(enemyWorld.buildings, enemyWorld.resources.gold, enemyWorld.resources.elixir);
 
-        // Place gold mines
-        const mineCount = 1 + Math.floor(Math.random() * 2);
-        for (let i = 0; i < mineCount; i++) {
-            const rx = centerX + (Math.random() > 0.5 ? 5 : -5) + Math.floor(Math.random() * 2);
-            const ry = centerY + (Math.random() > 0.5 ? 5 : -5) + Math.floor(Math.random() * 2);
-            if (this.isPositionValid(rx, ry, 'mine')) this.placeBuilding(rx, ry, 'mine', 'ENEMY');
-        }
-
-        // Place elixir collectors
-        const elixirCount = 1 + Math.floor(Math.random() * 2);
-        for (let i = 0; i < elixirCount; i++) {
-            const rx = centerX + (Math.random() > 0.5 ? 6 : -6) + Math.floor(Math.random() * 2);
-            const ry = centerY + (Math.random() > 0.5 ? 6 : -6) + Math.floor(Math.random() * 2);
-            if (this.isPositionValid(rx, ry, 'elixir_collector')) this.placeBuilding(rx, ry, 'elixir_collector', 'ENEMY');
-        }
-
-        // Calculate bounds for enclosing wall loop around ALL enemy buildings
-        let minX = this.mapSize, minY = this.mapSize, maxX = 0, maxY = 0;
-        let hasBuildings = false;
-
-        this.buildings.forEach(b => {
-            if (b.owner === 'ENEMY') {
-                hasBuildings = true;
-                const info = BUILDINGS[b.type];
-                minX = Math.min(minX, b.gridX);
-                minY = Math.min(minY, b.gridY);
-                maxX = Math.max(maxX, b.gridX + info.width);
-                maxY = Math.max(maxY, b.gridY + info.height);
-            }
+        enemyWorld.buildings.forEach(b => {
+            const inst = this.instantiateBuilding(b, 'ENEMY');
+            if (inst) inst.loot = lootMap.get(b.id);
         });
+    }
 
-        if (hasBuildings) {
-            // Buffer of 2 tiles to ensure we surround them with space
-            const wx1 = Math.max(1, minX - 2);
-            const wy1 = Math.max(1, minY - 2);
-            const wx2 = Math.min(this.mapSize - 2, maxX + 1);
-            const wy2 = Math.min(this.mapSize - 2, maxY + 1);
 
-            for (let x = wx1; x <= wx2; x++) {
-                for (let y = wy1; y <= wy2; y++) {
-                    // Draw rect
-                    if (x === wx1 || x === wx2 || y === wy1 || y === wy2) {
-                        if (this.isPositionValid(x, y, 'wall')) {
-                            this.placeBuilding(x, y, 'wall', 'ENEMY');
-                        }
-                    }
-                }
-            }
+
+    private findWardTarget(ward: Troop): Troop | PlacedBuilding | null {
+        // 1. Closest INJURED ally (Priority)
+        const injured = this.troops.filter(t => t.owner === ward.owner && t !== ward && t.health < t.maxHealth && t.health > 0);
+        if (injured.length > 0) {
+            injured.sort((a, b) => {
+                const da = Phaser.Math.Distance.Between(ward.gridX, ward.gridY, a.gridX, a.gridY);
+                const db = Phaser.Math.Distance.Between(ward.gridX, ward.gridY, b.gridX, b.gridY);
+                return da - db;
+            });
+            return injured[0];
+        }
+
+        // 2. Closest Ally (to follow)
+        const allies = this.troops.filter(t => t.owner === ward.owner && t !== ward && t.health > 0);
+        if (allies.length > 0) {
+            allies.sort((a, b) => {
+                const da = Phaser.Math.Distance.Between(ward.gridX, ward.gridY, a.gridX, a.gridY);
+                const db = Phaser.Math.Distance.Between(ward.gridX, ward.gridY, b.gridX, b.gridY);
+                return da - db;
+            });
+            return allies[0];
+        }
+
+        // 3. Enemy
+        return this.findNearestEnemyBuilding(ward);
+    }
+    private createSmokeEffect(x: number, y: number, count: number = 5, scale: number = 1, duration: number = 800) {
+        for (let i = 0; i < count; i++) {
+            this.time.delayedCall(i * 40, () => {
+                const smoke = this.add.graphics();
+                const size = (4 + Math.random() * 6) * scale;
+                smoke.fillStyle(0x757575, 0.35);
+                smoke.fillRect(-size / 2, -size / 2, size, size);
+                smoke.setRotation(Math.random() * Math.PI);
+                smoke.setPosition(x + (Math.random() - 0.5) * 25, y + (Math.random() - 0.5) * 15);
+                smoke.setDepth(10005);
+
+                this.tweens.add({
+                    targets: smoke,
+                    y: y - (60 + Math.random() * 60) * scale,
+                    x: smoke.x + (Math.random() - 0.5) * 50 * scale,
+                    alpha: 0,
+                    scale: 2.2 * scale,
+                    duration: duration + Math.random() * (duration * 0.5),
+                    ease: 'Quad.easeOut',
+                    onComplete: () => smoke.destroy()
+                });
+            });
         }
     }
 }
