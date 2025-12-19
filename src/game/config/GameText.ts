@@ -12,5 +12,6 @@ export const BUILDING_TEXTS: Record<string, { flavor: string; details: string }>
     xbow: { flavor: "Supersonic.", details: "Rapid-fire crossbow. Overwhelms enemies with a hail of bolts." },
     tesla: { flavor: "Shocking.", details: "Hidden underground. Pops up to zap up to 3 enemies with chain lightning." },
     magmavent: { flavor: "Liquid fire.", details: "Erupts continuously, creating a hazardous zone of area damage." },
-    prism: { flavor: "Focused light.", details: "Channels a continuous laser beam. Deals ramping damage to a single target." }
+    prism: { flavor: "Focused light.", details: "Channels a continuous laser beam. Deals ramping damage to a single target." },
+    dragons_breath: { flavor: "Ancient fury.", details: "A massive battery of 16 firecracker pods. Rains down a staggered salvo of explosive fire." }
 };

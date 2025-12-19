@@ -4419,8 +4419,17 @@ export class MainScene extends Phaser.Scene {
     }
 
     private updateCombat(time: number) {
-        // Include prism and magmavent in defenses
-        const defenses = this.buildings.filter(b => (b.type === 'cannon' || b.type === 'mortar' || b.type === 'tesla' || b.type === 'ballista' || b.type === 'xbow' || b.type === 'prism' || b.type === 'magmavent') && b.health > 0);
+        // Include all defense types
+        const defenses = this.buildings.filter(b => (
+            b.type === 'cannon' ||
+            b.type === 'mortar' ||
+            b.type === 'tesla' ||
+            b.type === 'ballista' ||
+            b.type === 'xbow' ||
+            b.type === 'prism' ||
+            b.type === 'magmavent' ||
+            b.type === 'dragons_breath'
+        ) && b.health > 0);
         defenses.forEach(defense => {
             let nearestTroop: Troop | null = null;
             const stats = getBuildingStats(defense.type as BuildingType, defense.level || 1);
@@ -4455,6 +4464,7 @@ export class MainScene extends Phaser.Scene {
                 else if (defense.type === 'xbow') this.shootXBowAt(defense, nearestTroop);
                 else if (defense.type === 'prism') this.shootPrismContinuousLaser(defense, nearestTroop, time);
                 else if (defense.type === 'magmavent') this.shootMagmaEruption(defense);
+                else if (defense.type === 'dragons_breath') this.shootDragonsBreathAt(defense, nearestTroop);
                 else this.shootAt(defense, nearestTroop);
             } else {
                 // No target - clean up prism laser if it exists
@@ -7640,6 +7650,67 @@ export class MainScene extends Phaser.Scene {
                 });
             });
         }
+    }
+
+    private shootDragonsBreathAt(db: PlacedBuilding, troop: Troop) {
+        const info = BUILDING_DEFINITIONS['dragons_breath'];
+        const start = this.cartToIso(db.gridX + info.width / 2, db.gridY + info.height / 2);
+        const targetX = troop.gridX;
+        const targetY = troop.gridY;
+        const stats = getBuildingStats('dragons_breath', db.level || 1);
+
+        for (let i = 0; i < 16; i++) {
+            this.time.delayedCall(i * 50, () => {
+                if (!db || db.health <= 0) return;
+                const jitterX = (Math.random() - 0.5) * 2.5;
+                const jitterY = (Math.random() - 0.5) * 2.5;
+                this.shootDragonPod(db, start, targetX + jitterX, targetY + jitterY, stats.damage || 25);
+            });
+        }
+    }
+
+    private shootDragonPod(db: PlacedBuilding, start: { x: number, y: number }, targetGridX: number, targetGridY: number, damage: number) {
+        const end = this.cartToIso(targetGridX, targetGridY);
+        const pod = this.add.graphics();
+        pod.fillStyle(0xff3300, 1);
+        pod.fillCircle(0, 0, 4);
+        pod.setPosition(start.x + (Math.random() - 0.5) * 30, start.y - 40);
+        pod.setDepth(5000);
+
+        const midY = (start.y + end.y) / 2 - 250;
+        const dist = Phaser.Math.Distance.Between(start.x, start.y, end.x, end.y);
+
+        this.tweens.add({
+            targets: pod,
+            x: end.x,
+            duration: dist / 0.35 + Math.random() * 150,
+            ease: 'Linear',
+            onUpdate: (tween) => {
+                const t = tween.progress;
+                pod.y = (1 - t) * (1 - t) * (start.y - 40) + 2 * (1 - t) * t * midY + t * t * end.y;
+                if (Math.random() > 0.7) {
+                    const spark = this.add.circle(pod.x, pod.y, 2, 0xffaa00, 0.8);
+                    spark.setDepth(4999);
+                    this.tweens.add({ targets: spark, alpha: 0, scale: 2, duration: 200, onComplete: () => spark.destroy() });
+                }
+            },
+            onComplete: () => {
+                pod.destroy();
+                const boom = this.add.circle(end.x, end.y, 15, 0xff6600, 0.7);
+                boom.setDepth(5001);
+                this.tweens.add({ targets: boom, alpha: 0, scale: 2, duration: 150, onComplete: () => boom.destroy() });
+
+                this.troops.forEach(t => {
+                    if (t.owner !== db.owner && t.health > 0) {
+                        const d = Phaser.Math.Distance.Between(t.gridX, t.gridY, targetGridX, targetGridY);
+                        if (d < 1.2) {
+                            t.health -= damage;
+                            this.updateHealthBar(t);
+                        }
+                    }
+                });
+            }
+        });
     }
 }
 

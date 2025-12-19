@@ -56,6 +56,8 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ type, level, resources, is
                         <span className="stat-label">Health</span>
                         <span className="stat-value">{stats.maxHealth}</span>
                     </div>
+
+                    {/* Defense Specific Stats */}
                     {stats.damage && (
                         <div className="stat-row">
                             <span className="stat-label">Damage</span>
@@ -80,6 +82,29 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ type, level, resources, is
                             <span className="stat-value">{stats.range}</span>
                         </div>
                     )}
+
+                    {/* Resource Specific Stats */}
+                    {stats.productionRate && (
+                        <>
+                            <div className="stat-row">
+                                <span className="stat-label">Production</span>
+                                <span className="stat-value">{stats.productionRate}/s</span>
+                            </div>
+                            <div className="stat-row">
+                                <span className="stat-label">Offline Rate</span>
+                                <span className="stat-value">{(stats.productionRate * 0.2).toFixed(1)}/s</span>
+                            </div>
+                        </>
+                    )}
+
+                    {/* Army/Housing Specific Stats */}
+                    {stats.capacity && (
+                        <div className="stat-row">
+                            <span className="stat-label">Housing</span>
+                            <span className="stat-value">+{stats.capacity}</span>
+                        </div>
+                    )}
+
                     {texts?.details && (
                         <div className="info-details">{texts.details}</div>
                     )}

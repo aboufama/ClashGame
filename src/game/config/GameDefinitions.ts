@@ -37,6 +37,7 @@ export interface BuildingDef {
     fireRate?: number;
     damage?: number;
     productionRate?: number; // Resources per second
+    capacity?: number; // Housing space provided
     maxLevel?: number;
     levels?: BuildingLevelStats[]; // index 0 = Level 1, index 1 = Level 2, etc.
 }
@@ -46,7 +47,7 @@ export interface BuildingDef {
 // I'll target the interface first.
 
 export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
-    town_hall: { id: 'town_hall', name: 'Town Hall', cost: 500, desc: 'The heart of your village.', width: 3, height: 3, maxHealth: 2000, category: 'other', maxCount: 1, color: 0x3366ff, maxLevel: 1 },
+    town_hall: { id: 'town_hall', name: 'Town Hall', cost: 500, desc: 'The heart of your village.', width: 3, height: 3, maxHealth: 2000, category: 'other', maxCount: 1, color: 0x3366ff, maxLevel: 1, capacity: 10 },
     barracks: { id: 'barracks', name: 'Barracks', cost: 200, desc: 'Trains brave troops.', width: 2, height: 2, maxHealth: 800, category: 'military', maxCount: 4, color: 0xff3333, maxLevel: 1 },
     cannon: {
         id: 'cannon',
@@ -111,7 +112,7 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
     mortar: { id: 'mortar', name: 'Mortar', cost: 400, desc: 'Splash damage area shell.', width: 2, height: 2, maxHealth: 700, range: 10, minRange: 3, category: 'defense', maxCount: 3, color: 0x555555, fireRate: 4000, damage: 45, maxLevel: 1 },
     tesla: { id: 'tesla', name: 'Tesla Coil', cost: 600, desc: 'Hidden zapping trap.', width: 1, height: 1, maxHealth: 600, range: 6, category: 'defense', maxCount: 3, color: 0x00ccff, fireRate: 1500, damage: 60, maxLevel: 1 },
     wall: { id: 'wall', name: 'Wall', cost: 50, desc: 'Stops enemies cold.', width: 1, height: 1, maxHealth: 500, category: 'defense', maxCount: 100, color: 0xcccccc, maxLevel: 1 },
-    army_camp: { id: 'army_camp', name: 'Army Camp', cost: 300, desc: 'Houses your army.', width: 3, height: 3, maxHealth: 1000, category: 'military', maxCount: 4, color: 0x884422, maxLevel: 1 },
+    army_camp: { id: 'army_camp', name: 'Army Camp', cost: 300, desc: 'Houses your army.', width: 3, height: 3, maxHealth: 1000, category: 'military', maxCount: 4, color: 0x884422, maxLevel: 1, capacity: 20 },
     prism: { id: 'prism', name: 'Prism Tower', cost: 550, desc: 'Beam bounces between foes.', width: 1, height: 1, maxHealth: 1100, range: 8, category: 'defense', maxCount: 1, color: 0xff00ff, fireRate: 50, maxLevel: 1 },
     magmavent: { id: 'magmavent', name: 'Magma Vent', cost: 650, desc: 'Erupts with area damage.', width: 3, height: 3, maxHealth: 1200, range: 6, category: 'defense', maxCount: 1, color: 0xff4400, fireRate: 1500, maxLevel: 1 },
     dragons_breath: {
@@ -128,7 +129,10 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         color: 0xcc0000,
         fireRate: 3000,  // 3 second salvo cycle
         damage: 25,      // Per pod (16 pods = 400 max damage per salvo)
-        maxLevel: 1
+        maxLevel: 1,
+        levels: [
+            { hp: 2500, damage: 25, fireRate: 3000, cost: 1500 }
+        ]
     },
 };
 
