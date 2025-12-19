@@ -67,12 +67,50 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         levels: [
             { hp: 800, damage: 70, fireRate: 2500, cost: 250 },       // Level 1 - Basic
             { hp: 900, damage: 80, fireRate: 2300, cost: 400 },       // Level 2 - Reinforced
-            { hp: 1000, damage: 95, fireRate: 2000, cost: 600 },      // Level 3 - Dual-barrel
-            { hp: 1400, damage: 140, fireRate: 1600, cost: 1000 }     // Level 4 - Heavy Siege Cannon
+            { hp: 950, damage: 88, fireRate: 2100, cost: 500 },       // Level 3 - Fortified (new intermediate)
+            { hp: 1000, damage: 95, fireRate: 2000, cost: 650 }       // Level 4 - Dual-barrel
         ]
     },
-    ballista: { id: 'ballista', name: 'Ballista', cost: 350, desc: 'Heavy single-target damage.', width: 2, height: 2, maxHealth: 900, range: 9, category: 'defense', maxCount: 2, color: 0x8b4513, fireRate: 3500, damage: 120, maxLevel: 1 },
-    xbow: { id: 'xbow', name: 'X-Bow', cost: 800, desc: 'Rapid fire long-range turret.', width: 2, height: 2, maxHealth: 1500, range: 11, category: 'defense', maxCount: 2, color: 0x8b008b, fireRate: 200, damage: 15, maxLevel: 1 },
+    ballista: {
+        id: 'ballista',
+        name: 'Ballista',
+        cost: 350,
+        desc: 'Heavy single-target damage.',
+        width: 2,
+        height: 2,
+        maxHealth: 900,
+        range: 9,
+        category: 'defense',
+        maxCount: 2,
+        color: 0x8b4513,
+        fireRate: 3500,
+        damage: 120,
+        maxLevel: 2,
+        levels: [
+            { hp: 900, damage: 120, fireRate: 3500, cost: 350 },    // Level 1 - Standard
+            { hp: 1050, damage: 140, fireRate: 3200, cost: 550 }    // Level 2 - Reinforced
+        ]
+    },
+    xbow: {
+        id: 'xbow',
+        name: 'X-Bow',
+        cost: 800,
+        desc: 'Rapid fire long-range turret.',
+        width: 2,
+        height: 2,
+        maxHealth: 1500,
+        range: 11,
+        category: 'defense',
+        maxCount: 2,
+        color: 0x8b008b,
+        fireRate: 200,
+        damage: 15,
+        maxLevel: 2,
+        levels: [
+            { hp: 1500, damage: 15, fireRate: 200, cost: 800 },     // Level 1 - Standard
+            { hp: 1750, damage: 18, fireRate: 180, cost: 1200 }     // Level 2 - Enhanced
+        ]
+    },
     mine: {
         id: 'mine',
         name: 'Gold Mine',

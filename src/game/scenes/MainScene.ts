@@ -729,7 +729,11 @@ export class MainScene extends Phaser.Scene {
                 }
                 break;
             case 'ballista':
-                this.drawBallista(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                if (building && building.level >= 2) {
+                    this.drawBallistaLevel2(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                } else {
+                    this.drawBallista(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                }
                 break;
             case 'mine':
                 this.drawGoldMine(graphics, c1, c2, c3, c4, center, alpha, tint, building);
@@ -750,7 +754,11 @@ export class MainScene extends Phaser.Scene {
                 this.drawArmyCamp(graphics, c1, c2, c3, c4, center, alpha, tint, baseGraphics);
                 break;
             case 'xbow':
-                this.drawXBow(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                if (building && building.level >= 2) {
+                    this.drawXBowLevel2(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                } else {
+                    this.drawXBow(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                }
                 break;
             case 'prism':
                 this.drawPrismTower(graphics, c1, c2, c3, c4, center, alpha, tint, building);
@@ -1470,7 +1478,203 @@ export class MainScene extends Phaser.Scene {
     }
 
     private drawCannonLevel3(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
-        // LEVEL 3 CANNON: Dual-barrel reinforced cannon with gold/brass accents and glowing effects
+        // LEVEL 3 CANNON: Fortified single-barrel with armor plating and steel reinforcements
+        const angle = building?.ballistaAngle ?? Math.PI / 4;
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+
+        // === ARMORED STEEL FOUNDATION ===
+        // Dark steel base with reinforced edges (isometric diamond)
+        graphics.fillStyle(tint ?? 0x3a3a4a, alpha);
+        graphics.fillPoints([c1, c2, c3, c4], true);
+
+        // Steel trim edges with subtle blue tint
+        graphics.lineStyle(3, 0x4a4a5a, alpha * 0.9);
+        graphics.lineBetween(c1.x, c1.y, c2.x, c2.y);
+        graphics.lineBetween(c1.x, c1.y, c4.x, c4.y);
+        graphics.lineStyle(2, 0x2a2a3a, alpha * 0.8);
+        graphics.lineBetween(c2.x, c2.y, c3.x, c3.y);
+        graphics.lineBetween(c3.x, c3.y, c4.x, c4.y);
+
+        // Steel corner bolts
+        graphics.fillStyle(0x606070, alpha * 0.9);
+        graphics.fillCircle(c1.x, c1.y, 3);
+        graphics.fillCircle(c2.x, c2.y, 2.5);
+        graphics.fillCircle(c3.x, c3.y, 2.5);
+        graphics.fillCircle(c4.x, c4.y, 2.5);
+        // Bolt highlights
+        graphics.fillStyle(0x808090, alpha * 0.6);
+        graphics.fillCircle(c1.x - 1, c1.y - 1, 1.5);
+
+        // === HEAVY ROTATING BASE ===
+        const baseRadiusX = 22;
+        const baseRadiusY = 13;
+        const baseY = center.y - 3;
+
+        // Shadow underneath
+        graphics.fillStyle(0x1a1a1a, alpha * 0.5);
+        graphics.fillEllipse(center.x + 2, baseY + 5, baseRadiusX + 2, baseRadiusY + 1);
+
+        // Main armored base - dark steel
+        graphics.fillStyle(0x3a3a4a, alpha);
+        graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+
+        // Inner steel ring
+        graphics.lineStyle(3, 0x2a2a3a, alpha * 0.8);
+        graphics.strokeEllipse(center.x, baseY, baseRadiusX - 4, baseRadiusY - 2);
+
+        // Armor plates visible on base (wedge sections)
+        graphics.fillStyle(0x4a4a5a, alpha * 0.6);
+        graphics.beginPath();
+        graphics.arc(center.x - 8, baseY, 8, -0.5, 0.8, false);
+        graphics.fillPath();
+        graphics.beginPath();
+        graphics.arc(center.x + 8, baseY, 8, 2.3, 3.6, false);
+        graphics.fillPath();
+
+        // Heavy outer ring
+        graphics.lineStyle(4, 0x4a4a5a, alpha);
+        graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+        graphics.lineStyle(2, 0x5a5a6a, alpha * 0.5);
+        graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
+
+        // === FORTIFIED BARREL SETUP ===
+        const barrelHeight = -12;
+        const barrelLength = 28;
+        const barrelWidth = 12;  // Thicker fortified barrel
+
+        // Recoil animation
+        const recoilAmount = (building?.cannonRecoilOffset ?? 0) * 10;
+        const recoilOffsetX = -cos * recoilAmount;
+        const recoilOffsetY = -sin * 0.5 * recoilAmount;
+
+        // Barrel tip position
+        const barrelTipX = center.x + cos * barrelLength + recoilOffsetX;
+        const barrelTipY = center.y + barrelHeight + sin * 0.5 * barrelLength + recoilOffsetY;
+
+        // Barrel shadow on ground
+        graphics.fillStyle(0x1a1a1a, alpha * 0.4);
+        graphics.fillEllipse(center.x + cos * (barrelLength * 0.5) + 3, center.y + 5, barrelLength * 0.7, 6);
+
+        // === ARMORED BARREL CARRIAGE ===
+        const supportOffsetX = -sin * 10;
+        const supportOffsetY = cos * 5;
+
+        // Left support (heavy steel)
+        graphics.fillStyle(0x3a3a4a, alpha);
+        graphics.beginPath();
+        graphics.moveTo(center.x - supportOffsetX, baseY - supportOffsetY);
+        graphics.lineTo(center.x - supportOffsetX * 0.5, center.y + barrelHeight + 5);
+        graphics.lineTo(center.x + cos * 5 - supportOffsetX * 0.5, center.y + barrelHeight + sin * 2.5 + 5);
+        graphics.lineTo(center.x + cos * 5, center.y + barrelHeight + sin * 2.5);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Right support (slightly darker)
+        graphics.fillStyle(0x2a2a3a, alpha);
+        graphics.beginPath();
+        graphics.moveTo(center.x + supportOffsetX, baseY + supportOffsetY);
+        graphics.lineTo(center.x + supportOffsetX * 0.5, center.y + barrelHeight + 5);
+        graphics.lineTo(center.x + cos * 5 + supportOffsetX * 0.5, center.y + barrelHeight + sin * 2.5 + 5);
+        graphics.lineTo(center.x + cos * 5, center.y + barrelHeight + sin * 2.5);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Steel bolts on supports
+        graphics.fillStyle(0x5a5a6a, alpha * 0.8);
+        graphics.fillCircle(center.x - supportOffsetX * 0.7, baseY - supportOffsetY * 0.7 - 3, 2);
+        graphics.fillCircle(center.x + supportOffsetX * 0.7, baseY + supportOffsetY * 0.7 - 3, 2);
+
+        // === CENTRAL PIVOT MECHANISM ===
+        const drawPivot = () => {
+            const pivotX = center.x + recoilOffsetX;
+            const pivotY = center.y + barrelHeight + 4 + recoilOffsetY;
+
+            // Heavy steel pivot
+            graphics.fillStyle(0x2a2a2a, alpha);
+            graphics.fillCircle(pivotX, pivotY, 9);
+            graphics.fillStyle(0x3a3a4a, alpha);
+            graphics.fillCircle(pivotX, pivotY, 7);
+            // Steel center
+            graphics.fillStyle(0x5a5a6a, alpha);
+            graphics.fillCircle(pivotX, pivotY, 4);
+            graphics.fillStyle(0x6a6a7a, alpha * 0.8);
+            graphics.fillCircle(pivotX - 1, pivotY - 1, 2);
+        };
+
+        if (sin >= 0) drawPivot();
+
+        // === BARREL BASE JOINT ===
+        const baseJointX = center.x + cos * 3 + recoilOffsetX;
+        const baseJointY = center.y + barrelHeight + sin * 1.5 + recoilOffsetY;
+        graphics.fillStyle(0x4a4a5a, alpha);
+        graphics.fillEllipse(baseJointX, baseJointY, 14, 9);
+        graphics.fillStyle(0x3a3a4a, alpha * 0.8);
+        graphics.fillEllipse(baseJointX, baseJointY, 10, 6);
+
+        // === FORTIFIED BARREL ===
+        const barrelBaseX = center.x + recoilOffsetX;
+        const barrelBaseY = center.y + barrelHeight + recoilOffsetY;
+
+        // Barrel outer shadow
+        graphics.lineStyle(barrelWidth + 3, 0x1a1a1a, alpha);
+        graphics.lineBetween(barrelBaseX, barrelBaseY + 2, barrelTipX, barrelTipY + 2);
+
+        // Barrel main body - dark steel
+        graphics.lineStyle(barrelWidth, 0x3a3a4a, alpha);
+        graphics.lineBetween(barrelBaseX, barrelBaseY, barrelTipX, barrelTipY);
+
+        // Barrel secondary layer
+        graphics.lineStyle(barrelWidth - 2, 0x4a4a5a, alpha);
+        graphics.lineBetween(barrelBaseX, barrelBaseY - 1, barrelTipX, barrelTipY - 1);
+
+        // Barrel highlight strip
+        graphics.lineStyle(3, 0x5a5a6a, alpha * 0.9);
+        graphics.lineBetween(barrelBaseX, barrelBaseY - 3, barrelTipX, barrelTipY - 3);
+
+        // === ARMOR REINFORCEMENT BANDS ===
+        const bands = [0.15, 0.35, 0.55, 0.75];
+        for (let i = 0; i < bands.length; i++) {
+            const t = bands[i];
+            const bandX = barrelBaseX + cos * barrelLength * t;
+            const bandY = barrelBaseY + sin * 0.5 * barrelLength * t;
+
+            // Steel reinforcement bands
+            graphics.fillStyle(0x4a4a5a, alpha);
+            graphics.fillEllipse(bandX, bandY, 9, 5);
+            // Highlight on bands
+            graphics.fillStyle(0x6a6a7a, alpha * 0.6);
+            graphics.fillCircle(bandX - 2, bandY - 1, 2);
+            graphics.lineStyle(1, 0x2a2a3a, alpha);
+            graphics.strokeEllipse(bandX, bandY, 9, 5);
+
+            // Small rivets on bands
+            if (i % 2 === 0) {
+                graphics.fillStyle(0x5a5a6a, alpha * 0.7);
+                graphics.fillCircle(bandX - 3, bandY, 1.5);
+                graphics.fillCircle(bandX + 3, bandY, 1.5);
+            }
+        }
+
+        // === MUZZLE SHROUD ===
+        const muzzleX = barrelTipX;
+        const muzzleY = barrelTipY;
+
+        // Heavy muzzle ring
+        graphics.fillStyle(0x4a4a5a, alpha);
+        graphics.fillEllipse(muzzleX, muzzleY, 8, 5);
+        graphics.fillStyle(0x5a5a6a, alpha);
+        graphics.fillEllipse(muzzleX, muzzleY, 6, 4);
+
+        // Dark bore
+        graphics.fillStyle(0x1a1a1a, alpha);
+        graphics.fillEllipse(muzzleX + cos * 2, muzzleY + sin, 4, 2.5);
+
+        if (sin < 0) drawPivot();
+    }
+
+    private drawCannonLevel4(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
+        // LEVEL 4 CANNON: Dual-barrel reinforced cannon with gold/brass accents and glowing effects
         const angle = building?.ballistaAngle ?? Math.PI / 4;
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
@@ -1674,231 +1878,88 @@ export class MainScene extends Phaser.Scene {
         if (sin < 0) drawPivot();
     }
 
-    private drawCannonLevel4(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
-        // LEVEL 4 CANNON: Heavy Siege Cannon - massive barrel with glowing core and war machine aesthetic
-        const angle = building?.ballistaAngle ?? Math.PI / 4;
-        const cos = Math.cos(angle);
-        const sin = Math.sin(angle);
-
-        // === HEAVY STEEL FORTRESS FOUNDATION ===
-        graphics.fillStyle(tint ?? 0x2a2a3a, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
-
-        // Glowing red trim (heated metal)
-        graphics.lineStyle(3, 0x8b0000, alpha * 0.8);
-        graphics.lineBetween(c1.x, c1.y, c2.x, c2.y);
-        graphics.lineBetween(c1.x, c1.y, c4.x, c4.y);
-        graphics.lineStyle(2, 0x660000, alpha * 0.7);
-        graphics.lineBetween(c2.x, c2.y, c3.x, c3.y);
-        graphics.lineBetween(c3.x, c3.y, c4.x, c4.y);
-
-        // Heavy corner bolts (glowing)
-        graphics.fillStyle(0xff4400, alpha * 0.6);
-        graphics.fillCircle(c1.x, c1.y, 5);
-        graphics.fillStyle(0xcc3300, alpha * 0.9);
-        graphics.fillCircle(c1.x, c1.y, 3.5);
-        graphics.fillStyle(0xff4400, alpha * 0.5);
-        graphics.fillCircle(c2.x, c2.y, 3);
-        graphics.fillCircle(c3.x, c3.y, 3);
-        graphics.fillCircle(c4.x, c4.y, 3);
-
-        // === MASSIVE ARMORED ROTATING BASE ===
-        const baseRadiusX = 28;
-        const baseRadiusY = 16;
-        const baseY = center.y - 4;
-
-        // Heavy shadow
-        graphics.fillStyle(0x0a0a0a, alpha * 0.6);
-        graphics.fillEllipse(center.x + 3, baseY + 6, baseRadiusX + 3, baseRadiusY + 2);
-
-        // Main armored base (dark steel)
-        graphics.fillStyle(0x1a1a2a, alpha);
-        graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-
-        // Inner heat ring (glowing red)
-        graphics.lineStyle(3, 0x8b0000, alpha * 0.7);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX - 6, baseRadiusY - 3);
-        graphics.lineStyle(2, 0xff4400, alpha * 0.5);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX - 8, baseRadiusY - 4);
-        graphics.lineStyle(1, 0xff6600, alpha * 0.3);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX - 10, baseRadiusY - 5);
-
-        // Heavy outer armor ring
-        graphics.lineStyle(5, 0x2a2a3a, alpha);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-        graphics.lineStyle(2, 0x3a3a4a, alpha * 0.7);
-        graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
-
-        // === MASSIVE SIEGE BARREL ===
-        const barrelHeight = -16;
-        const barrelLength = 38;   // Very long barrel
-        const barrelWidth = 16;    // Very thick barrel
-
-        // Heavy recoil
-        const recoilAmount = (building?.cannonRecoilOffset ?? 0) * 12;
-        const recoilOffsetX = -cos * recoilAmount;
-        const recoilOffsetY = -sin * 0.5 * recoilAmount;
-
-        const barrelTipX = center.x + cos * barrelLength + recoilOffsetX;
-        const barrelTipY = center.y + barrelHeight + sin * 0.5 * barrelLength + recoilOffsetY;
-
-        // Heavy barrel shadow
-        graphics.fillStyle(0x0a0a0a, alpha * 0.5);
-        graphics.fillEllipse(center.x + cos * (barrelLength * 0.5) + 4, center.y + 7, barrelLength * 0.8, 8);
-
-        // === ARMORED BARREL CARRIAGE ===
-        const supportOffsetX = -sin * 12;
-        const supportOffsetY = cos * 6;
-
-        // Left armored support
-        graphics.fillStyle(0x2a2a3a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(center.x - supportOffsetX, baseY - supportOffsetY);
-        graphics.lineTo(center.x - supportOffsetX * 0.4, center.y + barrelHeight + 6);
-        graphics.lineTo(center.x + cos * 8 - supportOffsetX * 0.4, center.y + barrelHeight + sin * 4 + 6);
-        graphics.lineTo(center.x + cos * 8, center.y + barrelHeight + sin * 4);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Right armored support
-        graphics.fillStyle(0x1a1a2a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(center.x + supportOffsetX, baseY + supportOffsetY);
-        graphics.lineTo(center.x + supportOffsetX * 0.4, center.y + barrelHeight + 6);
-        graphics.lineTo(center.x + cos * 8 + supportOffsetX * 0.4, center.y + barrelHeight + sin * 4 + 6);
-        graphics.lineTo(center.x + cos * 8, center.y + barrelHeight + sin * 4);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Glowing support accents
-        graphics.lineStyle(1, 0x8b0000, alpha * 0.6);
-        graphics.lineBetween(center.x - supportOffsetX, baseY - supportOffsetY, center.x + cos * 8, center.y + barrelHeight + sin * 4);
-        graphics.lineBetween(center.x + supportOffsetX, baseY + supportOffsetY, center.x + cos * 8, center.y + barrelHeight + sin * 4);
-
-        // === CENTRAL POWER CORE ===
-        const drawPivot = () => {
-            const pivotX = center.x + recoilOffsetX;
-            const pivotY = center.y + barrelHeight + 5 + recoilOffsetY;
-
-            // Outer armor
-            graphics.fillStyle(0x1a1a2a, alpha);
-            graphics.fillCircle(pivotX, pivotY, 14);
-            graphics.fillStyle(0x2a2a3a, alpha);
-            graphics.fillCircle(pivotX, pivotY, 11);
-            // Glowing core
-            graphics.fillStyle(0x8b0000, alpha);
-            graphics.fillCircle(pivotX, pivotY, 8);
-            graphics.fillStyle(0xcc3300, alpha * 0.9);
-            graphics.fillCircle(pivotX, pivotY, 6);
-            graphics.fillStyle(0xff4400, alpha * 0.8);
-            graphics.fillCircle(pivotX, pivotY, 4);
-            graphics.fillStyle(0xff6600, alpha * 0.6);
-            graphics.fillCircle(pivotX - 1, pivotY - 1, 2);
-        };
-
-        if (sin >= 0) drawPivot();
-
-        // === BARREL BASE JOINT (MASSIVE) ===
-        const baseJointX = center.x + cos * 5 + recoilOffsetX;
-        const baseJointY = center.y + barrelHeight + sin * 2.5 + recoilOffsetY;
-        graphics.fillStyle(0x2a2a3a, alpha);
-        graphics.fillEllipse(baseJointX, baseJointY, 20, 12);
-        graphics.fillStyle(0x8b0000, alpha * 0.7);
-        graphics.fillEllipse(baseJointX, baseJointY, 14, 8);
-        graphics.fillStyle(0x1a1a2a, alpha);
-        graphics.fillEllipse(baseJointX, baseJointY, 10, 6);
-
-        // === MASSIVE BARREL BODY ===
-        const barrelBaseX = center.x + recoilOffsetX;
-        const barrelBaseY = center.y + barrelHeight + recoilOffsetY;
-
-        // Barrel outer shadow
-        graphics.lineStyle(barrelWidth + 6, 0x0a0a0a, alpha);
-        graphics.lineBetween(barrelBaseX, barrelBaseY + 3, barrelTipX, barrelTipY + 3);
-
-        // Barrel main body - dark armored steel
-        graphics.lineStyle(barrelWidth, 0x1a1a2a, alpha);
-        graphics.lineBetween(barrelBaseX, barrelBaseY, barrelTipX, barrelTipY);
-
-        // Barrel mid layer
-        graphics.lineStyle(barrelWidth - 4, 0x2a2a3a, alpha);
-        graphics.lineBetween(barrelBaseX, barrelBaseY - 1, barrelTipX, barrelTipY - 1);
-
-        // Barrel highlight strip
-        graphics.lineStyle(3, 0x3a3a4a, alpha * 0.9);
-        graphics.lineBetween(barrelBaseX, barrelBaseY - 3, barrelTipX, barrelTipY - 3);
-
-        // === GLOWING ARMOR BANDS ===
-        const bands = [0.1, 0.3, 0.5, 0.7, 0.9];
-        for (let i = 0; i < bands.length; i++) {
-            const t = bands[i];
-            const bandX = center.x + cos * barrelLength * t + recoilOffsetX;
-            const bandY = center.y + barrelHeight + sin * 0.5 * barrelLength * t + recoilOffsetY;
-
-            // Armored bands with glowing rivets
-            graphics.fillStyle(0x2a2a3a, alpha);
-            graphics.fillEllipse(bandX, bandY, 10, 5.5);
-            graphics.lineStyle(2, 0x8b0000, alpha * 0.8);
-            graphics.strokeEllipse(bandX, bandY, 10, 5.5);
-            // Glowing rivets
-            graphics.fillStyle(0xff4400, alpha * 0.7);
-            graphics.fillCircle(bandX - 3, bandY - 1, 2);
-            graphics.fillCircle(bandX + 3, bandY + 1, 2);
-        }
-
-        // === MASSIVE MUZZLE GLOW ===
-        graphics.fillStyle(0x8b0000, alpha * 0.5);
-        graphics.fillCircle(barrelTipX, barrelTipY, 10);
-        graphics.fillStyle(0xcc3300, alpha * 0.4);
-        graphics.fillCircle(barrelTipX, barrelTipY, 13);
-        graphics.fillStyle(0xff4400, alpha * 0.3);
-        graphics.fillCircle(barrelTipX, barrelTipY, 16);
-        graphics.fillStyle(0xff6600, alpha * 0.2);
-        graphics.fillCircle(barrelTipX, barrelTipY, 19);
-
-        if (sin < 0) drawPivot();
-    }
-
     private drawBallista(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
         // Get ballista state from building if provided
         const angle = building?.ballistaAngle ?? 0; // Default facing right
         const stringTension = building?.ballistaStringTension ?? 0; // 0 = relaxed, 1 = fully drawn
         const boltLoaded = building?.ballistaBoltLoaded ?? true;
 
-        // === STURDY REINFORCED BASE ===
-        // Stone foundation platform
+        // === STONE FOUNDATION PLATFORM ===
+        // Raised stone base with depth
+        const baseHeight = 6;
+
+        // Side faces of the platform (isometric 3D effect)
+        graphics.fillStyle(0x4a4a4a, alpha);
+        graphics.beginPath();
+        graphics.moveTo(c2.x, c2.y);
+        graphics.lineTo(c3.x, c3.y);
+        graphics.lineTo(c3.x, c3.y + baseHeight);
+        graphics.lineTo(c2.x, c2.y + baseHeight);
+        graphics.closePath();
+        graphics.fillPath();
+
+        graphics.fillStyle(0x3a3a3a, alpha);
+        graphics.beginPath();
+        graphics.moveTo(c3.x, c3.y);
+        graphics.lineTo(c4.x, c4.y);
+        graphics.lineTo(c4.x, c4.y + baseHeight);
+        graphics.lineTo(c3.x, c3.y + baseHeight);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Top face
         graphics.fillStyle(tint ?? 0x5a5a5a, alpha);
         graphics.fillPoints([c1, c2, c3, c4], true);
+
+        // Stone block lines
+        graphics.lineStyle(1, 0x4a4a4a, alpha * 0.5);
+        const midX = (c1.x + c3.x) / 2;
+        const midY = (c1.y + c3.y) / 2;
+        graphics.lineBetween(c1.x, c1.y, c3.x, c3.y);
+        graphics.lineBetween(c2.x, c2.y, c4.x, c4.y);
+
+        // Border
         graphics.lineStyle(2, 0x3a3a3a, 0.6 * alpha);
         graphics.strokePoints([c1, c2, c3, c4], true, true);
 
-        // Stone texture details
-        graphics.fillStyle(0x4a4a4a, alpha * 0.5);
-        graphics.fillCircle(center.x - 12, center.y + 5, 4);
-        graphics.fillCircle(center.x + 10, center.y + 3, 3);
-        graphics.fillCircle(center.x - 5, center.y + 8, 3);
+        // === WOODEN ROTATING PLATFORM ===
+        const baseRadiusX = 22;
+        const baseRadiusY = 13;
+        const baseY = center.y - 4;
 
-        // Large elliptical wooden turret base with metal reinforcement (isometric)
-        // Use ellipse with squashed Y for isometric perspective
-        const baseRadiusX = 20;
-        const baseRadiusY = 12; // Squashed for isometric view
-        graphics.fillStyle(0x4a3520, alpha);
-        graphics.fillEllipse(center.x, center.y - 2, baseRadiusX, baseRadiusY);
-        graphics.lineStyle(3, 0x2a1a10, alpha);
-        graphics.strokeEllipse(center.x, center.y - 2, baseRadiusX, baseRadiusY);
+        // Shadow under platform
+        graphics.fillStyle(0x1a1a1a, alpha * 0.4);
+        graphics.fillEllipse(center.x + 2, baseY + 4, baseRadiusX, baseRadiusY);
 
-        // Metal band reinforcement rings (elliptical)
-        graphics.lineStyle(2, 0x555555, alpha);
-        graphics.strokeEllipse(center.x, center.y - 2, baseRadiusX - 2, baseRadiusY - 1);
-        graphics.lineStyle(1, 0x777777, alpha * 0.6);
-        graphics.strokeEllipse(center.x, center.y - 2, baseRadiusX - 5, baseRadiusY - 3);
+        // Main wooden platform
+        graphics.fillStyle(0x5a4030, alpha);
+        graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
 
-        // Wood grain pattern on base (curved for ellipse)
-        graphics.lineStyle(1, 0x3a2515, alpha * 0.4);
-        graphics.lineBetween(center.x - 15, center.y - 2, center.x + 15, center.y - 2);
-        graphics.beginPath();
-        graphics.arc(center.x, center.y - 2, baseRadiusX - 8, 0.3, Math.PI - 0.3);
-        graphics.strokePath();
+        // Wood plank lines (radial pattern)
+        graphics.lineStyle(1, 0x3a2515, alpha * 0.5);
+        for (let i = 0; i < 6; i++) {
+            const ang = (i / 6) * Math.PI;
+            const x1 = center.x + Math.cos(ang) * (baseRadiusX - 2);
+            const y1 = baseY + Math.sin(ang) * (baseRadiusY - 1);
+            const x2 = center.x - Math.cos(ang) * (baseRadiusX - 2);
+            const y2 = baseY - Math.sin(ang) * (baseRadiusY - 1);
+            graphics.lineBetween(x1, y1, x2, y2);
+        }
+
+        // Iron outer ring
+        graphics.lineStyle(3, 0x4a4a4a, alpha);
+        graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+        graphics.lineStyle(1, 0x606060, alpha * 0.6);
+        graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
+
+        // Iron rivets around edge
+        graphics.fillStyle(0x555555, alpha);
+        for (let i = 0; i < 8; i++) {
+            const ang = (i / 8) * Math.PI * 2;
+            const rx = center.x + Math.cos(ang) * (baseRadiusX - 3);
+            const ry = baseY + Math.sin(ang) * (baseRadiusY - 2);
+            graphics.fillCircle(rx, ry, 2);
+        }
 
         // Calculate rotation for the crossbow mechanism
         const cos = Math.cos(angle);
@@ -2071,31 +2132,283 @@ export class MainScene extends Phaser.Scene {
             graphics.lineBetween(rightArmX, rightArmY, stringCenterX, stringCenterY);
         }
 
-        // === STURDY BASE SUPPORTS ===
-        // Heavy wooden legs
-        graphics.fillStyle(0x3a2a15, alpha);
-        graphics.fillRect(center.x - 14, center.y + 2, 6, 10);
-        graphics.fillRect(center.x + 8, center.y + 2, 6, 10);
-        graphics.fillRect(center.x - 3, center.y + 6, 6, 8);
-
-        // Leg shadows
-        graphics.fillStyle(0x2a1a05, alpha * 0.5);
-        graphics.fillRect(center.x - 14, center.y + 9, 6, 3);
-        graphics.fillRect(center.x + 8, center.y + 9, 6, 3);
-        graphics.fillRect(center.x - 3, center.y + 11, 6, 3);
-
-        // Metal leg braces
-        graphics.fillStyle(0x444444, alpha);
-        graphics.fillRect(center.x - 15, center.y + 2, 8, 2);
-        graphics.fillRect(center.x + 7, center.y + 2, 8, 2);
-
-        // Central pivot mechanism
+        // === CENTRAL PIVOT MECHANISM ===
+        // Heavy iron pivot hub on the wooden platform
         graphics.fillStyle(0x2a2a2a, alpha);
-        graphics.fillCircle(center.x, center.y - 2, 6);
-        graphics.fillStyle(0x444444, alpha);
-        graphics.fillCircle(center.x, center.y - 3, 4);
-        graphics.fillStyle(0x666666, alpha * 0.5);
-        graphics.fillCircle(center.x - 1, center.y - 4, 2);
+        graphics.fillCircle(center.x, baseY, 8);
+        graphics.fillStyle(0x3a3a3a, alpha);
+        graphics.fillCircle(center.x, baseY - 1, 6);
+        graphics.fillStyle(0x4a4a4a, alpha);
+        graphics.fillCircle(center.x, baseY - 2, 4);
+        // Highlight
+        graphics.fillStyle(0x606060, alpha * 0.6);
+        graphics.fillCircle(center.x - 1, baseY - 3, 2);
+    }
+
+    private drawBallistaLevel2(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
+        // LEVEL 2 BALLISTA: Reinforced with bronze accents and improved mechanism
+        const angle = building?.ballistaAngle ?? 0;
+        const stringTension = building?.ballistaStringTension ?? 0;
+        const boltLoaded = building?.ballistaBoltLoaded ?? true;
+
+        // === REINFORCED STONE FOUNDATION ===
+        const baseHeight = 8; // Taller base
+
+        // Side faces with stone texture
+        graphics.fillStyle(0x4a4a4a, alpha);
+        graphics.beginPath();
+        graphics.moveTo(c2.x, c2.y);
+        graphics.lineTo(c3.x, c3.y);
+        graphics.lineTo(c3.x, c3.y + baseHeight);
+        graphics.lineTo(c2.x, c2.y + baseHeight);
+        graphics.closePath();
+        graphics.fillPath();
+
+        graphics.fillStyle(0x3a3a3a, alpha);
+        graphics.beginPath();
+        graphics.moveTo(c3.x, c3.y);
+        graphics.lineTo(c4.x, c4.y);
+        graphics.lineTo(c4.x, c4.y + baseHeight);
+        graphics.lineTo(c3.x, c3.y + baseHeight);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Top face with improved stone
+        graphics.fillStyle(tint ?? 0x606060, alpha);
+        graphics.fillPoints([c1, c2, c3, c4], true);
+
+        // Stone block pattern
+        graphics.lineStyle(1, 0x4a4a4a, alpha * 0.6);
+        graphics.lineBetween(c1.x, c1.y, c3.x, c3.y);
+        graphics.lineBetween(c2.x, c2.y, c4.x, c4.y);
+        // Additional cross pattern
+        const mid12 = { x: (c1.x + c2.x) / 2, y: (c1.y + c2.y) / 2 };
+        const mid34 = { x: (c3.x + c4.x) / 2, y: (c3.y + c4.y) / 2 };
+        graphics.lineBetween(mid12.x, mid12.y, mid34.x, mid34.y);
+
+        // Bronze corner accents
+        graphics.fillStyle(0xcd7f32, alpha * 0.8);
+        graphics.fillCircle(c1.x, c1.y, 3);
+        graphics.fillCircle(c2.x, c2.y, 2.5);
+        graphics.fillCircle(c3.x, c3.y, 2.5);
+        graphics.fillCircle(c4.x, c4.y, 2.5);
+
+        // Border
+        graphics.lineStyle(2, 0x3a3a3a, 0.7 * alpha);
+        graphics.strokePoints([c1, c2, c3, c4], true, true);
+
+        // === REINFORCED WOODEN PLATFORM ===
+        const baseRadiusX = 24;
+        const baseRadiusY = 14;
+        const baseY = center.y - 5;
+
+        // Shadow
+        graphics.fillStyle(0x1a1a1a, alpha * 0.4);
+        graphics.fillEllipse(center.x + 2, baseY + 5, baseRadiusX, baseRadiusY);
+
+        // Main platform - darker wood
+        graphics.fillStyle(0x4a3525, alpha);
+        graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+
+        // Wood planks
+        graphics.lineStyle(1, 0x2a1a10, alpha * 0.5);
+        for (let i = 0; i < 6; i++) {
+            const ang = (i / 6) * Math.PI;
+            const x1 = center.x + Math.cos(ang) * (baseRadiusX - 2);
+            const y1 = baseY + Math.sin(ang) * (baseRadiusY - 1);
+            const x2 = center.x - Math.cos(ang) * (baseRadiusX - 2);
+            const y2 = baseY - Math.sin(ang) * (baseRadiusY - 1);
+            graphics.lineBetween(x1, y1, x2, y2);
+        }
+
+        // Bronze outer ring (upgraded from iron)
+        graphics.lineStyle(4, 0xcd7f32, alpha);
+        graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+        graphics.lineStyle(2, 0xdaa520, alpha * 0.5);
+        graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
+
+        // Bronze rivets
+        graphics.fillStyle(0xcd7f32, alpha);
+        for (let i = 0; i < 10; i++) {
+            const ang = (i / 10) * Math.PI * 2;
+            const rx = center.x + Math.cos(ang) * (baseRadiusX - 3);
+            const ry = baseY + Math.sin(ang) * (baseRadiusY - 2);
+            graphics.fillCircle(rx, ry, 2.5);
+            graphics.fillStyle(0xdaa520, alpha * 0.5);
+            graphics.fillCircle(rx - 0.5, ry - 0.5, 1);
+            graphics.fillStyle(0xcd7f32, alpha);
+        }
+
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+
+        // === REINFORCED CROSSBOW ARMS ===
+        const armLength = 30;
+        const armWidth = 6;
+        const bowHeight = -18;
+
+        const leftArmX = center.x + (-sin) * armLength;
+        const leftArmY = center.y + bowHeight + (cos * 0.5) * armLength;
+        const rightArmX = center.x + (sin) * armLength;
+        const rightArmY = center.y + bowHeight + (-cos * 0.5) * armLength;
+
+        // Outer shadow
+        graphics.lineStyle(armWidth + 4, 0x1a0a05, alpha);
+        graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
+        graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
+
+        // Dark wood arm
+        graphics.lineStyle(armWidth + 2, 0x3a2515, alpha);
+        graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
+        graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
+
+        // Wood core
+        graphics.lineStyle(armWidth, 0x5a3520, alpha);
+        graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
+        graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
+
+        // Wood highlight
+        graphics.lineStyle(3, 0x6a4530, alpha);
+        graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
+        graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
+
+        // Bronze reinforcement bands
+        const bandDist1 = 0.25;
+        const bandDist2 = 0.5;
+        const bandDist3 = 0.75;
+
+        for (const dist of [bandDist1, bandDist2, bandDist3]) {
+            const leftBandX = center.x + (-sin) * armLength * dist;
+            const leftBandY = center.y + bowHeight + (cos * 0.5) * armLength * dist;
+            const rightBandX = center.x + (sin) * armLength * dist;
+            const rightBandY = center.y + bowHeight + (-cos * 0.5) * armLength * dist;
+
+            graphics.fillStyle(0xcd7f32, alpha);
+            graphics.fillCircle(leftBandX, leftBandY, 4);
+            graphics.fillCircle(rightBandX, rightBandY, 4);
+            graphics.fillStyle(0xdaa520, alpha * 0.6);
+            graphics.fillCircle(leftBandX - 0.5, leftBandY - 0.5, 2);
+            graphics.fillCircle(rightBandX - 0.5, rightBandY - 0.5, 2);
+        }
+
+        // Bronze arm tips
+        graphics.fillStyle(0x8b6914, alpha);
+        graphics.fillCircle(leftArmX, leftArmY, 6);
+        graphics.fillCircle(rightArmX, rightArmY, 6);
+        graphics.fillStyle(0xcd7f32, alpha);
+        graphics.fillCircle(leftArmX, leftArmY, 4);
+        graphics.fillCircle(rightArmX, rightArmY, 4);
+        graphics.fillStyle(0xdaa520, alpha * 0.6);
+        graphics.fillCircle(leftArmX - 1, leftArmY - 1, 2);
+        graphics.fillCircle(rightArmX - 1, rightArmY - 1, 2);
+
+        // String position
+        const stringPullback = stringTension * 18;
+        const stringCenterX = center.x + cos * (-stringPullback);
+        const stringCenterY = center.y + bowHeight + sin * 0.5 * (-stringPullback);
+
+        // === REINFORCED RAIL ===
+        const railLength = 30;
+        const railEndX = center.x + cos * railLength;
+        const railEndY = center.y + bowHeight + sin * 0.5 * railLength;
+        const railBackX = center.x + cos * (-14);
+        const railBackY = center.y + bowHeight + sin * 0.5 * (-14);
+
+        graphics.lineStyle(12, 0x1a0a05, alpha);
+        graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
+        graphics.lineStyle(10, 0x2a1510, alpha);
+        graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
+        graphics.lineStyle(6, 0x3a2515, alpha);
+        graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
+        graphics.lineStyle(2, 0x1a0a05, alpha * 0.7);
+        graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
+
+        // Bronze rail plates
+        for (const t of [0.3, 0.6]) {
+            const plateX = center.x + cos * railLength * t;
+            const plateY = center.y + bowHeight + sin * 0.5 * railLength * t;
+            graphics.fillStyle(0xcd7f32, alpha);
+            graphics.fillEllipse(plateX, plateY, 5, 3);
+            graphics.fillStyle(0xdaa520, alpha * 0.5);
+            graphics.fillCircle(plateX - 1, plateY - 1, 1.5);
+        }
+
+        // === BOLT ===
+        if (boltLoaded) {
+            const boltLength = 26;
+            const boltStartX = stringCenterX;
+            const boltStartY = stringCenterY;
+            const boltEndX = boltStartX + cos * boltLength;
+            const boltEndY = boltStartY + sin * 0.5 * boltLength;
+
+            graphics.lineStyle(4, 0x3a2a15, alpha);
+            graphics.lineBetween(boltStartX, boltStartY, boltEndX, boltEndY);
+            graphics.lineStyle(2, 0x5d4e37, alpha);
+            graphics.lineBetween(boltStartX, boltStartY, boltEndX, boltEndY);
+
+            // Arrowhead
+            const headLength = 10;
+            const headWidth = 5;
+            const headTipX = boltEndX + cos * headLength;
+            const headTipY = boltEndY + sin * 0.5 * headLength;
+
+            graphics.fillStyle(0x2a2a2a, alpha);
+            graphics.beginPath();
+            graphics.moveTo(headTipX, headTipY);
+            graphics.lineTo(boltEndX + (-sin) * headWidth, boltEndY + (cos * 0.5) * headWidth);
+            graphics.lineTo(boltEndX + (sin) * headWidth, boltEndY + (-cos * 0.5) * headWidth);
+            graphics.closePath();
+            graphics.fillPath();
+
+            graphics.fillStyle(0x555555, alpha * 0.6);
+            graphics.beginPath();
+            graphics.moveTo(headTipX, headTipY);
+            graphics.lineTo(boltEndX + (-sin) * headWidth * 0.4, boltEndY + (cos * 0.5) * headWidth * 0.4);
+            graphics.lineTo(boltEndX, boltEndY);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Bronze fletching
+            const fletchX = boltStartX + cos * 3;
+            const fletchY = boltStartY + sin * 0.5 * 3;
+            graphics.fillStyle(0xcd7f32, alpha);
+            graphics.beginPath();
+            graphics.moveTo(fletchX, fletchY);
+            graphics.lineTo(fletchX + (-sin) * 6, fletchY + (cos * 0.5) * 6 - 3);
+            graphics.lineTo(boltStartX + cos * 9, boltStartY + sin * 0.5 * 9);
+            graphics.closePath();
+            graphics.fillPath();
+            graphics.beginPath();
+            graphics.moveTo(fletchX, fletchY);
+            graphics.lineTo(fletchX + (sin) * 6, fletchY + (-cos * 0.5) * 6 - 3);
+            graphics.lineTo(boltStartX + cos * 9, boltStartY + sin * 0.5 * 9);
+            graphics.closePath();
+            graphics.fillPath();
+        }
+
+        // === BOWSTRING ===
+        graphics.lineStyle(3, 0x888888, alpha);
+        graphics.lineBetween(leftArmX, leftArmY, stringCenterX, stringCenterY);
+        graphics.lineBetween(rightArmX, rightArmY, stringCenterX, stringCenterY);
+        graphics.lineStyle(2, 0xbbbbbb, alpha);
+        graphics.lineBetween(leftArmX, leftArmY, stringCenterX, stringCenterY);
+        graphics.lineBetween(rightArmX, rightArmY, stringCenterX, stringCenterY);
+
+        if (stringTension > 0.3) {
+            graphics.lineStyle(5, 0xffffff, alpha * 0.2 * stringTension);
+            graphics.lineBetween(leftArmX, leftArmY, stringCenterX, stringCenterY);
+            graphics.lineBetween(rightArmX, rightArmY, stringCenterX, stringCenterY);
+        }
+
+        // === BRONZE PIVOT MECHANISM ===
+        graphics.fillStyle(0x8b6914, alpha);
+        graphics.fillCircle(center.x, baseY, 10);
+        graphics.fillStyle(0xcd7f32, alpha);
+        graphics.fillCircle(center.x, baseY - 1, 7);
+        graphics.fillStyle(0xdaa520, alpha);
+        graphics.fillCircle(center.x, baseY - 2, 4);
+        graphics.fillStyle(0xffd700, alpha * 0.5);
+        graphics.fillCircle(center.x - 1, baseY - 3, 2);
     }
 
     private drawXBow(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
@@ -2109,22 +2422,77 @@ export class MainScene extends Phaser.Scene {
         const sin = Math.sin(angle);
         const heightOffset = -18; // Height above ground
 
-        // === HEAVY FORTIFIED BASE ===
+        // === HEAVY FORTIFIED STONE BASE ===
+        const baseHeight = 8;
+
+        // Side faces (isometric depth)
+        graphics.fillStyle(0x5a5a5a, alpha);
+        graphics.beginPath();
+        graphics.moveTo(c2.x, c2.y);
+        graphics.lineTo(c3.x, c3.y);
+        graphics.lineTo(c3.x, c3.y + baseHeight);
+        graphics.lineTo(c2.x, c2.y + baseHeight);
+        graphics.closePath();
+        graphics.fillPath();
+
+        graphics.fillStyle(0x4a4a4a, alpha);
+        graphics.beginPath();
+        graphics.moveTo(c3.x, c3.y);
+        graphics.lineTo(c4.x, c4.y);
+        graphics.lineTo(c4.x, c4.y + baseHeight);
+        graphics.lineTo(c3.x, c3.y + baseHeight);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Top face
         graphics.fillStyle(tint ?? 0x6a6a6a, alpha);
         graphics.fillPoints([c1, c2, c3, c4], true);
+
+        // Stone block pattern
+        graphics.lineStyle(1, 0x5a5a5a, alpha * 0.5);
+        graphics.lineBetween(c1.x, c1.y, c3.x, c3.y);
+        graphics.lineBetween(c2.x, c2.y, c4.x, c4.y);
+
+        // Border
         graphics.lineStyle(2, 0x4a4a4a, 0.7 * alpha);
         graphics.strokePoints([c1, c2, c3, c4], true, true);
 
-        // Stone texture
-        graphics.fillStyle(0x5a5a5a, alpha * 0.5);
-        graphics.fillCircle(center.x - 18, center.y + 8, 5);
-        graphics.fillCircle(center.x + 15, center.y + 6, 4);
+        // === METAL ROTATING PLATFORM ===
+        const baseRadiusX = 24;
+        const baseRadiusY = 14;
+        const baseY = center.y - 4;
 
-        // Base Turret
-        graphics.fillStyle(0x4a3520, alpha);
-        graphics.fillEllipse(center.x, center.y, 26, 16);
-        graphics.lineStyle(2, 0x2a1a10, alpha);
-        graphics.strokeEllipse(center.x, center.y, 26, 16);
+        // Shadow
+        graphics.fillStyle(0x1a1a1a, alpha * 0.4);
+        graphics.fillEllipse(center.x + 2, baseY + 4, baseRadiusX, baseRadiusY);
+
+        // Dark metal platform
+        graphics.fillStyle(0x3a3a4a, alpha);
+        graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+
+        // Metal segment lines
+        graphics.lineStyle(1, 0x2a2a3a, alpha * 0.6);
+        for (let i = 0; i < 8; i++) {
+            const ang = (i / 8) * Math.PI * 2;
+            const x1 = center.x + Math.cos(ang) * (baseRadiusX - 2);
+            const y1 = baseY + Math.sin(ang) * (baseRadiusY - 1);
+            graphics.lineBetween(center.x, baseY, x1, y1);
+        }
+
+        // Outer ring
+        graphics.lineStyle(3, 0x4a4a5a, alpha);
+        graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+        graphics.lineStyle(1, 0x5a5a6a, alpha * 0.6);
+        graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
+
+        // Bolts
+        graphics.fillStyle(0x555560, alpha);
+        for (let i = 0; i < 8; i++) {
+            const ang = (i / 8) * Math.PI * 2;
+            const rx = center.x + Math.cos(ang) * (baseRadiusX - 3);
+            const ry = baseY + Math.sin(ang) * (baseRadiusY - 2);
+            graphics.fillCircle(rx, ry, 2);
+        }
 
         // === CROSSBOW BODY ===
         // Define Front (Tip) and Back (Stock) relative to center using angle
@@ -2186,19 +2554,221 @@ export class MainScene extends Phaser.Scene {
             graphics.lineBetween(nockX, nockY, boltTipX, boltTipY);
         }
 
-        // === CENTRAL PIVOT / MECH ===
-        // Removed black circle as requested
-        // graphics.fillStyle(0x222222, alpha);
-        // graphics.fillCircle(center.x, center.y + heightOffset, 6);
+        // === CENTRAL PIVOT MECHANISM ===
+        graphics.fillStyle(0x2a2a3a, alpha);
+        graphics.fillCircle(center.x, baseY, 8);
+        graphics.fillStyle(0x3a3a4a, alpha);
+        graphics.fillCircle(center.x, baseY - 1, 6);
+        graphics.fillStyle(0x4a4a5a, alpha);
+        graphics.fillCircle(center.x, baseY - 2, 4);
+        graphics.fillStyle(0x5a5a6a, alpha * 0.6);
+        graphics.fillCircle(center.x - 1, baseY - 3, 2);
 
         // Firing Glow
         const firingGlow = 0.3 + Math.sin(time / 50) * 0.2;
         graphics.fillStyle(0xff8844, alpha * firingGlow);
         graphics.fillCircle(frontX, frontY, 4);
+    }
 
-        // Supports
-        graphics.fillStyle(0x3a2a15, alpha);
-        graphics.fillRect(center.x - 4, center.y + 10, 8, 12);
+    private drawXBowLevel2(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
+        // LEVEL 2 X-BOW: Enhanced with purple/magenta accents and energy effects
+        const angle = building?.ballistaAngle ?? 0;
+        const stringTension = building?.ballistaStringTension ?? 0;
+        const time = this.time.now;
+
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+        const heightOffset = -20; // Slightly higher
+
+        // === ENHANCED FORTIFIED BASE ===
+        const baseHeight = 10;
+
+        // Side faces with purple tint
+        graphics.fillStyle(0x5a5a6a, alpha);
+        graphics.beginPath();
+        graphics.moveTo(c2.x, c2.y);
+        graphics.lineTo(c3.x, c3.y);
+        graphics.lineTo(c3.x, c3.y + baseHeight);
+        graphics.lineTo(c2.x, c2.y + baseHeight);
+        graphics.closePath();
+        graphics.fillPath();
+
+        graphics.fillStyle(0x4a4a5a, alpha);
+        graphics.beginPath();
+        graphics.moveTo(c3.x, c3.y);
+        graphics.lineTo(c4.x, c4.y);
+        graphics.lineTo(c4.x, c4.y + baseHeight);
+        graphics.lineTo(c3.x, c3.y + baseHeight);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Top face
+        graphics.fillStyle(tint ?? 0x6a6a7a, alpha);
+        graphics.fillPoints([c1, c2, c3, c4], true);
+
+        // Stone pattern
+        graphics.lineStyle(1, 0x5a5a6a, alpha * 0.5);
+        graphics.lineBetween(c1.x, c1.y, c3.x, c3.y);
+        graphics.lineBetween(c2.x, c2.y, c4.x, c4.y);
+        const mid12 = { x: (c1.x + c2.x) / 2, y: (c1.y + c2.y) / 2 };
+        const mid34 = { x: (c3.x + c4.x) / 2, y: (c3.y + c4.y) / 2 };
+        graphics.lineBetween(mid12.x, mid12.y, mid34.x, mid34.y);
+
+        // Purple/magenta corner crystals
+        graphics.fillStyle(0x8b008b, alpha * 0.9);
+        graphics.fillCircle(c1.x, c1.y, 4);
+        graphics.fillCircle(c2.x, c2.y, 3);
+        graphics.fillCircle(c3.x, c3.y, 3);
+        graphics.fillCircle(c4.x, c4.y, 3);
+        // Crystal glow
+        graphics.fillStyle(0xda70d6, alpha * 0.4);
+        graphics.fillCircle(c1.x, c1.y, 6);
+
+        graphics.lineStyle(2, 0x4a4a5a, 0.7 * alpha);
+        graphics.strokePoints([c1, c2, c3, c4], true, true);
+
+        // === ENHANCED METAL PLATFORM ===
+        const baseRadiusX = 26;
+        const baseRadiusY = 15;
+        const baseY = center.y - 5;
+
+        // Shadow
+        graphics.fillStyle(0x1a1a2a, alpha * 0.4);
+        graphics.fillEllipse(center.x + 2, baseY + 5, baseRadiusX, baseRadiusY);
+
+        // Dark metal with purple tint
+        graphics.fillStyle(0x3a3a5a, alpha);
+        graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+
+        // Energy pattern
+        graphics.lineStyle(1, 0x8b008b, alpha * 0.4);
+        for (let i = 0; i < 8; i++) {
+            const ang = (i / 8) * Math.PI * 2 + time / 2000;
+            const x1 = center.x + Math.cos(ang) * (baseRadiusX - 2);
+            const y1 = baseY + Math.sin(ang) * (baseRadiusY - 1);
+            graphics.lineBetween(center.x, baseY, x1, y1);
+        }
+
+        // Purple outer ring
+        graphics.lineStyle(4, 0x8b008b, alpha);
+        graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+        graphics.lineStyle(2, 0xda70d6, alpha * 0.5);
+        graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
+
+        // Purple gem bolts
+        graphics.fillStyle(0x8b008b, alpha);
+        for (let i = 0; i < 10; i++) {
+            const ang = (i / 10) * Math.PI * 2;
+            const rx = center.x + Math.cos(ang) * (baseRadiusX - 3);
+            const ry = baseY + Math.sin(ang) * (baseRadiusY - 2);
+            graphics.fillCircle(rx, ry, 2.5);
+            graphics.fillStyle(0xda70d6, alpha * 0.5);
+            graphics.fillCircle(rx - 0.5, ry - 0.5, 1);
+            graphics.fillStyle(0x8b008b, alpha);
+        }
+
+        // === ENHANCED CROSSBOW BODY ===
+        const frontX = center.x + cos * 22;
+        const frontY = center.y + heightOffset + sin * 0.5 * 22;
+        const backX = center.x + cos * -22;
+        const backY = center.y + heightOffset + sin * 0.5 * -22;
+
+        // Enhanced rail
+        graphics.lineStyle(12, 0x2a2a3a, alpha);
+        graphics.lineBetween(backX, backY, frontX, frontY);
+        graphics.lineStyle(8, 0x3a3a5a, alpha);
+        graphics.lineBetween(backX, backY, frontX, frontY);
+        graphics.lineStyle(4, 0x4a4a6a, alpha);
+        graphics.lineBetween(backX, backY, frontX, frontY);
+
+        // Purple energy line along rail
+        graphics.lineStyle(2, 0x8b008b, alpha * (0.5 + Math.sin(time / 100) * 0.2));
+        graphics.lineBetween(backX, backY, frontX, frontY);
+
+        // === ENHANCED ARMS ===
+        const armSpan = 34;
+        const armX = -sin * armSpan;
+        const armY = cos * 0.5 * armSpan;
+
+        const mountX = center.x + cos * 17;
+        const mountY = center.y + heightOffset + sin * 0.5 * 17;
+
+        const lArmX = mountX + armX;
+        const lArmY = mountY + armY;
+        const rArmX = mountX - armX;
+        const rArmY = mountY - armY;
+
+        // Shadow
+        graphics.lineStyle(7, 0x1a1a2a, alpha);
+        graphics.lineBetween(mountX, mountY, lArmX, lArmY);
+        graphics.lineBetween(mountX, mountY, rArmX, rArmY);
+
+        // Dark arms
+        graphics.lineStyle(5, 0x3a3a5a, alpha);
+        graphics.lineBetween(mountX, mountY, lArmX, lArmY);
+        graphics.lineBetween(mountX, mountY, rArmX, rArmY);
+
+        // Arm glow
+        graphics.lineStyle(3, 0x4a4a6a, alpha);
+        graphics.lineBetween(mountX, mountY, lArmX, lArmY);
+        graphics.lineBetween(mountX, mountY, rArmX, rArmY);
+
+        // Purple tips with glow
+        graphics.fillStyle(0x6a006a, alpha);
+        graphics.fillCircle(lArmX, lArmY, 5);
+        graphics.fillCircle(rArmX, rArmY, 5);
+        graphics.fillStyle(0x8b008b, alpha);
+        graphics.fillCircle(lArmX, lArmY, 3);
+        graphics.fillCircle(rArmX, rArmY, 3);
+        graphics.fillStyle(0xda70d6, alpha * 0.6);
+        graphics.fillCircle(lArmX - 0.5, lArmY - 0.5, 1.5);
+        graphics.fillCircle(rArmX - 0.5, rArmY - 0.5, 1.5);
+
+        // === ENERGY STRING ===
+        const pull = stringTension * 14;
+        const nockOffset = -6 - pull;
+        const nockX = center.x + cos * nockOffset;
+        const nockY = center.y + heightOffset + sin * 0.5 * nockOffset;
+
+        // Electric string effect
+        graphics.lineStyle(2, 0xda70d6, alpha);
+        graphics.lineBetween(lArmX, lArmY, nockX, nockY);
+        graphics.lineBetween(rArmX, rArmY, nockX, nockY);
+        graphics.lineStyle(1, 0xffffff, alpha * 0.7);
+        graphics.lineBetween(lArmX, lArmY, nockX, nockY);
+        graphics.lineBetween(rArmX, rArmY, nockX, nockY);
+
+        // === ENERGY BOLT ===
+        if (stringTension > 0.1) {
+            const boltTipX = frontX;
+            const boltTipY = frontY;
+            // Energy bolt with glow
+            graphics.lineStyle(4, 0x8b008b, alpha * 0.5);
+            graphics.lineBetween(nockX, nockY, boltTipX, boltTipY);
+            graphics.lineStyle(2, 0xda70d6, alpha);
+            graphics.lineBetween(nockX, nockY, boltTipX, boltTipY);
+            graphics.lineStyle(1, 0xffffff, alpha * 0.8);
+            graphics.lineBetween(nockX, nockY, boltTipX, boltTipY);
+        }
+
+        // === ENHANCED PIVOT ===
+        graphics.fillStyle(0x6a006a, alpha);
+        graphics.fillCircle(center.x, baseY, 10);
+        graphics.fillStyle(0x8b008b, alpha);
+        graphics.fillCircle(center.x, baseY - 1, 7);
+        graphics.fillStyle(0xda70d6, alpha);
+        graphics.fillCircle(center.x, baseY - 2, 4);
+        // Energy core glow
+        const coreGlow = 0.5 + Math.sin(time / 80) * 0.3;
+        graphics.fillStyle(0xffffff, alpha * coreGlow * 0.5);
+        graphics.fillCircle(center.x, baseY - 2, 2);
+
+        // Enhanced firing glow
+        const firingGlow = 0.4 + Math.sin(time / 40) * 0.3;
+        graphics.fillStyle(0xda70d6, alpha * firingGlow * 0.5);
+        graphics.fillCircle(frontX, frontY, 8);
+        graphics.fillStyle(0xff00ff, alpha * firingGlow);
+        graphics.fillCircle(frontX, frontY, 5);
     }
 
     private drawGoldMine(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
