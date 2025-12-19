@@ -8340,88 +8340,103 @@ export class MainScene extends Phaser.Scene {
                 graphics.fillCircle(-8, -4 + stepBob, 2);
 
                 // === ARMS (boulder appendages) ===
-                const leftArmAngle = -0.4 + armSwing;
-                const rightArmAngle = 0.4 - armSwing;
+                // Arm swing offsets
+                const leftArmSwingX = armSwing * 8;
+                const leftArmSwingY = Math.abs(armSwing) * 4;
+                const rightArmSwingX = -armSwing * 8;
+                const rightArmSwingY = Math.abs(armSwing) * 4;
 
-                // Left arm
-                graphics.save();
-                graphics.translateCanvas(-18, -20 + stepBob + shoulderRoll);
-                graphics.rotateCanvas(leftArmAngle);
+                // Left arm base position
+                const lax = -18;
+                const lay = -20 + stepBob + shoulderRoll;
 
-                // Upper arm
+                // Left arm - upper
                 graphics.fillStyle(stoneDark, 1);
                 graphics.beginPath();
-                graphics.moveTo(-4, 0);
-                graphics.lineTo(-6, 18);
-                graphics.lineTo(6, 20);
-                graphics.lineTo(4, 2);
+                graphics.moveTo(lax - 4, lay);
+                graphics.lineTo(lax - 8 + leftArmSwingX, lay + 18 + leftArmSwingY);
+                graphics.lineTo(lax + 4 + leftArmSwingX, lay + 20 + leftArmSwingY);
+                graphics.lineTo(lax + 4, lay + 2);
                 graphics.closePath();
                 graphics.fillPath();
                 graphics.fillStyle(stoneBase, 1);
-                graphics.fillRect(-3, 2, 6, 16);
+                graphics.beginPath();
+                graphics.moveTo(lax - 2, lay + 2);
+                graphics.lineTo(lax - 4 + leftArmSwingX * 0.5, lay + 16 + leftArmSwingY * 0.5);
+                graphics.lineTo(lax + 2 + leftArmSwingX * 0.5, lay + 17 + leftArmSwingY * 0.5);
+                graphics.lineTo(lax + 2, lay + 3);
+                graphics.closePath();
+                graphics.fillPath();
 
-                // Forearm
+                // Left forearm
+                const lfx = lax - 2 + leftArmSwingX;
+                const lfy = lay + 18 + leftArmSwingY;
                 graphics.fillStyle(stoneAccent, 1);
                 graphics.beginPath();
-                graphics.moveTo(-5, 18);
-                graphics.lineTo(-7, 35);
-                graphics.lineTo(5, 36);
-                graphics.lineTo(6, 19);
+                graphics.moveTo(lfx - 5, lfy);
+                graphics.lineTo(lfx - 7 + leftArmSwingX * 0.5, lfy + 17);
+                graphics.lineTo(lfx + 5 + leftArmSwingX * 0.5, lfy + 18);
+                graphics.lineTo(lfx + 6, lfy + 1);
                 graphics.closePath();
                 graphics.fillPath();
 
-                // Massive fist
+                // Left fist
+                const lfistX = lfx - 1 + leftArmSwingX * 0.5;
+                const lfistY = lfy + 22;
                 graphics.fillStyle(stoneDark, 1);
-                graphics.fillCircle(-1, 40, 9);
+                graphics.fillCircle(lfistX, lfistY, 9);
                 graphics.fillStyle(stoneBase, 1);
-                graphics.fillCircle(-2, 39, 7);
-                // Knuckle details
+                graphics.fillCircle(lfistX - 1, lfistY - 1, 7);
                 graphics.fillStyle(stoneLight, 0.5);
-                graphics.fillCircle(-5, 37, 2);
-                graphics.fillCircle(-1, 36, 2);
-                graphics.fillCircle(3, 37, 2);
+                graphics.fillCircle(lfistX - 4, lfistY - 3, 2);
+                graphics.fillCircle(lfistX, lfistY - 4, 2);
+                graphics.fillCircle(lfistX + 4, lfistY - 3, 2);
 
-                graphics.restore();
+                // Right arm base position
+                const rax = 18;
+                const ray = -20 + stepBob - shoulderRoll;
 
-                // Right arm
-                graphics.save();
-                graphics.translateCanvas(18, -20 + stepBob - shoulderRoll);
-                graphics.rotateCanvas(rightArmAngle);
-
-                // Upper arm
+                // Right arm - upper
                 graphics.fillStyle(stoneDark, 1);
                 graphics.beginPath();
-                graphics.moveTo(4, 0);
-                graphics.lineTo(6, 18);
-                graphics.lineTo(-6, 20);
-                graphics.lineTo(-4, 2);
+                graphics.moveTo(rax + 4, ray);
+                graphics.lineTo(rax + 8 + rightArmSwingX, ray + 18 + rightArmSwingY);
+                graphics.lineTo(rax - 4 + rightArmSwingX, ray + 20 + rightArmSwingY);
+                graphics.lineTo(rax - 4, ray + 2);
                 graphics.closePath();
                 graphics.fillPath();
                 graphics.fillStyle(stoneBase, 1);
-                graphics.fillRect(-3, 2, 6, 16);
+                graphics.beginPath();
+                graphics.moveTo(rax + 2, ray + 2);
+                graphics.lineTo(rax + 4 + rightArmSwingX * 0.5, ray + 16 + rightArmSwingY * 0.5);
+                graphics.lineTo(rax - 2 + rightArmSwingX * 0.5, ray + 17 + rightArmSwingY * 0.5);
+                graphics.lineTo(rax - 2, ray + 3);
+                graphics.closePath();
+                graphics.fillPath();
 
-                // Forearm
+                // Right forearm
+                const rfx = rax + 2 + rightArmSwingX;
+                const rfy = ray + 18 + rightArmSwingY;
                 graphics.fillStyle(stoneAccent, 1);
                 graphics.beginPath();
-                graphics.moveTo(5, 18);
-                graphics.lineTo(7, 35);
-                graphics.lineTo(-5, 36);
-                graphics.lineTo(-6, 19);
+                graphics.moveTo(rfx + 5, rfy);
+                graphics.lineTo(rfx + 7 + rightArmSwingX * 0.5, rfy + 17);
+                graphics.lineTo(rfx - 5 + rightArmSwingX * 0.5, rfy + 18);
+                graphics.lineTo(rfx - 6, rfy + 1);
                 graphics.closePath();
                 graphics.fillPath();
 
-                // Massive fist
+                // Right fist
+                const rfistX = rfx + 1 + rightArmSwingX * 0.5;
+                const rfistY = rfy + 22;
                 graphics.fillStyle(stoneDark, 1);
-                graphics.fillCircle(1, 40, 9);
+                graphics.fillCircle(rfistX, rfistY, 9);
                 graphics.fillStyle(stoneBase, 1);
-                graphics.fillCircle(2, 39, 7);
-                // Knuckle details
+                graphics.fillCircle(rfistX + 1, rfistY - 1, 7);
                 graphics.fillStyle(stoneLight, 0.5);
-                graphics.fillCircle(5, 37, 2);
-                graphics.fillCircle(1, 36, 2);
-                graphics.fillCircle(-3, 37, 2);
-
-                graphics.restore();
+                graphics.fillCircle(rfistX + 4, rfistY - 3, 2);
+                graphics.fillCircle(rfistX, rfistY - 4, 2);
+                graphics.fillCircle(rfistX - 4, rfistY - 3, 2);
 
                 // === HEAD (craggy boulder with glowing eyes) ===
                 // Neck
@@ -8715,13 +8730,6 @@ export class MainScene extends Phaser.Scene {
                 const runPhase = (now % 300) / 300;
                 const runBob = Math.sin(runPhase * Math.PI * 2) * 2;
                 const chargeForward = Math.abs(Math.sin(runPhase * Math.PI)) * 3;
-
-                // Determine cardinal direction for sprite orientation
-                const angleDeg = ((facingAngle * 180 / Math.PI) % 360 + 360) % 360;
-                const isRight = angleDeg >= 315 || angleDeg < 45;
-                const isDown = angleDeg >= 45 && angleDeg < 135;
-                const isLeft = angleDeg >= 135 && angleDeg < 225;
-                const isUp = angleDeg >= 225 && angleDeg < 315;
 
                 // Ram dimensions - MASSIVE tree trunk
                 const ramLength = 48;
