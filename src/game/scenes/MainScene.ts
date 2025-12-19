@@ -7549,6 +7549,7 @@ export class MainScene extends Phaser.Scene {
         this.placeBuilding(13, 11, 'cannon', 'PLAYER');
         this.placeBuilding(7, 12, 'cannon', 'PLAYER'); // Placeholder for archer tower
         this.placeBuilding(12, 7, 'mortar', 'PLAYER');
+        this.placeBuilding(3, 14, 'dragons_breath', 'PLAYER'); // New heavy defense
 
         // Resources
         this.placeBuilding(6, 6, 'mine', 'PLAYER');

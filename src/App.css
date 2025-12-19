@@ -957,6 +957,10 @@ button:disabled {
     background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect x="1" y="5" width="6" height="2" fill="%23a08060"/><path d="M2 5 L4 2 L6 5" fill="%23c4a484"/><rect x="3" y="4" width="2" height="3" fill="%232a1a0a"/></svg>');
 }
 
+.dragons_breath-icon {
+    background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect x="1" y="4" width="6" height="3" fill="%238b0000"/><rect x="2" y="1" width="4" height="3" fill="%23cc0000"/><circle cx="3" cy="2" r="0.5" fill="%23ffd700"/><circle cx="5" cy="2" r="0.5" fill="%23ffd700"/><rect x="2" y="4" width="4" height="1" fill="%23ffd700"/></svg>');
+}
+
 .warrior-icon {
     background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><circle cx="4" cy="4" r="2.5" fill="%23f1c40f"/><circle cx="4" cy="3.5" r="2" fill="%23d4a500"/><rect x="5" y="1" width="1" height="5" fill="%23aaa"/><rect x="4" y="3" width="3" height="1" fill="%23666"/></svg>');
 }
