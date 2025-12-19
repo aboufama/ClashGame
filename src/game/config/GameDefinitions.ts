@@ -4,7 +4,7 @@ export const MAP_SIZE = 25;
 export type BuildingType =
     | 'town_hall' | 'barracks' | 'cannon' | 'ballista' | 'xbow'
     | 'mine' | 'elixir_collector' | 'mortar' | 'tesla' | 'wall'
-    | 'army_camp' | 'prism' | 'magmavent';
+    | 'army_camp' | 'prism' | 'magmavent' | 'dragons_breath';
 
 export type TroopType =
     | 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'chronoswarm';
@@ -114,6 +114,22 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
     army_camp: { id: 'army_camp', name: 'Army Camp', cost: 300, desc: 'Houses your army.', width: 3, height: 3, maxHealth: 1000, category: 'military', maxCount: 4, color: 0x884422, maxLevel: 1 },
     prism: { id: 'prism', name: 'Prism Tower', cost: 550, desc: 'Beam bounces between foes.', width: 1, height: 1, maxHealth: 1100, range: 8, category: 'defense', maxCount: 1, color: 0xff00ff, fireRate: 50, maxLevel: 1 },
     magmavent: { id: 'magmavent', name: 'Magma Vent', cost: 650, desc: 'Erupts with area damage.', width: 3, height: 3, maxHealth: 1200, range: 6, category: 'defense', maxCount: 1, color: 0xff4400, fireRate: 1500, maxLevel: 1 },
+    dragons_breath: {
+        id: 'dragons_breath',
+        name: "Dragon's Breath",
+        cost: 1500,
+        desc: '16 firecracker pods rain destruction on foes.',
+        width: 4,
+        height: 4,
+        maxHealth: 2500,
+        range: 9,
+        category: 'defense',
+        maxCount: 1,
+        color: 0xcc0000,
+        fireRate: 3000,  // 3 second salvo cycle
+        damage: 25,      // Per pod (16 pods = 400 max damage per salvo)
+        maxLevel: 1
+    },
 };
 
 // Start of getBuildingStats is further down.
