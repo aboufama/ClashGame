@@ -206,11 +206,23 @@ function App() {
   }, [isBuildingOpen]);
 
   useEffect(() => {
+    Backend.sanitizeWalls('player_home');
     (window as any).refreshBuildingCounts = refreshBuildingCounts;
     (window as any).onBuildingPlaced = (type: string) => {
       const def = (BUILDING_DEFINITIONS as any)[type];
       if (def) {
-        setResources(prev => ({ ...prev, gold: prev.gold - def.cost }));
+        let cost = def.cost;
+        if (type === 'wall') {
+          const world = Backend.getWorld('player_home');
+          if (world) {
+            const walls = world.buildings.filter(b => b.type === 'wall');
+            if (walls.length > 0) {
+              const maxLevel = Math.max(...walls.map(w => w.level || 1));
+              cost = def.cost * maxLevel;
+            }
+          }
+        }
+        setResources(prev => ({ ...prev, gold: prev.gold - cost }));
       }
       refreshBuildingCounts();
     };
@@ -297,10 +309,20 @@ function App() {
 
       if (selectedBuildingInfo.level < maxLevel) {
         const nextLevelStats = getBuildingStats(selectedBuildingInfo.type, selectedBuildingInfo.level + 1);
+        let upgradeCost = nextLevelStats.cost;
 
-        if (resources.gold >= nextLevelStats.cost) {
+        // Wall Logic: Cost is multiplied by the number of walls being upgraded
+        if (selectedBuildingInfo.type === 'wall') {
+          const world = Backend.getWorld('player_home');
+          if (world) {
+            const count = world.buildings.filter(b => b.type === 'wall' && (b.level || 1) === selectedBuildingInfo.level).length;
+            upgradeCost = nextLevelStats.cost * count;
+          }
+        }
+
+        if (resources.gold >= upgradeCost) {
           // Subtract cost
-          setResources(prev => ({ ...prev, gold: prev.gold - nextLevelStats.cost }));
+          setResources(prev => ({ ...prev, gold: prev.gold - upgradeCost }));
 
           // Sync with backend
           Backend.upgradeBuilding('player_home', selectedInMap);
@@ -319,6 +341,17 @@ function App() {
 
   const buildingList = Object.values(BUILDING_DEFINITIONS);
 
+
+  // Pre-calculation for UI: Wall Bulk Upgrade Cost
+  let wallUpgradeCostOverride: number | undefined;
+  if (selectedBuildingInfo?.type === 'wall' && view === 'HOME') {
+    const world = Backend.getWorld('player_home');
+    if (world) {
+      const count = world.buildings.filter(b => b.type === 'wall' && (b.level || 1) === selectedBuildingInfo.level).length;
+      const nextStats = getBuildingStats('wall', selectedBuildingInfo.level + 1);
+      wallUpgradeCostOverride = nextStats.cost * count;
+    }
+  }
 
   return (
     <div className="app-container">
@@ -415,6 +448,7 @@ function App() {
             onDelete={handleDeleteBuilding}
             onUpgrade={handleUpgradeBuilding}
             onMove={() => (window as any).moveSelectedBuilding()}
+            upgradeCost={wallUpgradeCostOverride}
             key={selectedBuildingInfo.id}
           />
         )}
@@ -589,7 +623,25 @@ function App() {
             <div className="modal-body">
               <div className="building-grid">
                 {buildingList.map(b => {
-                  const isDisabled = resources.gold < b.cost || (buildingCounts[b.id] || 0) >= b.maxCount;
+                  let cost = b.cost;
+                  let name = b.name;
+
+                  // Dynamic Wall Cost/Level in Shop
+                  if (b.id === 'wall') {
+                    const world = Backend.getWorld('player_home');
+                    if (world) {
+                      const walls = world.buildings.filter(w => w.type === 'wall');
+                      if (walls.length > 0) {
+                        const level = Math.max(...walls.map(w => w.level || 1));
+                        if (level > 1) {
+                          cost = b.cost * level;
+                          name = `${b.name} (Lvl ${level})`;
+                        }
+                      }
+                    }
+                  }
+
+                  const isDisabled = resources.gold < cost || (buildingCounts[b.id] || 0) >= b.maxCount;
                   return (
                     <div
                       key={b.id}
@@ -601,11 +653,14 @@ function App() {
                         }
                       }}
                     >
+                      <div className="count-badge">{buildingCounts[b.id] || 0}/{b.maxCount}</div>
                       <div className={`icon ${b.id}-icon large`}></div>
-                      <span className="name">{b.name}</span>
+                      <span className="name">{name}</span>
                       <span className="desc-text" style={{ fontSize: '10px', color: '#aaa', display: 'block', marginBottom: '4px' }}>{b.desc}</span>
-                      <span className="cost">{b.cost}g</span>
-                      <span className="limit">{(buildingCounts[b.id] || 0)}/{b.maxCount}</span>
+                      <div className="cost-badge">
+                        <div className="icon gold-icon" style={{ width: '12px', height: '12px' }}></div>
+                        {cost}
+                      </div>
                     </div>
                   );
                 })}

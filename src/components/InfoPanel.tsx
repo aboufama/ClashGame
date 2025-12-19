@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BUILDING_DEFINITIONS, type BuildingType, getBuildingStats } from '../game/config/GameDefinitions';
 import { BUILDING_TEXTS } from '../game/config/GameText';
-
 interface InfoPanelProps {
     type: BuildingType;
     level: number;
@@ -10,13 +9,13 @@ interface InfoPanelProps {
     onDelete: () => void;
     onUpgrade: () => void;
     onMove: () => void;
+    upgradeCost?: number;
 }
 
-export const InfoPanel: React.FC<InfoPanelProps> = ({ type, level, resources, isExiting, onDelete, onUpgrade, onMove }) => {
+export const InfoPanel: React.FC<InfoPanelProps> = ({ type, level, resources, isExiting, onDelete, onUpgrade, onMove, upgradeCost }) => {
     const [mountClass, setMountClass] = useState('');
 
     useEffect(() => {
-        // Double RAF to ensure browser registers initial state before transition
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 setMountClass('open');
@@ -32,14 +31,18 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ type, level, resources, is
     const maxLevel = def.maxLevel || 1;
     const isMaxLevel = level >= maxLevel;
     const nextLevelStats = !isMaxLevel ? getBuildingStats(type, level + 1) : null;
-    const canAfford = nextLevelStats ? resources.gold >= nextLevelStats.cost : true;
+
+    // Use override cost if provided, else standard next level cost
+    const finalCost = upgradeCost !== undefined ? upgradeCost : (nextLevelStats?.cost || 0);
+    const canAfford = nextLevelStats ? resources.gold >= finalCost : true;
     const upgradeDisabled = isMaxLevel || !canAfford;
 
-    // CSS class logic
+    // ... CSS logic ...
     const className = `info-panel ${isExiting ? 'exiting' : mountClass}`;
 
     return (
         <div className={className}>
+            {/* ... header/body ... */}
             <div className="info-header">
                 <div className="info-title-row">
                     <h2>{def?.name.toUpperCase() || type.toUpperCase()}</h2>
@@ -51,6 +54,7 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ type, level, resources, is
             </div>
 
             <div className="info-body">
+                {/* ... existing stats structure ... */}
                 <div className="info-stats">
                     <div className="stat-row">
                         <span className="stat-label">Health</span>
@@ -175,7 +179,7 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ type, level, resources, is
                             <>
                                 <span>UPGRADE</span>
                                 <span style={{ fontSize: '0.65rem', opacity: canAfford ? 1 : 0.7, color: canAfford ? '#ffd700' : '#ff4444' }}>
-                                    {nextLevelStats?.cost} Gold
+                                    {finalCost} Gold
                                 </span>
                             </>
                         )}

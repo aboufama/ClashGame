@@ -8260,9 +8260,7 @@ export class MainScene extends Phaser.Scene {
 
                 // Shadow (elongated in direction of travel)
                 graphics.fillStyle(0x000000, 0.35);
-                graphics.beginPath();
-                graphics.ellipse(cos * 2, 6 + sin * 1, 28, 14, facingAngle * 0.3, 0, Math.PI * 2);
-                graphics.fill();
+                graphics.fillEllipse(cos * 2, 6 + sin * 1, 28, 14);
 
                 // === RAM BODY (rotates with facing angle) ===
                 const ramLength = 36;
@@ -8758,7 +8756,17 @@ export class MainScene extends Phaser.Scene {
             if (type && gridPosSnap.x >= 0 && gridPosSnap.x < this.mapSize && gridPosSnap.y >= 0 && gridPosSnap.y < this.mapSize) {
                 this.ghostBuilding.setVisible(true);
 
-                this.drawBuildingVisuals(this.ghostBuilding, gridPosSnap.x, gridPosSnap.y, type, 0.5, null);
+                // Determine Ghost Level for accurate preview
+                let level = 1;
+                if (this.selectedInWorld) {
+                    level = this.selectedInWorld.level || 1;
+                } else if (type === 'wall') {
+                    const walls = this.buildings.filter(b => b.type === 'wall');
+                    if (walls.length > 0) level = Math.max(...walls.map(w => w.level || 1));
+                }
+
+                const ghostObj = { type: type as BuildingType, level: level, gridX: gridPosSnap.x, gridY: gridPosSnap.y };
+                this.drawBuildingVisuals(this.ghostBuilding, gridPosSnap.x, gridPosSnap.y, type, 0.5, null, ghostObj as any);
 
                 // Ghost depth should be on top of everything for visibility
                 this.ghostBuilding.setDepth(200000);
@@ -9085,11 +9093,14 @@ export class MainScene extends Phaser.Scene {
         (window as any).moveSelectedBuilding = () => {
             this.isMoving = true;
             this.selectedBuildingType = null;
+            // Immediate visual feedback
+            this.onPointerMove(this.input.activePointer);
         };
 
         (window as any).upgradeSelectedBuilding = () => {
             if (this.selectedInWorld) {
-                this.selectedInWorld.level = (this.selectedInWorld.level || 1) + 1;
+                const prevLevel = this.selectedInWorld.level || 1;
+                this.selectedInWorld.level = prevLevel + 1;
                 const stats = getBuildingStats(this.selectedInWorld.type as BuildingType, this.selectedInWorld.level);
                 this.selectedInWorld.maxHealth = stats.maxHealth;
                 this.selectedInWorld.health = stats.maxHealth;
@@ -9097,6 +9108,20 @@ export class MainScene extends Phaser.Scene {
                 if (this.selectedInWorld.baseGraphics) this.selectedInWorld.baseGraphics.clear();
                 this.drawBuildingVisuals(this.selectedInWorld.graphics, this.selectedInWorld.gridX, this.selectedInWorld.gridY, this.selectedInWorld.type, 1, null, this.selectedInWorld, this.selectedInWorld.baseGraphics);
                 this.updateHealthBar(this.selectedInWorld);
+
+                // COHERENT UPDATE: If Wall, upgrade ALL other walls of the previous level
+                if (this.selectedInWorld.type === 'wall') {
+                    this.buildings.forEach(b => {
+                        if (b.type === 'wall' && b.id !== this.selectedInWorld!.id && (b.level || 1) === prevLevel) {
+                            b.level = this.selectedInWorld!.level;
+                            b.maxHealth = stats.maxHealth;
+                            b.health = b.maxHealth;
+                            b.graphics.clear();
+                            if (b.baseGraphics) b.baseGraphics.clear();
+                            this.drawBuildingVisuals(b.graphics, b.gridX, b.gridY, b.type, 1, null, b, b.baseGraphics);
+                        }
+                    });
+                }
 
                 // Refresh camp capacity if an army camp was upgraded
                 if (this.selectedInWorld.type === 'army_camp') {

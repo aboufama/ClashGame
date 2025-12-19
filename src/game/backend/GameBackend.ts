@@ -103,13 +103,22 @@ export class GameBackend {
         const currentCount = world.buildings.filter(b => b.type === type).length;
         if (currentCount >= info.maxCount) return null;
 
+        // Determine initial level (Auto-upgrade walls)
+        let initialLevel = 1;
+        if (type === 'wall') {
+            const walls = world.buildings.filter(b => b.type === 'wall');
+            if (walls.length > 0) {
+                initialLevel = Math.max(...walls.map(w => w.level || 1));
+            }
+        }
+
         // Create new building instance
         const newB: SerializedBuilding = {
             id: crypto.randomUUID(),
             type,
             gridX: x,
             gridY: y,
-            level: 1
+            level: initialLevel
         };
         world.buildings.push(newB);
         this.saveWorld(world);
@@ -135,21 +144,35 @@ export class GameBackend {
         const b = world.buildings.find(b => b.id === buildingId);
         if (!b) return false;
 
-        // Special case: walls upgrade ALL walls of the same level at once
         if (b.type === 'wall') {
-            const currentLevel = b.level;
-            const wallsToUpgrade = world.buildings.filter(
-                building => building.type === 'wall' && building.level === currentLevel
-            );
-            for (const wall of wallsToUpgrade) {
-                wall.level += 1;
-            }
+            const currentLevel = b.level || 1;
+            world.buildings.forEach(wb => {
+                if (wb.type === 'wall' && (wb.level || 1) === currentLevel) {
+                    wb.level = currentLevel + 1;
+                }
+            });
         } else {
             b.level += 1;
         }
 
         this.saveWorld(world);
         return true;
+    }
+
+    public sanitizeWalls(worldId: string) {
+        const world = this.getWorld(worldId);
+        if (!world) return;
+        let changed = false;
+        world.buildings.forEach(b => {
+            if (b.type === 'wall' && (b.level || 1) > 1) {
+                b.level = 1;
+                changed = true;
+            }
+        });
+        if (changed) {
+            console.log("Sanitized walls (reset to 1)");
+            this.saveWorld(world);
+        }
     }
 
 
