@@ -12,6 +12,14 @@ export type TroopType =
 export type ObstacleType =
     | 'rock_small' | 'rock_large' | 'tree_oak' | 'tree_pine' | 'grass_patch';
 
+export interface BuildingLevelStats {
+    hp: number;
+    damage?: number;
+    fireRate?: number;
+    productionRate?: number;
+    cost: number;
+}
+
 export interface BuildingDef {
     id: BuildingType;
     name: string;
@@ -30,6 +38,7 @@ export interface BuildingDef {
     damage?: number;
     productionRate?: number; // Resources per second
     maxLevel?: number;
+    levels?: BuildingLevelStats[]; // index 0 = Level 1, index 1 = Level 2, etc.
 }
 
 // ... (TroopDef, ObstacleDef omitted for brevity in prompt but implicitly kept if I target correctly)
@@ -39,7 +48,26 @@ export interface BuildingDef {
 export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
     town_hall: { id: 'town_hall', name: 'Town Hall', cost: 500, desc: 'The heart of your village.', width: 3, height: 3, maxHealth: 2000, category: 'other', maxCount: 1, color: 0x3366ff, maxLevel: 1 },
     barracks: { id: 'barracks', name: 'Barracks', cost: 200, desc: 'Trains brave troops.', width: 2, height: 2, maxHealth: 800, category: 'military', maxCount: 4, color: 0xff3333, maxLevel: 1 },
-    cannon: { id: 'cannon', name: 'Cannon', cost: 250, desc: 'Point defense against ground.', width: 1, height: 1, maxHealth: 800, range: 7, category: 'defense', maxCount: 5, color: 0x333333, fireRate: 2500, damage: 70, maxLevel: 1 },
+    cannon: {
+        id: 'cannon',
+        name: 'Cannon',
+        cost: 250,
+        desc: 'Point defense against ground.',
+        width: 1,
+        height: 1,
+        maxHealth: 800,
+        range: 7,
+        category: 'defense',
+        maxCount: 5,
+        color: 0x333333,
+        fireRate: 2500,
+        damage: 70,
+        maxLevel: 2,
+        levels: [
+            { hp: 800, damage: 70, fireRate: 2500, cost: 250 },      // Level 1
+            { hp: 1000, damage: 95, fireRate: 2000, cost: 500 }      // Level 2 - boosted stats (no range increase)
+        ]
+    },
     ballista: { id: 'ballista', name: 'Ballista', cost: 350, desc: 'Heavy single-target damage.', width: 2, height: 2, maxHealth: 900, range: 9, category: 'defense', maxCount: 2, color: 0x8b4513, fireRate: 3500, damage: 120, maxLevel: 1 },
     xbow: { id: 'xbow', name: 'X-Bow', cost: 800, desc: 'Rapid fire long-range turret.', width: 2, height: 2, maxHealth: 1500, range: 11, category: 'defense', maxCount: 2, color: 0x8b008b, fireRate: 200, damage: 15, maxLevel: 1 },
     mine: { id: 'mine', name: 'Gold Mine', cost: 150, desc: 'Produces glorious Gold.', width: 1, height: 1, maxHealth: 600, category: 'resource', maxCount: 8, color: 0xffaa00, productionRate: 2.5, maxLevel: 1 },
@@ -53,10 +81,20 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
 };
 
 // Start of getBuildingStats is further down.
-export function getBuildingStats(type: BuildingType, _level: number = 1): BuildingDef {
+export function getBuildingStats(type: BuildingType, level: number = 1): BuildingDef {
     const base = BUILDING_DEFINITIONS[type];
-    // No placeholder scaling. Only return base stats unless a specific level progression is programmed.
-    return { ...base };
+    const levelStats = base.levels ? base.levels[level - 1] : null;
+
+    if (!levelStats) return { ...base }; // Fallback to base stats if no levels defined
+
+    return {
+        ...base,
+        maxHealth: levelStats.hp,
+        damage: levelStats.damage ?? base.damage,
+        fireRate: levelStats.fireRate ?? base.fireRate,
+        productionRate: levelStats.productionRate ?? base.productionRate,
+        cost: levelStats.cost
+    };
 }
 
 export interface TroopDef {

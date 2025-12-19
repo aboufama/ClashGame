@@ -717,7 +717,12 @@ export class MainScene extends Phaser.Scene {
                 this.drawBarracks(graphics, c1, c2, c3, c4, center, alpha, tint);
                 break;
             case 'cannon':
-                this.drawCannon(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                // Use level-based rendering for cannon
+                if (building && building.level >= 2) {
+                    this.drawCannonLevel2(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                } else {
+                    this.drawCannon(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                }
                 break;
             case 'ballista':
                 this.drawBallista(graphics, c1, c2, c3, c4, center, alpha, tint, building);
@@ -1296,6 +1301,211 @@ export class MainScene extends Phaser.Scene {
         // Muzzle removed - barrel just ends with the line strokes
 
         // If pointing up (sin < 0), draw pivot LAST (on top of barrel)
+        if (sin < 0) drawPivot();
+    }
+
+    private drawCannonLevel2(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
+        // LEVEL 2 CANNON: Dual-barrel reinforced cannon with gold/brass accents and glowing effects
+        const angle = building?.ballistaAngle ?? Math.PI / 4;
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+
+        // === REINFORCED STEEL FOUNDATION ===
+        // Dark steel base with gold trim (isometric diamond)
+        graphics.fillStyle(tint ?? 0x4a4a5a, alpha);
+        graphics.fillPoints([c1, c2, c3, c4], true);
+
+        // Gold trim edges for premium look
+        graphics.lineStyle(3, 0xb8860b, alpha * 0.9);
+        graphics.lineBetween(c1.x, c1.y, c2.x, c2.y);
+        graphics.lineBetween(c1.x, c1.y, c4.x, c4.y);
+        graphics.lineStyle(2, 0x8b6914, alpha * 0.8);
+        graphics.lineBetween(c2.x, c2.y, c3.x, c3.y);
+        graphics.lineBetween(c3.x, c3.y, c4.x, c4.y);
+
+        // Decorative corner rivets (gold)
+        graphics.fillStyle(0xffd700, alpha * 0.9);
+        graphics.fillCircle(c1.x, c1.y, 3);
+        graphics.fillCircle(c2.x, c2.y, 2);
+        graphics.fillCircle(c3.x, c3.y, 2);
+        graphics.fillCircle(c4.x, c4.y, 2);
+
+        // === REINFORCED ROTATING BASE ===
+        const baseRadiusX = 24;
+        const baseRadiusY = 14;
+        const baseY = center.y - 3;
+
+        // Shadow underneath
+        graphics.fillStyle(0x1a1008, alpha * 0.5);
+        graphics.fillEllipse(center.x + 2, baseY + 5, baseRadiusX + 2, baseRadiusY + 1);
+
+        // Main reinforced steel base with dark blue tint
+        graphics.fillStyle(0x3a3a4a, alpha);
+        graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+
+        // Inner steel ring
+        graphics.lineStyle(3, 0x2a2a3a, alpha * 0.8);
+        graphics.strokeEllipse(center.x, baseY, baseRadiusX - 5, baseRadiusY - 3);
+
+        // Glowing energy ring (orange/red for heat effect)
+        graphics.lineStyle(2, 0xff6600, alpha * 0.6);
+        graphics.strokeEllipse(center.x, baseY, baseRadiusX - 8, baseRadiusY - 5);
+        graphics.lineStyle(1, 0xff9900, alpha * 0.4);
+        graphics.strokeEllipse(center.x, baseY, baseRadiusX - 9, baseRadiusY - 6);
+
+        // Gold reinforcement outer ring
+        graphics.lineStyle(4, 0xb8860b, alpha);
+        graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+        graphics.lineStyle(2, 0xffd700, alpha * 0.5);
+        graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
+
+        // === DUAL BARREL SETUP ===
+        const barrelHeight = -14;
+        const barrelLength = 30;  // Slightly longer barrels
+        const barrelWidth = 8;    // Slightly thinner for dual setup
+        const barrelSpacing = 5;  // Distance between the two barrels
+
+        // Recoil animation
+        const recoilAmount = (building?.cannonRecoilOffset ?? 0) * 10;
+        const recoilOffsetX = -cos * recoilAmount;
+        const recoilOffsetY = -sin * 0.5 * recoilAmount;
+
+        // Barrel perpendicular offset for dual barrels
+        const perpX = -sin * barrelSpacing;
+        const perpY = cos * 0.5 * barrelSpacing;
+
+        // Both barrel tip positions
+        const barrelTip1X = center.x + cos * barrelLength + recoilOffsetX + perpX;
+        const barrelTip1Y = center.y + barrelHeight + sin * 0.5 * barrelLength + recoilOffsetY + perpY;
+        const barrelTip2X = center.x + cos * barrelLength + recoilOffsetX - perpX;
+        const barrelTip2Y = center.y + barrelHeight + sin * 0.5 * barrelLength + recoilOffsetY - perpY;
+
+        // Barrel shadow on ground
+        graphics.fillStyle(0x1a1a1a, alpha * 0.4);
+        graphics.fillEllipse(center.x + cos * (barrelLength * 0.5) + 3, center.y + 5, barrelLength * 0.7, 6);
+
+        // === REINFORCED BARREL CARRIAGE ===
+        const supportOffsetX = -sin * 10;
+        const supportOffsetY = cos * 5;
+
+        // Left support (reinforced steel)
+        graphics.fillStyle(0x3a3a4a, alpha);
+        graphics.beginPath();
+        graphics.moveTo(center.x - supportOffsetX, baseY - supportOffsetY);
+        graphics.lineTo(center.x - supportOffsetX * 0.5, center.y + barrelHeight + 5);
+        graphics.lineTo(center.x + cos * 6 - supportOffsetX * 0.5, center.y + barrelHeight + sin * 3 + 5);
+        graphics.lineTo(center.x + cos * 6, center.y + barrelHeight + sin * 3);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Right support
+        graphics.fillStyle(0x2a2a3a, alpha);
+        graphics.beginPath();
+        graphics.moveTo(center.x + supportOffsetX, baseY + supportOffsetY);
+        graphics.lineTo(center.x + supportOffsetX * 0.5, center.y + barrelHeight + 5);
+        graphics.lineTo(center.x + cos * 6 + supportOffsetX * 0.5, center.y + barrelHeight + sin * 3 + 5);
+        graphics.lineTo(center.x + cos * 6, center.y + barrelHeight + sin * 3);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Gold trim on supports
+        graphics.lineStyle(1, 0xb8860b, alpha * 0.7);
+        graphics.lineBetween(center.x - supportOffsetX, baseY - supportOffsetY, center.x + cos * 6, center.y + barrelHeight + sin * 3);
+        graphics.lineBetween(center.x + supportOffsetX, baseY + supportOffsetY, center.x + cos * 6, center.y + barrelHeight + sin * 3);
+
+        // === CENTRAL PIVOT MECHANISM (ENHANCED) ===
+        const drawPivot = () => {
+            const pivotX = center.x + recoilOffsetX;
+            const pivotY = center.y + barrelHeight + 4 + recoilOffsetY;
+
+            // Larger reinforced pivot
+            graphics.fillStyle(0x2a2a2a, alpha);
+            graphics.fillCircle(pivotX, pivotY, 10);
+            graphics.fillStyle(0x3a3a4a, alpha);
+            graphics.fillCircle(pivotX, pivotY, 8);
+            // Gold center accent
+            graphics.fillStyle(0xb8860b, alpha);
+            graphics.fillCircle(pivotX, pivotY, 5);
+            graphics.fillStyle(0xffd700, alpha * 0.8);
+            graphics.fillCircle(pivotX - 1, pivotY - 1, 3);
+            // Glowing core
+            graphics.fillStyle(0xff6600, alpha * 0.5);
+            graphics.fillCircle(pivotX, pivotY, 2);
+        };
+
+        if (sin >= 0) drawPivot();
+
+        // === BARREL BASE JOINT (REINFORCED) ===
+        const baseJointX = center.x + cos * 4 + recoilOffsetX;
+        const baseJointY = center.y + barrelHeight + sin * 2 + recoilOffsetY;
+        graphics.fillStyle(0x4a4a5a, alpha);
+        graphics.fillEllipse(baseJointX, baseJointY, 16, 10);
+        graphics.fillStyle(0xb8860b, alpha * 0.8);
+        graphics.fillEllipse(baseJointX, baseJointY, 12, 7);
+        graphics.fillStyle(0x3a3a4a, alpha);
+        graphics.fillEllipse(baseJointX, baseJointY, 8, 5);
+
+        // === DUAL BARRELS ===
+        const drawBarrel = (tipX: number, tipY: number, offsetX: number, offsetY: number) => {
+            const barrelBaseX = center.x + recoilOffsetX + offsetX;
+            const barrelBaseY = center.y + barrelHeight + recoilOffsetY + offsetY;
+
+            // Barrel outer shadow
+            graphics.lineStyle(barrelWidth + 3, 0x1a1a1a, alpha);
+            graphics.lineBetween(barrelBaseX, barrelBaseY + 2, tipX, tipY + 2);
+
+            // Barrel main body - dark steel with blue tint
+            graphics.lineStyle(barrelWidth, 0x2a2a3a, alpha);
+            graphics.lineBetween(barrelBaseX, barrelBaseY, tipX, tipY);
+
+            // Barrel highlight strip
+            graphics.lineStyle(barrelWidth - 3, 0x3a3a4a, alpha);
+            graphics.lineBetween(barrelBaseX, barrelBaseY - 1, tipX, tipY - 1);
+
+            // Bright highlight
+            graphics.lineStyle(2, 0x5a5a6a, alpha * 0.9);
+            graphics.lineBetween(barrelBaseX, barrelBaseY - 2, tipX, tipY - 2);
+
+            // === GOLD DECORATIVE BANDS ===
+            const bands = [0.2, 0.5, 0.8];
+            for (const t of bands) {
+                const bandX = barrelBaseX + cos * barrelLength * t;
+                const bandY = barrelBaseY + sin * 0.5 * barrelLength * t;
+
+                // Gold bands with glow
+                graphics.fillStyle(0xb8860b, alpha);
+                graphics.fillEllipse(bandX, bandY, 6, 3.5);
+                graphics.fillStyle(0xffd700, alpha * 0.7);
+                graphics.fillCircle(bandX - 1, bandY - 1, 1.5);
+                graphics.lineStyle(1, 0x8b6914, alpha);
+                graphics.strokeEllipse(bandX, bandY, 6, 3.5);
+            }
+
+            // === MUZZLE GLOW (heat effect) ===
+            graphics.fillStyle(0xff4400, alpha * 0.4);
+            graphics.fillCircle(tipX, tipY, 5);
+            graphics.fillStyle(0xff6600, alpha * 0.3);
+            graphics.fillCircle(tipX, tipY, 7);
+            graphics.fillStyle(0xff9900, alpha * 0.2);
+            graphics.fillCircle(tipX, tipY, 9);
+        };
+
+        // Draw both barrels
+        drawBarrel(barrelTip1X, barrelTip1Y, perpX, perpY);
+        drawBarrel(barrelTip2X, barrelTip2Y, -perpX, -perpY);
+
+        // === CONNECTING BRACE BETWEEN BARRELS ===
+        const braceT = 0.35;
+        const brace1X = center.x + cos * barrelLength * braceT + recoilOffsetX + perpX;
+        const brace1Y = center.y + barrelHeight + sin * 0.5 * barrelLength * braceT + recoilOffsetY + perpY;
+        const brace2X = center.x + cos * barrelLength * braceT + recoilOffsetX - perpX;
+        const brace2Y = center.y + barrelHeight + sin * 0.5 * barrelLength * braceT + recoilOffsetY - perpY;
+
+        graphics.lineStyle(3, 0x3a3a4a, alpha);
+        graphics.lineBetween(brace1X, brace1Y, brace2X, brace2Y);
+        graphics.lineStyle(1, 0xb8860b, alpha * 0.8);
+        graphics.lineBetween(brace1X, brace1Y, brace2X, brace2Y);
+
         if (sin < 0) drawPivot();
     }
 
