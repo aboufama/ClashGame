@@ -8,7 +8,7 @@ export type BuildingType =
 
 export type TroopType =
     | 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'chronoswarm'
-    | 'ram' | 'stormmage';
+    | 'ram' | 'stormmage' | 'golem';
 
 export type ObstacleType =
     | 'rock_small' | 'rock_large' | 'tree_oak' | 'tree_pine' | 'grass_patch';
@@ -313,7 +313,8 @@ export const TROOP_DEFINITIONS: Record<TroopType, TroopDef> = {
     recursion: { id: 'recursion', name: 'Recursion', cost: 80, space: 3, desc: 'Splits into two copies on death.', health: 150, range: 1.0, damage: 12, speed: 0.003, color: 0xff00ff },
     chronoswarm: { id: 'chronoswarm', name: 'Speedster', cost: 60, space: 2, desc: 'Speeds up nearby allies.', health: 50, range: 1.5, damage: 5, speed: 0.004, color: 0xffcc00, boostRadius: 4.0, boostAmount: 1.5 },
     ram: { id: 'ram', name: 'Battering Ram', cost: 200, space: 8, desc: 'Charges Town Hall. 4x wall damage.', health: 800, range: 1.2, damage: 50, speed: 0.0018, color: 0x8b4513, targetPriority: 'town_hall', wallDamageMultiplier: 4 },
-    stormmage: { id: 'stormmage', name: 'Storm Mage', cost: 180, space: 6, desc: 'Chain lightning hits 4 targets.', health: 200, range: 4.9, damage: 40, speed: 0.002, color: 0x4444ff, chainCount: 4, chainRange: 5 }
+    stormmage: { id: 'stormmage', name: 'Storm Mage', cost: 180, space: 6, desc: 'Chain lightning hits 4 targets.', health: 200, range: 4.9, damage: 40, speed: 0.002, color: 0x4444ff, chainCount: 4, chainRange: 5 },
+    golem: { id: 'golem', name: 'Stone Golem', cost: 500, space: 25, desc: 'Colossal stone titan. Nearly indestructible.', health: 6000, range: 1.5, damage: 80, speed: 0.0012, color: 0x6b7b8b, targetPriority: 'defense' }
 };
 
 export const OBSTACLE_DEFINITIONS: Record<ObstacleType, ObstacleDef> = {

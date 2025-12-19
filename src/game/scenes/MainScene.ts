@@ -5047,14 +5047,18 @@ export class MainScene extends Phaser.Scene {
 
     // === LEVEL 3: FORTIFIED DARK STONE ===
     private drawWallLevel3(graphics: Phaser.GameObjects.Graphics, gridX: number, gridY: number, alpha: number, tint: number | null, owner: string) {
-        const wallHeight = 24;
-        const wallThickness = 0.35;
+        const wallHeight = 26;
+        const wallThickness = 0.38;
 
-        // Dark fortified stone colors
-        const stoneTop = tint ?? 0x7a7a8a;
-        const stoneFront = tint ?? 0x5a5a6a;
-        const stoneSide = tint ?? 0x4a4a5a;
-        const mortarColor = 0x3a3a4a;
+        // Dark obsidian fortress colors
+        const stoneTop = tint ?? 0x4a4a5a;
+        const stoneFront = tint ?? 0x3a3a4a;
+        const stoneSide = tint ?? 0x2a2a3a;
+        const stoneAccent = tint ?? 0x5a5a6a;
+        const goldTrim = 0xc9a227;
+        const goldDark = 0x8a7019;
+        const ironColor = 0x555565;
+        const ironLight = 0x707080;
 
         const hasNeighbor = (dx: number, dy: number) => {
             return this.buildings.some(b =>
@@ -5066,6 +5070,7 @@ export class MainScene extends Phaser.Scene {
         const nS = hasNeighbor(0, 1);
         const nW = hasNeighbor(-1, 0);
         const nE = hasNeighbor(1, 0);
+        const neighborCount = (nN ? 1 : 0) + (nS ? 1 : 0) + (nE ? 1 : 0) + (nW ? 1 : 0);
 
         const hw = wallThickness / 2;
         const cx = gridX + 0.5;
@@ -5105,7 +5110,7 @@ export class MainScene extends Phaser.Scene {
         if (nW) addSegment(cx, cy, gridX - 0.5, cy);
 
         // Central pillar (larger for fortified)
-        const ps = wallThickness * 0.7;
+        const ps = wallThickness * 0.75;
         const hps = ps / 2;
         const pTL = this.cartToIso(cx - hps, cy - hps);
         const pTR = this.cartToIso(cx + hps, cy - hps);
@@ -5131,46 +5136,171 @@ export class MainScene extends Phaser.Scene {
             graphics.fillPoints(top, true);
         }
 
-        // Mortar lines (brick pattern)
         const pcx = (ptTL.x + ptBR.x) / 2;
         const pcy = (ptTL.y + ptBR.y) / 2;
-        graphics.lineStyle(1, mortarColor, alpha * 0.5);
-        // Horizontal mortar lines
-        graphics.lineBetween(pcx - 5, pcy + 5, pcx + 5, pcy + 5);
-        graphics.lineBetween(pcx - 5, pcy + 10, pcx + 5, pcy + 10);
-        graphics.lineBetween(pcx - 5, pcy + 15, pcx + 5, pcy + 15);
-        // Vertical mortar lines (offset pattern)
-        graphics.lineBetween(pcx, pcy + 5, pcx, pcy + 10);
-        graphics.lineBetween(pcx - 3, pcy + 10, pcx - 3, pcy + 15);
-        graphics.lineBetween(pcx + 3, pcy + 10, pcx + 3, pcy + 15);
 
-        // Top edge highlights
-        graphics.lineStyle(1, 0x8a8a9a, alpha * 0.7);
+        // Stone brick pattern on front face
+        graphics.lineStyle(1, 0x252535, alpha * 0.6);
+        for (let row = 0; row < 3; row++) {
+            const rowY = pcy + 6 + row * 6;
+            graphics.lineBetween(pcx - 6, rowY, pcx + 6, rowY);
+            // Staggered vertical lines
+            const offset = row % 2 === 0 ? 0 : 3;
+            graphics.lineBetween(pcx - 3 + offset, rowY, pcx - 3 + offset, rowY + 6);
+            graphics.lineBetween(pcx + 3 + offset, rowY, pcx + 3 + offset, rowY + 6);
+        }
+
+        // Reinforced iron bands with rivets
+        graphics.fillStyle(ironColor, alpha);
+        graphics.fillRect(pcx - 7, pcy + 4, 14, 3);
+        graphics.fillRect(pcx - 7, pcy + 16, 14, 3);
+        // Rivet details
+        graphics.fillStyle(ironLight, alpha * 0.8);
+        for (const bandY of [pcy + 5, pcy + 17]) {
+            graphics.fillCircle(pcx - 5, bandY, 1.5);
+            graphics.fillCircle(pcx, bandY, 1.5);
+            graphics.fillCircle(pcx + 5, bandY, 1.5);
+        }
+
+        // === EXTRAVAGANT CORNER/JUNCTION DECORATIONS ===
+        const isCorner = neighborCount === 2 && ((nN && nE) || (nE && nS) || (nS && nW) || (nW && nN));
+        const isJunction = neighborCount >= 3;
+        const isEndCap = neighborCount <= 1;
+
+        if (isJunction) {
+            // Grand fortress junction - raised tower with golden crown
+            const towerHeight = 8;
+
+            // Raised tower base
+            graphics.fillStyle(stoneAccent, alpha);
+            graphics.fillRect(pcx - 6, pcy - wallHeight - towerHeight + 2, 12, towerHeight);
+            graphics.fillStyle(stoneSide, alpha);
+            graphics.beginPath();
+            graphics.moveTo(pcx - 6, pcy - wallHeight + 2);
+            graphics.lineTo(pcx - 6, pcy - wallHeight - towerHeight + 2);
+            graphics.lineTo(pcx - 4, pcy - wallHeight - towerHeight);
+            graphics.lineTo(pcx - 4, pcy - wallHeight);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Golden crown decoration
+            graphics.fillStyle(goldTrim, alpha);
+            graphics.beginPath();
+            graphics.moveTo(pcx - 5, pcy - wallHeight - towerHeight);
+            graphics.lineTo(pcx - 4, pcy - wallHeight - towerHeight - 4);
+            graphics.lineTo(pcx - 2, pcy - wallHeight - towerHeight - 1);
+            graphics.lineTo(pcx, pcy - wallHeight - towerHeight - 5);
+            graphics.lineTo(pcx + 2, pcy - wallHeight - towerHeight - 1);
+            graphics.lineTo(pcx + 4, pcy - wallHeight - towerHeight - 4);
+            graphics.lineTo(pcx + 5, pcy - wallHeight - towerHeight);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Crown jewels
+            graphics.fillStyle(0xff3333, alpha);
+            graphics.fillCircle(pcx, pcy - wallHeight - towerHeight - 3, 2);
+            graphics.fillStyle(0x3333ff, alpha);
+            graphics.fillCircle(pcx - 3, pcy - wallHeight - towerHeight - 2, 1.5);
+            graphics.fillCircle(pcx + 3, pcy - wallHeight - towerHeight - 2, 1.5);
+
+            // Crown highlights
+            graphics.fillStyle(0xffffff, alpha * 0.4);
+            graphics.fillCircle(pcx, pcy - wallHeight - towerHeight - 3.5, 0.8);
+
+            // Decorative shields on sides
+            graphics.fillStyle(ironColor, alpha);
+            graphics.fillCircle(pcx - 5, pcy + 10, 3);
+            graphics.fillCircle(pcx + 5, pcy + 10, 3);
+            graphics.fillStyle(goldDark, alpha);
+            graphics.fillCircle(pcx - 5, pcy + 10, 2);
+            graphics.fillCircle(pcx + 5, pcy + 10, 2);
+
+        } else if (isCorner) {
+            // Elegant corner tower with spire
+            const spireHeight = 12;
+
+            // Corner tower body
+            graphics.fillStyle(stoneAccent, alpha);
+            graphics.fillRect(pcx - 5, pcy - wallHeight - 4, 10, 6);
+
+            // Pointed spire
+            graphics.fillStyle(stoneSide, alpha);
+            graphics.beginPath();
+            graphics.moveTo(pcx - 5, pcy - wallHeight - 4);
+            graphics.lineTo(pcx, pcy - wallHeight - spireHeight);
+            graphics.lineTo(pcx + 5, pcy - wallHeight - 4);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Spire highlight
+            graphics.fillStyle(stoneTop, alpha);
+            graphics.beginPath();
+            graphics.moveTo(pcx - 2, pcy - wallHeight - 5);
+            graphics.lineTo(pcx, pcy - wallHeight - spireHeight);
+            graphics.lineTo(pcx + 1, pcy - wallHeight - 6);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Golden finial at top
+            graphics.fillStyle(goldTrim, alpha);
+            graphics.fillCircle(pcx, pcy - wallHeight - spireHeight - 2, 2.5);
+            graphics.fillStyle(0xffffff, alpha * 0.5);
+            graphics.fillCircle(pcx - 0.5, pcy - wallHeight - spireHeight - 2.5, 1);
+
+            // Decorative arrow slits
+            graphics.fillStyle(0x1a1a2a, alpha);
+            graphics.fillRect(pcx - 1, pcy + 8, 2, 6);
+
+            // Corner iron brackets
+            graphics.fillStyle(ironColor, alpha);
+            graphics.lineStyle(2, ironColor, alpha);
+            graphics.lineBetween(pcx - 6, pcy + 2, pcx - 6, pcy + 20);
+            graphics.lineBetween(pcx + 6, pcy + 2, pcx + 6, pcy + 20);
+
+        } else if (isEndCap) {
+            // Defensive end cap with battlements
+
+            // Crenellation (battlement teeth)
+            graphics.fillStyle(stoneAccent, alpha);
+            graphics.fillRect(pcx - 5, pcy - wallHeight - 5, 4, 5);
+            graphics.fillRect(pcx + 1, pcy - wallHeight - 5, 4, 5);
+
+            // Torch bracket
+            graphics.fillStyle(ironColor, alpha);
+            graphics.fillRect(pcx - 1, pcy - wallHeight - 3, 2, 4);
+
+            // Torch flame
+            graphics.fillStyle(0xff6600, alpha);
+            graphics.fillCircle(pcx, pcy - wallHeight - 5, 2);
+            graphics.fillStyle(0xffcc00, alpha);
+            graphics.fillCircle(pcx, pcy - wallHeight - 5.5, 1.2);
+            graphics.fillStyle(0xffffff, alpha * 0.6);
+            graphics.fillCircle(pcx, pcy - wallHeight - 5.5, 0.5);
+
+            // Skull decoration
+            graphics.fillStyle(0xccccaa, alpha);
+            graphics.fillCircle(pcx, pcy + 12, 3);
+            graphics.fillStyle(0x1a1a2a, alpha);
+            graphics.fillCircle(pcx - 1, pcy + 11, 0.8);
+            graphics.fillCircle(pcx + 1, pcy + 11, 0.8);
+            graphics.fillRect(pcx - 1.5, pcy + 13, 3, 1);
+
+        } else {
+            // Standard segment - subtle battlements
+            graphics.fillStyle(stoneAccent, alpha);
+            graphics.fillRect(pcx - 4, pcy - wallHeight - 3, 3, 3);
+            graphics.fillRect(pcx + 1, pcy - wallHeight - 3, 3, 3);
+        }
+
+        // Gold trim along top edges
+        graphics.lineStyle(1, goldTrim, alpha * 0.7);
         graphics.lineBetween(ptTL.x, ptTL.y, ptTR.x, ptTR.y);
         graphics.lineBetween(ptTL.x, ptTL.y, ptBL.x, ptBL.y);
 
-        // Iron reinforcement bands
-        graphics.lineStyle(2, 0x555565, alpha * 0.8);
-        graphics.lineBetween(pcx - 5, pcy + 3, pcx + 5, pcy + 3);
-
-        // Corner iron studs
-        graphics.fillStyle(0x606070, alpha);
-        graphics.fillCircle(ptTL.x, ptTL.y + 2, 2);
-        graphics.fillCircle(ptTR.x, ptTR.y + 2, 2);
-        graphics.fillStyle(0x808090, alpha * 0.5);
-        graphics.fillCircle(ptTL.x - 0.5, ptTL.y + 1.5, 1);
-
-        // Junction decoration with iron cap
-        const neighborCount = (nN ? 1 : 0) + (nS ? 1 : 0) + (nE ? 1 : 0) + (nW ? 1 : 0);
-        if (neighborCount >= 3) {
-            graphics.fillStyle(0x555565, alpha);
-            graphics.fillCircle(pcx, pcy - wallHeight + 2, 4);
-            graphics.fillStyle(0x707080, alpha * 0.6);
-            graphics.fillCircle(pcx - 1, pcy - wallHeight + 1, 2);
-        } else if (neighborCount >= 2) {
-            graphics.fillStyle(0x606070, alpha);
-            graphics.fillCircle(pcx, pcy - wallHeight + 2, 3);
-        }
+        // Stone texture highlights
+        graphics.fillStyle(0xffffff, alpha * 0.08);
+        graphics.fillRect(pcx - 4, pcy + 7, 2, 2);
+        graphics.fillRect(pcx + 2, pcy + 13, 2, 2);
     }
 
     private drawArmyCamp(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, baseGraphics?: Phaser.GameObjects.Graphics, building?: PlacedBuilding) {
@@ -8069,6 +8199,327 @@ export class MainScene extends Phaser.Scene {
                 graphics.fillRect(-2, 2, 4, 4);
                 break;
             }
+            case 'golem': {
+                // COLOSSAL STONE GOLEM - Massive animated rock titan
+                const now = Date.now();
+
+                // Walking animation - heavy, lumbering steps
+                const walkPhase = (now % 1200) / 1200;
+                const stepBob = Math.abs(Math.sin(walkPhase * Math.PI * 2)) * 4;
+                const armSwing = Math.sin(walkPhase * Math.PI * 2) * 0.3;
+                const shoulderRoll = Math.sin(walkPhase * Math.PI) * 2;
+
+                // Stone colors with ancient weathering
+                const stoneBase = isPlayer ? 0x5a6a7a : 0x6a5a5a;
+                const stoneDark = isPlayer ? 0x3a4a5a : 0x4a3a3a;
+                const stoneLight = isPlayer ? 0x7a8a9a : 0x8a7a7a;
+                const stoneAccent = isPlayer ? 0x4a5a6a : 0x5a4a4a;
+                const mossColor = isPlayer ? 0x4a6a3a : 0x5a4a3a;
+                const glowColor = isPlayer ? 0x44aaff : 0xff4444;
+                const glowColorBright = isPlayer ? 0x88ccff : 0xff8888;
+
+                // MASSIVE shadow
+                graphics.fillStyle(0x000000, 0.45);
+                graphics.fillEllipse(0, 18, 40, 20);
+
+                // === LEGS (massive stone pillars) ===
+                const legSpread = 12;
+                const leftLegPhase = walkPhase;
+                const rightLegPhase = (walkPhase + 0.5) % 1;
+                const leftLegLift = Math.max(0, Math.sin(leftLegPhase * Math.PI * 2)) * 6;
+                const rightLegLift = Math.max(0, Math.sin(rightLegPhase * Math.PI * 2)) * 6;
+
+                // Left leg
+                graphics.fillStyle(stoneDark, 1);
+                graphics.beginPath();
+                graphics.moveTo(-legSpread - 6, -5 + stepBob);
+                graphics.lineTo(-legSpread - 8, 12 - leftLegLift);
+                graphics.lineTo(-legSpread + 4, 14 - leftLegLift);
+                graphics.lineTo(-legSpread + 2, -3 + stepBob);
+                graphics.closePath();
+                graphics.fillPath();
+                // Leg highlight
+                graphics.fillStyle(stoneBase, 1);
+                graphics.beginPath();
+                graphics.moveTo(-legSpread - 4, -4 + stepBob);
+                graphics.lineTo(-legSpread - 5, 10 - leftLegLift);
+                graphics.lineTo(-legSpread, 11 - leftLegLift);
+                graphics.lineTo(-legSpread + 1, -3 + stepBob);
+                graphics.closePath();
+                graphics.fillPath();
+                // Left foot (massive stone block)
+                graphics.fillStyle(stoneDark, 1);
+                graphics.fillRect(-legSpread - 10, 12 - leftLegLift, 16, 6);
+                graphics.fillStyle(stoneAccent, 1);
+                graphics.fillRect(-legSpread - 8, 11 - leftLegLift, 12, 3);
+
+                // Right leg
+                graphics.fillStyle(stoneDark, 1);
+                graphics.beginPath();
+                graphics.moveTo(legSpread + 6, -5 + stepBob);
+                graphics.lineTo(legSpread + 8, 12 - rightLegLift);
+                graphics.lineTo(legSpread - 4, 14 - rightLegLift);
+                graphics.lineTo(legSpread - 2, -3 + stepBob);
+                graphics.closePath();
+                graphics.fillPath();
+                // Leg highlight
+                graphics.fillStyle(stoneBase, 1);
+                graphics.beginPath();
+                graphics.moveTo(legSpread + 4, -4 + stepBob);
+                graphics.lineTo(legSpread + 5, 10 - rightLegLift);
+                graphics.lineTo(legSpread, 11 - rightLegLift);
+                graphics.lineTo(legSpread - 1, -3 + stepBob);
+                graphics.closePath();
+                graphics.fillPath();
+                // Right foot
+                graphics.fillStyle(stoneDark, 1);
+                graphics.fillRect(legSpread - 6, 12 - rightLegLift, 16, 6);
+                graphics.fillStyle(stoneAccent, 1);
+                graphics.fillRect(legSpread - 4, 11 - rightLegLift, 12, 3);
+
+                // === TORSO (massive boulder body) ===
+                // Back layer - darker
+                graphics.fillStyle(stoneDark, 1);
+                graphics.beginPath();
+                graphics.moveTo(-22, -8 + stepBob);
+                graphics.lineTo(-18, -28 + stepBob);
+                graphics.lineTo(18, -28 + stepBob);
+                graphics.lineTo(22, -8 + stepBob);
+                graphics.lineTo(16, 2 + stepBob);
+                graphics.lineTo(-16, 2 + stepBob);
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Main body
+                graphics.fillStyle(stoneBase, 1);
+                graphics.beginPath();
+                graphics.moveTo(-20, -10 + stepBob);
+                graphics.lineTo(-16, -30 + stepBob);
+                graphics.lineTo(16, -30 + stepBob);
+                graphics.lineTo(20, -10 + stepBob);
+                graphics.lineTo(14, 0 + stepBob);
+                graphics.lineTo(-14, 0 + stepBob);
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Chest stone plates
+                graphics.fillStyle(stoneLight, 1);
+                graphics.beginPath();
+                graphics.moveTo(-12, -24 + stepBob);
+                graphics.lineTo(-8, -28 + stepBob);
+                graphics.lineTo(8, -28 + stepBob);
+                graphics.lineTo(12, -24 + stepBob);
+                graphics.lineTo(10, -14 + stepBob);
+                graphics.lineTo(-10, -14 + stepBob);
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Glowing rune on chest
+                graphics.fillStyle(glowColor, 0.8);
+                graphics.beginPath();
+                graphics.moveTo(0, -26 + stepBob);
+                graphics.lineTo(-4, -22 + stepBob);
+                graphics.lineTo(0, -18 + stepBob);
+                graphics.lineTo(4, -22 + stepBob);
+                graphics.closePath();
+                graphics.fillPath();
+                graphics.fillStyle(glowColorBright, 0.6);
+                graphics.fillCircle(0, -22 + stepBob, 2);
+
+                // Stone texture cracks
+                graphics.lineStyle(1, stoneDark, 0.6);
+                graphics.lineBetween(-15, -20 + stepBob, -10, -15 + stepBob);
+                graphics.lineBetween(12, -25 + stepBob, 16, -18 + stepBob);
+                graphics.lineBetween(-8, -8 + stepBob, -3, -12 + stepBob);
+                graphics.lineBetween(5, -6 + stepBob, 10, -10 + stepBob);
+
+                // Moss patches
+                graphics.fillStyle(mossColor, 0.7);
+                graphics.fillCircle(-14, -16 + stepBob, 3);
+                graphics.fillCircle(16, -12 + stepBob, 2.5);
+                graphics.fillCircle(-8, -4 + stepBob, 2);
+
+                // === ARMS (boulder appendages) ===
+                const leftArmAngle = -0.4 + armSwing;
+                const rightArmAngle = 0.4 - armSwing;
+
+                // Left arm
+                graphics.save();
+                graphics.translateCanvas(-18, -20 + stepBob + shoulderRoll);
+                graphics.rotateCanvas(leftArmAngle);
+
+                // Upper arm
+                graphics.fillStyle(stoneDark, 1);
+                graphics.beginPath();
+                graphics.moveTo(-4, 0);
+                graphics.lineTo(-6, 18);
+                graphics.lineTo(6, 20);
+                graphics.lineTo(4, 2);
+                graphics.closePath();
+                graphics.fillPath();
+                graphics.fillStyle(stoneBase, 1);
+                graphics.fillRect(-3, 2, 6, 16);
+
+                // Forearm
+                graphics.fillStyle(stoneAccent, 1);
+                graphics.beginPath();
+                graphics.moveTo(-5, 18);
+                graphics.lineTo(-7, 35);
+                graphics.lineTo(5, 36);
+                graphics.lineTo(6, 19);
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Massive fist
+                graphics.fillStyle(stoneDark, 1);
+                graphics.fillCircle(-1, 40, 9);
+                graphics.fillStyle(stoneBase, 1);
+                graphics.fillCircle(-2, 39, 7);
+                // Knuckle details
+                graphics.fillStyle(stoneLight, 0.5);
+                graphics.fillCircle(-5, 37, 2);
+                graphics.fillCircle(-1, 36, 2);
+                graphics.fillCircle(3, 37, 2);
+
+                graphics.restore();
+
+                // Right arm
+                graphics.save();
+                graphics.translateCanvas(18, -20 + stepBob - shoulderRoll);
+                graphics.rotateCanvas(rightArmAngle);
+
+                // Upper arm
+                graphics.fillStyle(stoneDark, 1);
+                graphics.beginPath();
+                graphics.moveTo(4, 0);
+                graphics.lineTo(6, 18);
+                graphics.lineTo(-6, 20);
+                graphics.lineTo(-4, 2);
+                graphics.closePath();
+                graphics.fillPath();
+                graphics.fillStyle(stoneBase, 1);
+                graphics.fillRect(-3, 2, 6, 16);
+
+                // Forearm
+                graphics.fillStyle(stoneAccent, 1);
+                graphics.beginPath();
+                graphics.moveTo(5, 18);
+                graphics.lineTo(7, 35);
+                graphics.lineTo(-5, 36);
+                graphics.lineTo(-6, 19);
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Massive fist
+                graphics.fillStyle(stoneDark, 1);
+                graphics.fillCircle(1, 40, 9);
+                graphics.fillStyle(stoneBase, 1);
+                graphics.fillCircle(2, 39, 7);
+                // Knuckle details
+                graphics.fillStyle(stoneLight, 0.5);
+                graphics.fillCircle(5, 37, 2);
+                graphics.fillCircle(1, 36, 2);
+                graphics.fillCircle(-3, 37, 2);
+
+                graphics.restore();
+
+                // === HEAD (craggy boulder with glowing eyes) ===
+                // Neck
+                graphics.fillStyle(stoneDark, 1);
+                graphics.fillRect(-8, -38 + stepBob, 16, 10);
+
+                // Head base
+                graphics.fillStyle(stoneBase, 1);
+                graphics.beginPath();
+                graphics.moveTo(-14, -36 + stepBob);
+                graphics.lineTo(-16, -48 + stepBob);
+                graphics.lineTo(-10, -54 + stepBob);
+                graphics.lineTo(10, -54 + stepBob);
+                graphics.lineTo(16, -48 + stepBob);
+                graphics.lineTo(14, -36 + stepBob);
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Brow ridge
+                graphics.fillStyle(stoneDark, 1);
+                graphics.beginPath();
+                graphics.moveTo(-14, -46 + stepBob);
+                graphics.lineTo(-12, -50 + stepBob);
+                graphics.lineTo(12, -50 + stepBob);
+                graphics.lineTo(14, -46 + stepBob);
+                graphics.lineTo(10, -44 + stepBob);
+                graphics.lineTo(-10, -44 + stepBob);
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Eye sockets (dark)
+                graphics.fillStyle(0x1a1a1a, 1);
+                graphics.fillCircle(-6, -45 + stepBob, 4);
+                graphics.fillCircle(6, -45 + stepBob, 4);
+
+                // Glowing eyes
+                const eyePulse = 0.7 + Math.sin(now / 200) * 0.3;
+                graphics.fillStyle(glowColor, eyePulse);
+                graphics.fillCircle(-6, -45 + stepBob, 3);
+                graphics.fillCircle(6, -45 + stepBob, 3);
+                graphics.fillStyle(glowColorBright, eyePulse * 0.8);
+                graphics.fillCircle(-6, -45 + stepBob, 1.5);
+                graphics.fillCircle(6, -45 + stepBob, 1.5);
+
+                // Eye glow effect
+                graphics.lineStyle(2, glowColor, eyePulse * 0.4);
+                graphics.strokeCircle(-6, -45 + stepBob, 5);
+                graphics.strokeCircle(6, -45 + stepBob, 5);
+
+                // Jagged mouth
+                graphics.fillStyle(0x2a2a2a, 1);
+                graphics.beginPath();
+                graphics.moveTo(-8, -40 + stepBob);
+                graphics.lineTo(-5, -38 + stepBob);
+                graphics.lineTo(-2, -40 + stepBob);
+                graphics.lineTo(2, -38 + stepBob);
+                graphics.lineTo(5, -40 + stepBob);
+                graphics.lineTo(8, -38 + stepBob);
+                graphics.lineTo(6, -36 + stepBob);
+                graphics.lineTo(-6, -36 + stepBob);
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Head cracks and details
+                graphics.lineStyle(1, stoneDark, 0.7);
+                graphics.lineBetween(-10, -52 + stepBob, -8, -46 + stepBob);
+                graphics.lineBetween(12, -50 + stepBob, 10, -44 + stepBob);
+                graphics.lineBetween(0, -54 + stepBob, 0, -50 + stepBob);
+
+                // Ancient runes on forehead
+                graphics.lineStyle(2, glowColor, eyePulse * 0.6);
+                graphics.lineBetween(-3, -52 + stepBob, 3, -52 + stepBob);
+                graphics.lineBetween(0, -54 + stepBob, 0, -50 + stepBob);
+
+                // Shoulder spikes/crystals
+                graphics.fillStyle(stoneLight, 1);
+                // Left spike
+                graphics.beginPath();
+                graphics.moveTo(-20, -26 + stepBob);
+                graphics.lineTo(-26, -34 + stepBob);
+                graphics.lineTo(-18, -30 + stepBob);
+                graphics.closePath();
+                graphics.fillPath();
+                // Right spike
+                graphics.beginPath();
+                graphics.moveTo(20, -26 + stepBob);
+                graphics.lineTo(26, -34 + stepBob);
+                graphics.lineTo(18, -30 + stepBob);
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Glowing crystal cores in spikes
+                graphics.fillStyle(glowColor, eyePulse * 0.7);
+                graphics.fillCircle(-22, -30 + stepBob, 2);
+                graphics.fillCircle(22, -30 + stepBob, 2);
+
+                break;
+            }
             case 'ward': {
                 const bodyColor = isPlayer ? 0x2ecc71 : 0x27ae60;
                 const darkBody = isPlayer ? 0x1e8449 : 0x196f3d;
@@ -8255,166 +8706,321 @@ export class MainScene extends Phaser.Scene {
             }
 
             case 'ram': {
-                // Battering Ram - wooden siege weapon that points toward target
+                // MASSIVE BATTERING RAM - Huge meaty tree trunk with iron tip, carried by two warriors
                 const now = Date.now();
                 const cos = Math.cos(facingAngle);
                 const sin = Math.sin(facingAngle);
 
-                // Charging bounce animation
-                const chargePhase = (now % 400) / 400;
-                const chargeBounce = Math.sin(chargePhase * Math.PI * 2) * 3;
-                const chargeForward = Math.abs(Math.sin(chargePhase * Math.PI)) * 4;
+                // Running animation phase - warriors bob up and down as they run
+                const runPhase = (now % 300) / 300;
+                const runBob = Math.sin(runPhase * Math.PI * 2) * 2;
+                const chargeForward = Math.abs(Math.sin(runPhase * Math.PI)) * 3;
 
-                // Shadow (elongated in direction of travel)
-                graphics.fillStyle(0x000000, 0.35);
-                graphics.fillEllipse(cos * 2, 6 + sin * 1, 28, 14);
+                // Determine cardinal direction for sprite orientation
+                const angleDeg = ((facingAngle * 180 / Math.PI) % 360 + 360) % 360;
+                const isRight = angleDeg >= 315 || angleDeg < 45;
+                const isDown = angleDeg >= 45 && angleDeg < 135;
+                const isLeft = angleDeg >= 135 && angleDeg < 225;
+                const isUp = angleDeg >= 225 && angleDeg < 315;
 
-                // === RAM BODY (rotates with facing angle) ===
-                const ramLength = 36;
-                const ramWidth = 10;
+                // Ram dimensions - MASSIVE tree trunk
+                const ramLength = 48;
+                const ramWidth = 14;
+                const ramHeight = 16;
 
-                // Calculate ram endpoints
+                // Calculate ram endpoints based on direction
                 const backX = -cos * (ramLength / 2) - cos * chargeForward;
-                const backY = -sin * (ramLength / 2) * 0.5 + chargeBounce - sin * chargeForward * 0.5;
+                const backY = -sin * (ramLength / 2) * 0.5 + runBob - sin * chargeForward * 0.5;
                 const frontX = cos * (ramLength / 2) + cos * chargeForward;
-                const frontY = sin * (ramLength / 2) * 0.5 + chargeBounce + sin * chargeForward * 0.5;
+                const frontY = sin * (ramLength / 2) * 0.5 + runBob + sin * chargeForward * 0.5;
 
                 // Perpendicular offset for width
                 const perpX = -sin * (ramWidth / 2);
                 const perpY = cos * (ramWidth / 2) * 0.5;
 
-                // Main wooden log body
-                graphics.fillStyle(0x5a3a20, 1);
-                graphics.beginPath();
-                graphics.moveTo(backX + perpX, backY + perpY - 8);
-                graphics.lineTo(frontX + perpX, frontY + perpY - 8);
-                graphics.lineTo(frontX - perpX, frontY - perpY - 8);
-                graphics.lineTo(backX - perpX, backY - perpY - 8);
-                graphics.closePath();
-                graphics.fillPath();
+                // Giant shadow
+                graphics.fillStyle(0x000000, 0.4);
+                graphics.fillEllipse(cos * 3, 10 + sin * 2, 44, 18);
 
-                // Wood highlight layer
-                graphics.fillStyle(0x7a5a40, 1);
-                graphics.beginPath();
-                graphics.moveTo(backX + perpX * 0.7, backY + perpY * 0.7 - 10);
-                graphics.lineTo(frontX + perpX * 0.7, frontY + perpY * 0.7 - 10);
-                graphics.lineTo(frontX - perpX * 0.3, frontY - perpY * 0.3 - 10);
-                graphics.lineTo(backX - perpX * 0.3, backY - perpY * 0.3 - 10);
-                graphics.closePath();
-                graphics.fillPath();
+                // === WARRIORS CARRYING THE RAM ===
+                const warrior1Phase = runPhase;
+                const warrior2Phase = (runPhase + 0.5) % 1;
+                const warrior1Bob = Math.sin(warrior1Phase * Math.PI * 2) * 3;
+                const warrior2Bob = Math.sin(warrior2Phase * Math.PI * 2) * 3;
 
-                // Wood grain lines
-                graphics.lineStyle(1, 0x4a2a15, 0.5);
-                for (let i = 0; i < 4; i++) {
-                    const t = 0.2 + i * 0.2;
-                    const gx = backX + (frontX - backX) * t;
-                    const gy = backY + (frontY - backY) * t - 9;
-                    graphics.lineBetween(gx + perpX * 0.5, gy + perpY * 0.5, gx - perpX * 0.5, gy - perpY * 0.5);
-                }
+                const skinColor = isPlayer ? 0xdeb887 : 0xc9a66b;
+                const skinDark = isPlayer ? 0xcd9b5a : 0xb8956a;
+                const armorColor = isPlayer ? 0x8b4513 : 0x654321;
+                const armorDark = isPlayer ? 0x5c3317 : 0x4a2f1a;
 
-                // Iron reinforcement bands
-                graphics.fillStyle(0x4a4a4a, 1);
-                for (const t of [0.25, 0.5, 0.75]) {
-                    const bx = backX + (frontX - backX) * t;
-                    const by = backY + (frontY - backY) * t - 8;
+                // Warrior positions - at back and middle of ram
+                const w1Offset = -0.35; // Back warrior
+                const w2Offset = 0.1;   // Front warrior
+
+                for (const [wOffset, wBob, legPhase] of [[w1Offset, warrior1Bob, warrior1Phase], [w2Offset, warrior2Bob, warrior2Phase]] as [number, number, number][]) {
+                    const wx = backX + (frontX - backX) * (wOffset + 0.5);
+                    const wy = backY + (frontY - backY) * (wOffset + 0.5);
+                    const legKick = Math.sin(legPhase * Math.PI * 2) * 3;
+
+                    // Warrior shadow
+                    graphics.fillStyle(0x000000, 0.25);
+                    graphics.fillEllipse(wx, wy + 12, 10, 5);
+
+                    // Running legs
+                    graphics.fillStyle(armorDark, 1);
+                    // Back leg
                     graphics.beginPath();
-                    graphics.moveTo(bx + perpX * 1.1, by + perpY * 1.1);
-                    graphics.lineTo(bx - perpX * 1.1, by - perpY * 1.1);
-                    graphics.lineTo(bx - perpX * 1.1, by - perpY * 1.1 - 3);
-                    graphics.lineTo(bx + perpX * 1.1, by + perpY * 1.1 - 3);
+                    graphics.moveTo(wx - 2, wy + 4);
+                    graphics.lineTo(wx - 3 - legKick, wy + 10);
+                    graphics.lineTo(wx - 1 - legKick, wy + 10);
+                    graphics.lineTo(wx, wy + 4);
+                    graphics.closePath();
+                    graphics.fillPath();
+                    // Front leg
+                    graphics.beginPath();
+                    graphics.moveTo(wx + 2, wy + 4);
+                    graphics.lineTo(wx + 3 + legKick, wy + 10);
+                    graphics.lineTo(wx + 5 + legKick, wy + 10);
+                    graphics.lineTo(wx + 4, wy + 4);
+                    graphics.closePath();
+                    graphics.fillPath();
+
+                    // Feet
+                    graphics.fillStyle(0x3a2a1a, 1);
+                    graphics.fillEllipse(wx - 2 - legKick, wy + 11, 3, 2);
+                    graphics.fillEllipse(wx + 4 + legKick, wy + 11, 3, 2);
+
+                    // Body (leather armor)
+                    graphics.fillStyle(armorColor, 1);
+                    graphics.fillCircle(wx, wy + wBob, 6);
+                    graphics.fillStyle(armorDark, 1);
+                    graphics.fillCircle(wx + 1, wy + wBob + 1, 5);
+
+                    // Arms reaching up to hold ram
+                    graphics.fillStyle(skinColor, 1);
+                    // Left arm
+                    graphics.beginPath();
+                    graphics.moveTo(wx - 4, wy + wBob - 2);
+                    graphics.lineTo(wx - 5, wy + wBob - 10);
+                    graphics.lineTo(wx - 3, wy + wBob - 10);
+                    graphics.lineTo(wx - 2, wy + wBob - 2);
+                    graphics.closePath();
+                    graphics.fillPath();
+                    // Right arm
+                    graphics.beginPath();
+                    graphics.moveTo(wx + 4, wy + wBob - 2);
+                    graphics.lineTo(wx + 5, wy + wBob - 10);
+                    graphics.lineTo(wx + 3, wy + wBob - 10);
+                    graphics.lineTo(wx + 2, wy + wBob - 2);
+                    graphics.closePath();
+                    graphics.fillPath();
+
+                    // Hands gripping (shown as small circles at top of arms)
+                    graphics.fillStyle(skinDark, 1);
+                    graphics.fillCircle(wx - 4, wy + wBob - 11, 2);
+                    graphics.fillCircle(wx + 4, wy + wBob - 11, 2);
+
+                    // Head
+                    graphics.fillStyle(skinColor, 1);
+                    graphics.fillCircle(wx, wy + wBob - 6, 4);
+                    // Helmet
+                    graphics.fillStyle(0x555555, 1);
+                    graphics.beginPath();
+                    graphics.arc(wx, wy + wBob - 7, 4, Math.PI, 0, false);
+                    graphics.closePath();
+                    graphics.fillPath();
+                    // Helmet spike
+                    graphics.fillStyle(0x666666, 1);
+                    graphics.beginPath();
+                    graphics.moveTo(wx - 1, wy + wBob - 11);
+                    graphics.lineTo(wx, wy + wBob - 14);
+                    graphics.lineTo(wx + 1, wy + wBob - 11);
                     graphics.closePath();
                     graphics.fillPath();
                 }
-                // Iron band highlights
-                graphics.fillStyle(0x6a6a6a, 0.6);
-                for (const t of [0.25, 0.5, 0.75]) {
-                    const bx = backX + (frontX - backX) * t;
-                    const by = backY + (frontY - backY) * t - 10;
-                    graphics.fillRect(bx - 2, by - 1, 4, 1);
-                }
 
-                // === RAM HEAD (iron-capped point) ===
-                const headLength = 14;
-                const tipX = frontX + cos * headLength + cos * chargeForward;
-                const tipY = frontY + sin * headLength * 0.5 - 8 + sin * chargeForward * 0.5;
-
-                // Iron ram head base
-                graphics.fillStyle(0x3a3a3a, 1);
+                // === MASSIVE TREE TRUNK ===
+                // Dark bark base layer
+                graphics.fillStyle(0x3d2817, 1);
                 graphics.beginPath();
-                graphics.moveTo(frontX + perpX * 1.2, frontY + perpY * 1.2 - 8);
-                graphics.lineTo(frontX - perpX * 1.2, frontY - perpY * 1.2 - 8);
-                graphics.lineTo(frontX - perpX * 1.2, frontY - perpY * 1.2 - 14);
-                graphics.lineTo(frontX + perpX * 1.2, frontY + perpY * 1.2 - 14);
+                graphics.moveTo(backX + perpX * 1.1, backY + perpY * 1.1 - ramHeight + 2);
+                graphics.lineTo(frontX + perpX * 0.9, frontY + perpY * 0.9 - ramHeight + 2);
+                graphics.lineTo(frontX - perpX * 0.9, frontY - perpY * 0.9 - ramHeight + 2);
+                graphics.lineTo(backX - perpX * 1.1, backY - perpY * 1.1 - ramHeight + 2);
                 graphics.closePath();
                 graphics.fillPath();
 
-                // Iron ram head point
+                // Main trunk body - rich brown wood
+                graphics.fillStyle(0x5d3a1a, 1);
+                graphics.beginPath();
+                graphics.moveTo(backX + perpX, backY + perpY - ramHeight);
+                graphics.lineTo(frontX + perpX * 0.85, frontY + perpY * 0.85 - ramHeight);
+                graphics.lineTo(frontX - perpX * 0.85, frontY - perpY * 0.85 - ramHeight);
+                graphics.lineTo(backX - perpX, backY - perpY - ramHeight);
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Wood highlight - top surface
+                graphics.fillStyle(0x7a4a2a, 1);
+                graphics.beginPath();
+                graphics.moveTo(backX + perpX * 0.8, backY + perpY * 0.8 - ramHeight - 4);
+                graphics.lineTo(frontX + perpX * 0.7, frontY + perpY * 0.7 - ramHeight - 4);
+                graphics.lineTo(frontX - perpX * 0.4, frontY - perpY * 0.4 - ramHeight - 3);
+                graphics.lineTo(backX - perpX * 0.4, backY - perpY * 0.4 - ramHeight - 3);
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Bark texture - deep grooves running lengthwise
+                graphics.lineStyle(2, 0x2a1a0a, 0.7);
+                for (let i = 0; i < 5; i++) {
+                    const offset = (i - 2) * 0.15;
+                    const gx1 = backX + perpX * offset;
+                    const gy1 = backY + perpY * offset - ramHeight - 1;
+                    const gx2 = frontX + perpX * offset * 0.8;
+                    const gy2 = frontY + perpY * offset * 0.8 - ramHeight - 1;
+                    graphics.lineBetween(gx1, gy1, gx2, gy2);
+                }
+
+                // Knots and wood details
+                graphics.fillStyle(0x4a2a15, 1);
+                const knot1T = 0.3;
+                const knot1X = backX + (frontX - backX) * knot1T + perpX * 0.3;
+                const knot1Y = backY + (frontY - backY) * knot1T + perpY * 0.3 - ramHeight - 2;
+                graphics.fillCircle(knot1X, knot1Y, 3);
+                graphics.fillStyle(0x3a1a0a, 1);
+                graphics.fillCircle(knot1X, knot1Y, 1.5);
+
+                const knot2T = 0.65;
+                const knot2X = backX + (frontX - backX) * knot2T - perpX * 0.2;
+                const knot2Y = backY + (frontY - backY) * knot2T - perpY * 0.2 - ramHeight - 1;
+                graphics.fillStyle(0x4a2a15, 1);
+                graphics.fillCircle(knot2X, knot2Y, 2.5);
+                graphics.fillStyle(0x3a1a0a, 1);
+                graphics.fillCircle(knot2X, knot2Y, 1);
+
+                // === IRON REINFORCEMENT RINGS ===
+                graphics.fillStyle(0x3a3a3a, 1);
+                for (const t of [0.15, 0.45, 0.75]) {
+                    const bx = backX + (frontX - backX) * t;
+                    const by = backY + (frontY - backY) * t - ramHeight;
+                    // Ring body
+                    graphics.beginPath();
+                    graphics.moveTo(bx + perpX * 1.15, by + perpY * 1.15 + 2);
+                    graphics.lineTo(bx - perpX * 1.15, by - perpY * 1.15 + 2);
+                    graphics.lineTo(bx - perpX * 1.15, by - perpY * 1.15 - 4);
+                    graphics.lineTo(bx + perpX * 1.15, by + perpY * 1.15 - 4);
+                    graphics.closePath();
+                    graphics.fillPath();
+                }
+                // Ring highlights
+                graphics.fillStyle(0x5a5a5a, 0.8);
+                for (const t of [0.15, 0.45, 0.75]) {
+                    const bx = backX + (frontX - backX) * t;
+                    const by = backY + (frontY - backY) * t - ramHeight - 3;
+                    graphics.fillRect(bx - perpX * 0.3 - 3, by, 6, 1.5);
+                }
+                // Rivets on rings
+                graphics.fillStyle(0x6a6a6a, 1);
+                for (const t of [0.15, 0.45, 0.75]) {
+                    const bx = backX + (frontX - backX) * t;
+                    const by = backY + (frontY - backY) * t - ramHeight - 1;
+                    graphics.fillCircle(bx + perpX * 0.9, by + perpY * 0.9, 1.5);
+                    graphics.fillCircle(bx - perpX * 0.9, by - perpY * 0.9, 1.5);
+                }
+
+                // === MASSIVE IRON RAM HEAD ===
+                const headLength = 18;
+                const tipX = frontX + cos * headLength + cos * chargeForward;
+                const tipY = frontY + sin * headLength * 0.5 - ramHeight + sin * chargeForward * 0.5;
+
+                // Iron collar connecting to wood
+                graphics.fillStyle(0x2a2a2a, 1);
+                graphics.beginPath();
+                graphics.moveTo(frontX + perpX * 1.3, frontY + perpY * 1.3 - ramHeight + 3);
+                graphics.lineTo(frontX - perpX * 1.3, frontY - perpY * 1.3 - ramHeight + 3);
+                graphics.lineTo(frontX - perpX * 1.3, frontY - perpY * 1.3 - ramHeight - 6);
+                graphics.lineTo(frontX + perpX * 1.3, frontY + perpY * 1.3 - ramHeight - 6);
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Main iron head - shaped like a beast
                 graphics.fillStyle(0x4a4a4a, 1);
                 graphics.beginPath();
-                graphics.moveTo(tipX, tipY);
-                graphics.lineTo(frontX + perpX * 1.2, frontY + perpY * 1.2 - 8);
-                graphics.lineTo(frontX + perpX * 1.2, frontY + perpY * 1.2 - 14);
+                graphics.moveTo(tipX, tipY - 2);
+                graphics.lineTo(frontX + perpX * 1.2, frontY + perpY * 1.2 - ramHeight + 2);
+                graphics.lineTo(frontX + perpX * 1.2, frontY + perpY * 1.2 - ramHeight - 5);
                 graphics.closePath();
                 graphics.fillPath();
 
-                graphics.fillStyle(0x555555, 1);
-                graphics.beginPath();
-                graphics.moveTo(tipX, tipY);
-                graphics.lineTo(frontX - perpX * 1.2, frontY - perpY * 1.2 - 8);
-                graphics.lineTo(frontX - perpX * 1.2, frontY - perpY * 1.2 - 14);
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Ram head highlight
-                graphics.fillStyle(0x6a6a6a, 0.7);
+                graphics.fillStyle(0x3a3a3a, 1);
                 graphics.beginPath();
                 graphics.moveTo(tipX, tipY - 2);
-                graphics.lineTo(frontX, frontY - 12);
-                graphics.lineTo(frontX + perpX * 0.5, frontY + perpY * 0.5 - 10);
+                graphics.lineTo(frontX - perpX * 1.2, frontY - perpY * 1.2 - ramHeight + 2);
+                graphics.lineTo(frontX - perpX * 1.2, frontY - perpY * 1.2 - ramHeight - 5);
                 graphics.closePath();
                 graphics.fillPath();
 
-                // === WHEELS (positioned on sides) ===
-                const wheelOffset = 12;
-                const wheel1X = -cos * wheelOffset + perpX * 1.5;
-                const wheel1Y = -sin * wheelOffset * 0.5 + perpY * 1.5 + 2;
-                const wheel2X = -cos * wheelOffset - perpX * 1.5;
-                const wheel2Y = -sin * wheelOffset * 0.5 - perpY * 1.5 + 2;
+                // Pointed tip highlight
+                graphics.fillStyle(0x6a6a6a, 1);
+                graphics.beginPath();
+                graphics.moveTo(tipX + 1, tipY - 4);
+                graphics.lineTo(frontX + perpX * 0.3, frontY + perpY * 0.3 - ramHeight - 4);
+                graphics.lineTo(frontX + perpX * 0.6, frontY + perpY * 0.6 - ramHeight - 2);
+                graphics.closePath();
+                graphics.fillPath();
 
-                // Wheel shadows
-                graphics.fillStyle(0x000000, 0.3);
-                graphics.fillEllipse(wheel1X + 1, wheel1Y + 3, 7, 4);
-                graphics.fillEllipse(wheel2X + 1, wheel2Y + 3, 7, 4);
-
-                // Wheels
-                graphics.fillStyle(0x3a2a1a, 1);
-                graphics.fillCircle(wheel1X, wheel1Y, 6);
-                graphics.fillCircle(wheel2X, wheel2Y, 6);
-                graphics.fillStyle(0x4a3a2a, 1);
-                graphics.fillCircle(wheel1X, wheel1Y, 4);
-                graphics.fillCircle(wheel2X, wheel2Y, 4);
-                // Wheel hubs
+                // Decorative ram horns on the head
                 graphics.fillStyle(0x555555, 1);
-                graphics.fillCircle(wheel1X, wheel1Y, 2);
-                graphics.fillCircle(wheel2X, wheel2Y, 2);
-                // Wheel spokes
-                graphics.lineStyle(1, 0x3a2a1a, 0.7);
-                for (let i = 0; i < 4; i++) {
-                    const spokeAngle = now / 200 + i * Math.PI / 2;
-                    graphics.lineBetween(
-                        wheel1X + Math.cos(spokeAngle) * 2, wheel1Y + Math.sin(spokeAngle) * 2,
-                        wheel1X + Math.cos(spokeAngle) * 5, wheel1Y + Math.sin(spokeAngle) * 5
-                    );
-                    graphics.lineBetween(
-                        wheel2X + Math.cos(spokeAngle) * 2, wheel2Y + Math.sin(spokeAngle) * 2,
-                        wheel2X + Math.cos(spokeAngle) * 5, wheel2Y + Math.sin(spokeAngle) * 5
-                    );
-                }
+                // Left horn
+                graphics.beginPath();
+                graphics.moveTo(frontX + perpX * 1.1 + cos * 4, frontY + perpY * 1.1 - ramHeight - 4);
+                graphics.lineTo(frontX + perpX * 1.8 + cos * 2, frontY + perpY * 1.8 - ramHeight - 8);
+                graphics.lineTo(frontX + perpX * 1.5 + cos * 6, frontY + perpY * 1.5 - ramHeight - 6);
+                graphics.closePath();
+                graphics.fillPath();
+                // Right horn
+                graphics.beginPath();
+                graphics.moveTo(frontX - perpX * 1.1 + cos * 4, frontY - perpY * 1.1 - ramHeight - 4);
+                graphics.lineTo(frontX - perpX * 1.8 + cos * 2, frontY - perpY * 1.8 - ramHeight - 8);
+                graphics.lineTo(frontX - perpX * 1.5 + cos * 6, frontY - perpY * 1.5 - ramHeight - 6);
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Menacing eyes on ram head
+                graphics.fillStyle(0xff3300, 0.9);
+                graphics.fillCircle(frontX + perpX * 0.5 + cos * 8, frontY + perpY * 0.5 - ramHeight - 2, 2);
+                graphics.fillCircle(frontX - perpX * 0.5 + cos * 8, frontY - perpY * 0.5 - ramHeight - 2, 2);
+                graphics.fillStyle(0xffff00, 0.7);
+                graphics.fillCircle(frontX + perpX * 0.5 + cos * 8.5, frontY + perpY * 0.5 - ramHeight - 2.5, 0.8);
+                graphics.fillCircle(frontX - perpX * 0.5 + cos * 8.5, frontY - perpY * 0.5 - ramHeight - 2.5, 0.8);
+
+                // === BACK END - Rough cut wood ===
+                graphics.fillStyle(0x6a4a2a, 1);
+                graphics.beginPath();
+                graphics.arc(backX, backY - ramHeight - 1, ramWidth * 0.45, 0, Math.PI * 2);
+                graphics.closePath();
+                graphics.fillPath();
+                // Tree rings
+                graphics.lineStyle(1, 0x5a3a1a, 0.6);
+                graphics.strokeCircle(backX, backY - ramHeight - 1, ramWidth * 0.3);
+                graphics.strokeCircle(backX, backY - ramHeight - 1, ramWidth * 0.15);
+                graphics.fillStyle(0x4a2a15, 1);
+                graphics.fillCircle(backX, backY - ramHeight - 1, 2);
 
                 // === ROPE HANDLES ===
-                graphics.lineStyle(2, 0x8a7a5a, 0.9);
-                const ropeY = chargeBounce - 6;
-                graphics.lineBetween(backX + perpX * 0.8, backY + perpY * 0.8 + ropeY, backX - perpX * 0.8, backY - perpY * 0.8 + ropeY);
+                graphics.lineStyle(3, 0x8a7a5a, 0.9);
+                // Rope loops at carrying positions
+                const rope1X = backX + (frontX - backX) * 0.15;
+                const rope1Y = backY + (frontY - backY) * 0.15 - ramHeight + 3;
+                const rope2X = backX + (frontX - backX) * 0.6;
+                const rope2Y = backY + (frontY - backY) * 0.6 - ramHeight + 3;
+
+                graphics.beginPath();
+                graphics.arc(rope1X, rope1Y, 4, 0, Math.PI);
+                graphics.strokePath();
+                graphics.beginPath();
+                graphics.arc(rope2X, rope2Y, 4, 0, Math.PI);
+                graphics.strokePath();
 
                 break;
             }
