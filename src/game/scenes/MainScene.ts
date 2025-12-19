@@ -5983,8 +5983,9 @@ export class MainScene extends Phaser.Scene {
                 bolt.lineTo(14, 4);
                 bolt.closePath();
                 bolt.fillPath();
-                // Fletching (smaller)
-                bolt.fillStyle(0xcc3333, 1);
+                // Fletching (smaller) - Grey for Level 2+, Red for Level 1
+                const fletchColor = (ballista.level >= 2) ? 0x444444 : 0xcc3333;
+                bolt.fillStyle(fletchColor, 1);
                 bolt.beginPath();
                 bolt.moveTo(-16, 0);
                 bolt.lineTo(-11, -5);
@@ -6179,8 +6180,9 @@ export class MainScene extends Phaser.Scene {
         arrow.lineTo(4, 2);
         arrow.closePath();
         arrow.fillPath();
-        // Fletching
-        arrow.fillStyle(0xcc4444, 0.8);
+        // Fletching - Grey for Level 2+, Red for Level 1
+        const fletchColor = (xbow.level >= 2) ? 0x444444 : 0xcc4444;
+        arrow.fillStyle(fletchColor, 0.8);
         arrow.beginPath();
         arrow.moveTo(-6, 0);
         arrow.lineTo(-4, -2);
