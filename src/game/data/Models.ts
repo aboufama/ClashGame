@@ -25,6 +25,7 @@ export interface PlayerResources {
 export interface SerializedWorld {
     id: string; // Unique World ID
     ownerId: string; // 'player' or some enemy ID
+    username?: string; // Owner's display name
     buildings: SerializedBuilding[];
     obstacles?: SerializedObstacle[]; // Optional for backward compat
     resources: PlayerResources;

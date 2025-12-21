@@ -25,7 +25,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
         try {
             let profile;
             if (isRegistering) {
-                profile = await Auth.register(username, password, email || undefined);
+                profile = await Auth.register(username, password);
             } else {
                 profile = await Auth.login(username, password);
             }
