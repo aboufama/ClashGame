@@ -1,4 +1,4 @@
-import { sql } from '@vercel/postgres';
+import { query } from './db';
 
 export default async function handler(request: Request) {
     const headers = {
@@ -20,9 +20,7 @@ export default async function handler(request: Request) {
             const userId = searchParams.get('userId');
             if (!userId) return new Response(JSON.stringify({ error: 'Missing userId' }), { status: 400, headers });
 
-            const result = await sql`
-                SELECT data FROM worlds WHERE user_id = ${userId}
-            `;
+            const result = await query('SELECT data FROM worlds WHERE user_id = $1', [userId]);
 
             if (result.rowCount === 0) {
                 return new Response(JSON.stringify({ found: false }), { headers });
@@ -34,12 +32,12 @@ export default async function handler(request: Request) {
         if (request.method === 'GET' && action === 'map') {
             // Get all worlds for map (lightweight)
             // Limit to 100 for now, optimizing later
-            const result = await sql`
+            const result = await query(`
                 SELECT user_id as id, username, world_x as "worldX", world_y as "worldY" 
                 FROM worlds 
                 ORDER BY last_updated DESC 
                 LIMIT 100
-            `;
+            `);
             return new Response(JSON.stringify(result.rows), { headers });
         }
 
@@ -48,9 +46,7 @@ export default async function handler(request: Request) {
             const targetId = searchParams.get('targetId');
             if (!targetId) return new Response(JSON.stringify({ error: 'Missing targetId' }), { status: 400, headers });
 
-            const result = await sql`
-                SELECT data FROM worlds WHERE user_id = ${targetId}
-            `;
+            const result = await query('SELECT data FROM worlds WHERE user_id = $1', [targetId]);
             if (result.rowCount === 0) return new Response(JSON.stringify({ found: false }), { headers });
             return new Response(JSON.stringify(result.rows[0].data), { headers });
         }
@@ -63,17 +59,17 @@ export default async function handler(request: Request) {
             const worldY = worldData.worldY || 0;
             const username = worldData.username;
 
-            await sql`
+            await query(`
                 INSERT INTO worlds (user_id, username, world_x, world_y, data, last_updated)
-                VALUES (${userId}, ${username}, ${worldX}, ${worldY}, ${worldData}, NOW())
+                VALUES ($1, $2, $3, $4, $5, NOW())
                 ON CONFLICT (user_id) 
                 DO UPDATE SET 
-                    data = ${worldData}, 
-                    username = ${username},
-                    world_x = ${worldX}, 
-                    world_y = ${worldY},
-                    last_updated = NOW();
-            `;
+                    data = $5, 
+                    username = $2,
+                    world_x = $3, 
+                    world_y = $4,
+                    last_updated = NOW()
+            `, [userId, username, worldX, worldY, worldData]);
 
             return new Response(JSON.stringify({ success: true }), { headers });
         }

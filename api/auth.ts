@@ -1,4 +1,4 @@
-import { sql } from '@vercel/postgres';
+import { query } from './db';
 
 export default async function handler(request: Request) {
     const headers = {
@@ -17,28 +17,27 @@ export default async function handler(request: Request) {
 
         if (action === 'register') {
             // Check if exists
-            const existing = await sql`SELECT id FROM users WHERE username = ${username}`;
-            if (existing.rowCount > 0) {
+            const existing = await query('SELECT id FROM users WHERE username = $1', [username]);
+            if (existing.rowCount && existing.rowCount > 0) {
                 return new Response(JSON.stringify({ error: 'Username taken' }), { status: 409, headers });
             }
 
             // Create user
-            // In production, bcrypt hash the password. Here preserving plain/simple as requested for prototype.
-            const result = await sql`
-                INSERT INTO users (username, password)
-                VALUES (${username}, ${password})
-                RETURNING id, username, created_at;
-            `;
+            const result = await query(`
+                INSERT INTO users(username, password)
+VALUES($1, $2)
+                RETURNING id, username, created_at
+    `, [username, password]);
 
             const user = result.rows[0];
             return new Response(JSON.stringify(user), { headers });
         }
 
         if (action === 'login') {
-            const result = await sql`
+            const result = await query(`
                 SELECT id, username FROM users 
-                WHERE username = ${username} AND password = ${password}
-            `;
+                WHERE username = $1 AND password = $2
+    `, [username, password]);
 
             if (result.rowCount === 0) {
                 return new Response(JSON.stringify({ error: 'Invalid credentials' }), { status: 401, headers });
