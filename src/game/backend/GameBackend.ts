@@ -28,6 +28,17 @@ export class GameBackend {
         }
     }
 
+    public async getBuildingCounts(worldId: string): Promise<Record<string, number>> {
+        const world = await this.getWorld(worldId);
+        if (!world) return {};
+
+        const counts: Record<string, number> = {};
+        world.buildings.forEach(b => {
+            counts[b.type] = (counts[b.type] || 0) + 1;
+        });
+        return counts;
+    }
+
     public async createWorld(id: string, owner: string): Promise<SerializedWorld> {
         const w: SerializedWorld = {
             id,
