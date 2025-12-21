@@ -5102,7 +5102,10 @@ export class MainScene extends Phaser.Scene {
         };
         (window as any).startAttack = () => {
             this.showCloudTransition(async () => {
+                // Set UI immediately
+                (window as any).setGameMode?.('ATTACK');
                 this.mode = 'ATTACK';
+
                 this.clearScene();
                 await this.generateEnemyVillage();
                 this.centerCamera();
@@ -5113,13 +5116,15 @@ export class MainScene extends Phaser.Scene {
                 this.elixirLooted = 0;
                 this.raidEndScheduled = false; // Reset for new raid
                 this.updateBattleStats();
-                (window as any).setGameMode?.('ATTACK');
             });
         };
 
         (window as any).startPracticeAttack = () => {
             this.showCloudTransition(async () => {
+                // Set UI immediately
+                (window as any).setGameMode?.('ATTACK');
                 this.mode = 'ATTACK';
+
                 this.clearScene();
                 // Load player's own base as the enemy
                 const playerWorld = await Backend.getWorld(this.userId);
@@ -5144,7 +5149,6 @@ export class MainScene extends Phaser.Scene {
                 this.elixirLooted = 0;
                 this.raidEndScheduled = false;
                 this.updateBattleStats();
-                (window as any).setGameMode?.('ATTACK');
             });
         };
 

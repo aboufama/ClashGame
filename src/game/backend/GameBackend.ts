@@ -59,8 +59,7 @@ export class GameBackend {
     }
 
     public async getWorld(id: string): Promise<SerializedWorld | null> {
-        // Simulate network delay
-        await new Promise(resolve => setTimeout(resolve, 50));
+
 
         if (!this.worlds.has(id)) {
             // Try load from localstorage
