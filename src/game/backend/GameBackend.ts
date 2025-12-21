@@ -13,19 +13,44 @@ export class GameBackend {
         GameBackend.instance = this;
     }
 
-    public createWorld(id: string, owner: string): SerializedWorld {
+    /** Purges ALL village data for ALL users from localStorage */
+    public static purgeAllData() {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('clashIso_world_')) {
+                keysToRemove.push(key);
+            }
+        }
+        keysToRemove.forEach(k => localStorage.removeItem(k));
+        if (GameBackend.instance) {
+            GameBackend.instance.worlds.clear();
+        }
+    }
+
+    public async createWorld(id: string, owner: string): Promise<SerializedWorld> {
         const w: SerializedWorld = {
             id,
             ownerId: owner,
             buildings: [],
-            resources: { gold: 0, elixir: 0 },
+            resources: { gold: 1000, elixir: 1000 }, // Starting resources
+            army: {}, // Fresh army
             lastSaveTime: Date.now()
         };
-        this.saveWorld(w);
+        await this.saveWorld(w);
         return w;
     }
 
-    public getWorld(id: string): SerializedWorld | null {
+    private async saveWorld(world: SerializedWorld): Promise<void> {
+        world.lastSaveTime = Date.now();
+        this.worlds.set(world.id, world);
+        localStorage.setItem(`clashIso_world_${world.id}`, JSON.stringify(world));
+    }
+
+    public async getWorld(id: string): Promise<SerializedWorld | null> {
+        // Simulate network delay
+        await new Promise(resolve => setTimeout(resolve, 50));
+
         if (!this.worlds.has(id)) {
             // Try load from localstorage
             const saved = localStorage.getItem(`clashIso_world_${id}`);
@@ -45,11 +70,15 @@ export class GameBackend {
                                 level: 1
                             })),
                             resources: { gold: 0, elixir: 0 },
+                            army: {},
                             lastSaveTime: Date.now()
                         };
                         this.worlds.set(id, migrated);
                         return migrated;
                     }
+
+                    // Ensure army field exists on load
+                    if (!parsed.army) parsed.army = {};
 
                     this.worlds.set(id, parsed);
                 } catch (e) {
@@ -61,39 +90,30 @@ export class GameBackend {
         return this.worlds.get(id) || null;
     }
 
-    public getBuildingCount(worldId: string, type: BuildingType): number {
-        const world = this.getWorld(worldId);
-        if (!world) return 0;
-        return world.buildings.filter(b => b.type === type).length;
-    }
-
-    public getBuildingCounts(worldId: string): Record<BuildingType, number> {
-        const world = this.getWorld(worldId);
-        const counts: Record<string, number> = {};
+    public async updateArmy(worldId: string, army: Record<string, number>): Promise<void> {
+        const world = await this.getWorld(worldId);
         if (world) {
-            world.buildings.forEach(b => {
-                counts[b.type] = (counts[b.type] || 0) + 1;
-            });
-        }
-        return counts as Record<BuildingType, number>;
-    }
-
-    public saveWorld(world: SerializedWorld) {
-        world.lastSaveTime = Date.now();
-        this.worlds.set(world.id, world);
-        localStorage.setItem(`clashIso_world_${world.id}`, JSON.stringify(world));
-    }
-
-    public updateResources(worldId: string, gold: number, elixir: number): void {
-        const world = this.getWorld(worldId);
-        if (world) {
-            world.resources = { gold, elixir };
-            this.saveWorld(world);
+            world.army = { ...army };
+            await this.saveWorld(world);
         }
     }
 
-    public placeBuilding(worldId: string, type: BuildingType, x: number, y: number): SerializedBuilding | null {
-        const world = this.getWorld(worldId);
+    /**
+     * Updates persistent resources
+     */
+    public async updateResources(worldId: string, gold: number, elixir: number): Promise<void> {
+        const world = await this.getWorld(worldId);
+        if (world) {
+            world.resources = {
+                gold: Math.max(0, gold),
+                elixir: Math.max(0, elixir)
+            };
+            await this.saveWorld(world);
+        }
+    }
+
+    public async placeBuilding(worldId: string, type: BuildingType, x: number, y: number): Promise<SerializedBuilding | null> {
+        const world = await this.getWorld(worldId);
         if (!world) return null;
 
         if (!this.isValidPosition(world, type, x, y, null)) return null;
@@ -121,24 +141,24 @@ export class GameBackend {
             level: initialLevel
         };
         world.buildings.push(newB);
-        this.saveWorld(world);
+        await this.saveWorld(world);
         return newB;
     }
 
-    public removeBuilding(worldId: string, buildingInstanceId: string): boolean {
-        const world = this.getWorld(worldId);
+    public async removeBuilding(worldId: string, buildingInstanceId: string): Promise<boolean> {
+        const world = await this.getWorld(worldId);
         if (!world) return false;
 
         const idx = world.buildings.findIndex(b => b.id === buildingInstanceId);
         if (idx === -1) return false;
 
         world.buildings.splice(idx, 1);
-        this.saveWorld(world);
+        await this.saveWorld(world);
         return true;
     }
 
-    public upgradeBuilding(worldId: string, buildingId: string): boolean {
-        const world = this.getWorld(worldId);
+    public async upgradeBuilding(worldId: string, buildingId: string): Promise<boolean> {
+        const world = await this.getWorld(worldId);
         if (!world) return false;
 
         const b = world.buildings.find(b => b.id === buildingId);
@@ -155,12 +175,12 @@ export class GameBackend {
             b.level += 1;
         }
 
-        this.saveWorld(world);
+        await this.saveWorld(world);
         return true;
     }
 
-    public sanitizeWalls(worldId: string) {
-        const world = this.getWorld(worldId);
+    public async sanitizeWalls(worldId: string) {
+        const world = await this.getWorld(worldId);
         if (!world) return;
         let changed = false;
         world.buildings.forEach(b => {
@@ -171,21 +191,27 @@ export class GameBackend {
         });
         if (changed) {
             console.log("Sanitized walls (reset to 1)");
-            this.saveWorld(world);
+            await this.saveWorld(world);
         }
     }
 
 
-    public resetWorld(worldId: string): void {
-        const world = this.getWorld(worldId);
+    public async resetWorld(worldId: string): Promise<void> {
+        const world = await this.getWorld(worldId);
         if (world) {
             world.buildings = [];
-            this.saveWorld(world);
+            world.resources = { gold: 1000, elixir: 1000 };
+            await this.saveWorld(world);
         }
     }
 
-    public moveBuilding(worldId: string, buildingId: string, newX: number, newY: number): boolean {
-        const world = this.getWorld(worldId);
+    public async deleteWorld(worldId: string): Promise<void> {
+        this.worlds.delete(worldId);
+        localStorage.removeItem(`clashIso_world_${worldId}`);
+    }
+
+    public async moveBuilding(worldId: string, buildingId: string, newX: number, newY: number): Promise<boolean> {
+        const world = await this.getWorld(worldId);
         if (!world) return false;
 
         const building = world.buildings.find(b => b.id === buildingId);
@@ -195,7 +221,7 @@ export class GameBackend {
 
         building.gridX = newX;
         building.gridY = newY;
-        this.saveWorld(world);
+        await this.saveWorld(world);
         return true;
     }
 
@@ -217,8 +243,8 @@ export class GameBackend {
     }
 
     // === OBSTACLE MANAGEMENT ===
-    public placeObstacle(worldId: string, type: ObstacleType, x: number, y: number): SerializedObstacle | null {
-        const world = this.getWorld(worldId);
+    public async placeObstacle(worldId: string, type: ObstacleType, x: number, y: number): Promise<SerializedObstacle | null> {
+        const world = await this.getWorld(worldId);
         if (!world) return null;
 
         if (!world.obstacles) world.obstacles = [];
@@ -237,29 +263,29 @@ export class GameBackend {
         };
 
         world.obstacles.push(newObstacle);
-        this.saveWorld(world);
+        await this.saveWorld(world);
         return newObstacle;
     }
 
-    public removeObstacle(worldId: string, obstacleId: string): boolean {
-        const world = this.getWorld(worldId);
+    public async removeObstacle(worldId: string, obstacleId: string): Promise<boolean> {
+        const world = await this.getWorld(worldId);
         if (!world || !world.obstacles) return false;
 
         const idx = world.obstacles.findIndex(o => o.id === obstacleId);
         if (idx === -1) return false;
 
         world.obstacles.splice(idx, 1);
-        this.saveWorld(world);
+        await this.saveWorld(world);
         return true;
     }
 
-    public getObstacles(worldId: string): SerializedObstacle[] {
-        const world = this.getWorld(worldId);
+    public async getObstacles(worldId: string): Promise<SerializedObstacle[]> {
+        const world = await this.getWorld(worldId);
         return world?.obstacles || [];
     }
 
-    public calculateOfflineProduction(worldId: string): { gold: number, elixir: number } {
-        const world = this.getWorld(worldId);
+    public async calculateOfflineProduction(worldId: string): Promise<{ gold: number, elixir: number }> {
+        const world = await this.getWorld(worldId);
         if (!world || !world.lastSaveTime) return { gold: 0, elixir: 0 };
 
         const now = Date.now();
@@ -285,21 +311,21 @@ export class GameBackend {
         if (totalGold > 0 || totalElixir > 0) {
             world.resources.gold += totalGold;
             world.resources.elixir += totalElixir;
-            this.saveWorld(world);
+            await this.saveWorld(world);
         }
 
         return { gold: totalGold, elixir: totalElixir };
     }
 
-    public generateEnemyWorld(): SerializedWorld {
+    public async generateEnemyWorld(): Promise<SerializedWorld> {
         const id = `enemy_${Date.now()}`;
-        const world = this.createWorld(id, 'ENEMY');
+        const world = await this.createWorld(id, 'ENEMY');
 
         const cx = Math.floor(MAP_SIZE / 2);
         const cy = Math.floor(MAP_SIZE / 2);
 
         // 1. CORE: Town Hall + Elite Defenses
-        this.placeBuilding(id, 'town_hall', cx, cy);
+        await this.placeBuilding(id, 'town_hall', cx, cy);
 
         // Add 1-2 Elite Defenses near TH
         const elites: BuildingType[] = ['dragons_breath', 'prism', 'xbow'];
@@ -307,12 +333,12 @@ export class GameBackend {
         for (let i = 0; i < eliteCount; i++) {
             const ex = cx + (Math.random() > 0.5 ? 2 : -2);
             const ey = cy + (Math.random() > 0.5 ? 2 : -2);
-            const b = this.placeBuilding(id, elites[Math.floor(Math.random() * elites.length)], ex, ey);
+            const b = await this.placeBuilding(id, elites[Math.floor(Math.random() * elites.length)], ex, ey);
             if (b) b.level = 3 + Math.floor(Math.random() * 3); // Level 3-5
         }
 
         // Inner Core Wall (Tight box)
-        this.generateRectWall(id, cx - 3, cy - 3, 7, 7); // Shrink for MAP_SIZE 25
+        await this.generateRectWall(id, cx - 3, cy - 3, 7, 7); // Shrink for MAP_SIZE 25
 
 
         // 2. INNER RING: Compartments (High Value Defenses + Storage)
@@ -334,15 +360,15 @@ export class GameBackend {
                             roll > 0.25 ? 'tesla' : 'ballista') as BuildingType;
             const resType = (Math.random() > 0.5 ? 'mine' : 'elixir_collector') as BuildingType;
 
-            const bDef = this.placeBuilding(id, defType, tx, ty);
+            const bDef = await this.placeBuilding(id, defType, tx, ty);
             if (bDef) bDef.level = 2 + Math.floor(Math.random() * 4); // Level 2-5
 
             // Try to place resource next to it
-            const bRes = this.placeBuilding(id, resType, tx + 1, ty + 1);
+            const bRes = await this.placeBuilding(id, resType, tx + 1, ty + 1);
             if (bRes) bRes.level = 1 + Math.floor(Math.random() * 5); // Level 1-5
 
             // Build Wall Compartment around this cluster
-            this.generateRectWall(id, tx - 2, ty - 2, 5, 5);
+            await this.generateRectWall(id, tx - 2, ty - 2, 5, 5);
         }
 
         // 3. OUTER LAYER: Scattered Defenses and Trash
@@ -364,13 +390,13 @@ export class GameBackend {
                             roll > 0.3 ? 'ballista' :
                                 roll > 0.15 ? 'army_camp' : 'mine') as BuildingType;
 
-            const b = this.placeBuilding(id, oType, ox, oy);
+            const b = await this.placeBuilding(id, oType, ox, oy);
             if (b) b.level = 1 + Math.floor(Math.random() * 4); // Level 1-4
         }
 
         // 4. OUTER PERIMETER WALL
         // Big wall enclosing most things (shrunk for deployment space)
-        this.generateRectWall(id, 3, 3, MAP_SIZE - 7, MAP_SIZE - 7);
+        await this.generateRectWall(id, 3, 3, MAP_SIZE - 7, MAP_SIZE - 7);
 
         // 5. Set Large Resources (Fake loot for incentive)
         world.resources = {
@@ -378,10 +404,11 @@ export class GameBackend {
             elixir: Math.floor(50000 + Math.random() * 100000)
         };
 
+        await this.saveWorld(world);
         return world;
     }
 
-    private generateRectWall(id: string, x: number, y: number, w: number, h: number) {
+    private async generateRectWall(id: string, x: number, y: number, w: number, h: number) {
         // Bounds check/clamping handled by placeBuilding mostly, but let's be safe
         const safeX = Math.max(0, x);
         const safeY = Math.max(0, y);
@@ -390,13 +417,13 @@ export class GameBackend {
 
         // Top & Bottom
         for (let i = 0; i <= safeW; i++) {
-            this.placeBuilding(id, 'wall', safeX + i, safeY);
-            this.placeBuilding(id, 'wall', safeX + i, safeY + safeH);
+            await this.placeBuilding(id, 'wall', safeX + i, safeY);
+            await this.placeBuilding(id, 'wall', safeX + i, safeY + safeH);
         }
         // Left & Right
         for (let j = 0; j <= safeH; j++) {
-            this.placeBuilding(id, 'wall', safeX, safeY + j);
-            this.placeBuilding(id, 'wall', safeX + safeW, safeY + j);
+            await this.placeBuilding(id, 'wall', safeX, safeY + j);
+            await this.placeBuilding(id, 'wall', safeX + safeW, safeY + j);
         }
     }
 }

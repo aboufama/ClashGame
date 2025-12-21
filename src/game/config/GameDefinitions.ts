@@ -7,8 +7,9 @@ export type BuildingType =
     | 'army_camp' | 'prism' | 'magmavent' | 'dragons_breath';
 
 export type TroopType =
-    | 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'chronoswarm'
-    | 'ram' | 'stormmage' | 'golem';
+    | 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion'
+    | 'ram' | 'stormmage' | 'golem' | 'sharpshooter' | 'mobilemortar'
+    | 'davincitank' | 'phalanx' | 'romanwarrior';
 
 export type ObstacleType =
     | 'rock_small' | 'rock_large' | 'tree_oak' | 'tree_pine' | 'grass_patch';
@@ -19,6 +20,7 @@ export interface BuildingLevelStats {
     fireRate?: number;
     productionRate?: number;
     capacity?: number;
+    range?: number;
     cost: number;
 }
 
@@ -234,7 +236,26 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         ]
     },
     prism: { id: 'prism', name: 'Prism Tower', cost: 550, desc: 'Beam bounces between foes.', width: 1, height: 1, maxHealth: 1100, range: 8, category: 'defense', maxCount: 1, color: 0xff00ff, fireRate: 50, maxLevel: 1 },
-    magmavent: { id: 'magmavent', name: 'Magma Vent', cost: 650, desc: 'Erupts with area damage.', width: 3, height: 3, maxHealth: 1200, range: 6, category: 'defense', maxCount: 1, color: 0xff4400, fireRate: 1500, maxLevel: 1 },
+    magmavent: {
+        id: 'magmavent',
+        name: 'Magma Vent',
+        cost: 650,
+        desc: 'Industrial grate erupts with area damage.',
+        width: 3,
+        height: 3,
+        maxHealth: 1200,
+        range: 4.2,
+        category: 'defense',
+        maxCount: 1,
+        color: 0xff4400,
+        fireRate: 1500,
+        damage: 80,
+        maxLevel: 2,
+        levels: [
+            { hp: 1200, damage: 80, fireRate: 1500, cost: 650, range: 4.2 },    // Level 1 - Basic grate
+            { hp: 1500, damage: 100, fireRate: 1300, cost: 1000, range: 4.2 }   // Level 2 - Enhanced with pressure gauges
+        ]
+    },
     dragons_breath: {
         id: 'dragons_breath',
         name: "Dragon's Breath",
@@ -270,6 +291,7 @@ export function getBuildingStats(type: BuildingType, level: number = 1): Buildin
         fireRate: levelStats.fireRate ?? base.fireRate,
         productionRate: levelStats.productionRate ?? base.productionRate,
         capacity: levelStats.capacity ?? base.capacity,
+        range: levelStats.range ?? base.range,
         cost: levelStats.cost
     };
 }
@@ -291,6 +313,10 @@ export interface TroopDef {
     wallDamageMultiplier?: number;  // Extra damage to walls
     chainCount?: number;  // For chain attacks
     chainRange?: number;  // Range for chain to jump
+    healRadius?: number; // For healers
+    healAmount?: number; // Heal per tick
+    movementType?: 'ground' | 'air' | 'ghost'; // Traversal capability
+    wallTraversalCost?: number; // Cost to move through a wall (default 5000, 0 for air/ghost)
 }
 
 export interface ObstacleDef {
@@ -307,14 +333,20 @@ export interface ObstacleDef {
 
 export const TROOP_DEFINITIONS: Record<TroopType, TroopDef> = {
     warrior: { id: 'warrior', name: 'Warrior', cost: 25, space: 1, desc: 'Fast melee fighter.', health: 100, range: 0.8, damage: 10, speed: 0.003, color: 0xffff00 },
-    archer: { id: 'archer', name: 'Archer', cost: 40, space: 1, desc: 'Ranged attacker.', health: 50, range: 4.5, damage: 14.0, speed: 0.0025, color: 0x00ffff },
+    archer: { id: 'archer', name: 'Archer', cost: 40, space: 1, desc: 'Ranged attacker.', health: 50, range: 2.7, damage: 14.0, speed: 0.0025, color: 0x00ffff },
     giant: { id: 'giant', name: 'Giant', cost: 150, space: 5, desc: 'Tank targeting Defenses.', health: 600, range: 1.0, damage: 16, speed: 0.002, color: 0xff6600 },
-    ward: { id: 'ward', name: 'Ward', cost: 80, space: 6, desc: 'Heals friendly troops.', health: 100, range: 4.0, damage: 9, speed: 0.0025, color: 0x00ff00 },
+    ward: { id: 'ward', name: 'Ward', cost: 80, space: 6, desc: 'Heals friendly troops.', health: 100, range: 4.0, damage: 9, speed: 0.0025, color: 0x00ff00, healRadius: 7.0, healAmount: 5 },
     recursion: { id: 'recursion', name: 'Recursion', cost: 80, space: 3, desc: 'Splits into two copies on death.', health: 150, range: 1.0, damage: 12, speed: 0.003, color: 0xff00ff },
-    chronoswarm: { id: 'chronoswarm', name: 'Speedster', cost: 60, space: 2, desc: 'Speeds up nearby allies.', health: 50, range: 1.5, damage: 5, speed: 0.004, color: 0xffcc00, boostRadius: 4.0, boostAmount: 1.5 },
-    ram: { id: 'ram', name: 'Battering Ram', cost: 200, space: 8, desc: 'Charges Town Hall. 4x wall damage.', health: 800, range: 1.2, damage: 50, speed: 0.0018, color: 0x8b4513, targetPriority: 'town_hall', wallDamageMultiplier: 4 },
+
+    ram: { id: 'ram', name: 'Battering Ram', cost: 200, space: 8, desc: 'Charges Town Hall. 4x wall damage.', health: 800, range: 1.2, damage: 50, speed: 0.0018, color: 0x8b4513, targetPriority: 'town_hall', wallDamageMultiplier: 4, wallTraversalCost: 50 },
     stormmage: { id: 'stormmage', name: 'Storm Mage', cost: 180, space: 6, desc: 'Chain lightning hits 4 targets.', health: 200, range: 4.9, damage: 40, speed: 0.002, color: 0x4444ff, chainCount: 4, chainRange: 5 },
-    golem: { id: 'golem', name: 'Stone Golem', cost: 500, space: 25, desc: 'Colossal stone titan. Nearly indestructible.', health: 6000, range: 1.5, damage: 80, speed: 0.0012, color: 0x6b7b8b, targetPriority: 'defense' }
+    golem: { id: 'golem', name: 'Stone Golem', cost: 500, space: 25, desc: 'Colossal stone titan. Nearly indestructible.', health: 6000, range: 1.5, damage: 53, speed: 0.0004, color: 0x6b7b8b, targetPriority: 'defense' },
+
+    sharpshooter: { id: 'sharpshooter', name: 'Sharpshooter', cost: 100, space: 4, desc: 'Elite archer with extended range.', health: 80, range: 5.6, damage: 70, speed: 0.002, color: 0x2e7d32 },
+    mobilemortar: { id: 'mobilemortar', name: 'Mobile Mortar', cost: 180, space: 8, desc: 'Portable mortar with splash damage.', health: 150, range: 6.75, damage: 200, speed: 0.0012, color: 0x555555 },
+    davincitank: { id: 'davincitank', name: 'Da Vinci Tank', cost: 600, space: 30, desc: 'Leonardo\'s armored war machine. Spins and fires in all directions.', health: 8000, range: 4.0, damage: 80, speed: 0.0006, color: 0xb8956e, targetPriority: 'defense' },
+    phalanx: { id: 'phalanx', name: 'Phalanx', cost: 350, space: 18, desc: 'Roman testudo formation. 3x3 shield wall with spears. Splits into 9 soldiers on death.', health: 3000, range: 1.5, damage: 45, speed: 0.0008, color: 0xc9a07a },
+    romanwarrior: { id: 'romanwarrior', name: 'Roman Soldier', cost: 0, space: 1, desc: 'An individual soldier from a Phalanx formation.', health: 300, range: 1.2, damage: 15, speed: 0.0015, color: 0xcc3333 }
 };
 
 export const OBSTACLE_DEFINITIONS: Record<ObstacleType, ObstacleDef> = {

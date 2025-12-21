@@ -28,6 +28,7 @@ export interface SerializedWorld {
     buildings: SerializedBuilding[];
     obstacles?: SerializedObstacle[]; // Optional for backward compat
     resources: PlayerResources;
+    army?: Record<string, number>; // Persisted army state
     lastSaveTime: number;
 }
 

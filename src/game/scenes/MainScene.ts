@@ -2,8 +2,17 @@
 import Phaser from 'phaser';
 import { Backend } from '../backend/GameBackend';
 import type { SerializedBuilding } from '../data/Models';
-import { BUILDING_DEFINITIONS, OBSTACLE_DEFINITIONS, getBuildingStats, type BuildingType, type ObstacleType } from '../config/GameDefinitions';
+import { BUILDING_DEFINITIONS, OBSTACLE_DEFINITIONS, TROOP_DEFINITIONS, getBuildingStats, type BuildingType, type ObstacleType } from '../config/GameDefinitions';
 import { LootSystem } from '../systems/LootSystem';
+import type { PlacedBuilding, Troop, PlacedObstacle } from '../types/GameTypes';
+import { BuildingRenderer } from '../renderers/BuildingRenderer';
+import { TroopRenderer } from '../renderers/TroopRenderer';
+import { ObstacleRenderer } from '../renderers/ObstacleRenderer';
+import { RubbleRenderer } from '../renderers/RubbleRenderer';
+import { PathfindingSystem } from '../systems/PathfindingSystem';
+import { TargetingSystem } from '../systems/TargetingSystem';
+import { IsoUtils } from '../utils/IsoUtils';
+import { Auth } from '../backend/AuthService';
 
 const BUILDINGS = BUILDING_DEFINITIONS as any;
 const OBSTACLES = OBSTACLE_DEFINITIONS as any;
@@ -12,89 +21,8 @@ const OBSTACLES = OBSTACLE_DEFINITIONS as any;
 
 
 
-interface PlacedBuilding {
-    id: string;
-    type: string;
-    level: number; // Added level property
-    gridX: number;
-    gridY: number;
-    graphics: Phaser.GameObjects.Graphics;
-    barrelGraphics?: Phaser.GameObjects.Graphics;
-    healthBar: Phaser.GameObjects.Graphics;
-    health: number;
-    maxHealth: number;
-    owner: 'PLAYER' | 'ENEMY';
-    loot?: { gold: number, elixir: number };
-    // Ballista-specific properties
-    ballistaAngle?: number;        // Current angle in radians (0 = facing right/east)
-    ballistaTargetAngle?: number;  // Target angle to smoothly rotate towards
-    ballistaStringTension?: number; // 0 = relaxed, 1 = fully drawn back
-    ballistaBoltLoaded?: boolean;   // Whether a bolt is ready to fire
-    lastFireTime?: number;
-    isFiring?: boolean;
-    // Idle swivel for rotating defenses
-    idleSwiveTime?: number;        // Time accumulator for idle swivel
-    idleTargetAngle?: number;      // Random idle target angle
-    // Cannon barrel recoil (0-1, 0 = normal, 1 = full recoil)
-    cannonRecoilOffset?: number;
-    // Prism Tower - Continuous laser properties
-    prismTarget?: Troop;           // Current target being lasered
-    prismLaserGraphics?: Phaser.GameObjects.Graphics; // The continuous laser beam
-    prismLaserCore?: Phaser.GameObjects.Graphics;     // Inner core of laser
-    prismChargingUp?: boolean;     // Whether it's charging up
-    prismChargeTime?: number;      // When charging started
-    // Range indicator
-    rangeIndicator?: Phaser.GameObjects.Graphics;
-    prismTrailLastPos?: { x: number, y: number }; // Track last scorch position for connected trail
-    lastTrailTime?: number;     // For specialized smoke trails
-    lastSmokeTime?: number;     // For defensive smoke effects
-    baseGraphics?: Phaser.GameObjects.Graphics; // Separate graphics for ground-level base (prevents clipping)
-}
-
-interface Troop {
-    id: string;
-    type: 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'chronoswarm' | 'ram' | 'stormmage';
-    gameObject: Phaser.GameObjects.Graphics;
-    healthBar: Phaser.GameObjects.Graphics;
-    gridX: number;
-    gridY: number;
-    health: number;
-    maxHealth: number;
-    owner: 'PLAYER' | 'ENEMY';
-    lastAttackTime: number;
-    attackDelay: number;
-    speedMult: number;
-    hasTakenDamage: boolean;
-    facingAngle: number;
-    path?: Phaser.Math.Vector2[]; // Path of grid coordinates to follow
-    lastPathTime?: number;
-    nextPathTime?: number;
-    target: any; // PlacedBuilding | Troop | null
-    // Special troop properties
-    recursionGen?: number; // For recursion (0 = original, 1 = first split, 2 = final)
-}
-
-interface PlacedObstacle {
-    id: string;
-    type: ObstacleType;
-    gridX: number;
-    gridY: number;
-    graphics: Phaser.GameObjects.Graphics;
-    animOffset: number; // For subtle idle animations
-}
 
 
-const TROOP_STATS = {
-    warrior: { health: 100, range: 0.8, damage: 10, speed: 0.003, color: 0xffff00, space: 1 },
-    archer: { health: 50, range: 4.5, damage: 14.0, speed: 0.0025, color: 0x00ffff, space: 1 },
-    giant: { health: 500, range: 0.8, damage: 20, speed: 0.001, color: 0xff8800, space: 5 },
-    ward: { health: 300, range: 5.0, damage: 9, speed: 0.0015, color: 0x00ff88, space: 3, healRadius: 7.0, healAmount: 5 },
-    // Novel units
-    recursion: { health: 120, range: 0.8, damage: 8, speed: 0.0025, color: 0x00ffaa, space: 3 }, // Splits into 2 on death (max 2 generations)
-    chronoswarm: { health: 50, range: 1.5, damage: 5, speed: 0.004, color: 0xffcc00, space: 2, boostRadius: 4.0, boostAmount: 1.5 }, // 50% speed boost to nearby allies
-    ram: { health: 800, range: 1.2, damage: 50, speed: 0.0018, color: 0x8b4513, space: 8, wallDamageMultiplier: 4, targetPriority: 'town_hall' },
-    stormmage: { health: 200, range: 4.9, damage: 40, speed: 0.002, color: 0x4444ff, space: 6, chainCount: 4, chainRange: 5 }
-};
 
 
 
@@ -175,6 +103,7 @@ export class MainScene extends Phaser.Scene {
     private troops: Troop[] = [];
     private ghostBuilding!: Phaser.GameObjects.Graphics;
     private deploymentGraphics!: Phaser.GameObjects.Graphics;
+    private forbiddenGraphics!: Phaser.GameObjects.Graphics;
     private cursorKeys!: Phaser.Types.Input.Keyboard.CursorKeys;
 
     private selectedBuildingType: string | null = null;
@@ -182,6 +111,8 @@ export class MainScene extends Phaser.Scene {
     private isMoving = false;
     private isDragging = false;
     private dragOrigin: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
+    private dragStartCam: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
+    private dragStartScreen: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
     private hoverGrid: Phaser.Math.Vector2 = new Phaser.Math.Vector2(-100, -100);
 
     private mode: GameMode = 'HOME';
@@ -193,6 +124,8 @@ export class MainScene extends Phaser.Scene {
     // Battle stats tracking
     private initialEnemyBuildings = 0;
     private lastDeployTime = 0;
+    private deployStartTime = 0;
+    private lastForbiddenInteractionTime = 0;
     private lastGrassGrowTime = 0;
 
     private destroyedBuildings = 0;
@@ -200,12 +133,18 @@ export class MainScene extends Phaser.Scene {
     private elixirLooted = 0;
     private hasDeployed = false;
     private raidEndScheduled = false; // Prevent multiple end calls
+    private pendingSpawnCount = 0; // Prevent battle end during troop splits (phalanx/recursion)
 
-    // Range indicator for clicked buildings in attack mode
+    private villageNameLabel!: Phaser.GameObjects.Text;
     private attackModeSelectedBuilding: PlacedBuilding | null = null;
+
+    private get userId(): string {
+        return Auth.getCurrentUser()?.id || 'player_home';
+    }
 
     // Manual firing interactions
     private isManualFiring = false;
+    private isLockingDragForTroops = false;
     private selectionGraphics!: Phaser.GameObjects.Graphics;
 
     private cameraSensitivity = 1.0;
@@ -218,7 +157,7 @@ export class MainScene extends Phaser.Scene {
     preload() { }
 
     create() {
-        this.cameras.main.setBackgroundColor('#2d2d2d');
+        this.cameras.main.setBackgroundColor('#141824'); // Deep midnight navy background
         this.cameras.main.setZoom(1);
 
         // Register and apply pixelation pipeline
@@ -260,15 +199,14 @@ export class MainScene extends Phaser.Scene {
         this.deploymentGraphics = this.add.graphics();
         this.deploymentGraphics.setVisible(false);
 
+        this.forbiddenGraphics = this.add.graphics();
+        this.forbiddenGraphics.setDepth(5);
+        this.forbiddenGraphics.setVisible(false);
+
         if (this.input.keyboard) {
             this.cursorKeys = this.input.keyboard.createCursorKeys();
             this.input.keyboard.on('keydown-ESC', () => {
                 this.cancelPlacement();
-            });
-            this.input.keyboard.on('keydown-R', () => {
-                if (confirm('Reset village layout?')) {
-                    this.resetVillage();
-                }
             });
             this.input.keyboard.on('keydown-M', () => {
                 if (this.selectedInWorld) {
@@ -295,15 +233,17 @@ export class MainScene extends Phaser.Scene {
         });
 
         // Try to load saved base, otherwise place default
-        if (!this.loadSavedBase()) {
-            this.placeDefaultVillage();
-        }
-        this.centerCamera();
+        this.loadSavedBase().then(async success => {
+            if (!success) {
+                await this.placeDefaultVillage();
+            }
+            this.centerCamera();
+        });
     }
 
     private centerCamera() {
         const centerGrid = this.mapSize / 2;
-        const pos = this.cartToIso(centerGrid, centerGrid);
+        const pos = IsoUtils.cartToIso(centerGrid, centerGrid);
         this.cameras.main.centerOn(pos.x, pos.y);
     }
 
@@ -320,26 +260,9 @@ export class MainScene extends Phaser.Scene {
     update(time: number, delta: number) {
         PixelatePipeline.zoom = this.cameras.main.zoom;
         PixelatePipeline.scroll.set(this.cameras.main.scrollX, this.cameras.main.scrollY);
-        // Auto-end raid if all troops dead and no reserves
-        if (this.mode === 'ATTACK' && this.hasDeployed) {
-            const army = (window as any).getArmy ? (window as any).getArmy() : {};
-            const remaining = Object.values(army).reduce((a: number, b: any) => a + (typeof b === 'number' ? b : 0), 0) as number;
-            const liveTroops = this.troops.filter(t => t.health > 0).length;
 
-            const percent = this.initialEnemyBuildings > 0
-                ? Math.floor((this.destroyedBuildings / this.initialEnemyBuildings) * 100)
-                : 0;
+        this.checkBattleEnd();
 
-            if (!this.raidEndScheduled && ((remaining <= 0 && liveTroops === 0) || percent >= 100)) {
-                this.raidEndScheduled = true;
-                // Give player 2 seconds to see final state before auto-ending
-                this.time.delayedCall(2000, () => {
-                    if ((window as any).onRaidEnded) {
-                        (window as any).onRaidEnded(this.goldLooted, this.elixirLooted);
-                    }
-                });
-            }
-        }
         this.handleCameraMovement(delta);
         this.updateCombat(time);
         this.updateTroops(delta);
@@ -358,6 +281,49 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
+    private checkBattleEnd() {
+        // Only check if we are attacking and have started deploying
+        if (this.mode !== 'ATTACK' || !this.hasDeployed || this.raidEndScheduled) return;
+
+        // 1. Check Army Remaining (troops not yet converted to entities)
+        const army = (window as any).getArmy?.() || {};
+        const armyRemaining = Object.values(army).reduce((total: number, count: any) => total + (typeof count === 'number' ? count : 0), 0) as number;
+
+        // 2. Check Active Troops (entities on the field)
+        // We filter by health > 0 to exclude dying troops that might still be in the array for animation handling
+        const activeTroops = this.troops.filter(t => t.health > 0).length;
+
+        // 3. Check Destruction Percentage
+        // Ensure we don't divide by zero
+        const totalBuildings = Math.max(1, this.initialEnemyBuildings);
+        const percent = Math.floor((this.destroyedBuildings / totalBuildings) * 100);
+
+        // Debug info (console logs would be visible in browser)
+        // console.log(`Battle State: Army: ${armyRemaining}, Active: ${activeTroops}, Destruction: ${percent}%`);
+
+        // END CONDITION:
+        // A) No reinforcements left AND no troops fighting AND no pending spawns (splits)
+        // B) Base is 100% destroyed
+        if ((armyRemaining <= 0 && activeTroops === 0 && this.pendingSpawnCount === 0) || percent >= 100) {
+            this.raidEndScheduled = true;
+
+            // 2-second delay to let final animations play / player realize what happened
+            this.time.delayedCall(2000, () => {
+                // Trigger the end sequence via the window callback, but pass a flag or handle it there
+                // The user wants the SAME pathway as "Return Home"
+                if ((window as any).onRaidEnded) {
+                    (window as any).onRaidEnded(this.goldLooted, this.elixirLooted);
+                } else {
+                    // Fallback: Trigger cloud transition manually if no UI callback
+                    this.showCloudTransition(() => {
+                        this.goHome();
+                        // We also need to tell React to switch view if possible, but goHome handles internal state
+                    });
+                }
+            });
+        }
+    }
+
     private updateManualFire(time: number) {
         const def = this.selectedInWorld;
         if (!def || !BUILDINGS[def.type] || BUILDINGS[def.type].category !== 'defense') return;
@@ -370,14 +336,14 @@ export class MainScene extends Phaser.Scene {
             def.lastFireTime = -99999; // Ensure ready immediately
         }
 
-        if (time < (def as any).lastFireTime + interval) return;
+        if (Date.now() < (def as any).lastFireTime + interval) return;
 
-        def.lastFireTime = time;
+        // Note: lastFireTime is set in each shoot function using Date.now()
 
         // Get target position
         const pointer = this.input.activePointer;
         const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-        const cardPos = this.isoToCart(worldPoint.x, worldPoint.y);
+        const cardPos = IsoUtils.isoToCart(worldPoint.x, worldPoint.y);
 
         // CREATE DUMMY TARGET
         const dummyTarget = {
@@ -410,7 +376,7 @@ export class MainScene extends Phaser.Scene {
                 if (this.mode === 'HOME' && this.selectedInWorld === b &&
                     (b.type === 'ballista' || b.type === 'xbow' || b.type === 'cannon')) {
                     const info = BUILDINGS[b.type];
-                    const center = this.cartToIso(b.gridX + info.width / 2, b.gridY + info.height / 2);
+                    const center = IsoUtils.cartToIso(b.gridX + info.width / 2, b.gridY + info.height / 2);
                     const pointer = this.input.activePointer;
                     const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
                     targetAngle = Math.atan2(worldPoint.y - (center.y - 14), worldPoint.x - center.x);
@@ -494,7 +460,7 @@ export class MainScene extends Phaser.Scene {
     }
 
     private createSmokeTrailEffect(gridX: number, gridY: number) {
-        const pos = this.cartToIso(gridX, gridY);
+        const pos = IsoUtils.cartToIso(gridX, gridY);
         const smoke = this.add.graphics();
         smoke.fillStyle(0x111111, 0.5); // Darker, slightly transparent black
         const size = 3 + Math.random() * 2;
@@ -517,13 +483,13 @@ export class MainScene extends Phaser.Scene {
 
     // Persistent state is now managed by Backend service automatically on modification
 
-    private loadSavedBase(): boolean {
+    private async loadSavedBase(): Promise<boolean> {
         // Load player home world from Backend
-        let world = Backend.getWorld('player_home');
+        let world = await Backend.getWorld(this.userId);
 
         // If world doesn't exist, create it (empty)
         if (!world) {
-            world = Backend.createWorld('player_home', 'PLAYER');
+            world = await Backend.createWorld(this.userId, 'PLAYER');
         }
 
         // If newly created or empty, return false to trigger default village placement
@@ -553,7 +519,7 @@ export class MainScene extends Phaser.Scene {
 
     private createIsoGrid() {
         const graphics = this.add.graphics();
-        graphics.setDepth(-1);
+        graphics.setDepth(-1000); // Floor even lower to support deep margin deployment
 
         // Draw all tiles with lush grass variation
         for (let x = 0; x < this.mapSize; x++) {
@@ -561,10 +527,51 @@ export class MainScene extends Phaser.Scene {
                 this.drawIsoTile(graphics, x, y);
             }
         }
+
+        // Add username label in the left corner (Grid 0, mapSize)
+        const leftCorner = IsoUtils.cartToIso(0, this.mapSize);
+
+        this.villageNameLabel = this.add.text(leftCorner.x + 20, leftCorner.y - 15, '', {
+            fontFamily: 'Outfit, Arial Black, sans-serif',
+            fontSize: '28px',
+            fontStyle: 'bold',
+            color: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 6
+        })
+            .setOrigin(0, 1)
+            .setAlpha(1.0) // Full brightness
+            .setDepth(-500)
+            .setAngle(-26.5); // Align with isometric left axis
+
+        this.updateVillageName();
+    }
+
+    public updateUsername(name: string) {
+        if (!this.villageNameLabel) return;
+
+        if (this.mode === 'HOME') {
+            this.villageNameLabel.setText(`${name.toUpperCase()}'S VILLAGE`);
+        } else {
+            this.villageNameLabel.setText(`ENEMY VILLAGE`);
+        }
+    }
+
+    private updateVillageName() {
+        if (!this.villageNameLabel) return;
+
+        let name = 'COMMANDER';
+        if (this.mode === 'HOME') {
+            name = Auth.getCurrentUser()?.username || 'COMMANDER';
+        } else {
+            name = 'ENEMY';
+        }
+
+        this.villageNameLabel.setText(`${name.toUpperCase()}'S VILLAGE`);
     }
 
     private drawIsoTile(graphics: Phaser.GameObjects.Graphics, x: number, y: number) {
-        const pos = this.cartToIso(x, y);
+        const pos = IsoUtils.cartToIso(x, y);
         const halfW = this.tileWidth / 2;
         const halfH = this.tileHeight / 2;
 
@@ -648,7 +655,7 @@ export class MainScene extends Phaser.Scene {
         return building;
     }
 
-    private placeBuilding(gridX: number, gridY: number, type: string, owner: 'PLAYER' | 'ENEMY' = 'PLAYER'): boolean {
+    private async placeBuilding(gridX: number, gridY: number, type: string, owner: 'PLAYER' | 'ENEMY' = 'PLAYER', isFree: boolean = false): Promise<boolean> {
         // Remove any obstacles that overlap with this building
         const info = BUILDINGS[type];
         if (info) {
@@ -657,12 +664,13 @@ export class MainScene extends Phaser.Scene {
 
         if (owner === 'PLAYER') {
             // Backend Validation & Placement
-            const data = Backend.placeBuilding('player_home', type as BuildingType, gridX, gridY);
+            const data = await Backend.placeBuilding(this.userId, type as BuildingType, gridX, gridY);
             if (data) {
                 this.instantiateBuilding(data, 'PLAYER');
-                (window as any).onBuildingPlaced?.(type);
+                (window as any).onBuildingPlaced?.(type, isFree);
                 return true;
             }
+            return false;
         } else {
             // For Enemy (Manual placement, e.g. from old generators if still used)
             // We create a temp serialized object
@@ -715,3466 +723,108 @@ export class MainScene extends Phaser.Scene {
 
     private drawBuildingVisuals(graphics: Phaser.GameObjects.Graphics, gridX: number, gridY: number, type: string, alpha: number = 1, tint: number | null = null, building?: PlacedBuilding, baseGraphics?: Phaser.GameObjects.Graphics) {
         const info = BUILDINGS[type];
-        const c1 = this.cartToIso(gridX, gridY);
-        const c2 = this.cartToIso(gridX + info.width, gridY);
-        const c3 = this.cartToIso(gridX + info.width, gridY + info.height);
-        const c4 = this.cartToIso(gridX, gridY + info.height);
-        const center = this.cartToIso(gridX + info.width / 2, gridY + info.height / 2);
+        const c1 = IsoUtils.cartToIso(gridX, gridY);
+        const c2 = IsoUtils.cartToIso(gridX + info.width, gridY);
+        const c3 = IsoUtils.cartToIso(gridX + info.width, gridY + info.height);
+        const c4 = IsoUtils.cartToIso(gridX, gridY + info.height);
+        const center = IsoUtils.cartToIso(gridX + info.width / 2, gridY + info.height / 2);
 
         // Building-specific premium visuals
         switch (type) {
             case 'town_hall':
-                this.drawTownHall(graphics, c1, c2, c3, c4, center, alpha, tint, baseGraphics);
+                BuildingRenderer.drawTownHall(graphics, gridX, gridY, this.time.now, alpha, tint, baseGraphics);
                 break;
             case 'barracks':
-                this.drawBarracks(graphics, c1, c2, c3, c4, center, alpha, tint);
+                BuildingRenderer.drawBarracks(graphics, c1, c2, c3, c4, center, alpha, tint);
                 break;
             case 'cannon':
                 // Use level-based rendering for cannon
                 if (building && building.level >= 4) {
-                    this.drawCannonLevel4(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                    BuildingRenderer.drawCannonLevel4(graphics, c1, c2, c3, c4, center, alpha, tint, building);
                 } else if (building && building.level === 3) {
-                    this.drawCannonLevel3(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                    BuildingRenderer.drawCannonLevel3(graphics, c1, c2, c3, c4, center, alpha, tint, building);
                 } else if (building && building.level === 2) {
-                    this.drawCannonLevel2(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                    BuildingRenderer.drawCannonLevel2(graphics, c1, c2, c3, c4, center, alpha, tint, building);
                 } else {
-                    this.drawCannon(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                    BuildingRenderer.drawCannon(graphics, c1, c2, c3, c4, center, alpha, tint, building);
                 }
                 break;
             case 'ballista':
                 if (building && building.level >= 2) {
-                    this.drawBallistaLevel2(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                    BuildingRenderer.drawBallistaLevel2(graphics, c1, c2, c3, c4, center, alpha, tint, building);
                 } else {
-                    this.drawBallista(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                    BuildingRenderer.drawBallista(graphics, c1, c2, c3, c4, center, alpha, tint, building);
                 }
                 break;
             case 'mine':
-                this.drawGoldMine(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                BuildingRenderer.drawGoldMine(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now);
                 break;
             case 'elixir_collector':
-                this.drawElixirCollector(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                BuildingRenderer.drawElixirCollector(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now);
                 break;
             case 'mortar':
-                this.drawMortar(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                BuildingRenderer.drawMortar(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now);
                 break;
             case 'tesla':
-                this.drawTeslaCoil(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                BuildingRenderer.drawTeslaCoil(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now);
                 break;
-            case 'wall':
-                this.drawWall(graphics, center, gridX, gridY, alpha, tint, building);
+            case 'wall': {
+                const owner = building?.owner ?? 'PLAYER';
+                const hasNeighbor = (dx: number, dy: number) => {
+                    return this.buildings.some(b =>
+                        b.type === 'wall' && b.gridX === gridX + dx && b.gridY === gridY + dy && b.owner === owner
+                    );
+                };
+                BuildingRenderer.drawWall(graphics, center, gridX, gridY, alpha, tint, building, {
+                    nN: hasNeighbor(0, -1),
+                    nS: hasNeighbor(0, 1),
+                    nE: hasNeighbor(1, 0),
+                    nW: hasNeighbor(-1, 0),
+                    owner: owner
+                });
                 break;
+            }
             case 'army_camp':
-                this.drawArmyCamp(graphics, c1, c2, c3, c4, center, alpha, tint, baseGraphics, building);
+                BuildingRenderer.drawArmyCamp(graphics, c1, c2, c3, c4, center, alpha, tint, baseGraphics, building);
                 break;
             case 'xbow':
                 if (building && building.level >= 2) {
-                    this.drawXBowLevel2(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                    BuildingRenderer.drawXBowLevel2(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now);
                 } else {
-                    this.drawXBow(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                    BuildingRenderer.drawXBow(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now);
                 }
                 break;
             case 'prism':
-                this.drawPrismTower(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                BuildingRenderer.drawPrismTower(graphics, c1, c2, c3, c4, center, alpha, tint, building);
                 break;
             case 'magmavent':
-                this.drawMagmaVent(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics);
+                BuildingRenderer.drawMagmaVent(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, this.time.now);
                 break;
             case 'dragons_breath':
-                this.drawDragonsBreath(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics);
+                BuildingRenderer.drawDragonsBreath(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, gridX, gridY, this.time.now);
                 break;
 
             default:
-                this.drawGenericBuilding(graphics, c1, c2, c3, c4, center, info, alpha, tint);
-        }
-    }
-
-    private drawTownHall(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, baseGraphics?: Phaser.GameObjects.Graphics) {
-        const time = this.time.now;
-        const g = baseGraphics || graphics; // Draw floor on baseGraphics
-
-        const height = 65;
-        const t1 = new Phaser.Math.Vector2(c1.x, c1.y - height);
-        const t2 = new Phaser.Math.Vector2(c2.x, c2.y - height);
-        const t3 = new Phaser.Math.Vector2(c3.x, c3.y - height);
-        const t4 = new Phaser.Math.Vector2(c4.x, c4.y - height);
-
-        // === ORNATE STONE FOUNDATION ===
-        g.fillStyle(tint ?? 0x7a6a5a, alpha);
-        g.fillPoints([c1, c2, c3, c4], true);
-
-        // Foundation borders
-        g.lineStyle(2, 0x5a4a3a, alpha);
-        g.strokePoints([c1, c2, c3, c4], true, true);
-
-        // Red carpet leading to door
-        g.fillStyle(0xaa2222, alpha);
-        g.fillCircle(center.x, center.y, 10);
-
-        // Foundation stone texture (moved to baseGraphics)
-        g.fillStyle(0x6a5a4a, alpha * 0.4);
-        for (let i = 0; i < 6; i++) {
-            const px = center.x + Math.sin(i * 2.3) * 20;
-            const py = center.y + Math.cos(i * 1.7) * 12;
-            g.fillCircle(px, py, 3 + Math.sin(i) * 1.5);
-        }
-
-        // === MAGNIFICENT WALLS ===
-        // Right wall (shadow side) - clean surface
-        graphics.fillStyle(tint ?? 0x5a4a3a, alpha);
-        graphics.fillPoints([c2, c3, t3, t2], true);
-
-        // Left wall (lit side) - clean surface
-        graphics.fillStyle(tint ?? 0x8a7a6a, alpha);
-        graphics.fillPoints([c3, c4, t4, t3], true);
-
-        // Wall edges
-        graphics.lineStyle(2, 0x3a2a1a, 0.5 * alpha);
-        graphics.strokePoints([c2, c3, t3, t2], true, true);
-        graphics.strokePoints([c3, c4, t4, t3], true, true);
-
-        // === ARCHED WINDOWS WITH WARM GLOW (ISOMETRIC) ===
-        // Window glow
-        const windowGlow = 0.6 + Math.sin(time / 300) * 0.15;
-
-        // Calculate wall directions for isometric window placement
-        // Right wall goes from c2 to c3
-        const rightWallDirX = (c3.x - c2.x);
-        const rightWallDirY = (c3.y - c2.y);
-        // Left wall goes from c3 to c4
-        const leftWallDirX = (c4.x - c3.x);
-        const leftWallDirY = (c4.y - c3.y);
-
-        // Right wall windows (isometric parallelograms)
-        for (let i = 0; i < 2; i++) {
-            const t = 0.3 + i * 0.4; // Position along wall
-            const baseX = c2.x + rightWallDirX * t;
-            const baseY = c2.y + rightWallDirY * t - height * 0.5;
-            // Window frame (isometric parallelogram)
-            const wh = 14; // window height
-            // Skew factor based on wall angle
-            const skewX = rightWallDirX * 0.08;
-            const skewY = rightWallDirY * 0.08;
-            graphics.fillStyle(0x3a2a1a, alpha);
-            graphics.beginPath();
-            graphics.moveTo(baseX - skewX * 2, baseY - wh / 2);
-            graphics.lineTo(baseX + skewX * 2, baseY - wh / 2 + skewY * 4);
-            graphics.lineTo(baseX + skewX * 2, baseY + wh / 2 + skewY * 4);
-            graphics.lineTo(baseX - skewX * 2, baseY + wh / 2);
-            graphics.closePath();
-            graphics.fillPath();
-            // Warm light (inner glow)
-            graphics.fillStyle(0xffdd88, alpha * windowGlow);
-            graphics.beginPath();
-            graphics.moveTo(baseX - skewX * 1.5, baseY - wh / 2 + 2);
-            graphics.lineTo(baseX + skewX * 1.5, baseY - wh / 2 + 2 + skewY * 3);
-            graphics.lineTo(baseX + skewX * 1.5, baseY + wh / 2 - 2 + skewY * 3);
-            graphics.lineTo(baseX - skewX * 1.5, baseY + wh / 2 - 2);
-            graphics.closePath();
-            graphics.fillPath();
-        }
-
-        // Left wall windows (isometric parallelograms)
-        for (let i = 0; i < 2; i++) {
-            const t = 0.3 + i * 0.4; // Position along wall
-            const baseX = c3.x + leftWallDirX * t;
-            const baseY = c3.y + leftWallDirY * t - height * 0.5;
-            // Window frame (isometric parallelogram)
-            const wh = 14; // window height
-            // Skew factor based on wall angle
-            const skewX = leftWallDirX * 0.08;
-            const skewY = leftWallDirY * 0.08;
-            graphics.fillStyle(0x3a2a1a, alpha);
-            graphics.beginPath();
-            graphics.moveTo(baseX - skewX * 2, baseY - wh / 2);
-            graphics.lineTo(baseX + skewX * 2, baseY - wh / 2 + skewY * 4);
-            graphics.lineTo(baseX + skewX * 2, baseY + wh / 2 + skewY * 4);
-            graphics.lineTo(baseX - skewX * 2, baseY + wh / 2);
-            graphics.closePath();
-            graphics.fillPath();
-            // Warm light (inner glow)
-            graphics.fillStyle(0xffdd88, alpha * windowGlow);
-            graphics.beginPath();
-            graphics.moveTo(baseX - skewX * 1.5, baseY - wh / 2 + 2);
-            graphics.lineTo(baseX + skewX * 1.5, baseY - wh / 2 + 2 + skewY * 3);
-            graphics.lineTo(baseX + skewX * 1.5, baseY + wh / 2 - 2 + skewY * 3);
-            graphics.lineTo(baseX - skewX * 1.5, baseY + wh / 2 - 2);
-            graphics.closePath();
-            graphics.fillPath();
-        }
-
-        // === DECORATIVE CORNER TOWERS ===
-        const towerHeight = 25;
-        const towerPositions = [
-            { x: c1.x + 8, y: c1.y - 5 },
-            { x: c4.x - 8, y: c4.y - 5 }
-        ];
-
-        for (const pos of towerPositions) {
-            // Tower body
-            graphics.fillStyle(0x6a5a4a, alpha);
-            graphics.fillRect(pos.x - 6, pos.y - height - towerHeight, 12, height + towerHeight);
-            graphics.lineStyle(1, 0x4a3a2a, alpha);
-            graphics.strokeRect(pos.x - 6, pos.y - height - towerHeight, 12, height + towerHeight);
-
-            // Tower cone roof
-            graphics.fillStyle(0xb84c4c, alpha);
-            graphics.beginPath();
-            graphics.moveTo(pos.x, pos.y - height - towerHeight - 15);
-            graphics.lineTo(pos.x - 8, pos.y - height - towerHeight);
-            graphics.lineTo(pos.x + 8, pos.y - height - towerHeight);
-            graphics.closePath();
-            graphics.fillPath();
-
-            // Roof highlight
-            graphics.lineStyle(1, 0xd85c5c, alpha * 0.5);
-            graphics.lineBetween(pos.x, pos.y - height - towerHeight - 15, pos.x + 8, pos.y - height - towerHeight);
-
-            // Tower window
-            graphics.fillStyle(0xffdd88, alpha * windowGlow);
-            graphics.fillCircle(pos.x, pos.y - height - 10, 4);
-        }
-
-        // === MAGNIFICENT ROOF ===
-        // Multi-layered roof
-        const roofColor = tint ?? 0xc86444;
-
-        // Base roof layer
-        graphics.fillStyle(roofColor, alpha);
-        graphics.fillPoints([t1, t2, t3, t4], true);
-
-        // Roof peak structure
-        const peakHeight = 20;
-        const peak = new Phaser.Math.Vector2(center.x, center.y - height - peakHeight);
-
-        graphics.fillStyle(0xb85434, alpha);
-        graphics.fillTriangle(t1.x, t1.y, t2.x, t2.y, peak.x, peak.y);
-        graphics.fillStyle(0x983424, alpha);
-        graphics.fillTriangle(t2.x, t2.y, t3.x, t3.y, peak.x, peak.y);
-        graphics.fillTriangle(t3.x, t3.y, t4.x, t4.y, peak.x, peak.y);
-        graphics.fillStyle(0xc86444, alpha);
-        graphics.fillTriangle(t4.x, t4.y, t1.x, t1.y, peak.x, peak.y);
-
-        // Roof edge trim
-        graphics.lineStyle(2, 0xd4a04a, alpha);
-        graphics.lineBetween(t1.x, t1.y, t2.x, t2.y);
-        graphics.lineBetween(t1.x, t1.y, t4.x, t4.y);
-
-        // Peak edges
-        graphics.lineStyle(1, 0xffd700, alpha * 0.8);
-        graphics.lineBetween(t1.x, t1.y, peak.x, peak.y);
-        graphics.lineBetween(t4.x, t4.y, peak.x, peak.y);
-
-        // === GLOWING GOLDEN DOME ===
-        const domeGlow = 0.8 + Math.sin(time / 400) * 0.2;
-
-        // Dome base
-        graphics.fillStyle(0xffd700, alpha * domeGlow);
-        graphics.fillCircle(peak.x, peak.y - 5, 10);
-        graphics.fillStyle(0xffe866, alpha * domeGlow);
-        graphics.fillCircle(peak.x, peak.y - 7, 7);
-        graphics.fillStyle(0xffffaa, alpha * domeGlow * 0.8);
-        graphics.fillCircle(peak.x - 2, peak.y - 9, 3);
-
-        // Dome glow aura
-        graphics.fillStyle(0xffd700, alpha * 0.2 * domeGlow);
-        graphics.fillCircle(peak.x, peak.y - 5, 16);
-
-        // Crown on dome
-        graphics.fillStyle(0xffd700, alpha);
-        graphics.beginPath();
-        graphics.moveTo(peak.x, peak.y - 20);
-        graphics.lineTo(peak.x - 4, peak.y - 14);
-        graphics.lineTo(peak.x - 2, peak.y - 14);
-        graphics.lineTo(peak.x - 2, peak.y - 16);
-        graphics.lineTo(peak.x, peak.y - 18);
-        graphics.lineTo(peak.x + 2, peak.y - 16);
-        graphics.lineTo(peak.x + 2, peak.y - 14);
-        graphics.lineTo(peak.x + 4, peak.y - 14);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // === ROYAL BANNERS ===
-        const flagWave = Math.sin(time / 120) * 4;
-        const flagWave2 = Math.sin(time / 130 + 1) * 4;
-
-        // Left banner
-        graphics.fillStyle(0x5d4e37, alpha);
-        graphics.fillRect(c1.x + 15, c1.y - height - 25, 2, 30);
-        graphics.fillStyle(0x2244aa, alpha);
-        graphics.beginPath();
-        graphics.moveTo(c1.x + 17, c1.y - height - 25);
-        graphics.lineTo(c1.x + 32 + flagWave, c1.y - height - 20);
-        graphics.lineTo(c1.x + 30 + flagWave * 0.8, c1.y - height - 10);
-        graphics.lineTo(c1.x + 17, c1.y - height - 5);
-        graphics.closePath();
-        graphics.fillPath();
-        // Banner emblem
-        graphics.fillStyle(0xffd700, alpha * 0.8);
-        graphics.fillCircle(c1.x + 23 + flagWave * 0.5, c1.y - height - 15, 4);
-
-        // Right banner
-        graphics.fillStyle(0x5d4e37, alpha);
-        graphics.fillRect(c4.x - 17, c4.y - height - 25, 2, 30);
-        graphics.fillStyle(0x2244aa, alpha);
-        graphics.beginPath();
-        graphics.moveTo(c4.x - 15, c4.y - height - 25);
-        graphics.lineTo(c4.x - 30 - flagWave2, c4.y - height - 20);
-        graphics.lineTo(c4.x - 28 - flagWave2 * 0.8, c4.y - height - 10);
-        graphics.lineTo(c4.x - 15, c4.y - height - 5);
-        graphics.closePath();
-        graphics.fillPath();
-        graphics.fillStyle(0xffd700, alpha * 0.8);
-        graphics.fillCircle(c4.x - 23 - flagWave2 * 0.5, c4.y - height - 15, 4);
-
-        // === MAGICAL FLOATING PARTICLES ===
-        for (let i = 0; i < 4; i++) {
-            const particleAngle = (time / 800 + i * 1.57) % (Math.PI * 2);
-            const particleDist = 25 + Math.sin(time / 200 + i) * 5;
-            const particleX = peak.x + Math.cos(particleAngle) * particleDist;
-            const particleY = peak.y - 15 + Math.sin(particleAngle) * particleDist * 0.4 - Math.sin(time / 300 + i) * 5;
-            const particleAlpha = 0.4 + Math.sin(time / 100 + i * 2) * 0.3;
-
-            graphics.fillStyle(0xffdd88, alpha * particleAlpha);
-            graphics.fillCircle(particleX, particleY, 2);
-            graphics.fillStyle(0xffffcc, alpha * particleAlpha * 0.5);
-            graphics.fillCircle(particleX, particleY - 1, 1);
+                BuildingRenderer.drawGenericBuilding(graphics, c1, c2, c3, c4, center, info, alpha, tint);
         }
     }
 
 
-    private drawBarracks(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null) {
-        const wallHeight = 28;
 
-        // Wall top corners
-        const t1 = new Phaser.Math.Vector2(c1.x, c1.y - wallHeight);
-        const t2 = new Phaser.Math.Vector2(c2.x, c2.y - wallHeight);
-        const t3 = new Phaser.Math.Vector2(c3.x, c3.y - wallHeight);
-        const t4 = new Phaser.Math.Vector2(c4.x, c4.y - wallHeight);
 
-        // === STONE FOUNDATION ===
-        graphics.fillStyle(tint ?? 0x7a6a5a, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
 
-        // Foundation texture
-        graphics.fillStyle(0x6a5a4a, alpha * 0.4);
-        graphics.fillCircle(center.x - 8, center.y + 3, 3);
-        graphics.fillCircle(center.x + 6, center.y + 5, 2);
 
-        // === WALLS (proper isometric 3D) ===
-        // Right wall (shadow side - SE facing)
-        graphics.fillStyle(tint ?? 0x8b3030, alpha);
-        graphics.fillPoints([c2, c3, t3, t2], true);
 
-        // Left wall (lit side - SW facing)
-        graphics.fillStyle(tint ?? 0xa04040, alpha);
-        graphics.fillPoints([c3, c4, t4, t3], true);
 
-        // Wall edge outlines
-        graphics.lineStyle(1, 0x4a1a1a, 0.6 * alpha);
-        graphics.lineBetween(c2.x, c2.y, t2.x, t2.y);
-        graphics.lineBetween(c3.x, c3.y, t3.x, t3.y);
-        graphics.lineBetween(c4.x, c4.y, t4.x, t4.y);
-
-        // === DOORWAY (on front-facing wall - SW wall between c3 and c4) ===
-        // Door must follow isometric angle of the wall
-        const doorHeight = 16;
-
-        // Wall direction vector (c3 to c4)
-        const wallDirX = (c4.x - c3.x);
-        const wallDirY = (c4.y - c3.y);
-        const wallLen = Math.sqrt(wallDirX * wallDirX + wallDirY * wallDirY);
-        const normX = wallDirX / wallLen;
-        const normY = wallDirY / wallLen;
-
-        // Door center on the wall
-        const doorCenterX = (c3.x + c4.x) / 2;
-        const doorCenterY = (c3.y + c4.y) / 2;
-        const doorHalfWidth = 10;
-
-        // Bottom corners of door (on wall line)
-        const dbl = { x: doorCenterX - normX * doorHalfWidth, y: doorCenterY - normY * doorHalfWidth };
-        const dbr = { x: doorCenterX + normX * doorHalfWidth, y: doorCenterY + normY * doorHalfWidth };
-        // Top corners (straight up in screen space)
-        const dtl = { x: dbl.x, y: dbl.y - doorHeight };
-        const dtr = { x: dbr.x, y: dbr.y - doorHeight };
-
-        // Door opening (dark interior)
-        graphics.fillStyle(0x1a0a0a, alpha);
-        graphics.fillPoints([
-            new Phaser.Math.Vector2(dbl.x, dbl.y),
-            new Phaser.Math.Vector2(dbr.x, dbr.y),
-            new Phaser.Math.Vector2(dtr.x, dtr.y),
-            new Phaser.Math.Vector2(dtl.x, dtl.y)
-        ], true);
-
-        // Door frame
-        graphics.lineStyle(2, 0x5d4e37, alpha);
-        graphics.lineBetween(dbl.x, dbl.y, dtl.x, dtl.y);
-        graphics.lineBetween(dbr.x, dbr.y, dtr.x, dtr.y);
-        graphics.lineBetween(dtl.x, dtl.y, dtr.x, dtr.y);
-
-        // === ISOMETRIC ROOF ===
-        const roofHeight = 18;
-        const roofOverhang = 4;
-
-        // Roof base corners (with overhang)
-        const r1 = new Phaser.Math.Vector2(t1.x, t1.y - roofOverhang);
-        const r2 = new Phaser.Math.Vector2(t2.x + roofOverhang, t2.y);
-        const r3 = new Phaser.Math.Vector2(t3.x, t3.y + roofOverhang);
-        const r4 = new Phaser.Math.Vector2(t4.x - roofOverhang, t4.y);
-
-        // Roof peak (ridge line along the isometric axis)
-        const peakFront = new Phaser.Math.Vector2(center.x + 10, center.y - wallHeight - roofHeight + 5);
-        const peakBack = new Phaser.Math.Vector2(center.x - 10, center.y - wallHeight - roofHeight - 5);
-
-        // Roof panels (4 triangular sections for pitched roof)
-        // Back-left panel (darkest)
-        graphics.fillStyle(0x3a2515, alpha);
-        graphics.fillTriangle(r1.x, r1.y, r4.x, r4.y, peakBack.x, peakBack.y);
-
-        // Back-right panel
-        graphics.fillStyle(0x4a3020, alpha);
-        graphics.fillTriangle(r1.x, r1.y, r2.x, r2.y, peakBack.x, peakBack.y);
-
-        // Front-right panel (medium)
-        graphics.fillStyle(0x5a3a25, alpha);
-        graphics.fillTriangle(r2.x, r2.y, r3.x, r3.y, peakFront.x, peakFront.y);
-        graphics.fillTriangle(r2.x, r2.y, peakBack.x, peakBack.y, peakFront.x, peakFront.y);
-
-        // Front-left panel (lightest)
-        graphics.fillStyle(0x6a4a30, alpha);
-        graphics.fillTriangle(r3.x, r3.y, r4.x, r4.y, peakFront.x, peakFront.y);
-        graphics.fillTriangle(r4.x, r4.y, peakBack.x, peakBack.y, peakFront.x, peakFront.y);
-
-        // Roof ridge line
-        graphics.lineStyle(2, 0x2a1510, alpha);
-        graphics.lineBetween(peakBack.x, peakBack.y, peakFront.x, peakFront.y);
-
-        // Roof edge highlights
-        graphics.lineStyle(1, 0x7a5a40, alpha * 0.6);
-        graphics.lineBetween(r3.x, r3.y, peakFront.x, peakFront.y);
-        graphics.lineBetween(r4.x, r4.y, peakFront.x, peakFront.y);
-
-    }
-
-
-    // === BEAUTIFUL ARTSY ROTATING CANNON ===
-    private drawCannon(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
-        // Get the rotation angle from building (same system as ballista/xbow)
-        const angle = building?.ballistaAngle ?? Math.PI / 4; // Default facing bottom-right (isometric forward)
-        const cos = Math.cos(angle);
-        const sin = Math.sin(angle);
-
-        // === STONE FOUNDATION PLATFORM ===
-        // Main stone base (isometric diamond)
-        graphics.fillStyle(tint ?? 0x7a7a7a, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
-
-        // Stone texture - lighter edges for 3D effect
-        graphics.lineStyle(2, 0x9a9a9a, alpha * 0.8);
-        graphics.lineBetween(c1.x, c1.y, c2.x, c2.y);
-        graphics.lineBetween(c1.x, c1.y, c4.x, c4.y);
-        graphics.lineStyle(2, 0x4a4a4a, alpha * 0.8);
-        graphics.lineBetween(c2.x, c2.y, c3.x, c3.y);
-        graphics.lineBetween(c3.x, c3.y, c4.x, c4.y);
-
-        // Stone decorative details
-        graphics.fillStyle(0x6a6a6a, alpha * 0.6);
-        graphics.fillCircle(center.x - 10, center.y + 6, 3);
-        graphics.fillCircle(center.x + 8, center.y + 4, 2);
-
-        // === WOODEN ROTATING BASE (Isometric ellipse) ===
-        const baseRadiusX = 22;
-        const baseRadiusY = 13; // Squashed for isometric view
-        const baseY = center.y - 3;
-
-        // Wood shadow underneath
-        graphics.fillStyle(0x1a1008, alpha * 0.5);
-        graphics.fillEllipse(center.x + 2, baseY + 4, baseRadiusX, baseRadiusY);
-
-        // Main wooden base
-        graphics.fillStyle(0x5a4030, alpha);
-        graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-
-        // Wood grain rings
-        graphics.lineStyle(2, 0x4a3020, alpha * 0.6);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX - 4, baseRadiusY - 2);
-        graphics.lineStyle(1, 0x3a2515, alpha * 0.4);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX - 8, baseRadiusY - 5);
-
-        // Metal reinforcement ring on wooden base
-        graphics.lineStyle(3, 0x444444, alpha);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-        graphics.lineStyle(1, 0x666666, alpha * 0.6);
-        graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
-
-
-
-        // === ROTATING CANNON BARREL ===
-        const barrelHeight = -14; // Height above base
-        const barrelLength = 28;  // Length of barrel
-        const barrelWidth = 10;   // Thickness
-
-        // Apply recoil offset (pulls barrel back in opposite direction of firing)
-        const recoilAmount = (building?.cannonRecoilOffset ?? 0) * 8; // Max 8 pixels recoil
-        const recoilOffsetX = -cos * recoilAmount;
-        const recoilOffsetY = -sin * 0.5 * recoilAmount;
-
-        // Calculate barrel end position based on angle (with recoil)
-        const barrelTipX = center.x + cos * barrelLength + recoilOffsetX;
-        const barrelTipY = center.y + barrelHeight + sin * 0.5 * barrelLength + recoilOffsetY;
-
-        // Barrel shadow on ground
-        graphics.fillStyle(0x1a1a1a, alpha * 0.3);
-        graphics.fillEllipse(center.x + cos * (barrelLength * 0.5) + 3, center.y + 4, barrelLength * 0.6, 5);
-
-        // === BARREL CARRIAGE (holds the barrel) ===
-        // Two side supports from the rotating base
-        const supportOffsetX = -sin * 8;
-        const supportOffsetY = cos * 4;
-
-        // Left support
-        graphics.fillStyle(0x4a3525, alpha);
-        graphics.beginPath();
-        graphics.moveTo(center.x - supportOffsetX, baseY - supportOffsetY);
-        graphics.lineTo(center.x - supportOffsetX * 0.5, center.y + barrelHeight + 4);
-        graphics.lineTo(center.x + cos * 5 - supportOffsetX * 0.5, center.y + barrelHeight + sin * 2.5 + 4);
-        graphics.lineTo(center.x + cos * 5, center.y + barrelHeight + sin * 2.5);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Right support
-        graphics.fillStyle(0x3a2515, alpha);
-        graphics.beginPath();
-        graphics.moveTo(center.x + supportOffsetX, baseY + supportOffsetY);
-        graphics.lineTo(center.x + supportOffsetX * 0.5, center.y + barrelHeight + 4);
-        graphics.lineTo(center.x + cos * 5 + supportOffsetX * 0.5, center.y + barrelHeight + sin * 2.5 + 4);
-        graphics.lineTo(center.x + cos * 5, center.y + barrelHeight + sin * 2.5);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // === CONDITIONAL RENDER ORDER ===
-        // If pointing down (sin >= 0), barrel is in front, so draw pivot FIRST (behind barrel)
-        // If pointing up (sin < 0), barrel is behind, so draw pivot LAST (on top of barrel)
-
-        const drawPivot = () => {
-            // === CENTRAL PIVOT MECHANISM ===
-            const pivotX = center.x + recoilOffsetX;
-            const pivotY = center.y + barrelHeight + 3 + recoilOffsetY;
-
-            graphics.fillStyle(0x333333, alpha);
-            graphics.fillCircle(pivotX, pivotY, 8);
-            graphics.fillStyle(0x444444, alpha);
-            graphics.fillCircle(pivotX, pivotY, 6);
-            graphics.fillStyle(0x555555, alpha);
-            graphics.fillCircle(pivotX, pivotY, 4);
-            graphics.fillStyle(0x666666, alpha * 0.7);
-            graphics.fillCircle(pivotX - 1, pivotY - 1, 2);
-        };
-
-        if (sin >= 0) drawPivot();
-
-        // === BARREL BASE ===
-        // Large reinforced base where barrel meets carriage (with recoil)
-        // Moved here to be BEHIND the barrel body
-        const baseJointX = center.x + cos * 3 + recoilOffsetX;
-        const baseJointY = center.y + barrelHeight + sin * 1.5 + recoilOffsetY;
-        graphics.fillStyle(0x555555, alpha);
-        graphics.fillEllipse(baseJointX, baseJointY, 14, 8);
-        graphics.fillStyle(0x444444, alpha);
-        graphics.fillEllipse(baseJointX, baseJointY, 10, 6);
-        graphics.fillStyle(0x333333, alpha);
-        graphics.fillEllipse(baseJointX, baseJointY, 6, 4);
-
-        // === MAIN BARREL BODY ===
-        // Draw the barrel as multiple layers for depth
-        // Barrel base point (with recoil)
-        const barrelBaseX = center.x + recoilOffsetX;
-        const barrelBaseY = center.y + barrelHeight + recoilOffsetY;
-
-        // Barrel outer shadow
-        graphics.lineStyle(barrelWidth + 4, 0x1a1a1a, alpha);
-        graphics.lineBetween(barrelBaseX, barrelBaseY + 2, barrelTipX, barrelTipY + 2);
-
-        // Barrel main body - dark iron
-        graphics.lineStyle(barrelWidth, 0x2a2a2a, alpha);
-        graphics.lineBetween(barrelBaseX, barrelBaseY, barrelTipX, barrelTipY);
-
-        // Barrel highlight strip (top)
-        graphics.lineStyle(barrelWidth - 4, 0x3a3a3a, alpha);
-        graphics.lineBetween(center.x, center.y + barrelHeight - 1, barrelTipX, barrelTipY - 1);
-
-        // Bright highlight
-        graphics.lineStyle(2, 0x5a5a5a, alpha * 0.8);
-        graphics.lineBetween(barrelBaseX, barrelBaseY - 2, barrelTipX, barrelTipY - 2);
-
-        // === DECORATIVE BARREL BANDS (iron) ===
-        const bands = [0.15, 0.4, 0.7, 0.9];
-        for (const t of bands) {
-            const bandX = center.x + cos * barrelLength * t + recoilOffsetX;
-            const bandY = center.y + barrelHeight + sin * 0.5 * barrelLength * t + recoilOffsetY;
-
-            // Iron bands
-            graphics.fillStyle(0x4a4a4a, alpha);
-            graphics.fillEllipse(bandX, bandY, 7, 4);
-            graphics.fillStyle(0x5a5a5a, alpha * 0.6);
-            graphics.fillCircle(bandX - 1, bandY - 1, 1.5);
-            graphics.lineStyle(1, 0x333333, alpha);
-            graphics.strokeEllipse(bandX, bandY, 7, 4);
-        }
-
-        // Barrel Base moved before barrel body
-
-
-        // Muzzle removed - barrel just ends with the line strokes
-
-        // If pointing up (sin < 0), draw pivot LAST (on top of barrel)
-        if (sin < 0) drawPivot();
-    }
-
-    private drawCannonLevel2(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
-        // LEVEL 2 CANNON: Reinforced single barrel with iron plating and copper accents
-        const angle = building?.ballistaAngle ?? Math.PI / 4;
-        const cos = Math.cos(angle);
-        const sin = Math.sin(angle);
-
-        // === REINFORCED STONE FOUNDATION ===
-        graphics.fillStyle(tint ?? 0x6a6a6a, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
-
-        // Iron corner brackets
-        graphics.lineStyle(2, 0x555555, alpha * 0.9);
-        graphics.lineBetween(c1.x, c1.y, c2.x, c2.y);
-        graphics.lineBetween(c1.x, c1.y, c4.x, c4.y);
-        graphics.lineStyle(2, 0x3a3a3a, alpha * 0.8);
-        graphics.lineBetween(c2.x, c2.y, c3.x, c3.y);
-        graphics.lineBetween(c3.x, c3.y, c4.x, c4.y);
-
-        // Corner rivets (iron)
-        graphics.fillStyle(0x666666, alpha * 0.9);
-        graphics.fillCircle(c1.x, c1.y, 2.5);
-        graphics.fillCircle(c2.x, c2.y, 2);
-        graphics.fillCircle(c3.x, c3.y, 2);
-        graphics.fillCircle(c4.x, c4.y, 2);
-
-        // === WOODEN ROTATING BASE WITH IRON REINFORCEMENT ===
-        const baseRadiusX = 23;
-        const baseRadiusY = 13.5;
-        const baseY = center.y - 3;
-
-        // Shadow underneath
-        graphics.fillStyle(0x1a1008, alpha * 0.5);
-        graphics.fillEllipse(center.x + 2, baseY + 4, baseRadiusX, baseRadiusY);
-
-        // Main wooden base (darker, treated wood)
-        graphics.fillStyle(0x4a3525, alpha);
-        graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-
-        // Wood grain rings
-        graphics.lineStyle(2, 0x3a2515, alpha * 0.6);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX - 4, baseRadiusY - 2);
-        graphics.lineStyle(1, 0x2a1a0a, alpha * 0.4);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX - 8, baseRadiusY - 5);
-
-        // Heavy iron reinforcement ring
-        graphics.lineStyle(4, 0x3a3a3a, alpha);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-        graphics.lineStyle(2, 0x555555, alpha * 0.6);
-        graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
-
-        // === BIGGER REINFORCED BARREL ===
-        const barrelHeight = -14;
-        const barrelLength = 30;  // Longer barrel
-        const barrelWidth = 12;   // Thicker barrel
-
-        // Recoil
-        const recoilAmount = (building?.cannonRecoilOffset ?? 0) * 9;
-        const recoilOffsetX = -cos * recoilAmount;
-        const recoilOffsetY = -sin * 0.5 * recoilAmount;
-
-        const barrelTipX = center.x + cos * barrelLength + recoilOffsetX;
-        const barrelTipY = center.y + barrelHeight + sin * 0.5 * barrelLength + recoilOffsetY;
-
-        // Barrel shadow
-        graphics.fillStyle(0x1a1a1a, alpha * 0.35);
-        graphics.fillEllipse(center.x + cos * (barrelLength * 0.5) + 3, center.y + 5, barrelLength * 0.65, 5);
-
-        // === BARREL CARRIAGE (heavier supports) ===
-        const supportOffsetX = -sin * 9;
-        const supportOffsetY = cos * 4.5;
-
-        // Left support
-        graphics.fillStyle(0x3a2a1a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(center.x - supportOffsetX, baseY - supportOffsetY);
-        graphics.lineTo(center.x - supportOffsetX * 0.5, center.y + barrelHeight + 5);
-        graphics.lineTo(center.x + cos * 6 - supportOffsetX * 0.5, center.y + barrelHeight + sin * 3 + 5);
-        graphics.lineTo(center.x + cos * 6, center.y + barrelHeight + sin * 3);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Right support
-        graphics.fillStyle(0x2a1a0a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(center.x + supportOffsetX, baseY + supportOffsetY);
-        graphics.lineTo(center.x + supportOffsetX * 0.5, center.y + barrelHeight + 5);
-        graphics.lineTo(center.x + cos * 6 + supportOffsetX * 0.5, center.y + barrelHeight + sin * 3 + 5);
-        graphics.lineTo(center.x + cos * 6, center.y + barrelHeight + sin * 3);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // === CENTRAL PIVOT (reinforced) ===
-        const drawPivot = () => {
-            const pivotX = center.x + recoilOffsetX;
-            const pivotY = center.y + barrelHeight + 3 + recoilOffsetY;
-
-            graphics.fillStyle(0x2a2a2a, alpha);
-            graphics.fillCircle(pivotX, pivotY, 9);
-            graphics.fillStyle(0x3a3a3a, alpha);
-            graphics.fillCircle(pivotX, pivotY, 7);
-            graphics.fillStyle(0x4a4a4a, alpha);
-            graphics.fillCircle(pivotX, pivotY, 5);
-            // Copper accent
-            graphics.fillStyle(0xb87333, alpha * 0.8);
-            graphics.fillCircle(pivotX - 1, pivotY - 1, 2.5);
-        };
-
-        if (sin >= 0) drawPivot();
-
-        // === BARREL BASE JOINT ===
-        const baseJointX = center.x + cos * 3 + recoilOffsetX;
-        const baseJointY = center.y + barrelHeight + sin * 1.5 + recoilOffsetY;
-        graphics.fillStyle(0x4a4a4a, alpha);
-        graphics.fillEllipse(baseJointX, baseJointY, 15, 9);
-        graphics.fillStyle(0x3a3a3a, alpha);
-        graphics.fillEllipse(baseJointX, baseJointY, 11, 7);
-        graphics.fillStyle(0x2a2a2a, alpha);
-        graphics.fillEllipse(baseJointX, baseJointY, 7, 4);
-
-        // === MAIN BARREL BODY (reinforced) ===
-        const barrelBaseX = center.x + recoilOffsetX;
-        const barrelBaseY = center.y + barrelHeight + recoilOffsetY;
-
-        // Barrel outer shadow
-        graphics.lineStyle(barrelWidth + 4, 0x1a1a1a, alpha);
-        graphics.lineBetween(barrelBaseX, barrelBaseY + 2, barrelTipX, barrelTipY + 2);
-
-        // Barrel main body - dark iron
-        graphics.lineStyle(barrelWidth, 0x2a2a2a, alpha);
-        graphics.lineBetween(barrelBaseX, barrelBaseY, barrelTipX, barrelTipY);
-
-        // Barrel highlight strip
-        graphics.lineStyle(barrelWidth - 4, 0x3a3a3a, alpha);
-        graphics.lineBetween(barrelBaseX, barrelBaseY - 1, barrelTipX, barrelTipY - 1);
-
-        // Bright highlight
-        graphics.lineStyle(2, 0x5a5a5a, alpha * 0.85);
-        graphics.lineBetween(barrelBaseX, barrelBaseY - 2, barrelTipX, barrelTipY - 2);
-
-        // === IRON BANDS (heavier than level 1) ===
-        const bands = [0.12, 0.35, 0.58, 0.82];
-        for (const t of bands) {
-            const bandX = center.x + cos * barrelLength * t + recoilOffsetX;
-            const bandY = center.y + barrelHeight + sin * 0.5 * barrelLength * t + recoilOffsetY;
-
-            // Iron bands with copper rivets
-            graphics.fillStyle(0x3a3a3a, alpha);
-            graphics.fillEllipse(bandX, bandY, 8, 4.5);
-            graphics.fillStyle(0xb87333, alpha * 0.7);
-            graphics.fillCircle(bandX - 2, bandY - 1, 1.5);
-            graphics.fillCircle(bandX + 2, bandY + 1, 1.5);
-            graphics.lineStyle(1, 0x2a2a2a, alpha);
-            graphics.strokeEllipse(bandX, bandY, 8, 4.5);
-        }
-
-        if (sin < 0) drawPivot();
-    }
-
-    private drawCannonLevel3(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
-        // LEVEL 3 CANNON: Fortified single-barrel with armor plating and steel reinforcements
-        const angle = building?.ballistaAngle ?? Math.PI / 4;
-        const cos = Math.cos(angle);
-        const sin = Math.sin(angle);
-
-        // === ARMORED STEEL FOUNDATION ===
-        // Dark steel base with reinforced edges (isometric diamond)
-        graphics.fillStyle(tint ?? 0x3a3a4a, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
-
-        // Steel trim edges with subtle blue tint
-        graphics.lineStyle(3, 0x4a4a5a, alpha * 0.9);
-        graphics.lineBetween(c1.x, c1.y, c2.x, c2.y);
-        graphics.lineBetween(c1.x, c1.y, c4.x, c4.y);
-        graphics.lineStyle(2, 0x2a2a3a, alpha * 0.8);
-        graphics.lineBetween(c2.x, c2.y, c3.x, c3.y);
-        graphics.lineBetween(c3.x, c3.y, c4.x, c4.y);
-
-        // Steel corner bolts
-        graphics.fillStyle(0x606070, alpha * 0.9);
-        graphics.fillCircle(c1.x, c1.y, 3);
-        graphics.fillCircle(c2.x, c2.y, 2.5);
-        graphics.fillCircle(c3.x, c3.y, 2.5);
-        graphics.fillCircle(c4.x, c4.y, 2.5);
-        // Bolt highlights
-        graphics.fillStyle(0x808090, alpha * 0.6);
-        graphics.fillCircle(c1.x - 1, c1.y - 1, 1.5);
-
-        // === HEAVY ROTATING BASE ===
-        const baseRadiusX = 22;
-        const baseRadiusY = 13;
-        const baseY = center.y - 3;
-
-        // Shadow underneath
-        graphics.fillStyle(0x1a1a1a, alpha * 0.5);
-        graphics.fillEllipse(center.x + 2, baseY + 5, baseRadiusX + 2, baseRadiusY + 1);
-
-        // Main armored base - dark steel
-        graphics.fillStyle(0x3a3a4a, alpha);
-        graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-
-        // Inner steel ring
-        graphics.lineStyle(3, 0x2a2a3a, alpha * 0.8);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX - 4, baseRadiusY - 2);
-
-        // Armor plates visible on base (wedge sections)
-        graphics.fillStyle(0x4a4a5a, alpha * 0.6);
-        graphics.beginPath();
-        graphics.arc(center.x - 8, baseY, 8, -0.5, 0.8, false);
-        graphics.fillPath();
-        graphics.beginPath();
-        graphics.arc(center.x + 8, baseY, 8, 2.3, 3.6, false);
-        graphics.fillPath();
-
-        // Heavy outer ring
-        graphics.lineStyle(4, 0x4a4a5a, alpha);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-        graphics.lineStyle(2, 0x5a5a6a, alpha * 0.5);
-        graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
-
-        // === FORTIFIED BARREL SETUP ===
-        const barrelHeight = -12;
-        const barrelLength = 28;
-        const barrelWidth = 12;  // Thicker fortified barrel
-
-        // Recoil animation
-        const recoilAmount = (building?.cannonRecoilOffset ?? 0) * 10;
-        const recoilOffsetX = -cos * recoilAmount;
-        const recoilOffsetY = -sin * 0.5 * recoilAmount;
-
-        // Barrel tip position
-        const barrelTipX = center.x + cos * barrelLength + recoilOffsetX;
-        const barrelTipY = center.y + barrelHeight + sin * 0.5 * barrelLength + recoilOffsetY;
-
-        // Barrel shadow on ground
-        graphics.fillStyle(0x1a1a1a, alpha * 0.4);
-        graphics.fillEllipse(center.x + cos * (barrelLength * 0.5) + 3, center.y + 5, barrelLength * 0.7, 6);
-
-        // === ARMORED BARREL CARRIAGE ===
-        const supportOffsetX = -sin * 10;
-        const supportOffsetY = cos * 5;
-
-        // Left support (heavy steel)
-        graphics.fillStyle(0x3a3a4a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(center.x - supportOffsetX, baseY - supportOffsetY);
-        graphics.lineTo(center.x - supportOffsetX * 0.5, center.y + barrelHeight + 5);
-        graphics.lineTo(center.x + cos * 5 - supportOffsetX * 0.5, center.y + barrelHeight + sin * 2.5 + 5);
-        graphics.lineTo(center.x + cos * 5, center.y + barrelHeight + sin * 2.5);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Right support (slightly darker)
-        graphics.fillStyle(0x2a2a3a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(center.x + supportOffsetX, baseY + supportOffsetY);
-        graphics.lineTo(center.x + supportOffsetX * 0.5, center.y + barrelHeight + 5);
-        graphics.lineTo(center.x + cos * 5 + supportOffsetX * 0.5, center.y + barrelHeight + sin * 2.5 + 5);
-        graphics.lineTo(center.x + cos * 5, center.y + barrelHeight + sin * 2.5);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Steel bolts on supports
-        graphics.fillStyle(0x5a5a6a, alpha * 0.8);
-        graphics.fillCircle(center.x - supportOffsetX * 0.7, baseY - supportOffsetY * 0.7 - 3, 2);
-        graphics.fillCircle(center.x + supportOffsetX * 0.7, baseY + supportOffsetY * 0.7 - 3, 2);
-
-        // === CENTRAL PIVOT MECHANISM ===
-        const drawPivot = () => {
-            const pivotX = center.x + recoilOffsetX;
-            const pivotY = center.y + barrelHeight + 4 + recoilOffsetY;
-
-            // Heavy steel pivot
-            graphics.fillStyle(0x2a2a2a, alpha);
-            graphics.fillCircle(pivotX, pivotY, 9);
-            graphics.fillStyle(0x3a3a4a, alpha);
-            graphics.fillCircle(pivotX, pivotY, 7);
-            // Steel center
-            graphics.fillStyle(0x5a5a6a, alpha);
-            graphics.fillCircle(pivotX, pivotY, 4);
-            graphics.fillStyle(0x6a6a7a, alpha * 0.8);
-            graphics.fillCircle(pivotX - 1, pivotY - 1, 2);
-        };
-
-        if (sin >= 0) drawPivot();
-
-        // === BARREL BASE JOINT ===
-        const baseJointX = center.x + cos * 3 + recoilOffsetX;
-        const baseJointY = center.y + barrelHeight + sin * 1.5 + recoilOffsetY;
-        graphics.fillStyle(0x4a4a5a, alpha);
-        graphics.fillEllipse(baseJointX, baseJointY, 14, 9);
-        graphics.fillStyle(0x3a3a4a, alpha * 0.8);
-        graphics.fillEllipse(baseJointX, baseJointY, 10, 6);
-
-        // === FORTIFIED BARREL ===
-        const barrelBaseX = center.x + recoilOffsetX;
-        const barrelBaseY = center.y + barrelHeight + recoilOffsetY;
-
-        // Barrel outer shadow
-        graphics.lineStyle(barrelWidth + 3, 0x1a1a1a, alpha);
-        graphics.lineBetween(barrelBaseX, barrelBaseY + 2, barrelTipX, barrelTipY + 2);
-
-        // Barrel main body - dark steel
-        graphics.lineStyle(barrelWidth, 0x3a3a4a, alpha);
-        graphics.lineBetween(barrelBaseX, barrelBaseY, barrelTipX, barrelTipY);
-
-        // Barrel secondary layer
-        graphics.lineStyle(barrelWidth - 2, 0x4a4a5a, alpha);
-        graphics.lineBetween(barrelBaseX, barrelBaseY - 1, barrelTipX, barrelTipY - 1);
-
-        // Barrel highlight strip
-        graphics.lineStyle(3, 0x5a5a6a, alpha * 0.9);
-        graphics.lineBetween(barrelBaseX, barrelBaseY - 3, barrelTipX, barrelTipY - 3);
-
-        // === ARMOR REINFORCEMENT BANDS ===
-        const bands = [0.15, 0.35, 0.55, 0.75];
-        for (let i = 0; i < bands.length; i++) {
-            const t = bands[i];
-            const bandX = barrelBaseX + cos * barrelLength * t;
-            const bandY = barrelBaseY + sin * 0.5 * barrelLength * t;
-
-            // Steel reinforcement bands
-            graphics.fillStyle(0x4a4a5a, alpha);
-            graphics.fillEllipse(bandX, bandY, 9, 5);
-            // Highlight on bands
-            graphics.fillStyle(0x6a6a7a, alpha * 0.6);
-            graphics.fillCircle(bandX - 2, bandY - 1, 2);
-            graphics.lineStyle(1, 0x2a2a3a, alpha);
-            graphics.strokeEllipse(bandX, bandY, 9, 5);
-
-            // Small rivets on bands
-            if (i % 2 === 0) {
-                graphics.fillStyle(0x5a5a6a, alpha * 0.7);
-                graphics.fillCircle(bandX - 3, bandY, 1.5);
-                graphics.fillCircle(bandX + 3, bandY, 1.5);
-            }
-        }
-
-        // === MUZZLE SHROUD ===
-        const muzzleX = barrelTipX;
-        const muzzleY = barrelTipY;
-
-        // Heavy muzzle ring
-        graphics.fillStyle(0x4a4a5a, alpha);
-        graphics.fillEllipse(muzzleX, muzzleY, 8, 5);
-        graphics.fillStyle(0x5a5a6a, alpha);
-        graphics.fillEllipse(muzzleX, muzzleY, 6, 4);
-
-        // Dark bore
-        graphics.fillStyle(0x1a1a1a, alpha);
-        graphics.fillEllipse(muzzleX + cos * 2, muzzleY + sin, 4, 2.5);
-
-        if (sin < 0) drawPivot();
-    }
-
-    private drawCannonLevel4(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
-        // LEVEL 4 CANNON: Dual-barrel reinforced cannon with gold/brass accents and glowing effects
-        const angle = building?.ballistaAngle ?? Math.PI / 4;
-        const cos = Math.cos(angle);
-        const sin = Math.sin(angle);
-
-        // === REINFORCED STEEL FOUNDATION ===
-        // Dark steel base with gold trim (isometric diamond)
-        graphics.fillStyle(tint ?? 0x4a4a5a, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
-
-        // Gold trim edges for premium look
-        graphics.lineStyle(3, 0xb8860b, alpha * 0.9);
-        graphics.lineBetween(c1.x, c1.y, c2.x, c2.y);
-        graphics.lineBetween(c1.x, c1.y, c4.x, c4.y);
-        graphics.lineStyle(2, 0x8b6914, alpha * 0.8);
-        graphics.lineBetween(c2.x, c2.y, c3.x, c3.y);
-        graphics.lineBetween(c3.x, c3.y, c4.x, c4.y);
-
-        // Decorative corner rivets (gold)
-        graphics.fillStyle(0xffd700, alpha * 0.9);
-        graphics.fillCircle(c1.x, c1.y, 3);
-        graphics.fillCircle(c2.x, c2.y, 2);
-        graphics.fillCircle(c3.x, c3.y, 2);
-        graphics.fillCircle(c4.x, c4.y, 2);
-
-        // === REINFORCED ROTATING BASE ===
-        const baseRadiusX = 24;
-        const baseRadiusY = 14;
-        const baseY = center.y - 3;
-
-        // Shadow underneath
-        graphics.fillStyle(0x1a1008, alpha * 0.5);
-        graphics.fillEllipse(center.x + 2, baseY + 5, baseRadiusX + 2, baseRadiusY + 1);
-
-        // Main reinforced steel base with dark blue tint
-        graphics.fillStyle(0x3a3a4a, alpha);
-        graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-
-        // Inner steel ring
-        graphics.lineStyle(3, 0x2a2a3a, alpha * 0.8);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX - 5, baseRadiusY - 3);
-
-        // Glowing energy ring (orange/red for heat effect)
-        graphics.lineStyle(2, 0xff6600, alpha * 0.6);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX - 8, baseRadiusY - 5);
-        graphics.lineStyle(1, 0xff9900, alpha * 0.4);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX - 9, baseRadiusY - 6);
-
-        // Gold reinforcement outer ring
-        graphics.lineStyle(4, 0xb8860b, alpha);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-        graphics.lineStyle(2, 0xffd700, alpha * 0.5);
-        graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
-
-        // === DUAL BARREL SETUP ===
-        const barrelHeight = -14;
-        const barrelLength = 30;  // Slightly longer barrels
-        const barrelWidth = 8;    // Slightly thinner for dual setup
-        const barrelSpacing = 5;  // Distance between the two barrels
-
-        // Recoil animation
-        const recoilAmount = (building?.cannonRecoilOffset ?? 0) * 10;
-        const recoilOffsetX = -cos * recoilAmount;
-        const recoilOffsetY = -sin * 0.5 * recoilAmount;
-
-        // Barrel perpendicular offset for dual barrels
-        const perpX = -sin * barrelSpacing;
-        const perpY = cos * 0.5 * barrelSpacing;
-
-        // Both barrel tip positions
-        const barrelTip1X = center.x + cos * barrelLength + recoilOffsetX + perpX;
-        const barrelTip1Y = center.y + barrelHeight + sin * 0.5 * barrelLength + recoilOffsetY + perpY;
-        const barrelTip2X = center.x + cos * barrelLength + recoilOffsetX - perpX;
-        const barrelTip2Y = center.y + barrelHeight + sin * 0.5 * barrelLength + recoilOffsetY - perpY;
-
-        // Barrel shadow on ground
-        graphics.fillStyle(0x1a1a1a, alpha * 0.4);
-        graphics.fillEllipse(center.x + cos * (barrelLength * 0.5) + 3, center.y + 5, barrelLength * 0.7, 6);
-
-        // === REINFORCED BARREL CARRIAGE ===
-        const supportOffsetX = -sin * 10;
-        const supportOffsetY = cos * 5;
-
-        // Left support (reinforced steel)
-        graphics.fillStyle(0x3a3a4a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(center.x - supportOffsetX, baseY - supportOffsetY);
-        graphics.lineTo(center.x - supportOffsetX * 0.5, center.y + barrelHeight + 5);
-        graphics.lineTo(center.x + cos * 6 - supportOffsetX * 0.5, center.y + barrelHeight + sin * 3 + 5);
-        graphics.lineTo(center.x + cos * 6, center.y + barrelHeight + sin * 3);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Right support
-        graphics.fillStyle(0x2a2a3a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(center.x + supportOffsetX, baseY + supportOffsetY);
-        graphics.lineTo(center.x + supportOffsetX * 0.5, center.y + barrelHeight + 5);
-        graphics.lineTo(center.x + cos * 6 + supportOffsetX * 0.5, center.y + barrelHeight + sin * 3 + 5);
-        graphics.lineTo(center.x + cos * 6, center.y + barrelHeight + sin * 3);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Gold trim on supports
-        graphics.lineStyle(1, 0xb8860b, alpha * 0.7);
-        graphics.lineBetween(center.x - supportOffsetX, baseY - supportOffsetY, center.x + cos * 6, center.y + barrelHeight + sin * 3);
-        graphics.lineBetween(center.x + supportOffsetX, baseY + supportOffsetY, center.x + cos * 6, center.y + barrelHeight + sin * 3);
-
-        // === CENTRAL PIVOT MECHANISM (ENHANCED) ===
-        const drawPivot = () => {
-            const pivotX = center.x + recoilOffsetX;
-            const pivotY = center.y + barrelHeight + 4 + recoilOffsetY;
-
-            // Larger reinforced pivot
-            graphics.fillStyle(0x2a2a2a, alpha);
-            graphics.fillCircle(pivotX, pivotY, 10);
-            graphics.fillStyle(0x3a3a4a, alpha);
-            graphics.fillCircle(pivotX, pivotY, 8);
-            // Gold center accent
-            graphics.fillStyle(0xb8860b, alpha);
-            graphics.fillCircle(pivotX, pivotY, 5);
-            graphics.fillStyle(0xffd700, alpha * 0.8);
-            graphics.fillCircle(pivotX - 1, pivotY - 1, 3);
-            // Glowing core
-            graphics.fillStyle(0xff6600, alpha * 0.5);
-            graphics.fillCircle(pivotX, pivotY, 2);
-        };
-
-        if (sin >= 0) drawPivot();
-
-        // === BARREL BASE JOINT (REINFORCED) ===
-        const baseJointX = center.x + cos * 4 + recoilOffsetX;
-        const baseJointY = center.y + barrelHeight + sin * 2 + recoilOffsetY;
-        graphics.fillStyle(0x4a4a5a, alpha);
-        graphics.fillEllipse(baseJointX, baseJointY, 16, 10);
-        graphics.fillStyle(0xb8860b, alpha * 0.8);
-        graphics.fillEllipse(baseJointX, baseJointY, 12, 7);
-        graphics.fillStyle(0x3a3a4a, alpha);
-        graphics.fillEllipse(baseJointX, baseJointY, 8, 5);
-
-        // === DUAL BARRELS ===
-        const drawBarrel = (tipX: number, tipY: number, offsetX: number, offsetY: number) => {
-            const barrelBaseX = center.x + recoilOffsetX + offsetX;
-            const barrelBaseY = center.y + barrelHeight + recoilOffsetY + offsetY;
-
-            // Barrel outer shadow
-            graphics.lineStyle(barrelWidth + 3, 0x1a1a1a, alpha);
-            graphics.lineBetween(barrelBaseX, barrelBaseY + 2, tipX, tipY + 2);
-
-            // Barrel main body - dark steel with blue tint
-            graphics.lineStyle(barrelWidth, 0x2a2a3a, alpha);
-            graphics.lineBetween(barrelBaseX, barrelBaseY, tipX, tipY);
-
-            // Barrel highlight strip
-            graphics.lineStyle(barrelWidth - 3, 0x3a3a4a, alpha);
-            graphics.lineBetween(barrelBaseX, barrelBaseY - 1, tipX, tipY - 1);
-
-            // Bright highlight
-            graphics.lineStyle(2, 0x5a5a6a, alpha * 0.9);
-            graphics.lineBetween(barrelBaseX, barrelBaseY - 2, tipX, tipY - 2);
-
-            // === GOLD DECORATIVE BANDS ===
-            const bands = [0.2, 0.5, 0.8];
-            for (const t of bands) {
-                const bandX = barrelBaseX + cos * barrelLength * t;
-                const bandY = barrelBaseY + sin * 0.5 * barrelLength * t;
-
-                // Gold bands with subtle depth
-                graphics.fillStyle(0xb8860b, alpha);
-                graphics.fillEllipse(bandX, bandY, 6, 3.5);
-                graphics.fillStyle(0xffd700, alpha * 0.7);
-                graphics.fillCircle(bandX - 1, bandY - 1, 1.5);
-                graphics.lineStyle(1, 0x8b6914, alpha);
-                graphics.strokeEllipse(bandX, bandY, 6, 3.5);
-            }
-        };
-
-        // Draw both barrels
-        drawBarrel(barrelTip1X, barrelTip1Y, perpX, perpY);
-        drawBarrel(barrelTip2X, barrelTip2Y, -perpX, -perpY);
-
-        // === CONNECTING BRACE BETWEEN BARRELS ===
-        const braceT = 0.35;
-        const brace1X = center.x + cos * barrelLength * braceT + recoilOffsetX + perpX;
-        const brace1Y = center.y + barrelHeight + sin * 0.5 * barrelLength * braceT + recoilOffsetY + perpY;
-        const brace2X = center.x + cos * barrelLength * braceT + recoilOffsetX - perpX;
-        const brace2Y = center.y + barrelHeight + sin * 0.5 * barrelLength * braceT + recoilOffsetY - perpY;
-
-        graphics.lineStyle(3, 0x3a3a4a, alpha);
-        graphics.lineBetween(brace1X, brace1Y, brace2X, brace2Y);
-        graphics.lineStyle(1, 0xb8860b, alpha * 0.8);
-        graphics.lineBetween(brace1X, brace1Y, brace2X, brace2Y);
-
-        if (sin < 0) drawPivot();
-    }
-
-    private drawBallista(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
-        // Get ballista state from building if provided
-        const angle = building?.ballistaAngle ?? 0; // Default facing right
-        const stringTension = building?.ballistaStringTension ?? 0; // 0 = relaxed, 1 = fully drawn
-        const boltLoaded = building?.ballistaBoltLoaded ?? true;
-
-        // === STONE FOUNDATION PLATFORM ===
-        // Raised stone base with depth
-        const baseHeight = 6;
-
-        // Side faces of the platform (isometric 3D effect)
-        graphics.fillStyle(0x4a4a4a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(c2.x, c2.y);
-        graphics.lineTo(c3.x, c3.y);
-        graphics.lineTo(c3.x, c3.y + baseHeight);
-        graphics.lineTo(c2.x, c2.y + baseHeight);
-        graphics.closePath();
-        graphics.fillPath();
-
-        graphics.fillStyle(0x3a3a3a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(c3.x, c3.y);
-        graphics.lineTo(c4.x, c4.y);
-        graphics.lineTo(c4.x, c4.y + baseHeight);
-        graphics.lineTo(c3.x, c3.y + baseHeight);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Top face
-        graphics.fillStyle(tint ?? 0x5a5a5a, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
-
-        // Stone block lines
-        graphics.lineStyle(1, 0x4a4a4a, alpha * 0.5);
-        const midX = (c1.x + c3.x) / 2;
-        const midY = (c1.y + c3.y) / 2;
-        graphics.lineBetween(c1.x, c1.y, c3.x, c3.y);
-        graphics.lineBetween(c2.x, c2.y, c4.x, c4.y);
-
-        // Border
-        graphics.lineStyle(2, 0x3a3a3a, 0.6 * alpha);
-        graphics.strokePoints([c1, c2, c3, c4], true, true);
-
-        // === WOODEN ROTATING PLATFORM ===
-        const baseRadiusX = 22;
-        const baseRadiusY = 13;
-        const baseY = center.y - 4;
-
-        // Shadow under platform
-        graphics.fillStyle(0x1a1a1a, alpha * 0.4);
-        graphics.fillEllipse(center.x + 2, baseY + 4, baseRadiusX, baseRadiusY);
-
-        // Main wooden platform
-        graphics.fillStyle(0x5a4030, alpha);
-        graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-
-        // Wood plank lines (radial pattern)
-        graphics.lineStyle(1, 0x3a2515, alpha * 0.5);
-        for (let i = 0; i < 6; i++) {
-            const ang = (i / 6) * Math.PI;
-            const x1 = center.x + Math.cos(ang) * (baseRadiusX - 2);
-            const y1 = baseY + Math.sin(ang) * (baseRadiusY - 1);
-            const x2 = center.x - Math.cos(ang) * (baseRadiusX - 2);
-            const y2 = baseY - Math.sin(ang) * (baseRadiusY - 1);
-            graphics.lineBetween(x1, y1, x2, y2);
-        }
-
-        // Iron outer ring
-        graphics.lineStyle(3, 0x4a4a4a, alpha);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-        graphics.lineStyle(1, 0x606060, alpha * 0.6);
-        graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
-
-        // Iron rivets around edge
-        graphics.fillStyle(0x555555, alpha);
-        for (let i = 0; i < 8; i++) {
-            const ang = (i / 8) * Math.PI * 2;
-            const rx = center.x + Math.cos(ang) * (baseRadiusX - 3);
-            const ry = baseY + Math.sin(ang) * (baseRadiusY - 2);
-            graphics.fillCircle(rx, ry, 2);
-        }
-
-        // Calculate rotation for the crossbow mechanism
-        const cos = Math.cos(angle);
-        const sin = Math.sin(angle);
-
-        // === CENTRAL PIVOT MECHANISM ===
-        // Heavy dark grey pivot hub on the wooden platform
-        graphics.fillStyle(0x2a2a2a, alpha);
-        graphics.fillCircle(center.x, baseY, 8);
-        graphics.fillStyle(0x3a3a3a, alpha);
-        graphics.fillCircle(center.x, baseY - 1, 6);
-        graphics.fillStyle(0x444444, alpha);
-        graphics.fillCircle(center.x, baseY - 2, 4);
-        // Highlight
-        graphics.fillStyle(0x606060, alpha * 0.6);
-        graphics.fillCircle(center.x - 1, baseY - 3, 2);
-
-        // === MASSIVE CROSSBOW ARMS ===
-        const armLength = 28; // Much bigger arms
-        const armWidth = 5;   // Thicker arms
-        const bowHeight = -16; // Higher mounting point
-
-        // Arm tip positions (perpendicular to firing direction)
-        const leftArmX = center.x + (-sin) * armLength;
-        const leftArmY = center.y + bowHeight + (cos * 0.5) * armLength;
-        const rightArmX = center.x + (sin) * armLength;
-        const rightArmY = center.y + bowHeight + (-cos * 0.5) * armLength;
-
-        // Draw curved bow arms with multiple layers for depth
-        // Outer shadow
-        graphics.lineStyle(armWidth + 3, 0x2a1a10, alpha);
-        graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
-        graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
-
-        // Main wooden arm
-        graphics.lineStyle(armWidth + 1, 0x5a3520, alpha);
-        graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
-        graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
-
-        // Wood highlight
-        graphics.lineStyle(armWidth - 1, 0x7a5540, alpha);
-        graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
-        graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
-
-        // Center wood grain
-        graphics.lineStyle(2, 0x6a4530, alpha);
-        graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
-        graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
-
-        // Metal reinforcement bands on arms
-        const bandDist1 = 0.3;
-        const bandDist2 = 0.6;
-        const bandDist3 = 0.85;
-
-        for (const dist of [bandDist1, bandDist2, bandDist3]) {
-            const leftBandX = center.x + (-sin) * armLength * dist;
-            const leftBandY = center.y + bowHeight + (cos * 0.5) * armLength * dist;
-            const rightBandX = center.x + (sin) * armLength * dist;
-            const rightBandY = center.y + bowHeight + (-cos * 0.5) * armLength * dist;
-
-            graphics.fillStyle(0x555555, alpha);
-            graphics.fillCircle(leftBandX, leftBandY, 3);
-            graphics.fillCircle(rightBandX, rightBandY, 3);
-            graphics.fillStyle(0x777777, alpha * 0.5);
-            graphics.fillCircle(leftBandX - 0.5, leftBandY - 0.5, 1.5);
-            graphics.fillCircle(rightBandX - 0.5, rightBandY - 0.5, 1.5);
-        }
-
-        // Large metal arm tips with hooks for string
-        graphics.fillStyle(0x3a3a3a, alpha);
-        graphics.fillCircle(leftArmX, leftArmY, 5);
-        graphics.fillCircle(rightArmX, rightArmY, 5);
-        graphics.fillStyle(0x555555, alpha);
-        graphics.fillCircle(leftArmX, leftArmY, 3);
-        graphics.fillCircle(rightArmX, rightArmY, 3);
-        graphics.fillStyle(0x888888, alpha * 0.5);
-        graphics.fillCircle(leftArmX - 1, leftArmY - 1, 1.5);
-        graphics.fillCircle(rightArmX - 1, rightArmY - 1, 1.5);
-
-        // Calculate bowstring position (needed for bolt placement)
-        const stringPullback = stringTension * 16;
-        const stringCenterX = center.x + cos * (-stringPullback);
-        const stringCenterY = center.y + bowHeight + sin * 0.5 * (-stringPullback);
-
-        // === MAIN RAIL/STOCK ===
-        const railLength = 28;
-        const railEndX = center.x + cos * railLength;
-        const railEndY = center.y + bowHeight + sin * 0.5 * railLength;
-        const railBackX = center.x + cos * (-12);
-        const railBackY = center.y + bowHeight + sin * 0.5 * (-12);
-
-        // Draw thick wooden rail
-        graphics.lineStyle(10, 0x2a1a10, alpha);
-        graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
-        graphics.lineStyle(8, 0x3a2515, alpha);
-        graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
-        graphics.lineStyle(5, 0x4a3520, alpha);
-        graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
-
-        // Rail groove for bolt
-        graphics.lineStyle(2, 0x2a1a10, alpha * 0.7);
-        graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
-
-        // Metal reinforcement plates on rail
-        const plateDist = 0.4;
-        const plateX = center.x + cos * railLength * plateDist;
-        const plateY = center.y + bowHeight + sin * 0.5 * railLength * plateDist;
-        graphics.fillStyle(0x444444, alpha);
-        graphics.fillRect(plateX - 4, plateY - 2, 8, 4);
-        graphics.fillStyle(0x666666, alpha * 0.5);
-        graphics.fillRect(plateX - 3, plateY - 1, 6, 2);
-
-        // === BOLT ===
-        if (boltLoaded) {
-            const boltLength = 24;
-            const boltStartX = stringCenterX;
-            const boltStartY = stringCenterY;
-            const boltEndX = boltStartX + cos * boltLength;
-            const boltEndY = boltStartY + sin * 0.5 * boltLength;
-
-            // Narrower bolt shaft
-            graphics.lineStyle(3, 0x4a3a25, alpha);
-            graphics.lineBetween(boltStartX, boltStartY, boltEndX, boltEndY);
-            graphics.lineStyle(2, 0x5d4e37, alpha);
-            graphics.lineBetween(boltStartX, boltStartY, boltEndX, boltEndY);
-            graphics.lineStyle(1, 0x7d6e57, alpha);
-            graphics.lineBetween(boltStartX, boltStartY, boltEndX, boltEndY);
-
-            // Arrowhead (smaller)
-            const headLength = 8;
-            const headWidth = 4;
-            const headTipX = boltEndX + cos * headLength;
-            const headTipY = boltEndY + sin * 0.5 * headLength;
-
-            graphics.fillStyle(0x2a2a2a, alpha);
-            graphics.beginPath();
-            graphics.moveTo(headTipX, headTipY);
-            graphics.lineTo(boltEndX + (-sin) * headWidth, boltEndY + (cos * 0.5) * headWidth);
-            graphics.lineTo(boltEndX + (sin) * headWidth, boltEndY + (-cos * 0.5) * headWidth);
-            graphics.closePath();
-            graphics.fillPath();
-
-            // Metal shine on head
-            graphics.fillStyle(0x555555, alpha * 0.6);
-            graphics.beginPath();
-            graphics.moveTo(headTipX, headTipY);
-            graphics.lineTo(boltEndX + (-sin) * headWidth * 0.5, boltEndY + (cos * 0.5) * headWidth * 0.5);
-            graphics.lineTo(boltEndX, boltEndY);
-            graphics.closePath();
-            graphics.fillPath();
-
-            // Smaller fletching
-            const fletchX = boltStartX + cos * 3;
-            const fletchY = boltStartY + sin * 0.5 * 3;
-            graphics.fillStyle(0xcc2222, alpha);
-            graphics.beginPath();
-            graphics.moveTo(fletchX, fletchY);
-            graphics.lineTo(fletchX + (-sin) * 5, fletchY + (cos * 0.5) * 5 - 3);
-            graphics.lineTo(boltStartX + cos * 8, boltStartY + sin * 0.5 * 8);
-            graphics.closePath();
-            graphics.fillPath();
-            graphics.beginPath();
-            graphics.moveTo(fletchX, fletchY);
-            graphics.lineTo(fletchX + (sin) * 5, fletchY + (-cos * 0.5) * 5 - 3);
-            graphics.lineTo(boltStartX + cos * 8, boltStartY + sin * 0.5 * 8);
-            graphics.closePath();
-            graphics.fillPath();
-        }
-
-        // === BOWSTRING (rendered on top of bolt) ===
-        graphics.lineStyle(3, 0x888888, alpha);
-        graphics.lineBetween(leftArmX, leftArmY, stringCenterX, stringCenterY);
-        graphics.lineBetween(rightArmX, rightArmY, stringCenterX, stringCenterY);
-        graphics.lineStyle(2, 0xaaaaaa, alpha);
-        graphics.lineBetween(leftArmX, leftArmY, stringCenterX, stringCenterY);
-        graphics.lineBetween(rightArmX, rightArmY, stringCenterX, stringCenterY);
-
-        // String tension glow when drawn
-        if (stringTension > 0.3) {
-            graphics.lineStyle(4, 0xffffff, alpha * 0.15 * stringTension);
-            graphics.lineBetween(leftArmX, leftArmY, stringCenterX, stringCenterY);
-            graphics.lineBetween(rightArmX, rightArmY, stringCenterX, stringCenterY);
-        }
-
-    }
-
-    private drawBallistaLevel2(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
-        // LEVEL 2 BALLISTA: Reinforced with bronze accents and improved mechanism
-        const angle = building?.ballistaAngle ?? 0;
-        const stringTension = building?.ballistaStringTension ?? 0;
-        const boltLoaded = building?.ballistaBoltLoaded ?? true;
-
-        // === REINFORCED STONE FOUNDATION ===
-        const baseHeight = 8; // Taller base
-
-        // Side faces with stone texture
-        graphics.fillStyle(0x4a4a4a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(c2.x, c2.y);
-        graphics.lineTo(c3.x, c3.y);
-        graphics.lineTo(c3.x, c3.y + baseHeight);
-        graphics.lineTo(c2.x, c2.y + baseHeight);
-        graphics.closePath();
-        graphics.fillPath();
-
-        graphics.fillStyle(0x3a3a3a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(c3.x, c3.y);
-        graphics.lineTo(c4.x, c4.y);
-        graphics.lineTo(c4.x, c4.y + baseHeight);
-        graphics.lineTo(c3.x, c3.y + baseHeight);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Top face with improved stone
-        graphics.fillStyle(tint ?? 0x606060, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
-
-        // Stone block pattern
-        graphics.lineStyle(1, 0x4a4a4a, alpha * 0.6);
-        graphics.lineBetween(c1.x, c1.y, c3.x, c3.y);
-        graphics.lineBetween(c2.x, c2.y, c4.x, c4.y);
-        // Additional cross pattern
-        const mid12 = { x: (c1.x + c2.x) / 2, y: (c1.y + c2.y) / 2 };
-        const mid34 = { x: (c3.x + c4.x) / 2, y: (c3.y + c4.y) / 2 };
-        graphics.lineBetween(mid12.x, mid12.y, mid34.x, mid34.y);
-
-        // Dark grey corner accents
-        graphics.fillStyle(0x444444, alpha * 0.8);
-        graphics.fillCircle(c1.x, c1.y, 3);
-        graphics.fillCircle(c2.x, c2.y, 2.5);
-        graphics.fillCircle(c3.x, c3.y, 2.5);
-        graphics.fillCircle(c4.x, c4.y, 2.5);
-
-        // Border
-        graphics.lineStyle(2, 0x3a3a3a, 0.7 * alpha);
-        graphics.strokePoints([c1, c2, c3, c4], true, true);
-
-        // === REINFORCED WOODEN PLATFORM ===
-        const baseRadiusX = 24;
-        const baseRadiusY = 14;
-        const baseY = center.y - 5;
-
-        // Shadow
-        graphics.fillStyle(0x1a1a1a, alpha * 0.4);
-        graphics.fillEllipse(center.x + 2, baseY + 5, baseRadiusX, baseRadiusY);
-
-        // Main platform - darker wood
-        graphics.fillStyle(0x4a3525, alpha);
-        graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-
-        // Wood planks
-        graphics.lineStyle(1, 0x2a1a10, alpha * 0.5);
-        for (let i = 0; i < 6; i++) {
-            const ang = (i / 6) * Math.PI;
-            const x1 = center.x + Math.cos(ang) * (baseRadiusX - 2);
-            const y1 = baseY + Math.sin(ang) * (baseRadiusY - 1);
-            const x2 = center.x - Math.cos(ang) * (baseRadiusX - 2);
-            const y2 = baseY - Math.sin(ang) * (baseRadiusY - 1);
-            graphics.lineBetween(x1, y1, x2, y2);
-        }
-
-        // Dark grey outer ring
-        graphics.lineStyle(4, 0x3a3a3a, alpha);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-        graphics.lineStyle(2, 0x555555, alpha * 0.5);
-        graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
-
-        // Dark grey rivets
-        graphics.fillStyle(0x444444, alpha);
-        for (let i = 0; i < 10; i++) {
-            const ang = (i / 10) * Math.PI * 2;
-            const rx = center.x + Math.cos(ang) * (baseRadiusX - 3);
-            const ry = baseY + Math.sin(ang) * (baseRadiusY - 2);
-            graphics.fillCircle(rx, ry, 2.5);
-            graphics.fillStyle(0x666666, alpha * 0.5);
-            graphics.fillCircle(rx - 0.5, ry - 0.5, 1);
-            graphics.fillStyle(0x444444, alpha);
-        }
-
-        const cos = Math.cos(angle);
-        const sin = Math.sin(angle);
-
-        // === DARK GREY PIVOT MECHANISM ===
-        graphics.fillStyle(0x2a2a2a, alpha);
-        graphics.fillCircle(center.x, baseY, 10);
-        graphics.fillStyle(0x3a3a3a, alpha);
-        graphics.fillCircle(center.x, baseY - 1, 7);
-        graphics.fillStyle(0x444444, alpha);
-        graphics.fillCircle(center.x, baseY - 2, 4);
-        graphics.fillStyle(0x666666, alpha * 0.5);
-        graphics.fillCircle(center.x - 1, baseY - 3, 2);
-
-        // === REINFORCED CROSSBOW ARMS ===
-        const armLength = 30;
-        const armWidth = 6;
-        const bowHeight = -18;
-
-        const leftArmX = center.x + (-sin) * armLength;
-        const leftArmY = center.y + bowHeight + (cos * 0.5) * armLength;
-        const rightArmX = center.x + (sin) * armLength;
-        const rightArmY = center.y + bowHeight + (-cos * 0.5) * armLength;
-
-        // Outer shadow
-        graphics.lineStyle(armWidth + 4, 0x1a0a05, alpha);
-        graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
-        graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
-
-        // Dark wood arm
-        graphics.lineStyle(armWidth + 2, 0x3a2515, alpha);
-        graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
-        graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
-
-        // Wood core
-        graphics.lineStyle(armWidth, 0x5a3520, alpha);
-        graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
-        graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
-
-        // Wood highlight
-        graphics.lineStyle(3, 0x6a4530, alpha);
-        graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
-        graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
-
-        // Dark grey reinforcement bands
-        const bandDist1 = 0.25;
-        const bandDist2 = 0.5;
-        const bandDist3 = 0.75;
-
-        for (const dist of [bandDist1, bandDist2, bandDist3]) {
-            const leftBandX = center.x + (-sin) * armLength * dist;
-            const leftBandY = center.y + bowHeight + (cos * 0.5) * armLength * dist;
-            const rightBandX = center.x + (sin) * armLength * dist;
-            const rightBandY = center.y + bowHeight + (-cos * 0.5) * armLength * dist;
-
-            graphics.fillStyle(0x333333, alpha);
-            graphics.fillCircle(leftBandX, leftBandY, 4);
-            graphics.fillCircle(rightBandX, rightBandY, 4);
-            graphics.fillStyle(0x555555, alpha * 0.6);
-            graphics.fillCircle(leftBandX - 0.5, leftBandY - 0.5, 2);
-            graphics.fillCircle(rightBandX - 0.5, rightBandY - 0.5, 2);
-        }
-
-        // Dark grey arm tips
-        graphics.fillStyle(0x2a2a2a, alpha);
-        graphics.fillCircle(leftArmX, leftArmY, 6);
-        graphics.fillCircle(rightArmX, rightArmY, 6);
-        graphics.fillStyle(0x444444, alpha);
-        graphics.fillCircle(leftArmX, leftArmY, 4);
-        graphics.fillCircle(rightArmX, rightArmY, 4);
-        graphics.fillStyle(0x666666, alpha * 0.6);
-        graphics.fillCircle(leftArmX - 1, leftArmY - 1, 2);
-        graphics.fillCircle(rightArmX - 1, rightArmY - 1, 2);
-
-        // String position
-        const stringPullback = stringTension * 18;
-        const stringCenterX = center.x + cos * (-stringPullback);
-        const stringCenterY = center.y + bowHeight + sin * 0.5 * (-stringPullback);
-
-        // === REINFORCED RAIL ===
-        const railLength = 30;
-        const railEndX = center.x + cos * railLength;
-        const railEndY = center.y + bowHeight + sin * 0.5 * railLength;
-        const railBackX = center.x + cos * (-14);
-        const railBackY = center.y + bowHeight + sin * 0.5 * (-14);
-
-        graphics.lineStyle(12, 0x1a0a05, alpha);
-        graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
-        graphics.lineStyle(10, 0x2a1510, alpha);
-        graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
-        graphics.lineStyle(6, 0x3a2515, alpha);
-        graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
-        graphics.lineStyle(2, 0x1a0a05, alpha * 0.7);
-        graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
-
-        // Dark grey rail plates
-        for (const t of [0.3, 0.6]) {
-            const plateX = center.x + cos * railLength * t;
-            const plateY = center.y + bowHeight + sin * 0.5 * railLength * t;
-            graphics.fillStyle(0x444444, alpha);
-            graphics.fillEllipse(plateX, plateY, 5, 3);
-            graphics.fillStyle(0x666666, alpha * 0.5);
-            graphics.fillCircle(plateX - 1, plateY - 1, 1.5);
-        }
-
-        // === BOLT ===
-        if (boltLoaded) {
-            const boltLength = 26;
-            const boltStartX = stringCenterX;
-            const boltStartY = stringCenterY;
-            const boltEndX = boltStartX + cos * boltLength;
-            const boltEndY = boltStartY + sin * 0.5 * boltLength;
-
-            graphics.lineStyle(4, 0x3a2a15, alpha);
-            graphics.lineBetween(boltStartX, boltStartY, boltEndX, boltEndY);
-            graphics.lineStyle(2, 0x5d4e37, alpha);
-            graphics.lineBetween(boltStartX, boltStartY, boltEndX, boltEndY);
-
-            // Arrowhead
-            const headLength = 10;
-            const headWidth = 5;
-            const headTipX = boltEndX + cos * headLength;
-            const headTipY = boltEndY + sin * 0.5 * headLength;
-
-            graphics.fillStyle(0x2a2a2a, alpha);
-            graphics.beginPath();
-            graphics.moveTo(headTipX, headTipY);
-            graphics.lineTo(boltEndX + (-sin) * headWidth, boltEndY + (cos * 0.5) * headWidth);
-            graphics.lineTo(boltEndX + (sin) * headWidth, boltEndY + (-cos * 0.5) * headWidth);
-            graphics.closePath();
-            graphics.fillPath();
-
-            graphics.fillStyle(0x555555, alpha * 0.6);
-            graphics.beginPath();
-            graphics.moveTo(headTipX, headTipY);
-            graphics.lineTo(boltEndX + (-sin) * headWidth * 0.4, boltEndY + (cos * 0.5) * headWidth * 0.4);
-            graphics.lineTo(boltEndX, boltEndY);
-            graphics.closePath();
-            graphics.fillPath();
-
-            // Dark grey fletching
-            const fletchX = boltStartX + cos * 3;
-            const fletchY = boltStartY + sin * 0.5 * 3;
-            graphics.fillStyle(0x444444, alpha);
-            graphics.beginPath();
-            graphics.moveTo(fletchX, fletchY);
-            graphics.lineTo(fletchX + (-sin) * 6, fletchY + (cos * 0.5) * 6 - 3);
-            graphics.lineTo(boltStartX + cos * 9, boltStartY + sin * 0.5 * 9);
-            graphics.closePath();
-            graphics.fillPath();
-            graphics.beginPath();
-            graphics.moveTo(fletchX, fletchY);
-            graphics.lineTo(fletchX + (sin) * 6, fletchY + (-cos * 0.5) * 6 - 3);
-            graphics.lineTo(boltStartX + cos * 9, boltStartY + sin * 0.5 * 9);
-            graphics.closePath();
-            graphics.fillPath();
-        }
-
-        // === BOWSTRING ===
-        graphics.lineStyle(3, 0x888888, alpha);
-        graphics.lineBetween(leftArmX, leftArmY, stringCenterX, stringCenterY);
-        graphics.lineBetween(rightArmX, rightArmY, stringCenterX, stringCenterY);
-        graphics.lineStyle(2, 0xbbbbbb, alpha);
-        graphics.lineBetween(leftArmX, leftArmY, stringCenterX, stringCenterY);
-        graphics.lineBetween(rightArmX, rightArmY, stringCenterX, stringCenterY);
-
-        if (stringTension > 0.3) {
-            graphics.lineStyle(5, 0xffffff, alpha * 0.2 * stringTension);
-            graphics.lineBetween(leftArmX, leftArmY, stringCenterX, stringCenterY);
-            graphics.lineBetween(rightArmX, rightArmY, stringCenterX, stringCenterY);
-        }
-
-    }
-
-    private drawXBow(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
-        // X-Bow state
-        const angle = building?.ballistaAngle ?? 0;
-        const stringTension = building?.ballistaStringTension ?? 0;
-        const time = this.time.now;
-
-        // Calculate rotation
-        const cos = Math.cos(angle);
-        const sin = Math.sin(angle);
-        const heightOffset = -18; // Height above ground
-
-        // === HEAVY FORTIFIED STONE BASE ===
-        const baseHeight = 8;
-
-        // Side faces (isometric depth)
-        graphics.fillStyle(0x5a5a5a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(c2.x, c2.y);
-        graphics.lineTo(c3.x, c3.y);
-        graphics.lineTo(c3.x, c3.y + baseHeight);
-        graphics.lineTo(c2.x, c2.y + baseHeight);
-        graphics.closePath();
-        graphics.fillPath();
-
-        graphics.fillStyle(0x4a4a4a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(c3.x, c3.y);
-        graphics.lineTo(c4.x, c4.y);
-        graphics.lineTo(c4.x, c4.y + baseHeight);
-        graphics.lineTo(c3.x, c3.y + baseHeight);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Top face
-        graphics.fillStyle(tint ?? 0x6a6a6a, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
-
-        // Stone block pattern
-        graphics.lineStyle(1, 0x5a5a5a, alpha * 0.5);
-        graphics.lineBetween(c1.x, c1.y, c3.x, c3.y);
-        graphics.lineBetween(c2.x, c2.y, c4.x, c4.y);
-
-        // Border
-        graphics.lineStyle(2, 0x4a4a4a, 0.7 * alpha);
-        graphics.strokePoints([c1, c2, c3, c4], true, true);
-
-        // === METAL ROTATING PLATFORM ===
-        const baseRadiusX = 24;
-        const baseRadiusY = 14;
-        const baseY = center.y - 4;
-
-        // Shadow
-        graphics.fillStyle(0x1a1a1a, alpha * 0.4);
-        graphics.fillEllipse(center.x + 2, baseY + 4, baseRadiusX, baseRadiusY);
-
-        // Dark metal platform
-        graphics.fillStyle(0x3a3a4a, alpha);
-        graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-
-        // Metal segment lines
-        graphics.lineStyle(1, 0x2a2a3a, alpha * 0.6);
-        for (let i = 0; i < 8; i++) {
-            const ang = (i / 8) * Math.PI * 2;
-            const x1 = center.x + Math.cos(ang) * (baseRadiusX - 2);
-            const y1 = baseY + Math.sin(ang) * (baseRadiusY - 1);
-            graphics.lineBetween(center.x, baseY, x1, y1);
-        }
-
-        // Outer ring
-        graphics.lineStyle(3, 0x4a4a5a, alpha);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-        graphics.lineStyle(1, 0x5a5a6a, alpha * 0.6);
-        graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
-
-        // Bolts
-        graphics.fillStyle(0x555560, alpha);
-        for (let i = 0; i < 8; i++) {
-            const ang = (i / 8) * Math.PI * 2;
-            const rx = center.x + Math.cos(ang) * (baseRadiusX - 3);
-            const ry = baseY + Math.sin(ang) * (baseRadiusY - 2);
-            graphics.fillCircle(rx, ry, 2);
-        }
-
-        // === CENTRAL PIVOT MECHANISM ===
-        graphics.fillStyle(0x2a2a3a, alpha);
-        graphics.fillCircle(center.x, baseY, 8);
-        graphics.fillStyle(0x3a3a4a, alpha);
-        graphics.fillCircle(center.x, baseY - 1, 6);
-        graphics.fillStyle(0x4a4a5a, alpha);
-        graphics.fillCircle(center.x, baseY - 2, 4);
-        graphics.fillStyle(0x5a5a6a, alpha * 0.6);
-        graphics.fillCircle(center.x - 1, baseY - 3, 2);
-
-        // === CROSSBOW BODY ===
-        // Define Front (Tip) and Back (Stock) relative to center using angle
-        // Front is +d along angle
-        const frontX = center.x + cos * 20;
-        const frontY = center.y + heightOffset + sin * 0.5 * 20;
-        const backX = center.x + cos * -20;
-        const backY = center.y + heightOffset + sin * 0.5 * -20;
-
-        // Draw Stock/Rail
-        graphics.lineStyle(10, 0x3a2515, alpha);
-        graphics.lineBetween(backX, backY, frontX, frontY);
-        // Highlight
-        graphics.lineStyle(6, 0x5a3520, alpha);
-        graphics.lineBetween(backX, backY, frontX, frontY);
-
-        // === ARMS (Mounted at Front) ===
-        // Arms extend perpendicular to aim
-        const armSpan = 30;
-        const armX = -sin * armSpan;
-        const armY = cos * 0.5 * armSpan;
-
-        // Mount point slightly behind tip
-        const mountX = center.x + cos * 15;
-        const mountY = center.y + heightOffset + sin * 0.5 * 15;
-
-        const lArmX = mountX + armX;
-        const lArmY = mountY + armY;
-        const rArmX = mountX - armX;
-        const rArmY = mountY - armY;
-
-        graphics.lineStyle(5, 0x4a2a10, alpha);
-        graphics.lineBetween(mountX, mountY, lArmX, lArmY);
-        graphics.lineBetween(mountX, mountY, rArmX, rArmY);
-
-        // Tips
-        graphics.fillStyle(0x888888, alpha);
-        graphics.fillCircle(lArmX, lArmY, 3);
-        graphics.fillCircle(rArmX, rArmY, 3);
-
-        // === STRING (Single) ===
-        // Connects tips to Nock. Nock moves with tension.
-        const pull = stringTension * 12; // 0 to 12px back
-        // Resting nock position (mid-rail) -> Pulled back (near stock)
-        // Resting: -5. Pulled: -17.
-        const nockOffset = -5 - pull;
-        const nockX = center.x + cos * nockOffset;
-        const nockY = center.y + heightOffset + sin * 0.5 * nockOffset;
-
-        graphics.lineStyle(1.5, 0xdddddd, alpha); // Thin string
-        graphics.lineBetween(lArmX, lArmY, nockX, nockY);
-        graphics.lineBetween(rArmX, rArmY, nockX, nockY);
-
-        // === BOLT (If loaded) ===
-        if (stringTension > 0.1) {
-            const boltTipX = frontX;
-            const boltTipY = frontY;
-            graphics.lineStyle(2, 0xffff00, alpha);
-            graphics.lineBetween(nockX, nockY, boltTipX, boltTipY);
-        }
-
-        // Firing Glow
-        const firingGlow = 0.3 + Math.sin(time / 50) * 0.2;
-        graphics.fillStyle(0xff8844, alpha * firingGlow);
-        graphics.fillCircle(frontX, frontY, 4);
-    }
-
-    private drawXBowLevel2(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
-        // LEVEL 2 X-BOW: Enhanced with purple/magenta accents and energy effects
-        const angle = building?.ballistaAngle ?? 0;
-        const stringTension = building?.ballistaStringTension ?? 0;
-        const time = this.time.now;
-
-        const cos = Math.cos(angle);
-        const sin = Math.sin(angle);
-        const heightOffset = -20; // Slightly higher
-
-        // === ENHANCED FORTIFIED BASE ===
-        const baseHeight = 10;
-
-        // Side faces with purple tint
-        graphics.fillStyle(0x5a5a6a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(c2.x, c2.y);
-        graphics.lineTo(c3.x, c3.y);
-        graphics.lineTo(c3.x, c3.y + baseHeight);
-        graphics.lineTo(c2.x, c2.y + baseHeight);
-        graphics.closePath();
-        graphics.fillPath();
-
-        graphics.fillStyle(0x4a4a5a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(c3.x, c3.y);
-        graphics.lineTo(c4.x, c4.y);
-        graphics.lineTo(c4.x, c4.y + baseHeight);
-        graphics.lineTo(c3.x, c3.y + baseHeight);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Top face
-        graphics.fillStyle(tint ?? 0x6a6a7a, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
-
-        // Stone pattern
-        graphics.lineStyle(1, 0x5a5a6a, alpha * 0.5);
-        graphics.lineBetween(c1.x, c1.y, c3.x, c3.y);
-        graphics.lineBetween(c2.x, c2.y, c4.x, c4.y);
-        const mid12 = { x: (c1.x + c2.x) / 2, y: (c1.y + c2.y) / 2 };
-        const mid34 = { x: (c3.x + c4.x) / 2, y: (c3.y + c4.y) / 2 };
-        graphics.lineBetween(mid12.x, mid12.y, mid34.x, mid34.y);
-
-        // Dark grey corner accents
-        graphics.fillStyle(0x444444, alpha * 0.9);
-        graphics.fillCircle(c1.x, c1.y, 4);
-        graphics.fillCircle(c2.x, c2.y, 3);
-        graphics.fillCircle(c3.x, c3.y, 3);
-        graphics.fillCircle(c4.x, c4.y, 3);
-        // Subtle grey glow
-        graphics.fillStyle(0x666666, alpha * 0.4);
-        graphics.fillCircle(c1.x, c1.y, 6);
-
-        graphics.lineStyle(2, 0x4a4a5a, 0.7 * alpha);
-        graphics.strokePoints([c1, c2, c3, c4], true, true);
-
-        // === ENHANCED METAL PLATFORM ===
-        const baseRadiusX = 26;
-        const baseRadiusY = 15;
-        const baseY = center.y - 5;
-
-        // Shadow
-        graphics.fillStyle(0x1a1a2a, alpha * 0.4);
-        graphics.fillEllipse(center.x + 2, baseY + 5, baseRadiusX, baseRadiusY);
-
-        // Dark grey metal platform
-        graphics.fillStyle(0x333333, alpha);
-        graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-
-        // Geometric pattern
-        graphics.lineStyle(1, 0x444444, alpha * 0.4);
-        for (let i = 0; i < 8; i++) {
-            const ang = (i / 8) * Math.PI * 2 + time / 2000;
-            const x1 = center.x + Math.cos(ang) * (baseRadiusX - 2);
-            const y1 = baseY + Math.sin(ang) * (baseRadiusY - 1);
-            graphics.lineBetween(center.x, baseY, x1, y1);
-        }
-
-        // Dark grey outer ring
-        graphics.lineStyle(4, 0x3a3a3a, alpha);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-        graphics.lineStyle(2, 0x555555, alpha * 0.5);
-        graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
-
-        // Dark grey rivets
-        graphics.fillStyle(0x444444, alpha);
-        for (let i = 0; i < 10; i++) {
-            const ang = (i / 10) * Math.PI * 2;
-            const rx = center.x + Math.cos(ang) * (baseRadiusX - 3);
-            const ry = baseY + Math.sin(ang) * (baseRadiusY - 2);
-            graphics.fillCircle(rx, ry, 2.5);
-            graphics.fillStyle(0x666666, alpha * 0.5);
-            graphics.fillCircle(rx - 0.5, ry - 0.5, 1);
-            graphics.fillStyle(0x444444, alpha);
-        }
-
-        // === ENHANCED DARK GREY PIVOT ===
-        graphics.fillStyle(0x2a2a2a, alpha);
-        graphics.fillCircle(center.x, baseY, 10);
-        graphics.fillStyle(0x3a3a3a, alpha);
-        graphics.fillCircle(center.x, baseY - 1, 7);
-        graphics.fillStyle(0x444444, alpha);
-        graphics.fillCircle(center.x, baseY - 2, 4);
-        // Core highlight
-        graphics.fillStyle(0x666666, alpha * 0.6);
-        graphics.fillCircle(center.x, baseY - 2, 2);
-
-        // === ENHANCED CROSSBOW BODY ===
-        const frontX = center.x + cos * 22;
-        const frontY = center.y + heightOffset + sin * 0.5 * 22;
-        const backX = center.x + cos * -22;
-        const backY = center.y + heightOffset + sin * 0.5 * -22;
-
-        // Enhanced rail
-        graphics.lineStyle(12, 0x2a2a3a, alpha);
-        graphics.lineBetween(backX, backY, frontX, frontY);
-        graphics.lineStyle(8, 0x333333, alpha);
-        graphics.lineBetween(backX, backY, frontX, frontY);
-        graphics.lineStyle(4, 0x444444, alpha);
-        graphics.lineBetween(backX, backY, frontX, frontY);
-
-        // Dark grey line along rail
-        graphics.lineStyle(2, 0x444444, alpha * 0.7);
-        graphics.lineBetween(backX, backY, frontX, frontY);
-
-        // === ENHANCED ARMS ===
-        const armSpan = 34;
-        const armX = -sin * armSpan;
-        const armY = cos * 0.5 * armSpan;
-
-        const mountX = center.x + cos * 17;
-        const mountY = center.y + heightOffset + sin * 0.5 * 17;
-
-        const lArmX = mountX + armX;
-        const lArmY = mountY + armY;
-        const rArmX = mountX - armX;
-        const rArmY = mountY - armY;
-
-        // Shadow
-        graphics.lineStyle(7, 0x1a1a2a, alpha);
-        graphics.lineBetween(mountX, mountY, lArmX, lArmY);
-        graphics.lineBetween(mountX, mountY, rArmX, rArmY);
-
-        // Dark arms
-        graphics.lineStyle(5, 0x333333, alpha);
-        graphics.lineBetween(mountX, mountY, lArmX, lArmY);
-        graphics.lineBetween(mountX, mountY, rArmX, rArmY);
-
-        // Arm highlights
-        graphics.lineStyle(3, 0x444444, alpha);
-        graphics.lineBetween(mountX, mountY, lArmX, lArmY);
-        graphics.lineBetween(mountX, mountY, rArmX, rArmY);
-
-        // Dark grey tips
-        graphics.fillStyle(0x2a2a2a, alpha);
-        graphics.fillCircle(lArmX, lArmY, 5);
-        graphics.fillCircle(rArmX, rArmY, 5);
-        graphics.fillStyle(0x444444, alpha);
-        graphics.fillCircle(lArmX, lArmY, 3);
-        graphics.fillCircle(rArmX, rArmY, 3);
-        graphics.fillStyle(0x666666, alpha * 0.6);
-        graphics.fillCircle(lArmX - 0.5, lArmY - 0.5, 1.5);
-        graphics.fillCircle(rArmX - 0.5, rArmY - 0.5, 1.5);
-
-        // === ENERGY STRING ===
-        const pull = stringTension * 14;
-        const nockOffset = -6 - pull;
-        const nockX = center.x + cos * nockOffset;
-        const nockY = center.y + heightOffset + sin * 0.5 * nockOffset;
-
-        // Reinforced string effect
-        graphics.lineStyle(2, 0x555555, alpha);
-        graphics.lineBetween(lArmX, lArmY, nockX, nockY);
-        graphics.lineBetween(rArmX, rArmY, nockX, nockY);
-        graphics.lineStyle(1, 0x777777, alpha * 0.7);
-        graphics.lineBetween(lArmX, lArmY, nockX, nockY);
-        graphics.lineBetween(rArmX, rArmY, nockX, nockY);
-
-        // Reinforced bolt
-        if (stringTension > 0.1) {
-            const boltTipX = frontX;
-            const boltTipY = frontY;
-            graphics.lineStyle(4, 0x333333, alpha * 0.5);
-            graphics.lineBetween(nockX, nockY, boltTipX, boltTipY);
-            graphics.lineStyle(2, 0x555555, alpha);
-            graphics.lineBetween(nockX, nockY, boltTipX, boltTipY);
-            graphics.lineStyle(1, 0x777777, alpha * 0.8);
-            graphics.lineBetween(nockX, nockY, boltTipX, boltTipY);
-        }
-
-        // Subtle firing effect
-        const firingGlow = 0.2 + Math.sin(time / 60) * 0.1;
-        graphics.fillStyle(0x666666, alpha * firingGlow * 0.5);
-        graphics.fillCircle(frontX, frontY, 8);
-        graphics.fillStyle(0x888888, alpha * firingGlow);
-        graphics.fillCircle(frontX, frontY, 5);
-    }
-
-    private drawGoldMine(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
-        const time = this.time.now;
-        const level = building?.level ?? 1;
-        const isLevel2 = level >= 2;
-        const isLevel3 = level >= 3;
-        const isLevel4 = level >= 4;
-        const isLevel5 = level >= 5;
-
-        // === ROCKY GROUND BASE ===
-        const baseColor = isLevel5 ? 0x5a5a5a : (isLevel4 ? 0x8a7a6a : (isLevel3 ? 0x7d6d5d : (isLevel2 ? 0x7a6a5a : 0x6b5a4a)));
-        graphics.fillStyle(tint ?? baseColor, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
-        const borderColor = isLevel5 ? 0x777777 : (isLevel3 ? 0x9b8365 : (isLevel2 ? 0x8b7355 : 0x4a3a2a));
-        graphics.lineStyle(isLevel5 ? 3 : (isLevel3 ? 2 : (isLevel2 ? 2 : 1)), borderColor, 0.6 * alpha);
-        graphics.strokePoints([c1, c2, c3, c4], true, true);
-
-        // Level 2+: Gold-trimmed corners (L5 uses metal)
-        if (isLevel2) {
-            const cornerColor = isLevel5 ? 0x888888 : (isLevel4 ? 0xeecc00 : (isLevel3 ? 0xe0b000 : 0xdaa520));
-            graphics.fillStyle(cornerColor, alpha * 0.8);
-            graphics.fillCircle(c1.x, c1.y, isLevel5 ? 5 : (isLevel4 ? 4 : 3));
-            graphics.fillCircle(c2.x, c2.y, isLevel5 ? 4 : (isLevel3 ? 3 : 2));
-            graphics.fillCircle(c3.x, c3.y, isLevel5 ? 4 : (isLevel3 ? 3 : 2));
-            graphics.fillCircle(c4.x, c4.y, isLevel5 ? 5 : (isLevel4 ? 4 : 2));
-            // L5: Metal bolt highlights
-            if (isLevel5) {
-                graphics.fillStyle(0xaaaaaa, alpha * 0.6);
-                graphics.fillCircle(c1.x, c1.y - 1, 2);
-                graphics.fillCircle(c3.x, c3.y - 1, 2);
-            }
-        }
-
-        // L4+: Rim highlights (L5 uses steel)
-        if (isLevel4) {
-            graphics.lineStyle(1, isLevel5 ? 0x999999 : 0xcccccc, alpha * 0.5);
-            graphics.lineBetween(c1.x, c1.y, c2.x, c2.y);
-            graphics.lineBetween(c1.x, c1.y, c4.x, c4.y);
-        }
-
-        // Scattered rocks/dirt texture (reduced for L5 industrial)
-        if (!isLevel5) {
-            graphics.fillStyle(0x5a4a3a, alpha * 0.6);
-            graphics.fillCircle(center.x - 15, center.y + 6, 5);
-            graphics.fillCircle(center.x + 12, center.y + 4, 4);
-            graphics.fillCircle(center.x - 8, center.y + 10, 3);
-            graphics.fillStyle(0x7a6a5a, alpha * 0.4);
-            graphics.fillCircle(center.x + 5, center.y + 8, 3);
-        } else {
-            // L5: Metal floor plates
-            graphics.fillStyle(0x666666, alpha * 0.5);
-            graphics.fillRect(center.x - 18, center.y + 3, 10, 6);
-            graphics.fillRect(center.x + 8, center.y + 5, 10, 5);
-        }
-
-        // === MINE SHAFT ENTRANCE (dark tunnel) ===
-        // Entrance frame - wooden supports
-        graphics.fillStyle(0x3a2a1a, alpha);
-        graphics.fillRect(center.x - 12, center.y - 8, 4, 16);
-        graphics.fillRect(center.x + 8, center.y - 8, 4, 16);
-
-        // Entrance top beam
-        graphics.fillStyle(0x4a3a2a, alpha);
-        graphics.fillRect(center.x - 14, center.y - 12, 28, 5);
-        graphics.fillStyle(0x5a4a3a, alpha);
-        graphics.fillRect(center.x - 13, center.y - 11, 26, 2);
-
-        // Dark tunnel interior
-        graphics.fillStyle(0x1a1a1a, alpha);
-        graphics.fillRect(center.x - 8, center.y - 6, 16, 14);
-        graphics.fillStyle(0x0a0a0a, alpha);
-        graphics.fillRect(center.x - 6, center.y - 4, 12, 10);
-
-        // === MINE CART TRACKS ===
-        graphics.lineStyle(2, 0x555555, alpha);
-        graphics.lineBetween(center.x - 6, center.y + 8, center.x + 20, center.y + 2);
-        graphics.lineBetween(center.x - 2, center.y + 10, center.x + 24, center.y + 4);
-
-        // Track ties
-        graphics.fillStyle(0x3a2a1a, alpha);
-        for (let i = 0; i < 4; i++) {
-            const tx = center.x - 4 + i * 7;
-            const ty = center.y + 9 - i * 1.5;
-            graphics.fillRect(tx, ty, 6, 2);
-        }
-
-        // === ANIMATED MINE CART ===
-        const cartCycle = (time / 2000) % 1;
-        const cartInTunnel = cartCycle < 0.3 || cartCycle > 0.8;
-
-        if (!cartInTunnel) {
-            const cartProgress = (cartCycle - 0.3) / 0.5; // 0 to 1 while visible
-            const cartX = center.x - 4 + cartProgress * 16;
-            const cartY = center.y + 6 - cartProgress * 3;
-
-            // Cart body
-            graphics.fillStyle(0x5a5a5a, alpha);
-            graphics.fillRect(cartX - 6, cartY - 8, 12, 8);
-            graphics.fillStyle(0x4a4a4a, alpha);
-            graphics.fillRect(cartX - 5, cartY - 7, 10, 6);
-
-            // Gold ore in cart
-            graphics.fillStyle(0xffd700, alpha);
-            graphics.fillCircle(cartX - 2, cartY - 6, 3);
-            graphics.fillCircle(cartX + 2, cartY - 5, 2);
-            graphics.fillCircle(cartX, cartY - 8, 2);
-
-            // Cart wheels
-            graphics.fillStyle(0x333333, alpha);
-            graphics.fillCircle(cartX - 4, cartY, 2);
-            graphics.fillCircle(cartX + 4, cartY, 2);
-        }
-
-        // === HEADFRAME TOWER ===
-        // L5: Metal industrial tower, otherwise wooden
-        const beamColor = isLevel5 ? 0x555555 : 0x4a3a2a;
-        const beamColorLight = isLevel5 ? 0x666666 : 0x5a4a3a;
-        const beamColorDark = isLevel5 ? 0x444444 : 0x4a3a2a;
-
-        // Main support beams (A-frame)
-        graphics.fillStyle(beamColor, alpha);
-        graphics.fillRect(center.x - 20, center.y - 35, isLevel5 ? 5 : 4, 40);
-        graphics.fillRect(center.x - 6, center.y - 35, isLevel5 ? 5 : 4, 40);
-
-        // L5: Metal beam highlights
-        if (isLevel5) {
-            graphics.fillStyle(0x777777, alpha * 0.6);
-            graphics.fillRect(center.x - 19, center.y - 35, 1, 40);
-            graphics.fillRect(center.x - 5, center.y - 35, 1, 40);
-        }
-
-        // Cross beams
-        graphics.fillStyle(beamColorLight, alpha);
-        graphics.fillRect(center.x - 21, center.y - 30, 20, isLevel5 ? 4 : 3);
-        graphics.fillRect(center.x - 21, center.y - 18, 20, isLevel5 ? 4 : 3);
-
-        // Diagonal bracing
-        graphics.lineStyle(isLevel5 ? 3 : 2, beamColorDark, alpha);
-        graphics.lineBetween(center.x - 19, center.y - 28, center.x - 5, center.y - 16);
-        graphics.lineBetween(center.x - 19, center.y - 16, center.x - 5, center.y - 28);
-
-        // Pulley wheel at top (larger for L5)
-        const pulleySize = isLevel5 ? 7 : 5;
-        graphics.fillStyle(isLevel5 ? 0x666666 : 0x555555, alpha);
-        graphics.fillCircle(center.x - 13, center.y - 38, pulleySize);
-        graphics.fillStyle(isLevel5 ? 0x888888 : 0x666666, alpha);
-        graphics.fillCircle(center.x - 13, center.y - 38, pulleySize - 2);
-
-        // Animated wheel rotation
-        const wheelAngle = time / (isLevel5 ? 300 : 400);  // Faster for L5
-        graphics.lineStyle(isLevel5 ? 2 : 1, isLevel5 ? 0x555555 : 0x444444, alpha);
-        for (let i = 0; i < 4; i++) {
-            const a = wheelAngle + (i / 4) * Math.PI * 2;
-            graphics.lineBetween(
-                center.x - 13 + Math.cos(a) * (pulleySize - 1),
-                center.y - 38 + Math.sin(a) * (pulleySize - 1),
-                center.x - 13 - Math.cos(a) * (pulleySize - 1),
-                center.y - 38 - Math.sin(a) * (pulleySize - 1)
-            );
-        }
-
-        // L5: Secondary gear
-        if (isLevel5) {
-            graphics.fillStyle(0x666666, alpha);
-            graphics.fillCircle(center.x - 5, center.y - 42, 4);
-            graphics.fillStyle(0x888888, alpha * 0.7);
-            graphics.fillCircle(center.x - 5, center.y - 42, 2);
-            // Gear teeth hint
-            graphics.lineStyle(1, 0x555555, alpha);
-            for (let i = 0; i < 4; i++) {
-                const a = -wheelAngle * 1.5 + (i / 4) * Math.PI * 2;
-                graphics.lineBetween(
-                    center.x - 5 + Math.cos(a) * 3,
-                    center.y - 42 + Math.sin(a) * 3,
-                    center.x - 5 - Math.cos(a) * 3,
-                    center.y - 42 - Math.sin(a) * 3
-                );
-            }
-        }
-
-        // Rope/chain from pulley
-        graphics.lineStyle(isLevel5 ? 2 : 1, isLevel5 ? 0x555555 : 0x8b7355, alpha);
-        graphics.lineBetween(center.x - 13, center.y - 33, center.x - 13, center.y - 5);
-
-        // === GOLD ORE PILES ===
-        const pileScale = isLevel5 ? 1.5 : (isLevel4 ? 1.3 : (isLevel3 ? 1.15 : (isLevel2 ? 1.0 : 0.85)));
-        // Large pile
-        graphics.fillStyle(isLevel5 ? 0xab9375 : (isLevel4 ? 0x9b8365 : 0x8b7355), alpha);
-        graphics.fillCircle(center.x + 18, center.y - 2, 8 * pileScale);
-        graphics.fillCircle(center.x + 22, center.y + 2, 6 * pileScale);
-
-        // Level 2+: Extra gold pile
-        if (isLevel2) {
-            graphics.fillStyle(isLevel5 ? 0xbb9a85 : (isLevel3 ? 0xab9375 : 0x9b8365), alpha);
-            graphics.fillCircle(center.x + 26, center.y - 1, 5 * pileScale);
-        }
-
-        // L3+: Third pile
-        if (isLevel3) {
-            graphics.fillStyle(0x9b8365, alpha);
-            graphics.fillCircle(center.x + 14, center.y + 3, 4 * pileScale);
-        }
-
-        // Gold chunks in pile
-        graphics.fillStyle(isLevel5 ? 0xffee00 : (isLevel4 ? 0xffe000 : 0xffd700), alpha);
-        graphics.fillCircle(center.x + 16, center.y - 4, 3 * pileScale);
-        graphics.fillCircle(center.x + 20, center.y - 1, 4 * pileScale);
-        graphics.fillCircle(center.x + 24, center.y + 1, 2.5 * pileScale);
-        graphics.fillCircle(center.x + 18, center.y, 2.5 * pileScale);
-
-        // Level 2+: Extra gold chunks
-        if (isLevel2) {
-            graphics.fillCircle(center.x + 26, center.y - 2, 3);
-            graphics.fillCircle(center.x + 14, center.y - 2, 2);
-            graphics.fillCircle(center.x + 22, center.y - 3, 2);
-        }
-
-        // L4+: Refined gold bars (stacked) - more for L5
-        if (isLevel4) {
-            graphics.fillStyle(0xffd700, alpha);
-            graphics.fillRect(center.x + 10, center.y + 4, isLevel5 ? 10 : 8, 3);
-            graphics.fillStyle(0xffe855, alpha);
-            graphics.fillRect(center.x + 11, center.y + 4, isLevel5 ? 8 : 6, 1);
-            graphics.fillStyle(0xeec000, alpha);
-            graphics.fillRect(center.x + 11, center.y + 2, 7, 2);
-        }
-
-        // Sparkling gold highlights (animated)
-        const sparkle1 = 0.5 + Math.sin(time / 150) * 0.5;
-        const sparkle2 = 0.5 + Math.sin(time / 180 + 1) * 0.5;
-        const sparkle3 = 0.5 + Math.sin(time / 200 + 2) * 0.5;
-
-        graphics.fillStyle(isLevel4 ? 0xffffaa : 0xffff88, alpha * sparkle1);
-        graphics.fillCircle(center.x + 17, center.y - 5, 1.5 * pileScale);
-        graphics.fillStyle(isLevel4 ? 0xffffaa : 0xffff88, alpha * sparkle2);
-        graphics.fillCircle(center.x + 21, center.y - 2, 1.5 * pileScale);
-        graphics.fillStyle(0xffffaa, alpha * sparkle3);
-        graphics.fillCircle(center.x + 19, center.y - 3, 1 * pileScale);
-
-        // Level 2+: Extra sparkles
-        if (isLevel2) {
-            const sparkle4 = 0.5 + Math.sin(time / 120 + 3) * 0.5;
-            const sparkle5 = 0.5 + Math.sin(time / 160 + 4) * 0.5;
-            graphics.fillStyle(0xffff66, alpha * sparkle4);
-            graphics.fillCircle(center.x + 25, center.y - 1, 1.5);
-            graphics.fillStyle(0xffffcc, alpha * sparkle5);
-            graphics.fillCircle(center.x + 15, center.y - 3, 1);
-        }
-
-        // L3+: More sparkles
-        if (isLevel3) {
-            const sparkle6 = 0.5 + Math.sin(time / 100 + 5) * 0.5;
-            graphics.fillStyle(0xffffdd, alpha * sparkle6);
-            graphics.fillCircle(center.x + 13, center.y + 2, 1.2);
-        }
-
-        // === LANTERNS ===
-        // Left lantern on post
-        graphics.fillStyle(0x4a3a2a, alpha);
-        graphics.fillRect(center.x - 24, center.y - 5, 2, 12);
-
-        // Lantern glow (animated flicker)
-        const flicker = 0.7 + Math.sin(time / 80) * 0.3;
-        graphics.fillStyle(0xff8800, alpha * flicker);
-        graphics.fillCircle(center.x - 23, center.y - 8, isLevel3 ? 4 : 3);
-        graphics.fillStyle(0xffcc44, alpha * flicker * 0.8);
-        graphics.fillCircle(center.x - 23, center.y - 9, isLevel3 ? 2.5 : 2);
-
-        // Small gold coin/nugget detail near entrance
-        graphics.fillStyle(0xffd700, alpha);
-        graphics.fillCircle(center.x + 6, center.y + 5, isLevel3 ? 2.5 : 2);
-        graphics.fillCircle(center.x + 3, center.y + 7, isLevel3 ? 2 : 1.5);
-    }
-
-    private drawElixirCollector(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
-        // Purple/pink theme for elixir
-        const level = building?.level ?? 1;
-        const isLevel2 = level >= 2;
-        const isLevel3 = level >= 3;
-        const isLevel4 = level >= 4;
-        const isLevel5 = level >= 5;
-
-        const purpleDark = tint ?? (isLevel5 ? 0x9c64b3 : (isLevel4 ? 0x8c54a3 : (isLevel3 ? 0x7c4493 : (isLevel2 ? 0x7c4493 : 0x6c3483))));
-        const purpleMid = tint ?? (isLevel5 ? 0xbe74dd : (isLevel4 ? 0xae64cd : (isLevel3 ? 0x9e54bd : (isLevel2 ? 0x9e54bd : 0x8e44ad))));
-        const purpleLight = tint ?? (isLevel5 ? 0xd599ed : (isLevel4 ? 0xc589dd : (isLevel3 ? 0xb579cd : (isLevel2 ? 0xb579cd : 0xa569bd))));
-
-        // Stone base (enhanced for higher levels)
-        const baseColor = isLevel4 ? 0x7a7a7a : (isLevel3 ? 0x6f6f6f : (isLevel2 ? 0x6a6a6a : 0x5a5a5a));
-        graphics.fillStyle(baseColor, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
-        graphics.lineStyle(isLevel3 ? 2 : (isLevel2 ? 2 : 1), isLevel3 ? 0xbb8fce : (isLevel2 ? 0x9b59b6 : 0x3a3a3a), 0.5 * alpha);
-        graphics.strokePoints([c1, c2, c3, c4], true, true);
-
-        // Level 2+: Purple-trimmed corners
-        if (isLevel2) {
-            const cornerColor = isLevel4 ? 0xd7bde2 : (isLevel3 ? 0xc9a8d8 : 0xbb8fce);
-            graphics.fillStyle(cornerColor, alpha * 0.8);
-            graphics.fillCircle(c1.x, c1.y, isLevel4 ? 4 : 3);
-            graphics.fillCircle(c2.x, c2.y, isLevel3 ? 3 : 2);
-            graphics.fillCircle(c3.x, c3.y, isLevel3 ? 3 : 2);
-            graphics.fillCircle(c4.x, c4.y, isLevel4 ? 4 : 2);
-        }
-
-        // L4: Crystal purple rim highlights
-        if (isLevel4) {
-            graphics.lineStyle(1, 0xe8daef, alpha * 0.5);
-            graphics.lineBetween(c1.x, c1.y, c2.x, c2.y);
-            graphics.lineBetween(c1.x, c1.y, c4.x, c4.y);
-        }
-
-        // Elixir tank (glass container) - larger for higher levels
-        const tankScale = isLevel4 ? 1.2 : (isLevel3 ? 1.1 : 1.0);
-        const tankHeight = (isLevel2 ? 34 : 30) * tankScale;
-        const tankWidth = (isLevel2 ? 20 : 18) * tankScale;
-
-        // Tank back (darker)
-        graphics.fillStyle(purpleDark, alpha * 0.8);
-        graphics.fillEllipse(center.x, center.y - 5, tankWidth, tankWidth * 0.5);
-
-        // Tank body (glass effect)
-        graphics.fillStyle(purpleMid, alpha * 0.7);
-        graphics.fillRect(center.x - tankWidth / 2, center.y - 5 - tankHeight, tankWidth, tankHeight);
-
-        // Tank shine (glass reflection)
-        const shineAlpha = isLevel4 ? 0.3 : (isLevel3 ? 0.28 : (isLevel2 ? 0.25 : 0.2));
-        graphics.fillStyle(0xffffff, shineAlpha * alpha);
-        graphics.fillRect(center.x - tankWidth / 2 + 3, center.y - 5 - tankHeight + 3, isLevel3 ? 6 : (isLevel2 ? 5 : 4), tankHeight - 6);
-
-        // Level 2+: Secondary shine
-        if (isLevel2) {
-            graphics.fillStyle(0xffffff, (isLevel3 ? 0.18 : 0.15) * alpha);
-            graphics.fillRect(center.x + tankWidth / 2 - 6, center.y - 5 - tankHeight + 5, isLevel3 ? 3 : 2, tankHeight - 10);
-        }
-
-        // Tank top cap
-        graphics.fillStyle(purpleLight, alpha);
-        graphics.fillEllipse(center.x, center.y - 5 - tankHeight, tankWidth, tankWidth * 0.5);
-
-        // Level 2+: Glowing rim
-        if (isLevel2) {
-            graphics.lineStyle(isLevel4 ? 3 : 2, isLevel4 ? 0xe8daef : 0xd7bde2, alpha * (isLevel3 ? 0.7 : 0.6));
-            graphics.strokeEllipse(center.x, center.y - 5 - tankHeight, tankWidth - 2, (tankWidth - 2) * 0.5);
-        }
-
-        // Pump mechanism on top
-        const time = this.time.now / 300;
-        const pumpOffset = Math.sin(time) * (isLevel3 ? 5 : (isLevel2 ? 4 : 3));
-
-        // Pump base (reinforced for higher levels)
-        graphics.fillStyle(isLevel3 ? 0x6a6a6a : (isLevel2 ? 0x5a5a5a : 0x4a4a4a), alpha);
-        graphics.fillRect(center.x - 4, center.y - tankHeight - 20, 8, 10);
-
-        // L2+: Metal bands on pump
-        if (isLevel2 && !isLevel5) {
-            graphics.fillStyle(isLevel4 ? 0xbb8fce : 0x9b59b6, alpha * 0.7);
-            graphics.fillRect(center.x - 5, center.y - tankHeight - 20, 10, 2);
-            graphics.fillRect(center.x - 5, center.y - tankHeight - 12, 10, 2);
-        }
-
-        // Pump piston (animated up/down) - L1-L4 only
-        if (!isLevel5) {
-            graphics.fillStyle(isLevel3 ? 0x888888 : (isLevel2 ? 0x777777 : 0x666666), alpha);
-            graphics.fillRect(center.x - 2, center.y - tankHeight - 25 + pumpOffset, 4, 8);
-
-            // Pump handle
-            graphics.lineStyle(2, isLevel3 ? 0x777777 : (isLevel2 ? 0x666666 : 0x555555), alpha);
-            graphics.lineBetween(center.x, center.y - tankHeight - 25 + pumpOffset, center.x + 10, center.y - tankHeight - 20 + pumpOffset * 0.5);
-        } else {
-            // === L5: INDUSTRIAL DEEP EXTRACTION ===
-            // One big central pipe going into the ground with pump on top
-
-            // Big extraction pipe (main feature)
-            const pipeWidth = 14;
-
-            // Pipe shadow/depth
-            graphics.fillStyle(0x444444, alpha);
-            graphics.fillRect(center.x - pipeWidth / 2 - 1, center.y - 5, pipeWidth + 2, 18);
-
-            // Main pipe body
-            graphics.fillStyle(0x666666, alpha);
-            graphics.fillRect(center.x - pipeWidth / 2, center.y - 5, pipeWidth, 15);
-
-            // Pipe highlight (left edge)
-            graphics.fillStyle(0x888888, alpha * 0.7);
-            graphics.fillRect(center.x - pipeWidth / 2 + 1, center.y - 4, 2, 13);
-
-            // Pipe opening (dark hole going down)
-            graphics.fillStyle(0x222222, alpha);
-            graphics.fillEllipse(center.x, center.y + 8, pipeWidth - 2, 5);
-
-            // Pipe rim (top edge)
-            graphics.fillStyle(0x777777, alpha);
-            graphics.fillEllipse(center.x, center.y - 5, pipeWidth, 5);
-            graphics.fillStyle(0x555555, alpha);
-            graphics.fillEllipse(center.x, center.y - 5, pipeWidth - 4, 3);
-
-            // Connection pipe from tank to main pipe
-            graphics.fillStyle(0x666666, alpha);
-            graphics.fillRect(center.x - 3, center.y - tankHeight - 5, 6, tankHeight);
-            graphics.fillStyle(0x888888, alpha * 0.5);
-            graphics.fillRect(center.x - 2, center.y - tankHeight - 5, 1, tankHeight);
-
-            // Elixir flow inside connection pipe (animated) - only render within pipe bounds
-            const flowOffset = (time / 200) % 1;
-            const pipeTop = center.y - tankHeight - 5;
-            const pipeBottom = center.y - 5;
-            for (let i = 0; i < 3; i++) {
-                const flowY = pipeTop + ((flowOffset + i * 0.33) % 1) * tankHeight;
-                // Only draw if within pipe bounds
-                if (flowY >= pipeTop && flowY <= pipeBottom - 8) {
-                    graphics.fillStyle(purpleMid, alpha * 0.8);
-                    graphics.fillRect(center.x - 1, flowY, 2, 8);
-                }
-            }
-
-            // Industrial pump mechanism on top of tank
-            // Pump housing
-            graphics.fillStyle(0x555555, alpha);
-            graphics.fillRect(center.x - 8, center.y - tankHeight - 18, 16, 14);
-            graphics.fillStyle(0x666666, alpha);
-            graphics.fillRect(center.x - 7, center.y - tankHeight - 17, 14, 12);
-
-            // Pump highlight
-            graphics.fillStyle(0x777777, alpha * 0.6);
-            graphics.fillRect(center.x - 6, center.y - tankHeight - 16, 2, 10);
-
-            // Animated pump piston
-            graphics.fillStyle(0x888888, alpha);
-            graphics.fillRect(center.x - 2, center.y - tankHeight - 25 + pumpOffset, 4, 10);
-
-            // Pump top cap
-            graphics.fillStyle(0x666666, alpha);
-            graphics.fillEllipse(center.x, center.y - tankHeight - 25 + pumpOffset, 6, 2);
-
-            // Purple glow from pipe (elixir being extracted)
-            const glowPulse = 0.4 + Math.sin(time * 3) * 0.2;
-            graphics.fillStyle(purpleLight, alpha * glowPulse);
-            graphics.fillEllipse(center.x, center.y + 6, pipeWidth + 4, 8);
-        }
-
-        // Elixir bubbles (animated)
-        const bubbleTime = this.time.now / 200;
-        const bubbleCount = isLevel4 ? 7 : (isLevel3 ? 6 : (isLevel2 ? 5 : 3));
-        for (let i = 0; i < bubbleCount; i++) {
-            const bubbleY = ((bubbleTime + i * (isLevel3 ? 0.25 : (isLevel2 ? 0.35 : 0.5))) % 1) * tankHeight;
-            const bubbleX = Math.sin(bubbleTime * 2 + i) * (isLevel3 ? 6 : (isLevel2 ? 5 : 4));
-            graphics.fillStyle(isLevel4 ? 0xe8daef : 0xd7bde2, (isLevel3 ? 0.8 : (isLevel2 ? 0.7 : 0.6)) * alpha);
-            graphics.fillCircle(center.x + bubbleX, center.y - 5 - bubbleY, isLevel3 ? 3 : (isLevel2 ? 2.5 : 2));
-        }
-
-        // Level 2+: Glowing elixir particles
-        if (isLevel2) {
-            const glowTime = this.time.now / 150;
-            const particleCount = isLevel4 ? 5 : (isLevel3 ? 4 : 3);
-            for (let i = 0; i < particleCount; i++) {
-                const glow = 0.3 + Math.sin(glowTime + i * 2) * 0.3;
-                const px = center.x + Math.sin(glowTime * 0.5 + i * 2.5) * 6;
-                const py = center.y - 5 - tankHeight * 0.5 + Math.cos(glowTime * 0.3 + i) * 8;
-                graphics.fillStyle(isLevel4 ? 0xf0e8f5 : 0xe8daef, alpha * glow);
-                graphics.fillCircle(px, py, isLevel4 ? 2 : 1.5);
-            }
-        }
-
-        // L4: Magical sparkle effect near top
-        if (isLevel4) {
-            const sparkleTime = this.time.now / 100;
-            for (let i = 0; i < 3; i++) {
-                const sparkle = 0.4 + Math.sin(sparkleTime + i * 1.5) * 0.4;
-                const sx = center.x + Math.cos(sparkleTime * 0.8 + i * 2) * 8;
-                const sy = center.y - 5 - tankHeight + 5 + Math.sin(sparkleTime * 0.5 + i) * 5;
-                graphics.fillStyle(0xffffff, alpha * sparkle * 0.6);
-                graphics.fillCircle(sx, sy, 1);
-            }
-        }
-
-        // Wooden supports (reinforced for higher levels)
-        graphics.fillStyle(isLevel3 ? 0x7d6e57 : (isLevel2 ? 0x6d5e47 : 0x5d4e37), alpha);
-        graphics.fillRect(center.x - tankWidth / 2 - 3, center.y - 5, isLevel3 ? 5 : (isLevel2 ? 4 : 3), 8);
-        graphics.fillRect(center.x + tankWidth / 2 - (isLevel3 ? 2 : (isLevel2 ? 1 : 0)), center.y - 5, isLevel3 ? 5 : (isLevel2 ? 4 : 3), 8);
-
-        // Level 2+: Metal reinforcement bands on supports
-        if (isLevel2) {
-            graphics.fillStyle(isLevel4 ? 0xbb8fce : 0x9b59b6, alpha * (isLevel3 ? 0.7 : 0.6));
-            graphics.fillRect(center.x - tankWidth / 2 - 3, center.y - 3, isLevel3 ? 5 : 4, 2);
-            graphics.fillRect(center.x + tankWidth / 2 - (isLevel3 ? 2 : 1), center.y - 3, isLevel3 ? 5 : 4, 2);
-        }
-
-        // L4: Extra elixir pipe on side
-        if (isLevel4) {
-            graphics.fillStyle(0x9b59b6, alpha * 0.8);
-            graphics.fillRect(center.x + tankWidth / 2 + 2, center.y - tankHeight * 0.6, 3, 15);
-            graphics.fillStyle(0xbb8fce, alpha * 0.5);
-            graphics.fillRect(center.x + tankWidth / 2 + 3, center.y - tankHeight * 0.6 + 2, 1, 11);
-        }
-    }
-
-
-    private drawMortar(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
-        const time = this.time.now;
-        const level = building?.level ?? 1;
-        const isLevel2 = level >= 2;
-        const isLevel3 = level >= 3;
-        const size = isLevel3 ? 1.2 : (isLevel2 ? 1.12 : 1.0);
-
-        // Recoil animation - reduced movement + scale shrink for perspective effect
-        const timeSinceFire = building?.lastFireTime ? (time - building.lastFireTime) : 10000;
-        const recoilDuration = 400;
-        let recoil = 0;
-        let recoilScale = 1.0;
-        if (timeSinceFire < recoilDuration) {
-            const t = timeSinceFire / recoilDuration;
-            const recoilAmount = Math.sin(t * Math.PI);
-            recoil = recoilAmount * 5;
-            recoilScale = 1.0 - recoilAmount * 0.08;
-        }
-
-        // Subtle rotation - based on horizontal direction to target in screen space
-        const aimAngle = building?.ballistaAngle ?? 0;
-        const horizontalAim = Math.cos(aimAngle);
-
-        // Snap to 7 discrete positions
-        let rotationDeg = 0;
-        if (horizontalAim > 0.9) rotationDeg = 30;
-        else if (horizontalAim > 0.6) rotationDeg = 20;
-        else if (horizontalAim > 0.25) rotationDeg = 10;
-        else if (horizontalAim < -0.9) rotationDeg = -30;
-        else if (horizontalAim < -0.6) rotationDeg = -20;
-        else if (horizontalAim < -0.25) rotationDeg = -10;
-
-        // Colors - varies by level
-        const stoneBase = tint ?? (isLevel3 ? 0x5a5a5a : (isLevel2 ? 0x4a4540 : 0x5a5550));
-        const stoneDark = isLevel3 ? 0x4a4a4a : (isLevel2 ? 0x3a3530 : 0x4a4540);
-        const stoneLight = isLevel3 ? 0x7a7a7a : 0x6a6560;
-        const ironColor = isLevel3 ? 0x4a4a4a : (isLevel2 ? 0x3a3a3a : 0x4a4a4a);
-        const ironDark = isLevel3 ? 0x3a3a3a : (isLevel2 ? 0x2a2a2a : 0x3a3a3a);
-        const ironLight = isLevel3 ? 0x6a6a6a : (isLevel2 ? 0x4a4a4a : 0x5a5a5a);
-        const ironHighlight = isLevel3 ? 0xcccccc : null; // White/silver highlight for L3
-        const dirtColor = isLevel3 ? 0x4a4038 : 0x3a3020;
-
-        // Emplacement dimensions
-        const pitRadius = 22 * size;
-        const pitY = center.y + 2;
-        const baseElevation = isLevel3 ? 4 : 0; // L3 has elevated base
-
-        // ============================================
-        // STONE BASE PLATFORM
-        // ============================================
-        // L3: Draw elevated platform sides first
-        if (isLevel3) {
-            graphics.fillStyle(stoneDark, alpha);
-            // Front side of elevation
-            graphics.beginPath();
-            graphics.moveTo(c2.x, c2.y);
-            graphics.lineTo(c3.x, c3.y);
-            graphics.lineTo(c3.x, c3.y + baseElevation);
-            graphics.lineTo(c2.x, c2.y + baseElevation);
-            graphics.closePath();
-            graphics.fillPath();
-            // Right side
-            graphics.beginPath();
-            graphics.moveTo(c3.x, c3.y);
-            graphics.lineTo(c4.x, c4.y);
-            graphics.lineTo(c4.x, c4.y + baseElevation);
-            graphics.lineTo(c3.x, c3.y + baseElevation);
-            graphics.closePath();
-            graphics.fillPath();
-        }
-
-        // Main platform top
-        graphics.fillStyle(stoneBase, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
-
-        // Edge highlights
-        graphics.lineStyle(2, stoneLight, alpha * 0.6);
-        graphics.lineBetween(c1.x, c1.y, c2.x, c2.y);
-        graphics.lineBetween(c1.x, c1.y, c4.x, c4.y);
-        graphics.lineStyle(2, stoneDark, alpha * 0.6);
-        graphics.lineBetween(c2.x, c2.y, c3.x, c3.y);
-        graphics.lineBetween(c3.x, c3.y, c4.x, c4.y);
-
-        // L3: Stone rim around edge + decorative garnishes
-        if (isLevel3) {
-            graphics.lineStyle(3, 0x6a6a6a, alpha * 0.8);
-            graphics.strokePoints([c1, c2, c3, c4], true, true);
-
-            // Corner rivets/stones
-            graphics.fillStyle(0x7a7a7a, alpha);
-            graphics.fillCircle(c1.x, c1.y, 3);
-            graphics.fillCircle(c2.x, c2.y, 3);
-            graphics.fillCircle(c3.x, c3.y, 3);
-            graphics.fillCircle(c4.x, c4.y, 3);
-            // Inner highlight on rivets
-            graphics.fillStyle(0x9a9a9a, alpha * 0.8);
-            graphics.fillCircle(c1.x - 1, c1.y - 1, 1.5);
-            graphics.fillCircle(c2.x - 1, c2.y - 1, 1.5);
-            graphics.fillCircle(c3.x - 1, c3.y - 1, 1.5);
-            graphics.fillCircle(c4.x - 1, c4.y - 1, 1.5);
-
-            // Small decorative stones near emplacement
-            graphics.fillStyle(0x5a5a5a, alpha * 0.7);
-            graphics.fillCircle(center.x - 22, center.y - 8, 2.5);
-            graphics.fillCircle(center.x + 20, center.y - 6, 2);
-            graphics.fillCircle(center.x - 18, center.y + 10, 2);
-            graphics.fillCircle(center.x + 22, center.y + 8, 2.5);
-        }
-
-        // ============================================
-        // DIRT EMPLACEMENT (the pit the mortar sits in)
-        // ============================================
-        // Outer dirt ring
-        graphics.fillStyle(dirtColor, alpha);
-        graphics.fillEllipse(center.x, pitY, pitRadius * 2.2, pitRadius * 1.0);
-
-        // Inner dark pit
-        graphics.fillStyle(0x1a1510, alpha);
-        graphics.fillEllipse(center.x, pitY + 2, pitRadius * 1.8, pitRadius * 0.8);
-
-        // Deep shadow
-        graphics.fillStyle(0x0a0a08, alpha);
-        graphics.fillEllipse(center.x, pitY + 4, pitRadius * 1.4, pitRadius * 0.6);
-
-        // ============================================
-        // MORTAR BARREL (recoils into pit with scale shrink + ROTATION)
-        // Rotation is achieved by offsetting top more than bottom
-        // ============================================
-        const barrelY = center.y - 8 * size + recoil;
-        const barrelWidth = 20 * size * recoilScale;
-
-        // Tilt multiplier - how much each vertical level gets offset
-        // Bottom = 0 (stays centered), Top = full rotation offset
-        const tiltAmount = rotationDeg * 0.12; // Max ~3.6px at ±30 degrees
-
-        // Barrel base (bottom, goes into pit) - minimal tilt
-        graphics.fillStyle(ironDark, alpha);
-        graphics.fillEllipse(center.x + tiltAmount * 0.1, barrelY + 14 * size * recoilScale, barrelWidth * 0.8, barrelWidth * 0.35);
-        graphics.fillEllipse(center.x + tiltAmount * 0.2, barrelY + 10 * size * recoilScale, barrelWidth * 0.9, barrelWidth * 0.4);
-
-        // Main barrel body - progressive tilt
-        graphics.fillStyle(ironColor, alpha);
-        graphics.fillEllipse(center.x + tiltAmount * 0.35, barrelY + 6 * size * recoilScale, barrelWidth, barrelWidth * 0.45);
-        graphics.fillEllipse(center.x + tiltAmount * 0.5, barrelY + 2 * size * recoilScale, barrelWidth * 1.1, barrelWidth * 0.5);
-        graphics.fillEllipse(center.x + tiltAmount * 0.65, barrelY - 2 * size * recoilScale, barrelWidth * 1.2, barrelWidth * 0.55);
-
-        // Iron bands - also tilt
-        graphics.lineStyle(2, ironDark, alpha);
-        graphics.strokeEllipse(center.x + tiltAmount * 0.25, barrelY + 8 * size * recoilScale, barrelWidth * 0.85, barrelWidth * 0.38);
-        graphics.strokeEllipse(center.x + tiltAmount * 0.5, barrelY, barrelWidth * 1.1, barrelWidth * 0.5);
-
-        // Level 2+: Extra reinforcement band
-        if (isLevel2) {
-            graphics.lineStyle(2, 0x2a2a2a, alpha);
-            graphics.strokeEllipse(center.x + tiltAmount * 0.4, barrelY + 4 * size * recoilScale, barrelWidth * 0.95, barrelWidth * 0.43);
-        }
-
-        // Barrel rim (top) - maximum tilt
-        graphics.fillStyle(ironLight, alpha);
-        graphics.fillEllipse(center.x + tiltAmount * 0.85, barrelY - 6 * size * recoilScale, barrelWidth * 1.3, barrelWidth * 0.6);
-
-        // Level 3: Single beefy shiny rim highlight
-        if (ironHighlight) {
-            graphics.lineStyle(3, ironHighlight, alpha * 0.85);
-            graphics.strokeEllipse(center.x + tiltAmount * 0.85, barrelY - 7 * size * recoilScale, barrelWidth * 1.38, barrelWidth * 0.64);
-        }
-
-        // Inner rim
-        graphics.fillStyle(ironColor, alpha);
-        graphics.fillEllipse(center.x + tiltAmount * 0.85, barrelY - 6 * size * recoilScale, barrelWidth * 1.1, barrelWidth * 0.5);
-
-        // Bore hole
-        graphics.fillStyle(0x0a0a0a, alpha);
-        graphics.fillEllipse(center.x + tiltAmount * 0.9, barrelY - 6 * size * recoilScale, barrelWidth * 0.85, barrelWidth * 0.38);
-
-        // Bore depth
-        graphics.fillStyle(0x000000, alpha * 0.8);
-        graphics.fillEllipse(center.x + tiltAmount * 1.0, barrelY - 4 * size * recoilScale, barrelWidth * 0.7, barrelWidth * 0.32);
-
-        // ============================================
-        // FRONT DIRT EDGE (covers barrel bottom - the masking layer)
-        // ============================================
-        graphics.fillStyle(dirtColor, alpha);
-        graphics.beginPath();
-        // Draw front arc of the dirt emplacement
-        for (let i = 0; i <= 16; i++) {
-            const angle = (i / 32) * Math.PI * 2;
-            const px = center.x + Math.cos(angle) * pitRadius * 1.1;
-            const py = pitY + Math.sin(angle) * pitRadius * 0.5;
-            if (i === 0) graphics.moveTo(px, py);
-            else graphics.lineTo(px, py);
-        }
-        // Inner edge
-        for (let i = 16; i >= 0; i--) {
-            const angle = (i / 32) * Math.PI * 2;
-            const px = center.x + Math.cos(angle) * pitRadius * 0.7;
-            const py = pitY + Math.sin(angle) * pitRadius * 0.32;
-            graphics.lineTo(px, py);
-        }
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Dirt texture on front edge
-        graphics.fillStyle(0x2a2518, alpha * 0.5);
-        graphics.fillCircle(center.x + 8, pitY + pitRadius * 0.35, 3);
-        graphics.fillCircle(center.x - 6, pitY + pitRadius * 0.4, 2);
-        graphics.fillCircle(center.x + 2, pitY + pitRadius * 0.38, 2.5);
-
-        // ============================================
-        // SMOKE EFFECT ON FIRING
-        // ============================================
-        if (timeSinceFire < 300) {
-            const t = timeSinceFire / 300;
-            const smokeAlpha = (1 - t) * 0.5;
-            graphics.fillStyle(0x888888, alpha * smokeAlpha);
-            graphics.fillCircle(center.x + Math.sin(time / 40) * 4, barrelY - 12 - t * 20, 4 + t * 6);
-            graphics.fillCircle(center.x - 4 + Math.cos(time / 50) * 3, barrelY - 18 - t * 25, 3 + t * 5);
-            graphics.fillCircle(center.x + 3 + Math.sin(time / 60) * 2, barrelY - 24 - t * 28, 2.5 + t * 4);
-        }
-    }
-
-    private drawTeslaCoil(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding) {
-        const time = this.time.now;
-        const level = building?.level ?? 1;
-        const isLevel2 = level >= 2;
-
-        // Stone base platform (thicker for L2)
-        graphics.fillStyle(isLevel2 ? 0x6a6a6a : 0x5a5a5a, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
-        graphics.lineStyle(isLevel2 ? 2 : 1, isLevel2 ? 0x4a4a4a : 0x3a3a3a, 0.5 * alpha);
-        graphics.strokePoints([c1, c2, c3, c4], true, true);
-
-        // L2: Raised platform edge
-        if (isLevel2) {
-            graphics.fillStyle(0x555555, alpha * 0.8);
-            graphics.fillRect(center.x - 16, center.y + 2, 32, 4);
-        }
-
-        // Wooden support post (thicker for L2)
-        const postWidth = isLevel2 ? 10 : 8;
-        graphics.fillStyle(isLevel2 ? 0x5a4a3a : 0x4a3a2a, alpha);
-        graphics.fillRect(center.x - postWidth / 2, center.y - 35, postWidth, 35);
-        graphics.lineStyle(1, 0x2a1a0a, 0.5 * alpha);
-        graphics.strokeRect(center.x - postWidth / 2, center.y - 35, postWidth, 35);
-
-        // Metal coil rings with subtle glow (more rings for L2)
-        const ringCount = isLevel2 ? 4 : 3;
-        for (let i = 0; i < ringCount; i++) {
-            const ringY = center.y - 10 - i * (isLevel2 ? 7 : 8);
-            const ringGlow = 0.3 + Math.sin(time / 150 + i) * 0.1;
-            const ringSize = isLevel2 ? 14 : 12;
-            graphics.fillStyle(isLevel2 ? 0x7a7a7a : 0x6a6a6a, alpha);
-            graphics.fillEllipse(center.x, ringY, ringSize, 4);
-            graphics.lineStyle(1, 0x3a3a3a, alpha);
-            graphics.strokeEllipse(center.x, ringY, ringSize, 4);
-            // Electric glow on rings
-            graphics.lineStyle(isLevel2 ? 2 : 1, 0x00ccff, alpha * ringGlow);
-            graphics.strokeEllipse(center.x, ringY, ringSize + 1, 5);
-        }
-
-        // L2: Electrical ring around the base
-        if (isLevel2) {
-            const ringPulse = 0.5 + Math.sin(time / 100) * 0.3;
-            graphics.lineStyle(3, 0x00ccff, alpha * ringPulse * 0.6);
-            graphics.strokeEllipse(center.x, center.y - 2, 24, 8);
-            graphics.lineStyle(1, 0x88ffff, alpha * ringPulse * 0.8);
-            graphics.strokeEllipse(center.x, center.y - 2, 22, 7);
-
-            // Occasional sparks from ring
-            const sparkSeed = Math.floor(time / 80);
-            if (sparkSeed % 3 === 0) {
-                const sparkAngle = (time / 50) % (Math.PI * 2);
-                const sx = center.x + Math.cos(sparkAngle) * 12;
-                const sy = center.y - 2 + Math.sin(sparkAngle) * 4;
-                graphics.fillStyle(0xffffff, alpha * 0.8);
-                graphics.fillCircle(sx, sy, 2);
-            }
-        }
-
-        // Glowing electric orb
-        const orbY = center.y - 40;
-
-        // Pulsing glow intensity
-        const pulseIntensity = 0.8 + Math.sin(time / 120) * 0.2;
-        const fastPulse = 0.6 + Math.sin(time / 50) * 0.4;
-
-        // Outer glow (pulsing)
-        graphics.fillStyle(0x00ccff, 0.3 * alpha * pulseIntensity);
-        graphics.fillCircle(center.x, orbY, 14 + Math.sin(time / 80) * 2);
-
-        // Mid glow
-        graphics.fillStyle(0x44ddff, 0.5 * alpha * pulseIntensity);
-        graphics.fillCircle(center.x, orbY, 10);
-
-        // Core
-        graphics.fillStyle(tint ?? 0xaaeeff, alpha);
-        graphics.fillCircle(center.x, orbY, 7);
-
-        // Electric highlight
-        graphics.fillStyle(0xffffff, 0.8 * alpha);
-        graphics.fillCircle(center.x - 2, orbY - 2, 2);
-
-        // === IDLE CRACKLING ARCS ===
-        // Random arcs that jump from the orb
-        const arcCount = 3;
-        for (let i = 0; i < arcCount; i++) {
-            // Use time-based pseudo-random to create consistent but varied arcs
-            const seed = Math.floor(time / 100) + i * 137;
-            const arcActive = (seed % 5) < 2; // Arc appears ~40% of the time
-
-            if (arcActive) {
-                const arcAngle = ((seed * 1.618) % 6.28); // Golden ratio for nice distribution
-                const arcLength = 12 + (seed % 8);
-
-                // Start from orb
-                const startX = center.x + Math.cos(arcAngle) * 6;
-                const startY = orbY + Math.sin(arcAngle) * 6;
-
-                // End point with jitter
-                const endX = center.x + Math.cos(arcAngle) * arcLength + Math.sin(time / 20 + i) * 3;
-                const endY = orbY + Math.sin(arcAngle) * arcLength + Math.cos(time / 25 + i) * 2;
-
-                // Mid point for arc curve
-                const midX = (startX + endX) / 2 + Math.sin(time / 15 + i * 2) * 4;
-                const midY = (startY + endY) / 2 + Math.cos(time / 18 + i * 2) * 3;
-
-                // Draw crackling arc
-                graphics.lineStyle(2, 0x00ffff, alpha * fastPulse * 0.8);
-                graphics.beginPath();
-                graphics.moveTo(startX, startY);
-                graphics.lineTo(midX, midY);
-                graphics.lineTo(endX, endY);
-                graphics.strokePath();
-
-                // Brighter inner line
-                graphics.lineStyle(1, 0xffffff, alpha * fastPulse * 0.6);
-                graphics.beginPath();
-                graphics.moveTo(startX, startY);
-                graphics.lineTo(midX, midY);
-                graphics.lineTo(endX, endY);
-                graphics.strokePath();
-
-                // Spark at end
-                graphics.fillStyle(0xffffff, alpha * fastPulse);
-                graphics.fillCircle(endX, endY, 1.5);
-            }
-        }
-
-        // Small floating sparks around the orb
-        for (let i = 0; i < 4; i++) {
-            const sparkAngle = (time / 200 + i * 1.57) % (Math.PI * 2);
-            const sparkDist = 16 + Math.sin(time / 100 + i) * 4;
-            const sparkX = center.x + Math.cos(sparkAngle) * sparkDist;
-            const sparkY = orbY + Math.sin(sparkAngle) * sparkDist * 0.6;
-            const sparkAlpha = 0.3 + Math.sin(time / 60 + i * 2) * 0.3;
-
-            graphics.fillStyle(0x88ffff, alpha * sparkAlpha);
-            graphics.fillCircle(sparkX, sparkY, 1.5);
-        }
-    }
-
-    // === PRISM TOWER - Beam bounces between enemies ===
-    private drawPrismTower(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, _building?: PlacedBuilding) {
-        const time = this.time.now;
-
-        // Isometric stone base platform
-        graphics.fillStyle(tint ?? 0x4a4a5a, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
-
-        // Base edge highlights (isometric)
-        graphics.lineStyle(1, 0x6a6a7a, alpha * 0.8);
-        graphics.lineBetween(c1.x, c1.y, c2.x, c2.y);
-        graphics.lineBetween(c1.x, c1.y, c4.x, c4.y);
-        graphics.lineStyle(1, 0x2a2a3a, alpha * 0.8);
-        graphics.lineBetween(c2.x, c2.y, c3.x, c3.y);
-        graphics.lineBetween(c3.x, c3.y, c4.x, c4.y);
-
-        // Crystal pillar base (isometric hexagonal)
-        const baseHeight = 15;
-        graphics.fillStyle(0x3a3a4a, alpha);
-        // SE face
-        graphics.fillPoints([
-            new Phaser.Math.Vector2(center.x + 8, center.y + 4),
-            new Phaser.Math.Vector2(center.x + 8, center.y + 4 - baseHeight),
-            new Phaser.Math.Vector2(center.x, center.y - 4 - baseHeight),
-            new Phaser.Math.Vector2(center.x, center.y - 4)
-        ], true);
-        // SW face (lighter)
-        graphics.fillStyle(0x5a5a6a, alpha);
-        graphics.fillPoints([
-            new Phaser.Math.Vector2(center.x, center.y - 4),
-            new Phaser.Math.Vector2(center.x, center.y - 4 - baseHeight),
-            new Phaser.Math.Vector2(center.x - 8, center.y + 4 - baseHeight),
-            new Phaser.Math.Vector2(center.x - 8, center.y + 4)
-        ], true);
-
-        // Main crystal (triangular prism - isometric)
-        const crystalBase = center.y - baseHeight;
-        const crystalHeight = 35;
-
-        // Crystal faces with rainbow refraction
-        const hue1 = (time / 20) % 360;
-        const hue2 = (hue1 + 120) % 360;
-        const hue3 = (hue1 + 240) % 360;
-
-        // Convert HSL to approximate hex (simplified)
-        const hslToColor = (h: number) => {
-            const c = 0.7;
-            const x = c * (1 - Math.abs((h / 60) % 2 - 1));
-            let r = 0, g = 0, b = 0;
-            if (h < 60) { r = c; g = x; }
-            else if (h < 120) { r = x; g = c; }
-            else if (h < 180) { g = c; b = x; }
-            else if (h < 240) { g = x; b = c; }
-            else if (h < 300) { r = x; b = c; }
-            else { r = c; b = x; }
-            return ((Math.floor((r + 0.3) * 255) << 16) | (Math.floor((g + 0.3) * 255) << 8) | Math.floor((b + 0.3) * 255));
-        };
-
-        // SE crystal face
-        graphics.fillStyle(hslToColor(hue1), alpha * 0.8);
-        graphics.beginPath();
-        graphics.moveTo(center.x + 6, crystalBase + 4);
-        graphics.lineTo(center.x, crystalBase - crystalHeight);
-        graphics.lineTo(center.x, crystalBase - 2);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // SW crystal face
-        graphics.fillStyle(hslToColor(hue2), alpha * 0.8);
-        graphics.beginPath();
-        graphics.moveTo(center.x - 6, crystalBase + 4);
-        graphics.lineTo(center.x, crystalBase - crystalHeight);
-        graphics.lineTo(center.x, crystalBase - 2);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Front crystal face
-        graphics.fillStyle(hslToColor(hue3), alpha * 0.9);
-        graphics.beginPath();
-        graphics.moveTo(center.x - 6, crystalBase + 4);
-        graphics.lineTo(center.x, crystalBase - crystalHeight);
-        graphics.lineTo(center.x + 6, crystalBase + 4);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Crystal glow
-        const glowPulse = 0.4 + Math.sin(time / 100) * 0.2;
-        graphics.fillStyle(0xffffff, alpha * glowPulse);
-        graphics.fillCircle(center.x, crystalBase - crystalHeight + 5, 4);
-
-        // Refracted light beams (subtle)
-        graphics.lineStyle(1, 0xffffff, alpha * 0.3);
-        for (let i = 0; i < 3; i++) {
-            const beamAngle = (time / 500 + i * 2.1) % (Math.PI * 2);
-            const beamLen = 15 + Math.sin(time / 150 + i) * 5;
-            graphics.lineBetween(
-                center.x, crystalBase - crystalHeight,
-                center.x + Math.cos(beamAngle) * beamLen,
-                crystalBase - crystalHeight + Math.sin(beamAngle) * beamLen * 0.5
-            );
-        }
-    }
 
     // === MAGMA VENT - STEAMPUNK/TECH REDESIGN ===
-    private drawMagmaVent(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding, baseGraphics?: Phaser.GameObjects.Graphics) {
-        const time = this.time.now || 0;
-        const _building = building;
-
-        const g = baseGraphics || graphics; // Use baseGraphics for base
-
-        // Eruption state
-        const timeSinceFire = _building?.lastFireTime ? (time - _building.lastFireTime) : 100000;
-        const attackDuration = 1200;
-        const isErupting = timeSinceFire < attackDuration;
-        const eruptIntensity = isErupting ? Math.sin((timeSinceFire / attackDuration) * Math.PI) : 0; // 0 to 1 to 0
-
-        // === BASE PLATFORM (Metal grating) ===
-        // Dark metallic base
-        const baseColor = isErupting
-            ? Phaser.Display.Color.GetColor(
-                Phaser.Math.Interpolation.Linear([0x2a, 0x55, 0x2a], (timeSinceFire / attackDuration)),
-                Phaser.Math.Interpolation.Linear([0x2a, 0x22, 0x2a], (timeSinceFire / attackDuration)),
-                Phaser.Math.Interpolation.Linear([0x2a, 0x00, 0x2a], (timeSinceFire / attackDuration))
-            )
-            : 0x2a2a2a;
-
-        g.fillStyle(tint ?? baseColor, alpha);
-        g.fillPoints([c1, c2, c3, c4], true);
-
-        // Steel rim
-        g.lineStyle(2, 0x555555, alpha);
-        g.strokePoints([c1, c2, c3, c4], true, true);
-
-        // Grating lines - glow orange when erupting
-        const gratingColor = isErupting ? 0xff6600 : 0x3a3a3a;
-        const gratingAlpha = isErupting ? 0.8 : 0.5;
-
-        g.lineStyle(isErupting ? 2 : 1, gratingColor, alpha * gratingAlpha);
-        for (let i = 0; i < 4; i++) {
-            const r = (i + 1) / 5;
-            // Cross hatching
-            const startX = c1.x + (c2.x - c1.x) * r;
-            const startY = c1.y + (c2.y - c1.y) * r;
-            const endX = c4.x + (c3.x - c4.x) * r;
-            const endY = c4.y + (c3.y - c4.y) * r;
-            g.lineBetween(startX, startY, endX, endY);
-
-            const sX = c1.x + (c4.x - c1.x) * r;
-            const sY = c1.y + (c4.y - c1.y) * r;
-            const eX = c2.x + (c3.x - c2.x) * r;
-            const eY = c2.y + (c3.y - c2.y) * r;
-            g.lineBetween(sX, sY, eX, eY);
-        }
-        // === VOLCANIC ROCKS (Surrounding the vent) ===
-        graphics.fillStyle(0x2a1a10, alpha); // Dark reddish rock
-
-        // Large Left Rock
-        const leftRockOrigin = { x: center.x - 35, y: center.y + 5 };
-        graphics.fillPoints([
-            { x: leftRockOrigin.x + 0, y: leftRockOrigin.y + 0 },
-            { x: leftRockOrigin.x + 15, y: leftRockOrigin.y - 8 },
-            { x: leftRockOrigin.x + 25, y: leftRockOrigin.y + 0 },
-            { x: leftRockOrigin.x + 10, y: leftRockOrigin.y + 10 },
-            { x: leftRockOrigin.x - 5, y: leftRockOrigin.y + 5 }
-        ], true);
-        // Rock highlight
-        graphics.fillStyle(0x3a2a20, alpha);
-        graphics.fillRect(center.x - 32, center.y + 2, 8, 4);
-
-        // Large Right Rock
-        graphics.fillStyle(0x2a1a10, alpha);
-        const rightRockOrigin = { x: center.x + 25, y: center.y - 5 };
-        graphics.fillPoints([
-            { x: rightRockOrigin.x + 0, y: rightRockOrigin.y + 0 },
-            { x: rightRockOrigin.x + 15, y: rightRockOrigin.y - 5 },
-            { x: rightRockOrigin.x + 20, y: rightRockOrigin.y + 5 },
-            { x: rightRockOrigin.x + 5, y: rightRockOrigin.y + 15 },
-            { x: rightRockOrigin.x - 5, y: rightRockOrigin.y + 5 }
-        ], true);
-        // Rock highlight
-        graphics.fillStyle(0x3a2a20, alpha);
-        graphics.fillRect(center.x + 30, center.y - 2, 8, 4);
-
-        // Back Rock Cluster
-        graphics.fillStyle(0x2a1a10, alpha);
-        const backRockOrigin = { x: center.x - 10, y: center.y - 25 };
-        graphics.fillPoints([
-            { x: backRockOrigin.x + 0, y: backRockOrigin.y + 0 },
-            { x: backRockOrigin.x + 20, y: backRockOrigin.y - 5 },
-            { x: backRockOrigin.x + 25, y: backRockOrigin.y + 8 },
-            { x: backRockOrigin.x + 5, y: backRockOrigin.y + 12 },
-            { x: backRockOrigin.x - 5, y: backRockOrigin.y + 5 }
-        ], true);
-
-        // Glowing fissures on rocks when erupting
-        if (isErupting) {
-            graphics.fillStyle(0xff4400, alpha * eruptIntensity * 0.5);
-            graphics.fillRect(center.x - 28, center.y + 6, 6, 2); // Left rock crack
-            graphics.fillRect(center.x + 32, center.y + 5, 4, 2); // Right rock crack
-        }
-
-        // === CONTAINMENT RING (Copper/brass outer ring) ===
-        const ringY = center.y - 5;
-
-        // Outer containment ring - back half
-        graphics.fillStyle(0x8b5a2b, alpha); // Copper
-        graphics.beginPath();
-        graphics.moveTo(center.x - 22, ringY + 8);
-        graphics.lineTo(center.x - 20, ringY - 8);
-        graphics.lineTo(center.x + 20, ringY - 8);
-        graphics.lineTo(center.x + 22, ringY + 8);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Ring highlight (shiny copper)
-        graphics.fillStyle(0xcd7f32, alpha * 0.8);
-        graphics.fillRect(center.x - 18, ringY - 6, 36, 4);
-
-        // === LAVA CHAMBER (Central pit with tech housing) ===
-        // Dark inner chamber
-        graphics.fillStyle(0x1a0a00, alpha);
-        graphics.fillRect(center.x - 14, ringY - 4, 28, 10);
-
-        // Lava pool (pixelated glow)
-        const lavaGlow = isErupting ? (0.8 + Math.sin(time / 50) * 0.2) : (0.4 + Math.sin(time / 200) * 0.1);
-        graphics.fillStyle(0xff2200, alpha * lavaGlow);
-        graphics.fillRect(center.x - 10, ringY - 2, 20, 6);
-        graphics.fillStyle(0xff6600, alpha * lavaGlow);
-        graphics.fillRect(center.x - 6, ringY - 1, 12, 4);
-        graphics.fillStyle(0xffaa00, alpha * lavaGlow * 0.8);
-        graphics.fillRect(center.x - 3, ringY, 6, 2);
-
-        // === STEAM PIPES (Left and right) ===
-        // Left pipe
-        graphics.fillStyle(0x6a4a3a, alpha);
-        graphics.fillRect(center.x - 26, ringY - 15, 6, 20);
-        graphics.fillStyle(0x8b6a5a, alpha);
-        graphics.fillRect(center.x - 25, ringY - 14, 4, 18);
-
-        // Right pipe
-        graphics.fillStyle(0x6a4a3a, alpha);
-        graphics.fillRect(center.x + 20, ringY - 15, 6, 20);
-        graphics.fillStyle(0x8b6a5a, alpha);
-        graphics.fillRect(center.x + 21, ringY - 14, 4, 18);
-
-        // Pipe caps (brass) - glow when erupting
-        const capColor = isErupting ? 0xff8800 : 0xb8860b;
-        graphics.fillStyle(capColor, alpha);
-        graphics.fillRect(center.x - 27, ringY - 18, 8, 4);
-        graphics.fillRect(center.x + 19, ringY - 18, 8, 4);
-
-        // === PRESSURE GAUGES ===
-        // Left gauge housing
-        graphics.fillStyle(0x4a4a4a, alpha);
-        graphics.fillRect(center.x - 32, ringY - 8, 8, 8);
-        graphics.fillStyle(0x2a2a2a, alpha);
-        graphics.fillRect(center.x - 31, ringY - 7, 6, 6);
-        // Gauge needle (moves with pressure)
-        const needleAngle = isErupting ? eruptIntensity : 0.2;
-        graphics.fillStyle(0xff4400, alpha);
-        graphics.fillRect(center.x - 29 + needleAngle * 2, ringY - 5, 2, 3);
-
-        // Right gauge
-        graphics.fillStyle(0x4a4a4a, alpha);
-        graphics.fillRect(center.x + 24, ringY - 8, 8, 8);
-        graphics.fillStyle(0x2a2a2a, alpha);
-        graphics.fillRect(center.x + 25, ringY - 7, 6, 6);
-        graphics.fillStyle(0x00ff00, alpha * (isErupting ? 0.3 : 0.8));
-        graphics.fillRect(center.x + 27, ringY - 5, 2, 3);
-
-        // === RIVETS (Industrial detail) ===
-        graphics.fillStyle(isErupting ? 0x8a6a5a : 0x5a5a5a, alpha);
-        const rivetPositions = [
-            [-20, ringY + 6], [20, ringY + 6],
-            [-18, ringY - 10], [18, ringY - 10],
-            [-24, ringY], [24, ringY]
-        ];
-        for (const [rx, ry] of rivetPositions) {
-            graphics.fillRect(center.x + rx - 1, ry - 1, 3, 3);
-        }
-
-        // === CONTROL PANEL (Front) ===
-        graphics.fillStyle(0x3a3a3a, alpha);
-        graphics.fillRect(center.x - 8, ringY + 6, 16, 6);
-        // Buttons/lights
-        graphics.fillStyle(isErupting ? 0xff0000 : 0x440000, alpha);
-        graphics.fillRect(center.x - 5, ringY + 8, 3, 3);
-        graphics.fillStyle(0x004400, alpha);
-        graphics.fillRect(center.x + 2, ringY + 8, 3, 3);
-
-        // === IDLE SMOKE (Small wisps from pipes) ===
-        const smokeCount = isErupting ? 0 : 2; // Only show idle smoke when not erupting
-        for (let i = 0; i < smokeCount; i++) {
-            const pipeX = i === 0 ? center.x - 23 : center.x + 23;
-            const smokeCycle = 4000;
-            const smokePhase = ((time / smokeCycle) + i * 0.5) % 1;
-            const smokeY = ringY - 18 - smokePhase * 20;
-            const smokeX = pipeX + Math.sin(time / 600 + i) * 4 * smokePhase;
-            const smokeAlpha = (1 - smokePhase) * 0.2;
-            const smokeSize = Math.floor(2 + smokePhase * 3);
-
-            graphics.fillStyle(0x888888, alpha * smokeAlpha);
-            graphics.fillRect(smokeX - smokeSize / 2, smokeY - smokeSize / 2, smokeSize, smokeSize);
-        }
-    }
 
     // === DRAGON'S BREATH - Subtle Asian-Themed Firecracker Battery ===
-    private drawDragonsBreath(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: PlacedBuilding, baseGraphics?: Phaser.GameObjects.Graphics) {
-        const time = this.time.now || 0;
-        const g = baseGraphics || graphics;
-
-        // Firing state - extended salvo time for 16 pods
-        const timeSinceFire = building?.lastFireTime ? (time - building.lastFireTime) : 100000;
-        const fireRate = 3000; // Full reload cycle
-        const salvoActive = timeSinceFire < 800; // Firing phase
-        const reloadPhase = timeSinceFire >= 800 ? Math.min(1, (timeSinceFire - 800) / (fireRate - 800)) : 0;
-
-        // === ELEGANT STONE PLATFORM (Subtle Asian Temple Style) ===
-        // Main platform - dark slate with subtle red undertone
-        const baseColor = tint ?? 0x3a2a2a;
-        g.fillStyle(baseColor, alpha);
-        g.fillPoints([c1, c2, c3, c4], true);
-
-        // Subtle inner pattern - darker stone tiles
-        g.fillStyle(0x2a1a1a, alpha * 0.5);
-        const inset = 8;
-        const inner1 = new Phaser.Math.Vector2(c1.x, c1.y + inset);
-        const inner2 = new Phaser.Math.Vector2(c2.x + inset * 0.5, c2.y);
-        const inner3 = new Phaser.Math.Vector2(c3.x, c3.y - inset);
-        const inner4 = new Phaser.Math.Vector2(c4.x - inset * 0.5, c4.y);
-        g.fillPoints([inner1, inner2, inner3, inner4], true);
-
-        // Elegant gold trim border (single refined line)
-        g.lineStyle(2, 0xb8860b, alpha * 0.8);
-        g.strokePoints([c1, c2, c3, c4], true, true);
-
-        // Corner ornaments - jade-gold studs
-        const corners = [c1, c2, c3, c4];
-        for (const corner of corners) {
-            g.fillStyle(0x4a6a4a, alpha * 0.9); // Jade green
-            g.fillCircle(corner.x, corner.y, 4);
-            g.fillStyle(0xb8860b, alpha); // Gold center
-            g.fillCircle(corner.x, corner.y, 2);
-        }
-
-        // Bamboo accent borders (subtle wooden frame)
-        g.lineStyle(1, 0x5a4a3a, alpha * 0.6);
-        g.lineBetween(c1.x, c1.y, c2.x, c2.y);
-        g.lineBetween(c4.x, c4.y, c3.x, c3.y);
-
-        // === 16 SILO HOLES (4x4 Grid - evenly spread) ===
-
-        for (let row = 0; row < 4; row++) {
-            for (let col = 0; col < 4; col++) {
-                // Calculate center of each tile in the 4x4 grid
-                const tileGridX = building ? building.gridX + col + 0.5 : col + 0.5;
-                const tileGridY = building ? building.gridY + row + 0.5 : row + 0.5;
-                const tileCenter = this.cartToIso(tileGridX, tileGridY);
-
-                const podIndex = row * 4 + col;
-
-                // Silo hole (dark pit)
-                graphics.fillStyle(0x1a0a0a, alpha);
-                graphics.fillEllipse(tileCenter.x, tileCenter.y + 2, 14, 7);
-
-                // Silo rim (brass ring)
-                graphics.lineStyle(2, 0x6a4a2a, alpha);
-                graphics.strokeEllipse(tileCenter.x, tileCenter.y + 2, 14, 7);
-
-                // === FIRECRACKER POD STATE ===
-                // Staggered firing: each pod fires 40ms apart
-                const podFireDelay = podIndex * 40;
-                const podTimeSinceFire = timeSinceFire - podFireDelay;
-
-                // States: 
-                // -100 to 0: Fuse glowing
-                // 0 to 200: Firing (rocket launches)
-                // 200 to 800: Empty (pod fired, gone)
-                // 800+: Reloading (pod rises from silo)
-
-                const isFuseGlowing = salvoActive && podTimeSinceFire > -100 && podTimeSinceFire <= 0;
-                const isFiring = podTimeSinceFire > 0 && podTimeSinceFire < 200;
-                const isEmpty = podTimeSinceFire >= 200 && timeSinceFire < 800;
-                const isReloading = timeSinceFire >= 800;
-
-                // Calculate pod position (rises from silo during reload)
-                let podHeight = 28; // Full height above platform
-                let podVisible = true;
-
-                if (isEmpty) {
-                    // Pod is gone (fired away)
-                    podVisible = false;
-                } else if (isReloading) {
-                    // Pod rises from silo over reload period
-                    // Pods reload in reverse order (last fired = first to reload visually, or same order)
-                    const podReloadDelay = podIndex * 50; // Staggered reload
-                    const podReloadTime = (timeSinceFire - 800) - podReloadDelay;
-                    const reloadDuration = 1500;
-
-                    if (podReloadTime < 0) {
-                        podVisible = false;
-                    } else if (podReloadTime < reloadDuration) {
-                        // Rising animation
-                        const riseProgress = podReloadTime / reloadDuration;
-                        podHeight = riseProgress * 28;
-                        podVisible = true;
-                    } else {
-                        podHeight = 28;
-                        podVisible = true;
-                    }
-                } else if (isFiring) {
-                    // Slight upward recoil during firing
-                    const fireProgress = podTimeSinceFire / 200;
-                    podHeight = 28 + Math.sin(fireProgress * Math.PI) * 4;
-                }
-
-                if (podVisible) {
-                    const baseY = tileCenter.y + 2;
-                    const topY = baseY - podHeight;
-
-                    // === LARGE FIRECRACKER ROCKET ===
-                    const rocketWidth = 10;
-                    const rocketHeight = podHeight - 4;
-
-                    // Rocket body (red with gold bands)
-                    graphics.fillStyle(0xcc2222, alpha);
-                    graphics.fillRect(tileCenter.x - rocketWidth / 2, topY, rocketWidth, rocketHeight);
-
-                    // Paper texture lines
-                    graphics.lineStyle(1, 0xaa1111, alpha * 0.5);
-                    for (let i = 1; i < 4; i++) {
-                        const lineY = topY + (rocketHeight * i / 4);
-                        graphics.lineBetween(tileCenter.x - rocketWidth / 2, lineY, tileCenter.x + rocketWidth / 2, lineY);
-                    }
-
-                    // Gold decorative bands
-                    graphics.fillStyle(0xffd700, alpha);
-                    graphics.fillRect(tileCenter.x - rocketWidth / 2 - 1, topY, rocketWidth + 2, 4);
-                    graphics.fillRect(tileCenter.x - rocketWidth / 2 - 1, topY + rocketHeight - 4, rocketWidth + 2, 4);
-
-                    // Middle gold band with dragon motif
-                    const midY = topY + rocketHeight / 2;
-                    graphics.fillStyle(0xb8860b, alpha);
-                    graphics.fillRect(tileCenter.x - rocketWidth / 2, midY - 2, rocketWidth, 4);
-
-                    // Tiny dragon/swirl symbol
-                    graphics.fillStyle(0x880000, alpha);
-                    graphics.fillCircle(tileCenter.x, midY, 2);
-
-                    // Rocket tip (conical - gold/brass)
-                    graphics.fillStyle(0xb8860b, alpha);
-                    graphics.beginPath();
-                    graphics.moveTo(tileCenter.x, topY - 6);
-                    graphics.lineTo(tileCenter.x - rocketWidth / 2, topY);
-                    graphics.lineTo(tileCenter.x + rocketWidth / 2, topY);
-                    graphics.closePath();
-                    graphics.fillPath();
-
-                    // Tip highlight
-                    graphics.fillStyle(0xffd700, alpha * 0.6);
-                    graphics.beginPath();
-                    graphics.moveTo(tileCenter.x, topY - 6);
-                    graphics.lineTo(tileCenter.x - 2, topY);
-                    graphics.lineTo(tileCenter.x, topY - 2);
-                    graphics.closePath();
-                    graphics.fillPath();
-
-                    // Fuse at top
-                    const fuseColor = isFuseGlowing ? 0xff6600 : 0x3a3a3a;
-                    graphics.fillStyle(fuseColor, alpha);
-                    graphics.fillRect(tileCenter.x - 1, topY - 10, 2, 5);
-
-                    // Fuse spark/glow
-                    if (isFuseGlowing) {
-                        const sparkIntensity = 0.5 + Math.sin(time / 30 + podIndex) * 0.5;
-                        graphics.fillStyle(0xffff00, alpha * sparkIntensity);
-                        graphics.fillCircle(tileCenter.x, topY - 10, 3);
-                        graphics.fillStyle(0xffffff, alpha * sparkIntensity * 0.5);
-                        graphics.fillCircle(tileCenter.x, topY - 10, 1.5);
-                    }
-
-                    // === LAUNCH SMOKE FROM SILO ===
-                    if (isFiring) {
-                        const fireProgress = podTimeSinceFire / 200;
-                        const smokeIntensity = Math.sin(fireProgress * Math.PI);
-
-                        // Smoke billowing from silo hole
-                        for (let s = 0; s < 5; s++) {
-                            const smokeAge = (fireProgress * 5 + s * 0.2) % 1;
-                            const smokeX = tileCenter.x + Math.sin(time / 50 + s * 2 + podIndex) * (6 + smokeAge * 10);
-                            const smokeY = baseY - smokeAge * 20;
-                            const smokeSize = 4 + smokeAge * 8;
-                            const smokeAlpha = (1 - smokeAge) * smokeIntensity * 0.6;
-
-                            graphics.fillStyle(0x888888, alpha * smokeAlpha);
-                            graphics.fillCircle(smokeX, smokeY, smokeSize);
-                        }
-
-                        // Muzzle flash at silo
-                        graphics.fillStyle(0xff6600, alpha * smokeIntensity * 0.5);
-                        graphics.fillEllipse(tileCenter.x, baseY, 12 + smokeIntensity * 6, 6 + smokeIntensity * 3);
-                        graphics.fillStyle(0xffff00, alpha * smokeIntensity * 0.3);
-                        graphics.fillEllipse(tileCenter.x, baseY, 8, 4);
-                    }
-                }
-
-                // === LOADING SMOKE (during reload phase) ===
-                if (isReloading) {
-                    const podReloadDelay = podIndex * 50;
-                    const podReloadTime = (timeSinceFire - 800) - podReloadDelay;
-
-                    if (podReloadTime > 0 && podReloadTime < 500) {
-                        const steamProgress = podReloadTime / 500;
-                        const steamAlpha = (1 - steamProgress) * 0.3;
-                        const steamOffset = Math.sin(time / 100 + podIndex) * 3;
-
-                        graphics.fillStyle(0xaaaaaa, alpha * steamAlpha);
-                        graphics.fillCircle(tileCenter.x + steamOffset, tileCenter.y - 5 - steamProgress * 15, 3 + steamProgress * 4);
-                    }
-                }
-            }
-        }
-
-        // === SUBTLE AMBIENT EFFECTS ===
-        // Small wisps of incense/steam (idle state only)
-        if (!salvoActive && reloadPhase >= 1) {
-            for (let i = 0; i < 2; i++) {
-                const wispsTime = (time / 4000 + i * 0.5) % 1;
-                const wispX = center.x + Math.sin(time / 800 + i * 3) * 15;
-                const wispY = center.y - 20 - wispsTime * 25;
-                const wispAlpha = (1 - wispsTime) * 0.15;
-
-                graphics.fillStyle(0xcccccc, alpha * wispAlpha);
-                graphics.fillCircle(wispX, wispY, 2 + wispsTime * 3);
-            }
-        }
-    }
 
     // === RUBBLE SYSTEM (Destroyed Building Remains) ===
     private createRubble(gridX: number, gridY: number, width: number, height: number) {
         const graphics = this.add.graphics();
-        this.drawRubble(graphics, gridX, gridY, width, height);
+        RubbleRenderer.drawRubble(graphics, gridX, gridY, width, height);
 
         // Very low depth so rubble renders UNDER troops and other elements
         graphics.setDepth(5);
@@ -4182,204 +832,7 @@ export class MainScene extends Phaser.Scene {
         this.rubble.push({ gridX, gridY, width, height, graphics, createdAt: Date.now() });
     }
 
-    private drawRubble(graphics: Phaser.GameObjects.Graphics, gridX: number, gridY: number, width: number, height: number, time: number = 0, fireIntensity: number = 1) {
-        const c1 = this.cartToIso(gridX, gridY);
-        const c2 = this.cartToIso(gridX + width, gridY);
-        const c3 = this.cartToIso(gridX + width, gridY + height);
-        const c4 = this.cartToIso(gridX, gridY + height);
-        const center = this.cartToIso(gridX + width / 2, gridY + height / 2);
 
-        // Base rubble pile (dark shadow)
-        graphics.fillStyle(0x2a2a2a, 0.5);
-        graphics.fillPoints([c1, c2, c3, c4], true);
-
-        // Debris count scales with building size
-        const debrisCount = width * height * 5;
-        const seed = gridX * 1000 + gridY; // Consistent random per location
-        const isLarge = width >= 3 || height >= 3;
-
-        // For large rubble (3x3), add significant structural pieces
-        if (isLarge) {
-            // Collapsed wall sections
-            for (let i = 0; i < 4; i++) {
-                const rand1 = Math.sin(seed + i * 11.11) * 0.5 + 0.5;
-                const rand2 = Math.cos(seed + i * 12.22) * 0.5 + 0.5;
-                const wx = center.x + (rand1 - 0.5) * width * 30;
-                const wy = center.y + (rand2 - 0.5) * height * 15;
-                const wallAngle = rand1 * Math.PI * 0.5;
-                const wallLen = 15 + rand1 * 10;
-                const wallHeight = 8 + rand2 * 6;
-
-                // Wall segment (collapsed stone wall piece)
-                graphics.fillStyle(0x6a6a6a, 0.9);
-                graphics.beginPath();
-                graphics.moveTo(wx - wallLen * 0.5, wy);
-                graphics.lineTo(wx + wallLen * 0.5, wy);
-                graphics.lineTo(wx + wallLen * 0.4, wy - wallHeight);
-                graphics.lineTo(wx - wallLen * 0.3, wy - wallHeight * 0.8);
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Shadow
-                graphics.fillStyle(0x3a3a3a, 0.4);
-                graphics.beginPath();
-                graphics.moveTo(wx - wallLen * 0.5, wy);
-                graphics.lineTo(wx + wallLen * 0.5, wy);
-                graphics.lineTo(wx + wallLen * 0.6, wy + 4);
-                graphics.lineTo(wx - wallLen * 0.4, wy + 3);
-                graphics.closePath();
-                graphics.fillPath();
-            }
-
-            // Large broken pillars/columns
-            for (let i = 0; i < 2; i++) {
-                const rand1 = Math.sin(seed + i * 20.1) * 0.5 + 0.5;
-                const rand2 = Math.cos(seed + i * 21.2) * 0.5 + 0.5;
-                const px = center.x + (rand1 - 0.5) * width * 20;
-                const py = center.y + (rand2 - 0.5) * height * 10;
-
-                // Fallen pillar
-                graphics.fillStyle(0x8a7a6a, 0.9);
-                graphics.fillRect(px - 12, py - 4, 24, 8);
-                graphics.fillStyle(0x9a8a7a, 1);
-                graphics.fillRect(px - 10, py - 6, 20, 4);
-            }
-        }
-
-        // Scattered stone chunks
-        for (let i = 0; i < debrisCount; i++) {
-            const rand1 = Math.sin(seed + i * 1.23) * 0.5 + 0.5;
-            const rand2 = Math.cos(seed + i * 2.34) * 0.5 + 0.5;
-            const rand3 = Math.sin(seed + i * 3.45) * 0.5 + 0.5;
-
-            const px = center.x + (rand1 - 0.5) * width * 32;
-            const py = center.y + (rand2 - 0.5) * height * 16;
-            const size = isLarge ? (4 + rand3 * 8) : (3 + rand3 * 6);
-
-            // Stone colors vary
-            const stoneColors = [0x8a8a8a, 0x6a6a6a, 0x5a5a5a, 0x7a6a5a, 0x9a8a7a];
-            const colorIdx = Math.floor(rand1 * stoneColors.length);
-
-            graphics.fillStyle(stoneColors[colorIdx], 0.9);
-            // Draw irregular stone shapes
-            graphics.beginPath();
-            graphics.moveTo(px, py - size * 0.6);
-            graphics.lineTo(px + size * 0.5, py - size * 0.2);
-            graphics.lineTo(px + size * 0.4, py + size * 0.4);
-            graphics.lineTo(px - size * 0.3, py + size * 0.5);
-            graphics.lineTo(px - size * 0.5, py);
-            graphics.closePath();
-            graphics.fillPath();
-        }
-
-        // Broken wood beams (for larger buildings)
-        if (width >= 2 || height >= 2) {
-            const beamCount = isLarge ? 6 : Math.floor((width + height) / 2);
-            for (let i = 0; i < beamCount; i++) {
-                const rand1 = Math.sin(seed + i * 5.67 + 100) * 0.5 + 0.5;
-                const rand2 = Math.cos(seed + i * 6.78 + 100) * 0.5 + 0.5;
-                const rand3 = Math.sin(seed + i * 7.89 + 100) * 0.5 + 0.5;
-
-                const bx = center.x + (rand1 - 0.5) * width * 26;
-                const by = center.y + (rand2 - 0.5) * height * 13;
-                const angle = rand3 * Math.PI;
-                const length = isLarge ? (12 + rand1 * 18) : (8 + rand1 * 12);
-
-                graphics.lineStyle(isLarge ? 4 : 3, 0x5a3a2a, 0.8);
-                graphics.lineBetween(
-                    bx - Math.cos(angle) * length,
-                    by - Math.sin(angle) * length * 0.5,
-                    bx + Math.cos(angle) * length,
-                    by + Math.sin(angle) * length * 0.5
-                );
-
-                // Charred ends for large rubble (pixelated)
-                if (isLarge) {
-                    graphics.fillStyle(0x2a1a0a, 0.7);
-                    const cx = bx - Math.cos(angle) * length;
-                    const cy = by - Math.sin(angle) * length * 0.5;
-                    graphics.fillRect(cx - 2, cy - 2, 5, 5);
-                }
-            }
-        }
-
-        // Dust/ash patches - use rectangles for pixelated look
-        for (let i = 0; i < debrisCount / 2; i++) {
-            const rand1 = Math.sin(seed + i * 9.01 + 200) * 0.5 + 0.5;
-            const rand2 = Math.cos(seed + i * 0.12 + 200) * 0.5 + 0.5;
-
-            const dx = center.x + (rand1 - 0.5) * width * 28;
-            const dy = center.y + (rand2 - 0.5) * height * 14;
-            const size = 4 + rand1 * 4;
-
-            graphics.fillStyle(0x4a4a4a, 0.3);
-            graphics.fillRect(dx - size / 2, dy - size / 2, size, size);
-        }
-
-        // BURNING EFFECTS for large (3x3) rubble - fades out over time
-        // All effects use rectangles for consistent pixelation
-        if (isLarge && time > 0) {
-            // Fire spots - fade out based on fireIntensity
-            if (fireIntensity > 0.05) {
-                for (let i = 0; i < 4; i++) {
-                    const rand1 = Math.sin(seed + i * 30.3) * 0.5 + 0.5;
-                    const rand2 = Math.cos(seed + i * 31.4) * 0.5 + 0.5;
-                    const fx = center.x + (rand1 - 0.5) * width * 20;
-                    const fy = center.y + (rand2 - 0.5) * height * 10;
-
-                    const flicker = Math.sin(time / 100 + i * 2) * 0.3 + 0.7;
-                    const fireSize = Math.floor((6 + Math.sin(time / 150 + i) * 3) * fireIntensity);
-
-                    // Orange glow base (rectangle)
-                    const glowSize = fireSize + 6;
-                    graphics.fillStyle(0xff6600, 0.4 * flicker * fireIntensity);
-                    graphics.fillRect(fx - glowSize / 2, fy - glowSize / 2, glowSize, glowSize);
-
-                    // Fire core (rectangle)
-                    graphics.fillStyle(0xff4400, 0.7 * flicker * fireIntensity);
-                    graphics.fillRect(fx - fireSize / 2, fy - 2 - fireSize / 2, fireSize, fireSize);
-
-                    // Yellow flame tip (small rectangle)
-                    const tipSize = Math.max(2, fireSize * 0.5);
-                    const tipY = fy - 5 - Math.sin(time / 80 + i) * 2;
-                    graphics.fillStyle(0xffaa00, 0.8 * flicker * fireIntensity);
-                    graphics.fillRect(fx - tipSize / 2, tipY - tipSize / 2, tipSize, tipSize);
-                }
-
-                // Rising embers - small pixel particles
-                for (let i = 0; i < 6; i++) {
-                    const rand1 = Math.sin(seed + i * 40.4) * 0.5 + 0.5;
-                    const rand2 = Math.cos(seed + i * 41.5) * 0.5 + 0.5;
-                    const emberCycle = ((time / 2000) + rand1) % 1;
-
-                    const ex = center.x + (rand1 - 0.5) * width * 15 + Math.sin(time / 300 + i) * 5;
-                    const ey = center.y + (rand2 - 0.5) * height * 8 - emberCycle * 30;
-                    const emberAlpha = (1 - emberCycle) * 0.8 * fireIntensity;
-
-                    graphics.fillStyle(0xff6600, emberAlpha);
-                    graphics.fillRect(ex - 1, ey - 1, 3, 3); // 3x3 pixel ember
-                }
-            }
-
-            // Smoke wisps - INCREASE as fire fades out (smoldering effect)
-            // Use rectangles for pixelated smoke
-            const smokeIntensity = 1 - fireIntensity * 0.5; // More smoke as fire fades
-            const smokeCount = fireIntensity > 0.3 ? 3 : 5; // More smoke when fire is low
-            for (let i = 0; i < smokeCount; i++) {
-                const rand1 = Math.sin(seed + i * 50.5) * 0.5 + 0.5;
-                const rand2 = Math.cos(seed + i * 51.6) * 0.5 + 0.5;
-                const smokeCycle = ((time / 3000) + rand1) % 1;
-
-                const sx = center.x + (rand1 - 0.5) * width * 12 + Math.sin(time / 500 + i) * 8;
-                const sy = center.y + (rand2 - 0.5) * height * 6 - smokeCycle * 50;
-                const smokeAlpha = (1 - smokeCycle) * 0.3 * smokeIntensity;
-                const smokeSize = Math.floor((4 + smokeCycle * 10) * smokeIntensity);
-
-                graphics.fillStyle(0x555555, smokeAlpha);
-                graphics.fillRect(sx - smokeSize / 2, sy - smokeSize / 2, smokeSize, smokeSize);
-            }
-        }
-    }
 
     private growGrass(time: number) {
         if (this.mode !== 'HOME') return;
@@ -4431,7 +884,7 @@ export class MainScene extends Phaser.Scene {
                     fireIntensity = Math.max(0, 1 - (age - 15) / 30);
                 }
 
-                this.drawRubble(r.graphics, r.gridX, r.gridY, r.width, r.height, time, fireIntensity);
+                RubbleRenderer.drawRubble(r.graphics, r.gridX, r.gridY, r.width, r.height, time, fireIntensity);
             }
         });
     }
@@ -4470,7 +923,7 @@ export class MainScene extends Phaser.Scene {
 
         // Persist to backend if in HOME mode
         if (this.mode === 'HOME') {
-            Backend.placeObstacle('player_home', type, gridX, gridY);
+            Backend.placeObstacle(this.userId, type, gridX, gridY);
         }
         return true;
     }
@@ -4498,257 +951,10 @@ export class MainScene extends Phaser.Scene {
     }
 
     private drawObstacle(obstacle: PlacedObstacle, time: number = 0) {
-        const info = OBSTACLES[obstacle.type];
-        const center = this.cartToIso(obstacle.gridX + info.width / 2, obstacle.gridY + info.height / 2);
-
-        obstacle.graphics.clear();
-
-        switch (obstacle.type) {
-            case 'rock_small':
-                this.drawSmallRock(obstacle.graphics, center);
-                break;
-            case 'rock_large':
-                this.drawLargeRock(obstacle.graphics, center);
-                break;
-            case 'tree_oak':
-                this.drawOakTree(obstacle.graphics, center, time + obstacle.animOffset);
-                break;
-            case 'tree_pine':
-                this.drawPineTree(obstacle.graphics, center, time + obstacle.animOffset);
-                break;
-            case 'grass_patch':
-                this.drawGrassPatch(obstacle.graphics, center, time + obstacle.animOffset);
-                break;
-        }
+        ObstacleRenderer.drawObstacle(obstacle.graphics, obstacle, time);
     }
 
-    private drawSmallRock(graphics: Phaser.GameObjects.Graphics, center: Phaser.Math.Vector2) {
-        const x = center.x;
-        const y = center.y;
 
-        // Ground contact shadow (very subtle, touching the rock)
-        graphics.fillStyle(0x3a3a3a, 0.25);
-        graphics.fillEllipse(x, y + 2, 16, 5);
-
-        // Flat stone base sitting ON the ground (isometric diamond shape)
-        graphics.fillStyle(0x6a6a6a, 1);
-        graphics.beginPath();
-        graphics.moveTo(x, y - 4); // top
-        graphics.lineTo(x + 10, y + 1); // right
-        graphics.lineTo(x, y + 6); // bottom
-        graphics.lineTo(x - 10, y + 1); // left
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Top surface (lighter, slightly raised)
-        graphics.fillStyle(0x8a8a8a, 1);
-        graphics.beginPath();
-        graphics.moveTo(x, y - 6); // top
-        graphics.lineTo(x + 8, y - 1); // right
-        graphics.lineTo(x, y + 3); // bottom
-        graphics.lineTo(x - 8, y - 1); // left
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Highlight on top-left edge
-        graphics.fillStyle(0x9a9a9a, 0.7);
-        graphics.beginPath();
-        graphics.moveTo(x - 6, y - 2);
-        graphics.lineTo(x, y - 5);
-        graphics.lineTo(x + 2, y - 3);
-        graphics.lineTo(x - 4, y);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Small texture details (crevices)
-        graphics.lineStyle(1, 0x5a5a5a, 0.6);
-        graphics.lineBetween(x - 3, y, x + 3, y + 1);
-    }
-
-    private drawLargeRock(graphics: Phaser.GameObjects.Graphics, center: Phaser.Math.Vector2) {
-        const x = center.x;
-        const y = center.y;
-
-        // Ground contact shadow (subtle, directly under rocks)
-        graphics.fillStyle(0x3a3a3a, 0.2);
-        graphics.fillEllipse(x, y + 6, 40, 12);
-
-        // Main stone slab (flat isometric, sitting on ground)
-        graphics.fillStyle(0x5a5a5a, 1);
-        graphics.beginPath();
-        graphics.moveTo(x, y - 8); // top
-        graphics.lineTo(x + 18, y); // right
-        graphics.lineTo(x, y + 10); // bottom
-        graphics.lineTo(x - 18, y); // left
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Top surface of main slab (lighter)
-        graphics.fillStyle(0x7a7a7a, 1);
-        graphics.beginPath();
-        graphics.moveTo(x, y - 10); // top
-        graphics.lineTo(x + 15, y - 2); // right
-        graphics.lineTo(x, y + 6); // bottom
-        graphics.lineTo(x - 15, y - 2); // left
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Second smaller stone (overlapping, slight offset)
-        graphics.fillStyle(0x6a6a6a, 1);
-        graphics.beginPath();
-        graphics.moveTo(x + 8, y - 12); // top
-        graphics.lineTo(x + 18, y - 6); // right
-        graphics.lineTo(x + 10, y); // bottom
-        graphics.lineTo(x, y - 6); // left
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Top of second stone
-        graphics.fillStyle(0x8a8a8a, 1);
-        graphics.beginPath();
-        graphics.moveTo(x + 8, y - 14);
-        graphics.lineTo(x + 16, y - 8);
-        graphics.lineTo(x + 10, y - 3);
-        graphics.lineTo(x + 2, y - 8);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Third small stone (bottom left area)
-        graphics.fillStyle(0x5a5a5a, 1);
-        graphics.beginPath();
-        graphics.moveTo(x - 10, y + 2);
-        graphics.lineTo(x - 4, y + 6);
-        graphics.lineTo(x - 8, y + 10);
-        graphics.lineTo(x - 14, y + 6);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Highlight on main stone
-        graphics.fillStyle(0x9a9a9a, 0.6);
-        graphics.beginPath();
-        graphics.moveTo(x - 10, y - 4);
-        graphics.lineTo(x, y - 8);
-        graphics.lineTo(x + 4, y - 6);
-        graphics.lineTo(x - 6, y - 2);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Moss patch between stones
-        graphics.fillStyle(0x4a6a4a, 0.5);
-        graphics.fillCircle(x - 4, y + 3, 3);
-        graphics.fillCircle(x + 6, y - 3, 2);
-
-        // Crevice details
-        graphics.lineStyle(1, 0x4a4a4a, 0.5);
-        graphics.lineBetween(x - 8, y, x + 4, y + 2);
-        graphics.lineBetween(x + 2, y - 4, x + 8, y - 2);
-    }
-
-    private drawOakTree(graphics: Phaser.GameObjects.Graphics, center: Phaser.Math.Vector2, time: number) {
-        const x = center.x;
-        const y = center.y;
-        const sway = Math.sin(time / 800) * 2;
-
-        // Shadow
-        graphics.fillStyle(0x333333, 0.3);
-        graphics.fillEllipse(x + 5, y + 20, 40, 16);
-
-        // Trunk
-        graphics.fillStyle(0x5a3a2a, 1);
-        graphics.beginPath();
-        graphics.moveTo(x - 6, y + 15);
-        graphics.lineTo(x - 4 + sway * 0.3, y - 15);
-        graphics.lineTo(x + 4 + sway * 0.3, y - 15);
-        graphics.lineTo(x + 6, y + 15);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Trunk bark detail
-        graphics.lineStyle(1, 0x4a2a1a, 0.6);
-        graphics.lineBetween(x - 2, y + 10, x - 1 + sway * 0.2, y - 10);
-        graphics.lineBetween(x + 2, y + 12, x + 1 + sway * 0.2, y - 8);
-
-        // Foliage layers (bottom to top)
-        const foliageColors = [0x2a6a2a, 0x3a8a3a, 0x4a9a4a];
-        const foliageLayers = [
-            { yOff: -20, size: 24, sway: sway * 0.5 },
-            { yOff: -30, size: 20, sway: sway * 0.7 },
-            { yOff: -40, size: 16, sway: sway * 1.0 }
-        ];
-
-        foliageLayers.forEach((layer, i) => {
-            graphics.fillStyle(foliageColors[i], 1);
-            graphics.fillEllipse(x + layer.sway, y + layer.yOff, layer.size, layer.size * 0.6);
-        });
-
-        // Highlight spots on top layer
-        graphics.fillStyle(0x5aaa5a, 0.5);
-        graphics.fillCircle(x - 4 + sway, y - 42, 4);
-        graphics.fillCircle(x + 6 + sway, y - 38, 3);
-    }
-
-    private drawPineTree(graphics: Phaser.GameObjects.Graphics, center: Phaser.Math.Vector2, time: number) {
-        const x = center.x;
-        const y = center.y;
-        const sway = Math.sin(time / 700) * 1.5;
-
-        // Shadow
-        graphics.fillStyle(0x333333, 0.3);
-        graphics.fillEllipse(x + 3, y + 12, 20, 8);
-
-        // Trunk
-        graphics.fillStyle(0x5a3a2a, 1);
-        graphics.beginPath();
-        graphics.moveTo(x - 3, y + 10);
-        graphics.lineTo(x - 2 + sway * 0.2, y - 10);
-        graphics.lineTo(x + 2 + sway * 0.2, y - 10);
-        graphics.lineTo(x + 3, y + 10);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Pine layers (triangular)
-        const pineColors = [0x1a5a2a, 0x2a6a3a, 0x3a7a4a];
-        const layers = [
-            { yOff: -5, width: 18, height: 12, sway: sway * 0.3 },
-            { yOff: -15, width: 14, height: 12, sway: sway * 0.6 },
-            { yOff: -25, width: 10, height: 12, sway: sway * 0.9 },
-            { yOff: -34, width: 6, height: 10, sway: sway * 1.2 }
-        ];
-
-        layers.forEach((layer, i) => {
-            graphics.fillStyle(pineColors[Math.min(i, 2)], 1);
-            graphics.beginPath();
-            graphics.moveTo(x + layer.sway, y + layer.yOff - layer.height);
-            graphics.lineTo(x + layer.width / 2 + layer.sway * 0.5, y + layer.yOff);
-            graphics.lineTo(x - layer.width / 2 + layer.sway * 0.5, y + layer.yOff);
-            graphics.closePath();
-            graphics.fillPath();
-        });
-    }
-
-    private drawGrassPatch(graphics: Phaser.GameObjects.Graphics, center: Phaser.Math.Vector2, time: number) {
-        const x = center.x;
-        const y = center.y;
-
-        // Draw multiple grass blades
-        for (let i = 0; i < 8; i++) {
-            const bx = x + (i - 4) * 4 + Math.sin(i * 2) * 3;
-            const by = y + Math.cos(i * 3) * 4;
-            const sway = Math.sin(time / 500 + i * 0.5) * 2;
-            const height = 10 + Math.sin(i * 1.5) * 4;
-
-            const grassColor = i % 2 === 0 ? 0x4a8a4a : 0x5a9a5a;
-            graphics.lineStyle(2, grassColor, 0.9);
-            graphics.beginPath();
-            graphics.moveTo(bx, by);
-            graphics.lineTo(bx + sway, by - height);
-            graphics.strokePath();
-        }
-
-        // Ground accent
-        graphics.fillStyle(0x3a6a3a, 0.3);
-        graphics.fillEllipse(x, y + 2, 16, 6);
-    }
 
     private updateObstacleAnimations(time: number) {
         this.obstacles.forEach(obstacle => {
@@ -4768,7 +974,7 @@ export class MainScene extends Phaser.Scene {
 
         // Persist to backend if in HOME mode
         if (this.mode === 'HOME') {
-            Backend.removeObstacle('player_home', obstacleId);
+            Backend.removeObstacle(this.userId, obstacleId);
         }
         return true;
     }
@@ -4808,766 +1014,15 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
-    private drawWall(graphics: Phaser.GameObjects.Graphics, _center: Phaser.Math.Vector2, gridX: number, gridY: number, alpha: number, tint: number | null, building?: PlacedBuilding) {
-        const level = building?.level ?? 1;
-        const owner = building?.owner ?? 'PLAYER';
-
-        // Route to appropriate level renderer
-        if (level >= 3) {
-            this.drawWallLevel3(graphics, gridX, gridY, alpha, tint, owner);
-        } else if (level === 2) {
-            this.drawWallLevel2(graphics, gridX, gridY, alpha, tint, owner);
-        } else {
-            this.drawWallLevel1(graphics, gridX, gridY, alpha, tint, owner);
-        }
-    }
 
     // === LEVEL 1: WOODEN PALISADE ===
-    private drawWallLevel1(graphics: Phaser.GameObjects.Graphics, gridX: number, gridY: number, alpha: number, tint: number | null, owner: string) {
-        const wallHeight = 22;
-        const wallThickness = 0.28;
-
-        // Wooden colors - warm browns
-        const woodTop = tint ?? 0x8b6b4a;
-        const woodFront = tint ?? 0x6b4a30;
-        const woodSide = tint ?? 0x5a3a20;
-
-        const hasNeighbor = (dx: number, dy: number) => {
-            return this.buildings.some(b =>
-                b.type === 'wall' && b.gridX === gridX + dx && b.gridY === gridY + dy && b.owner === owner
-            );
-        };
-
-        const nN = hasNeighbor(0, -1);
-        const nS = hasNeighbor(0, 1);
-        const nW = hasNeighbor(-1, 0);
-        const nE = hasNeighbor(1, 0);
-
-        const hw = wallThickness / 2;
-        const cx = gridX + 0.5;
-        const cy = gridY + 0.5;
-
-        const sideFaces: { points: Phaser.Math.Vector2[], color: number }[] = [];
-        const topFaces: Phaser.Math.Vector2[][] = [];
-
-        const addSegment = (x1: number, y1: number, x2: number, y2: number) => {
-            const isVertical = Math.abs(y2 - y1) > Math.abs(x2 - x1);
-            if (isVertical) {
-                const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
-                const bl = this.cartToIso(x1 - hw, minY), br = this.cartToIso(x1 + hw, minY);
-                const fl = this.cartToIso(x1 - hw, maxY), fr = this.cartToIso(x1 + hw, maxY);
-                const tbl = new Phaser.Math.Vector2(bl.x, bl.y - wallHeight);
-                const tbr = new Phaser.Math.Vector2(br.x, br.y - wallHeight);
-                const tfl = new Phaser.Math.Vector2(fl.x, fl.y - wallHeight);
-                const tfr = new Phaser.Math.Vector2(fr.x, fr.y - wallHeight);
-                sideFaces.push({ points: [br, fr, tfr, tbr], color: woodSide });
-                sideFaces.push({ points: [fr, fl, tfl, tfr], color: woodFront });
-                topFaces.push([tbl, tbr, tfr, tfl]);
-            } else {
-                const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
-                const lt = this.cartToIso(minX, y1 - hw), lb = this.cartToIso(minX, y1 + hw);
-                const rt = this.cartToIso(maxX, y1 - hw), rb = this.cartToIso(maxX, y1 + hw);
-                const tlt = new Phaser.Math.Vector2(lt.x, lt.y - wallHeight);
-                const tlb = new Phaser.Math.Vector2(lb.x, lb.y - wallHeight);
-                const trt = new Phaser.Math.Vector2(rt.x, rt.y - wallHeight);
-                const trb = new Phaser.Math.Vector2(rb.x, rb.y - wallHeight);
-                sideFaces.push({ points: [rt, rb, trb, trt], color: woodSide });
-                sideFaces.push({ points: [rb, lb, tlb, trb], color: woodFront });
-                topFaces.push([tlt, trt, trb, tlb]);
-            }
-        };
-
-        if (nN) addSegment(cx, cy, cx, gridY - 0.5);
-        if (nW) addSegment(cx, cy, gridX - 0.5, cy);
-
-        // Central post
-        const ps = wallThickness * 0.7;
-        const hps = ps / 2;
-        const pTL = this.cartToIso(cx - hps, cy - hps);
-        const pTR = this.cartToIso(cx + hps, cy - hps);
-        const pBR = this.cartToIso(cx + hps, cy + hps);
-        const pBL = this.cartToIso(cx - hps, cy + hps);
-        const ptTL = new Phaser.Math.Vector2(pTL.x, pTL.y - wallHeight);
-        const ptTR = new Phaser.Math.Vector2(pTR.x, pTR.y - wallHeight);
-        const ptBR = new Phaser.Math.Vector2(pBR.x, pBR.y - wallHeight);
-        const ptBL = new Phaser.Math.Vector2(pBL.x, pBL.y - wallHeight);
-        sideFaces.push({ points: [pTR, pBR, ptBR, ptTR], color: woodSide });
-        sideFaces.push({ points: [pBR, pBL, ptBL, ptBR], color: woodFront });
-        topFaces.push([ptTL, ptTR, ptBR, ptBL]);
-
-        // Render side faces
-        for (const face of sideFaces) {
-            graphics.fillStyle(face.color, alpha);
-            graphics.fillPoints(face.points, true);
-        }
-
-        // Render top faces
-        graphics.fillStyle(woodTop, alpha);
-        for (const top of topFaces) {
-            graphics.fillPoints(top, true);
-        }
-
-        // Wood grain lines on front faces
-        graphics.lineStyle(1, 0x4a2a15, alpha * 0.4);
-        const pcx = (ptTL.x + ptBR.x) / 2;
-        const pcy = (ptTL.y + ptBR.y) / 2;
-        graphics.lineBetween(pcx - 2, pcy + wallHeight * 0.3, pcx - 2, pcy + wallHeight * 0.8);
-        graphics.lineBetween(pcx + 1, pcy + wallHeight * 0.2, pcx + 1, pcy + wallHeight * 0.7);
-
-        // Sharpened top (pointed stake)
-        const peakY = pcy - 6;
-        graphics.fillStyle(0x9b7b5a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(pcx, peakY);
-        graphics.lineTo(ptTL.x, ptTL.y);
-        graphics.lineTo(ptTR.x, ptTR.y);
-        graphics.closePath();
-        graphics.fillPath();
-        graphics.beginPath();
-        graphics.moveTo(pcx, peakY);
-        graphics.lineTo(ptTR.x, ptTR.y);
-        graphics.lineTo(ptBR.x, ptBR.y);
-        graphics.closePath();
-        graphics.fillPath();
-        graphics.fillStyle(0x7b5b3a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(pcx, peakY);
-        graphics.lineTo(ptBR.x, ptBR.y);
-        graphics.lineTo(ptBL.x, ptBL.y);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Rope binding
-        const ropeY = pcy + 8;
-        graphics.lineStyle(2, 0x8a7a5a, alpha);
-        graphics.lineBetween(pcx - 4, ropeY, pcx + 4, ropeY);
-        graphics.lineStyle(1, 0x6a5a3a, alpha * 0.6);
-        graphics.lineBetween(pcx - 3, ropeY + 2, pcx + 3, ropeY + 2);
-    }
 
     // === LEVEL 2: STONE WALL ===
-    private drawWallLevel2(graphics: Phaser.GameObjects.Graphics, gridX: number, gridY: number, alpha: number, tint: number | null, owner: string) {
-        const wallHeight = 20;
-        const wallThickness = 0.3;
-
-        // Stone colors - classic grey
-        const stoneTop = tint ?? 0xd4c4a8;
-        const stoneFront = tint ?? 0xa89878;
-        const stoneSide = tint ?? 0x8a7a68;
-
-        const hasNeighbor = (dx: number, dy: number) => {
-            return this.buildings.some(b =>
-                b.type === 'wall' && b.gridX === gridX + dx && b.gridY === gridY + dy && b.owner === owner
-            );
-        };
-
-        const nN = hasNeighbor(0, -1);
-        const nS = hasNeighbor(0, 1);
-        const nW = hasNeighbor(-1, 0);
-        const nE = hasNeighbor(1, 0);
-
-        const hw = wallThickness / 2;
-        const cx = gridX + 0.5;
-        const cy = gridY + 0.5;
-
-        const sideFaces: { points: Phaser.Math.Vector2[], color: number }[] = [];
-        const topFaces: Phaser.Math.Vector2[][] = [];
-
-        const addSegment = (x1: number, y1: number, x2: number, y2: number) => {
-            const isVertical = Math.abs(y2 - y1) > Math.abs(x2 - x1);
-            if (isVertical) {
-                const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
-                const bl = this.cartToIso(x1 - hw, minY), br = this.cartToIso(x1 + hw, minY);
-                const fl = this.cartToIso(x1 - hw, maxY), fr = this.cartToIso(x1 + hw, maxY);
-                const tbl = new Phaser.Math.Vector2(bl.x, bl.y - wallHeight);
-                const tbr = new Phaser.Math.Vector2(br.x, br.y - wallHeight);
-                const tfl = new Phaser.Math.Vector2(fl.x, fl.y - wallHeight);
-                const tfr = new Phaser.Math.Vector2(fr.x, fr.y - wallHeight);
-                sideFaces.push({ points: [br, fr, tfr, tbr], color: stoneSide });
-                sideFaces.push({ points: [fr, fl, tfl, tfr], color: stoneFront });
-                topFaces.push([tbl, tbr, tfr, tfl]);
-            } else {
-                const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
-                const lt = this.cartToIso(minX, y1 - hw), lb = this.cartToIso(minX, y1 + hw);
-                const rt = this.cartToIso(maxX, y1 - hw), rb = this.cartToIso(maxX, y1 + hw);
-                const tlt = new Phaser.Math.Vector2(lt.x, lt.y - wallHeight);
-                const tlb = new Phaser.Math.Vector2(lb.x, lb.y - wallHeight);
-                const trt = new Phaser.Math.Vector2(rt.x, rt.y - wallHeight);
-                const trb = new Phaser.Math.Vector2(rb.x, rb.y - wallHeight);
-                sideFaces.push({ points: [rt, rb, trb, trt], color: stoneSide });
-                sideFaces.push({ points: [rb, lb, tlb, trb], color: stoneFront });
-                topFaces.push([tlt, trt, trb, tlb]);
-            }
-        };
-
-        if (nN) addSegment(cx, cy, cx, gridY - 0.5);
-        if (nW) addSegment(cx, cy, gridX - 0.5, cy);
-
-        // Central pillar
-        const ps = wallThickness * 0.6;
-        const hps = ps / 2;
-        const pTL = this.cartToIso(cx - hps, cy - hps);
-        const pTR = this.cartToIso(cx + hps, cy - hps);
-        const pBR = this.cartToIso(cx + hps, cy + hps);
-        const pBL = this.cartToIso(cx - hps, cy + hps);
-        const ptTL = new Phaser.Math.Vector2(pTL.x, pTL.y - wallHeight);
-        const ptTR = new Phaser.Math.Vector2(pTR.x, pTR.y - wallHeight);
-        const ptBR = new Phaser.Math.Vector2(pBR.x, pBR.y - wallHeight);
-        const ptBL = new Phaser.Math.Vector2(pBL.x, pBL.y - wallHeight);
-        sideFaces.push({ points: [pTR, pBR, ptBR, ptTR], color: stoneSide });
-        sideFaces.push({ points: [pBR, pBL, ptBL, ptBR], color: stoneFront });
-        topFaces.push([ptTL, ptTR, ptBR, ptBL]);
-
-        // Render side faces
-        for (const face of sideFaces) {
-            graphics.fillStyle(face.color, alpha);
-            graphics.fillPoints(face.points, true);
-        }
-
-        // Render top faces
-        graphics.fillStyle(stoneTop, alpha);
-        for (const top of topFaces) {
-            graphics.fillPoints(top, true);
-        }
-
-        // Top highlights
-        graphics.lineStyle(1, 0xe8dcc8, alpha * 0.6);
-        graphics.lineBetween(ptTL.x, ptTL.y, ptTR.x, ptTR.y);
-        graphics.lineBetween(ptTL.x, ptTL.y, ptBL.x, ptBL.y);
-
-        // Junction decoration
-        const neighborCount = (nN ? 1 : 0) + (nS ? 1 : 0) + (nE ? 1 : 0) + (nW ? 1 : 0);
-        if (neighborCount >= 3) {
-            const pcx = (ptTL.x + ptBR.x) / 2;
-            const pcy = (ptTL.y + ptBR.y) / 2;
-            graphics.fillStyle(0xe8dcc8, alpha);
-            graphics.fillCircle(pcx, pcy, 2.5);
-        }
-    }
 
     // === LEVEL 3: FORTIFIED DARK STONE ===
-    private drawWallLevel3(graphics: Phaser.GameObjects.Graphics, gridX: number, gridY: number, alpha: number, tint: number | null, owner: string) {
-        const wallHeight = 26;
-        const wallThickness = 0.38;
 
-        // Dark obsidian fortress colors
-        const stoneTop = tint ?? 0x4a4a5a;
-        const stoneFront = tint ?? 0x3a3a4a;
-        const stoneSide = tint ?? 0x2a2a3a;
-        const stoneAccent = tint ?? 0x5a5a6a;
-        const goldTrim = 0xc9a227;
-        const goldDark = 0x8a7019;
-        const ironColor = 0x555565;
-        const ironLight = 0x707080;
 
-        const hasNeighbor = (dx: number, dy: number) => {
-            return this.buildings.some(b =>
-                b.type === 'wall' && b.gridX === gridX + dx && b.gridY === gridY + dy && b.owner === owner
-            );
-        };
 
-        const nN = hasNeighbor(0, -1);
-        const nS = hasNeighbor(0, 1);
-        const nW = hasNeighbor(-1, 0);
-        const nE = hasNeighbor(1, 0);
-        const neighborCount = (nN ? 1 : 0) + (nS ? 1 : 0) + (nE ? 1 : 0) + (nW ? 1 : 0);
-
-        const hw = wallThickness / 2;
-        const cx = gridX + 0.5;
-        const cy = gridY + 0.5;
-
-        const sideFaces: { points: Phaser.Math.Vector2[], color: number }[] = [];
-        const topFaces: Phaser.Math.Vector2[][] = [];
-
-        const addSegment = (x1: number, y1: number, x2: number, y2: number) => {
-            const isVertical = Math.abs(y2 - y1) > Math.abs(x2 - x1);
-            if (isVertical) {
-                const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
-                const bl = this.cartToIso(x1 - hw, minY), br = this.cartToIso(x1 + hw, minY);
-                const fl = this.cartToIso(x1 - hw, maxY), fr = this.cartToIso(x1 + hw, maxY);
-                const tbl = new Phaser.Math.Vector2(bl.x, bl.y - wallHeight);
-                const tbr = new Phaser.Math.Vector2(br.x, br.y - wallHeight);
-                const tfl = new Phaser.Math.Vector2(fl.x, fl.y - wallHeight);
-                const tfr = new Phaser.Math.Vector2(fr.x, fr.y - wallHeight);
-                sideFaces.push({ points: [br, fr, tfr, tbr], color: stoneSide });
-                sideFaces.push({ points: [fr, fl, tfl, tfr], color: stoneFront });
-                topFaces.push([tbl, tbr, tfr, tfl]);
-            } else {
-                const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
-                const lt = this.cartToIso(minX, y1 - hw), lb = this.cartToIso(minX, y1 + hw);
-                const rt = this.cartToIso(maxX, y1 - hw), rb = this.cartToIso(maxX, y1 + hw);
-                const tlt = new Phaser.Math.Vector2(lt.x, lt.y - wallHeight);
-                const tlb = new Phaser.Math.Vector2(lb.x, lb.y - wallHeight);
-                const trt = new Phaser.Math.Vector2(rt.x, rt.y - wallHeight);
-                const trb = new Phaser.Math.Vector2(rb.x, rb.y - wallHeight);
-                sideFaces.push({ points: [rt, rb, trb, trt], color: stoneSide });
-                sideFaces.push({ points: [rb, lb, tlb, trb], color: stoneFront });
-                topFaces.push([tlt, trt, trb, tlb]);
-            }
-        };
-
-        if (nN) addSegment(cx, cy, cx, gridY - 0.5);
-        if (nW) addSegment(cx, cy, gridX - 0.5, cy);
-
-        // Central pillar (larger for fortified)
-        const ps = wallThickness * 0.75;
-        const hps = ps / 2;
-        const pTL = this.cartToIso(cx - hps, cy - hps);
-        const pTR = this.cartToIso(cx + hps, cy - hps);
-        const pBR = this.cartToIso(cx + hps, cy + hps);
-        const pBL = this.cartToIso(cx - hps, cy + hps);
-        const ptTL = new Phaser.Math.Vector2(pTL.x, pTL.y - wallHeight);
-        const ptTR = new Phaser.Math.Vector2(pTR.x, pTR.y - wallHeight);
-        const ptBR = new Phaser.Math.Vector2(pBR.x, pBR.y - wallHeight);
-        const ptBL = new Phaser.Math.Vector2(pBL.x, pBL.y - wallHeight);
-        sideFaces.push({ points: [pTR, pBR, ptBR, ptTR], color: stoneSide });
-        sideFaces.push({ points: [pBR, pBL, ptBL, ptBR], color: stoneFront });
-        topFaces.push([ptTL, ptTR, ptBR, ptBL]);
-
-        // Render side faces
-        for (const face of sideFaces) {
-            graphics.fillStyle(face.color, alpha);
-            graphics.fillPoints(face.points, true);
-        }
-
-        // Render top faces
-        graphics.fillStyle(stoneTop, alpha);
-        for (const top of topFaces) {
-            graphics.fillPoints(top, true);
-        }
-
-        const pcx = (ptTL.x + ptBR.x) / 2;
-        const pcy = (ptTL.y + ptBR.y) / 2;
-
-        // Stone brick pattern on front face
-        graphics.lineStyle(1, 0x252535, alpha * 0.6);
-        for (let row = 0; row < 3; row++) {
-            const rowY = pcy + 6 + row * 6;
-            graphics.lineBetween(pcx - 6, rowY, pcx + 6, rowY);
-            // Staggered vertical lines
-            const offset = row % 2 === 0 ? 0 : 3;
-            graphics.lineBetween(pcx - 3 + offset, rowY, pcx - 3 + offset, rowY + 6);
-            graphics.lineBetween(pcx + 3 + offset, rowY, pcx + 3 + offset, rowY + 6);
-        }
-
-        // Reinforced iron bands with rivets
-        graphics.fillStyle(ironColor, alpha);
-        graphics.fillRect(pcx - 7, pcy + 4, 14, 3);
-        graphics.fillRect(pcx - 7, pcy + 16, 14, 3);
-        // Rivet details
-        graphics.fillStyle(ironLight, alpha * 0.8);
-        for (const bandY of [pcy + 5, pcy + 17]) {
-            graphics.fillCircle(pcx - 5, bandY, 1.5);
-            graphics.fillCircle(pcx, bandY, 1.5);
-            graphics.fillCircle(pcx + 5, bandY, 1.5);
-        }
-
-        // === EXTRAVAGANT CORNER/JUNCTION DECORATIONS ===
-        const isCorner = neighborCount === 2 && ((nN && nE) || (nE && nS) || (nS && nW) || (nW && nN));
-        const isJunction = neighborCount >= 3;
-        const isEndCap = neighborCount <= 1;
-
-        if (isJunction) {
-            // Grand fortress junction - raised tower with golden crown
-            const towerHeight = 8;
-
-            // Raised tower base
-            graphics.fillStyle(stoneAccent, alpha);
-            graphics.fillRect(pcx - 6, pcy - wallHeight - towerHeight + 2, 12, towerHeight);
-            graphics.fillStyle(stoneSide, alpha);
-            graphics.beginPath();
-            graphics.moveTo(pcx - 6, pcy - wallHeight + 2);
-            graphics.lineTo(pcx - 6, pcy - wallHeight - towerHeight + 2);
-            graphics.lineTo(pcx - 4, pcy - wallHeight - towerHeight);
-            graphics.lineTo(pcx - 4, pcy - wallHeight);
-            graphics.closePath();
-            graphics.fillPath();
-
-            // Golden crown decoration
-            graphics.fillStyle(goldTrim, alpha);
-            graphics.beginPath();
-            graphics.moveTo(pcx - 5, pcy - wallHeight - towerHeight);
-            graphics.lineTo(pcx - 4, pcy - wallHeight - towerHeight - 4);
-            graphics.lineTo(pcx - 2, pcy - wallHeight - towerHeight - 1);
-            graphics.lineTo(pcx, pcy - wallHeight - towerHeight - 5);
-            graphics.lineTo(pcx + 2, pcy - wallHeight - towerHeight - 1);
-            graphics.lineTo(pcx + 4, pcy - wallHeight - towerHeight - 4);
-            graphics.lineTo(pcx + 5, pcy - wallHeight - towerHeight);
-            graphics.closePath();
-            graphics.fillPath();
-
-            // Crown jewels
-            graphics.fillStyle(0xff3333, alpha);
-            graphics.fillCircle(pcx, pcy - wallHeight - towerHeight - 3, 2);
-            graphics.fillStyle(0x3333ff, alpha);
-            graphics.fillCircle(pcx - 3, pcy - wallHeight - towerHeight - 2, 1.5);
-            graphics.fillCircle(pcx + 3, pcy - wallHeight - towerHeight - 2, 1.5);
-
-            // Crown highlights
-            graphics.fillStyle(0xffffff, alpha * 0.4);
-            graphics.fillCircle(pcx, pcy - wallHeight - towerHeight - 3.5, 0.8);
-
-            // Decorative shields on sides
-            graphics.fillStyle(ironColor, alpha);
-            graphics.fillCircle(pcx - 5, pcy + 10, 3);
-            graphics.fillCircle(pcx + 5, pcy + 10, 3);
-            graphics.fillStyle(goldDark, alpha);
-            graphics.fillCircle(pcx - 5, pcy + 10, 2);
-            graphics.fillCircle(pcx + 5, pcy + 10, 2);
-
-        } else if (isCorner) {
-            // Elegant corner tower with spire
-            const spireHeight = 12;
-
-            // Corner tower body
-            graphics.fillStyle(stoneAccent, alpha);
-            graphics.fillRect(pcx - 5, pcy - wallHeight - 4, 10, 6);
-
-            // Pointed spire
-            graphics.fillStyle(stoneSide, alpha);
-            graphics.beginPath();
-            graphics.moveTo(pcx - 5, pcy - wallHeight - 4);
-            graphics.lineTo(pcx, pcy - wallHeight - spireHeight);
-            graphics.lineTo(pcx + 5, pcy - wallHeight - 4);
-            graphics.closePath();
-            graphics.fillPath();
-
-            // Spire highlight
-            graphics.fillStyle(stoneTop, alpha);
-            graphics.beginPath();
-            graphics.moveTo(pcx - 2, pcy - wallHeight - 5);
-            graphics.lineTo(pcx, pcy - wallHeight - spireHeight);
-            graphics.lineTo(pcx + 1, pcy - wallHeight - 6);
-            graphics.closePath();
-            graphics.fillPath();
-
-            // Golden finial at top
-            graphics.fillStyle(goldTrim, alpha);
-            graphics.fillCircle(pcx, pcy - wallHeight - spireHeight - 2, 2.5);
-            graphics.fillStyle(0xffffff, alpha * 0.5);
-            graphics.fillCircle(pcx - 0.5, pcy - wallHeight - spireHeight - 2.5, 1);
-
-            // Decorative arrow slits
-            graphics.fillStyle(0x1a1a2a, alpha);
-            graphics.fillRect(pcx - 1, pcy + 8, 2, 6);
-
-            // Corner iron brackets
-            graphics.fillStyle(ironColor, alpha);
-            graphics.lineStyle(2, ironColor, alpha);
-            graphics.lineBetween(pcx - 6, pcy + 2, pcx - 6, pcy + 20);
-            graphics.lineBetween(pcx + 6, pcy + 2, pcx + 6, pcy + 20);
-
-        } else if (isEndCap) {
-            // Defensive end cap with battlements
-
-            // Crenellation (battlement teeth)
-            graphics.fillStyle(stoneAccent, alpha);
-            graphics.fillRect(pcx - 5, pcy - wallHeight - 5, 4, 5);
-            graphics.fillRect(pcx + 1, pcy - wallHeight - 5, 4, 5);
-
-            // Torch bracket
-            graphics.fillStyle(ironColor, alpha);
-            graphics.fillRect(pcx - 1, pcy - wallHeight - 3, 2, 4);
-
-            // Torch flame
-            graphics.fillStyle(0xff6600, alpha);
-            graphics.fillCircle(pcx, pcy - wallHeight - 5, 2);
-            graphics.fillStyle(0xffcc00, alpha);
-            graphics.fillCircle(pcx, pcy - wallHeight - 5.5, 1.2);
-            graphics.fillStyle(0xffffff, alpha * 0.6);
-            graphics.fillCircle(pcx, pcy - wallHeight - 5.5, 0.5);
-
-            // Skull decoration
-            graphics.fillStyle(0xccccaa, alpha);
-            graphics.fillCircle(pcx, pcy + 12, 3);
-            graphics.fillStyle(0x1a1a2a, alpha);
-            graphics.fillCircle(pcx - 1, pcy + 11, 0.8);
-            graphics.fillCircle(pcx + 1, pcy + 11, 0.8);
-            graphics.fillRect(pcx - 1.5, pcy + 13, 3, 1);
-
-        } else {
-            // Standard segment - subtle battlements
-            graphics.fillStyle(stoneAccent, alpha);
-            graphics.fillRect(pcx - 4, pcy - wallHeight - 3, 3, 3);
-            graphics.fillRect(pcx + 1, pcy - wallHeight - 3, 3, 3);
-        }
-
-        // Gold trim along top edges
-        graphics.lineStyle(1, goldTrim, alpha * 0.7);
-        graphics.lineBetween(ptTL.x, ptTL.y, ptTR.x, ptTR.y);
-        graphics.lineBetween(ptTL.x, ptTL.y, ptBL.x, ptBL.y);
-
-        // Stone texture highlights
-        graphics.fillStyle(0xffffff, alpha * 0.08);
-        graphics.fillRect(pcx - 4, pcy + 7, 2, 2);
-        graphics.fillRect(pcx + 2, pcy + 13, 2, 2);
-    }
-
-    private drawArmyCamp(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, baseGraphics?: Phaser.GameObjects.Graphics, building?: PlacedBuilding) {
-        const time = this.time.now;
-        const g = baseGraphics || graphics;
-        const level = building?.level ?? 1;
-        const isLevel2 = level >= 2;
-
-        const info = BUILDINGS['army_camp'];
-        const ringRadiusX = 15 * info.width;
-        const ringRadiusY = 7.5 * info.height;
-
-        // === TRAINING GROUND BASE ===
-        // Packed dirt/sand arena floor
-        g.fillStyle(tint ?? 0xb8a080, alpha);
-        g.fillPoints([c1, c2, c3, c4], true);
-
-        // Inner training circle (worn area)
-        g.lineStyle(2, 0xa89070, 0.5 * alpha);
-        g.strokeEllipse(center.x, center.y, ringRadiusX * 2, ringRadiusY * 2);
-        g.fillStyle(0xa89070, 0.3 * alpha);
-        g.fillEllipse(center.x, center.y, ringRadiusX * 2, ringRadiusY * 2);
-        // Ground texture - packed earth patterns
-        g.fillStyle(0x9a8060, alpha * 0.5);
-        for (let i = 0; i < 12; i++) {
-            const angle = (i / 12) * Math.PI * 2;
-            const dist = 20 + (i % 3) * 12;
-            const ox = Math.cos(angle) * dist * 0.8;
-            const oy = Math.sin(angle) * dist * 0.4;
-            g.fillCircle(center.x + ox, center.y + 5 + oy, 2 + (i % 2));
-        }
-
-        // Simple border - L2 has slightly nicer border
-        g.lineStyle(isLevel2 ? 3 : 2, isLevel2 ? 0x6d5535 : 0x8b7355, alpha * 0.7);
-        g.strokePoints([c1, c2, c3, c4], true, true);
-
-        // L2: Corner posts
-        if (isLevel2) {
-            g.fillStyle(0x5d4e37, alpha);
-            g.fillCircle(c1.x, c1.y, 3);
-            g.fillCircle(c2.x, c2.y, 3);
-            g.fillCircle(c3.x, c3.y, 3);
-            g.fillCircle(c4.x, c4.y, 3);
-        }
-
-        // === CENTRAL CAMPFIRE ===
-        const fireX = center.x;
-        const fireY = center.y + 8;
-
-        // Fire pit stones (ring)
-        g.fillStyle(0x555555, alpha);
-        for (let i = 0; i < 8; i++) {
-            const angle = (i / 8) * Math.PI * 2;
-            const stoneX = fireX + Math.cos(angle) * 12;
-            const stoneY = fireY + Math.sin(angle) * 6;
-            g.fillEllipse(stoneX, stoneY, 5, 3);
-        }
-
-        // Fire pit inner (ash/coals)
-        g.fillStyle(0x2a2020, alpha);
-        g.fillEllipse(fireX, fireY, 10, 5);
-
-        // Glowing coals
-        const coalGlow = 0.5 + Math.sin(time / 200) * 0.2;
-        g.fillStyle(0x881100, alpha * coalGlow);
-        g.fillEllipse(fireX, fireY, 8, 4);
-        g.fillStyle(0xcc3300, alpha * coalGlow * 0.7);
-        g.fillEllipse(fireX - 2, fireY, 4, 2);
-        g.fillEllipse(fireX + 3, fireY + 1, 3, 1.5);
-
-        // Main flame animation
-        const flame1 = Math.sin(time / 60) * 0.3 + 0.7;
-        const flame2 = Math.sin(time / 45 + 1) * 0.25 + 0.75;
-        const flame3 = Math.sin(time / 80 + 2) * 0.35 + 0.65;
-
-        // Flame glow on ground
-        graphics.fillStyle(0xff4400, alpha * 0.15 * flame1);
-        graphics.fillEllipse(fireX, fireY, 25, 12);
-
-        // Back flames
-        graphics.fillStyle(0xdd4400, alpha * flame3);
-        graphics.beginPath();
-        graphics.moveTo(fireX - 6, fireY);
-        graphics.lineTo(fireX - 8, fireY - 12 - flame3 * 5);
-        graphics.lineTo(fireX - 3, fireY - 8);
-        graphics.lineTo(fireX - 5, fireY - 18 - flame2 * 6);
-        graphics.lineTo(fireX, fireY - 10);
-        graphics.lineTo(fireX + 2, fireY - 16 - flame1 * 5);
-        graphics.lineTo(fireX + 5, fireY - 6);
-        graphics.lineTo(fireX + 7, fireY - 14 - flame3 * 4);
-        graphics.lineTo(fireX + 6, fireY);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Mid flames (orange)
-        graphics.fillStyle(0xff6600, alpha * flame1);
-        graphics.beginPath();
-        graphics.moveTo(fireX - 5, fireY);
-        graphics.lineTo(fireX - 6, fireY - 10 - flame2 * 4);
-        graphics.lineTo(fireX - 2, fireY - 7);
-        graphics.lineTo(fireX - 3, fireY - 15 - flame1 * 5);
-        graphics.lineTo(fireX + 1, fireY - 9);
-        graphics.lineTo(fireX + 3, fireY - 13 - flame3 * 4);
-        graphics.lineTo(fireX + 5, fireY - 5);
-        graphics.lineTo(fireX + 5, fireY);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Inner flames (yellow-orange)
-        graphics.fillStyle(0xffaa00, alpha * flame2);
-        graphics.beginPath();
-        graphics.moveTo(fireX - 3, fireY);
-        graphics.lineTo(fireX - 4, fireY - 7 - flame1 * 3);
-        graphics.lineTo(fireX - 1, fireY - 5);
-        graphics.lineTo(fireX, fireY - 11 - flame2 * 4);
-        graphics.lineTo(fireX + 2, fireY - 6);
-        graphics.lineTo(fireX + 3, fireY - 8 - flame3 * 3);
-        graphics.lineTo(fireX + 3, fireY);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Core flames (yellow)
-        graphics.fillStyle(0xffdd44, alpha * flame3);
-        graphics.beginPath();
-        graphics.moveTo(fireX - 2, fireY);
-        graphics.lineTo(fireX - 2, fireY - 5 - flame2 * 2);
-        graphics.lineTo(fireX, fireY - 8 - flame1 * 3);
-        graphics.lineTo(fireX + 2, fireY - 4 - flame3 * 2);
-        graphics.lineTo(fireX + 2, fireY);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Fire sparks/embers rising
-        for (let i = 0; i < 5; i++) {
-            const sparkPhase = (time / 80 + i * 40) % 40;
-            if (sparkPhase < 35) {
-                const sparkRise = sparkPhase * 0.7;
-                const sparkDrift = Math.sin(sparkPhase * 0.3 + i) * 4;
-                const sparkAlpha = 1 - sparkPhase / 35;
-                graphics.fillStyle(0xffaa44, alpha * sparkAlpha * 0.8);
-                graphics.fillCircle(fireX + sparkDrift + (i - 2) * 2, fireY - 15 - sparkRise, 1.2);
-            }
-        }
-
-        // === LEVEL 2+: TRAINING DUMMY AND WEAPON RACK ===
-        if (isLevel2) {
-            const dummyX = center.x - 35;
-            const dummyY = center.y - 5;
-
-            // Dummy post
-            graphics.fillStyle(0x5d4e37, alpha);
-            graphics.fillRect(dummyX - 2, dummyY - 25, 4, 30);
-            graphics.fillStyle(0x3d2e17, alpha);
-            graphics.fillRect(dummyX + 1, dummyY - 25, 1, 30);
-
-            // Dummy body (straw-stuffed sack)
-            graphics.fillStyle(0xc4a060, alpha);
-            graphics.fillEllipse(dummyX, dummyY - 18, 8, 12);
-            graphics.fillStyle(0xa48040, alpha * 0.6);
-            graphics.fillEllipse(dummyX + 2, dummyY - 18, 5, 10);
-
-            // Dummy head
-            graphics.fillStyle(0xc4a060, alpha);
-            graphics.fillCircle(dummyX, dummyY - 32, 6);
-            graphics.fillStyle(0xa48040, alpha * 0.5);
-            graphics.fillCircle(dummyX + 1, dummyY - 32, 4);
-
-            // Dummy arms (wooden crossbar)
-            graphics.fillStyle(0x5d4e37, alpha);
-            graphics.fillRect(dummyX - 10, dummyY - 22, 20, 3);
-
-            // Straw detail
-            graphics.lineStyle(1, 0x8a7030, alpha * 0.6);
-            graphics.lineBetween(dummyX - 4, dummyY - 10, dummyX - 6, dummyY - 5);
-            graphics.lineBetween(dummyX + 3, dummyY - 10, dummyX + 5, dummyY - 6);
-            graphics.lineBetween(dummyX, dummyY - 10, dummyX, dummyY - 4);
-
-            // === WEAPON RACK (right side) ===
-            const rackX = center.x + 35;
-            const rackY = center.y;
-
-            // Rack frame (A-frame)
-            graphics.fillStyle(0x5d4e37, alpha);
-            // Left leg
-            graphics.beginPath();
-            graphics.moveTo(rackX - 10, rackY + 5);
-            graphics.lineTo(rackX - 8, rackY - 20);
-            graphics.lineTo(rackX - 5, rackY - 20);
-            graphics.lineTo(rackX - 7, rackY + 5);
-            graphics.closePath();
-            graphics.fillPath();
-
-            // Right leg
-            graphics.beginPath();
-            graphics.moveTo(rackX + 10, rackY + 5);
-            graphics.lineTo(rackX + 8, rackY - 20);
-            graphics.lineTo(rackX + 5, rackY - 20);
-            graphics.lineTo(rackX + 7, rackY + 5);
-            graphics.closePath();
-            graphics.fillPath();
-
-            // Cross bar
-            graphics.fillRect(rackX - 9, rackY - 18, 18, 3);
-            graphics.fillStyle(0x3d2e17, alpha);
-            graphics.fillRect(rackX - 9, rackY - 16, 18, 1);
-
-            // Weapons on rack
-            // Sword 1
-            graphics.fillStyle(0x888888, alpha);
-            graphics.fillRect(rackX - 7, rackY - 30, 2, 14);
-            graphics.fillStyle(0x5d4e37, alpha);
-            graphics.fillRect(rackX - 8, rackY - 17, 4, 3);
-            graphics.fillStyle(0xccaa00, alpha);
-            graphics.fillRect(rackX - 7, rackY - 17, 2, 1);
-
-            // Sword 2
-            graphics.fillStyle(0x777777, alpha);
-            graphics.fillRect(rackX + 1, rackY - 28, 2, 12);
-            graphics.fillStyle(0x5d4e37, alpha);
-            graphics.fillRect(rackX, rackY - 17, 4, 3);
-            graphics.fillStyle(0xccaa00, alpha);
-            graphics.fillRect(rackX + 1, rackY - 17, 2, 1);
-
-            // Axe
-            graphics.fillStyle(0x5d4e37, alpha);
-            graphics.fillRect(rackX + 6, rackY - 32, 2, 16);
-            graphics.fillStyle(0x666666, alpha);
-            graphics.beginPath();
-            graphics.moveTo(rackX + 5, rackY - 32);
-            graphics.lineTo(rackX + 11, rackY - 30);
-            graphics.lineTo(rackX + 11, rackY - 26);
-            graphics.lineTo(rackX + 5, rackY - 24);
-            graphics.closePath();
-            graphics.fillPath();
-        }
-    }
-
-    private drawGenericBuilding(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, _center: Phaser.Math.Vector2, info: any, alpha: number, tint: number | null) {
-        const color = tint ?? info.color;
-        const height = 30 * Math.max(info.width, info.height);
-        const t1 = new Phaser.Math.Vector2(c1.x, c1.y - height);
-        const t2 = new Phaser.Math.Vector2(c2.x, c2.y - height);
-        const t3 = new Phaser.Math.Vector2(c3.x, c3.y - height);
-        const t4 = new Phaser.Math.Vector2(c4.x, c4.y - height);
-
-        graphics.fillStyle(color, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
-
-        const darkColor = Phaser.Display.Color.IntegerToColor(color).darken(20).color;
-        const lightColor = Phaser.Display.Color.IntegerToColor(color).brighten(10).color;
-
-        graphics.fillStyle(darkColor, alpha);
-        graphics.fillPoints([c2, c3, t3, t2], true);
-        graphics.fillStyle(lightColor, alpha);
-        graphics.fillPoints([c3, c4, t4, t3], true);
-
-        graphics.lineStyle(1, 0x000000, 0.3 * alpha);
-        graphics.strokePoints([c2, c3, t3, t2], true, true);
-        graphics.strokePoints([c3, c4, t4, t3], true, true);
-
-        const topColor = Phaser.Display.Color.IntegerToColor(color).brighten(25).color;
-        graphics.fillStyle(topColor, alpha);
-        graphics.fillPoints([t1, t2, t3, t4], true);
-        graphics.lineStyle(2, 0xffffff, 0.15 * alpha);
-        graphics.lineBetween(t1.x, t1.y, t2.x, t2.y);
-        graphics.lineBetween(t1.x, t1.y, t4.x, t4.y);
-    }
 
 
     private updateHealthBar(item: PlacedBuilding | Troop) {
@@ -5591,17 +1046,25 @@ export class MainScene extends Phaser.Scene {
 
         if (isBuilding) {
             const info = BUILDINGS[item.type];
-            const p = this.cartToIso(item.gridX + info.width / 2, item.gridY + info.height / 2);
+            const p = IsoUtils.cartToIso(item.gridX + info.width / 2, item.gridY + info.height / 2);
             width = 36 + info.width * 8;
             height = 8;
             x = p.x - width / 2;
             y = p.y - 50 - (info.height * 10);
         } else {
-            const pos = this.cartToIso(item.gridX, item.gridY);
+            const troop = item as Troop;
+            const pos = IsoUtils.cartToIso(troop.gridX, troop.gridY);
             width = 28;
             height = 6;
             x = pos.x - width / 2;
-            y = pos.y - 22;
+
+            // Adjust health bar height based on unit size
+            let yOffset = 22;
+            if (troop.type === 'golem') yOffset = 70;
+            else if (troop.type === 'sharpshooter' || troop.type === 'mobilemortar') yOffset = 45;
+            else if (troop.type === 'giant') yOffset = 35;
+
+            y = pos.y - yOffset;
         }
 
         const healthPct = Math.max(0, item.health / item.maxHealth);
@@ -5635,36 +1098,39 @@ export class MainScene extends Phaser.Scene {
 
         // Main health fill
         if (healthPct > 0) {
-            const fillWidth = Math.max(height, width * healthPct);
-            bar.fillStyle(fillColor, 1);
-            this.drawRoundedRect(bar, x, y, fillWidth, height, radius);
+            const fillWidth = width * healthPct;
+            if (fillWidth > 0.5) { // Only draw if visible
+                bar.fillStyle(fillColor, 1);
+                // For very small widths, use a smaller radius to prevent artifacts
+                const fillRadius = Math.min(radius, fillWidth / 2);
+                this.drawRoundedRect(bar, x, y, fillWidth, height, fillRadius);
 
-            // Inner shadow at top of fill
-            bar.fillStyle(0x000000, 0.2);
-            bar.fillRect(x + radius, y, Math.max(0, fillWidth - radius * 2), 2);
+                // Inner shadow at top of fill
+                bar.fillStyle(0x000000, 0.2);
+                bar.fillRect(x + radius, y, Math.max(0, fillWidth - radius * 2), 2);
 
-            // Glossy highlight on top half
-            bar.fillStyle(highlightColor, 0.4);
-            bar.fillRect(x + radius, y + 1, Math.max(0, fillWidth - radius * 2), height / 3);
+                // Glossy highlight on top half
+                bar.fillStyle(highlightColor, 0.4);
+                bar.fillRect(x + radius, y + 1, Math.max(0, fillWidth - radius * 2), height / 3);
 
-            // Bright specular highlight
-            bar.fillStyle(0xffffff, 0.3);
-            bar.fillRect(x + radius + 2, y + 2, Math.min(8, Math.max(0, fillWidth - radius * 2 - 4)), 1);
-        }
-
-        // Health segments (CoC-style dividers)
-        if (isBuilding && width > 30) {
-            bar.lineStyle(1, 0x000000, 0.3);
-            const segments = Math.floor(width / 12);
-            for (let i = 1; i < segments; i++) {
-                const segX = x + (width / segments) * i;
-                bar.lineBetween(segX, y + 1, segX, y + height - 1);
+                // Bright specular highlight
+                bar.fillStyle(0xffffff, 0.3);
+                bar.fillRect(x + radius + 2, y + 2, Math.min(8, Math.max(0, fillWidth - radius * 2 - 4)), 1);
             }
+
+            // Health segments (CoC-style dividers)
+            if (isBuilding && width > 30) {
+                bar.lineStyle(1, 0x000000, 0.3);
+                const segments = Math.floor(width / 12);
+                for (let i = 1; i < segments; i++) {
+                    const segX = x + (width / segments) * i;
+                    bar.lineBetween(segX, y + 1, segX, y + height - 1);
+                }
+            }
+
+            bar.setDepth(30000);
         }
-
-        bar.setDepth(30000);
     }
-
 
     private drawRoundedRect(graphics: Phaser.GameObjects.Graphics, x: number, y: number, width: number, height: number, radius: number) {
         graphics.beginPath();
@@ -5709,9 +1175,14 @@ export class MainScene extends Phaser.Scene {
             // Check if enough time has passed since last shot
             if (time < (defense.lastFireTime || 0) + interval) return;
 
+            const bWidth = stats.width || 1;
+            const bHeight = stats.height || 1;
+            const centerX = defense.gridX + bWidth / 2;
+            const centerY = defense.gridY + bHeight / 2;
+
             this.troops.forEach(troop => {
                 if (troop.owner !== defense.owner && troop.health > 0) {
-                    const dist = Phaser.Math.Distance.Between(defense.gridX, defense.gridY, troop.gridX, troop.gridY);
+                    const dist = Phaser.Math.Distance.Between(centerX, centerY, troop.gridX, troop.gridY);
                     if (dist < minDist) {
                         if (stats.minRange && dist < stats.minRange) return; // Dead zone check
                         minDist = dist; nearestTroop = troop;
@@ -5745,7 +1216,7 @@ export class MainScene extends Phaser.Scene {
 
             if (troop.type === 'ward') {
                 // --- PASSIVE WARD HEAL ---
-                const wardStats = TROOP_STATS.ward;
+                const wardStats = TROOP_DEFINITIONS.ward;
                 const healDelay = 500; // Heal every 0.5 seconds
                 if (!(troop as any).lastPassiveHeal || time > (troop as any).lastPassiveHeal + healDelay) {
                     (troop as any).lastPassiveHeal = time;
@@ -5753,12 +1224,12 @@ export class MainScene extends Phaser.Scene {
                     this.troops.forEach(other => {
                         if (other.owner === troop.owner && other.health > 0 && other.health < other.maxHealth) {
                             const d = Phaser.Math.Distance.Between(troop.gridX, troop.gridY, other.gridX, other.gridY);
-                            if (d <= wardStats.healRadius) {
-                                other.health = Math.min(other.maxHealth, other.health + wardStats.healAmount);
+                            if (d <= (wardStats.healRadius ?? 0)) {
+                                other.health = Math.min(other.maxHealth, other.health + (wardStats.healAmount ?? 0));
                                 this.updateHealthBar(other);
 
                                 // Small green puff of health
-                                const pos = this.cartToIso(other.gridX, other.gridY);
+                                const pos = IsoUtils.cartToIso(other.gridX, other.gridY);
                                 const flash = this.add.circle(pos.x, pos.y - 12, 5, 0x00ff88, 0.5);
                                 flash.setDepth(other.gameObject.depth + 1);
                                 this.tweens.add({
@@ -5784,7 +1255,7 @@ export class MainScene extends Phaser.Scene {
                 if (troop.type === 'ward') {
                     troop.target = this.findWardTarget(troop);
                 } else {
-                    troop.target = this.findNearestEnemyBuilding(troop);
+                    troop.target = TargetingSystem.findTarget(troop, this.buildings);
                 }
             }
 
@@ -5800,12 +1271,12 @@ export class MainScene extends Phaser.Scene {
                 const dy = Math.max(by - troop.gridY, 0, troop.gridY - (by + th));
                 const dist = Math.sqrt(dx * dx + dy * dy);
 
-                const stats = TROOP_STATS[troop.type];
+                const stats = TROOP_DEFINITIONS[troop.type];
                 const isEnemy = b.owner !== troop.owner;
 
                 if (troop.type === 'ward' && time > troop.lastAttackTime + troop.attackDelay) {
                     // Ward specialized attack behavior (Grand Warden style)
-                    const wardStats = TROOP_STATS.ward;
+                    const wardStats = TROOP_DEFINITIONS.ward;
                     const enemies = this.buildings.filter(b => b.owner !== troop.owner && b.health > 0);
                     let attackTarget: PlacedBuilding | null = null;
 
@@ -5866,8 +1337,242 @@ export class MainScene extends Phaser.Scene {
 
                             if (troop.type === 'archer') {
                                 this.showArcherProjectile(troop, troop.target, stats.damage);
+                            } else if (troop.type === 'sharpshooter') {
+                                // Sharpshooter - enhanced archer projectile
+                                this.showSharpshooterProjectile(troop, troop.target, stats.damage);
+                            } else if (troop.type === 'mobilemortar') {
+                                // Mobile Mortar - arcing splash attack like mortar building
+                                this.showMobileMortarShot(troop, troop.target, stats.damage);
                             } else if (troop.type === 'stormmage') {
                                 this.showStormLightning(troop, troop.target, stats.damage);
+                            } else if (troop.type === 'golem') {
+                                // GOLEM GROUND POUND - Single slam with AoE damage
+                                const currentPos = IsoUtils.cartToIso(troop.gridX, troop.gridY);
+
+                                // Initialize slamOffset if not set
+                                if (troop.slamOffset === undefined) troop.slamOffset = 0;
+
+                                // Single slam animation - body/head drops down (using slamOffset)
+                                const slamTarget = { offset: 0 };
+                                this.tweens.add({
+                                    targets: slamTarget,
+                                    offset: 12, // Body/head slam down amount
+                                    duration: 200,
+                                    ease: 'Quad.easeIn',
+                                    onUpdate: () => {
+                                        troop.slamOffset = slamTarget.offset;
+                                        this.redrawTroopWithMovement(troop, false);
+                                    },
+                                    onComplete: () => {
+                                        // Screen shake at impact
+                                        this.cameras.main.shake(100, 0.003);
+
+                                        // Ground crack effect (moved higher to align with slam)
+                                        this.showGolemCrackEffect(currentPos.x, currentPos.y + 15);
+
+                                        // Deal damage to all buildings within 3 tile radius
+                                        const aoeTiles = 3;
+                                        this.buildings.forEach(b => {
+                                            if (b.owner !== troop.owner && b.health > 0) {
+                                                const bdx = (b.gridX + BUILDINGS[b.type].width / 2) - troop.gridX;
+                                                const bdy = (b.gridY + BUILDINGS[b.type].height / 2) - troop.gridY;
+                                                const bdist = Math.sqrt(bdx * bdx + bdy * bdy);
+                                                if (bdist <= aoeTiles) {
+                                                    b.health -= stats.damage;
+                                                    this.showHitEffect(b.graphics);
+                                                    this.updateHealthBar(b);
+                                                    if (b.health <= 0) {
+                                                        this.destroyBuilding(b);
+                                                    }
+                                                }
+                                            }
+                                        });
+
+                                        // Rise back up
+                                        this.tweens.add({
+                                            targets: slamTarget,
+                                            offset: 0,
+                                            duration: 400,
+                                            ease: 'Quad.easeOut',
+                                            onUpdate: () => {
+                                                troop.slamOffset = slamTarget.offset;
+                                                this.redrawTroopWithMovement(troop, false);
+                                            }
+                                        });
+                                    }
+                                });
+
+                            } else if (troop.type === 'davincitank') {
+                                // DA VINCI TANK - Fire cannon from closest 45° position toward target
+                                const tankPos = IsoUtils.cartToIso(troop.gridX, troop.gridY);
+                                const targetBuilding = troop.target;
+                                const targetInfo = BUILDINGS[targetBuilding.type];
+                                const targetPos = IsoUtils.cartToIso(
+                                    targetBuilding.gridX + targetInfo.width / 2,
+                                    targetBuilding.gridY + targetInfo.height / 2
+                                );
+
+                                // Store current angle for rotation after shot
+                                const currentAngle = troop.facingAngle || 0;
+
+                                // Calculate angle TO target
+                                const angleToTarget = Math.atan2(targetPos.y - tankPos.y, targetPos.x - tankPos.x);
+
+                                // Snap to nearest 45° increment (8 cannons = PI/4 spacing)
+                                const snapIncrement = Math.PI / 4;
+                                const firingAngle = Math.round(angleToTarget / snapIncrement) * snapIncrement;
+
+                                // Muzzle effects appear CLOSER to tank
+                                const muzzleOffset = 30;
+                                const muzzleX = tankPos.x + Math.cos(firingAngle) * muzzleOffset;
+                                const muzzleY = tankPos.y + Math.sin(firingAngle) * muzzleOffset * 0.5 - 10;
+
+                                // Cannonball starts FARTHER from tank
+                                const ballOffset = 45;
+                                const ballX = tankPos.x + Math.cos(firingAngle) * ballOffset;
+                                const ballY = tankPos.y + Math.sin(firingAngle) * ballOffset * 0.5 - 12;
+
+                                // Adjust depth: when shooting upward (negative Y direction), put ball behind tank
+                                const isShootingUp = firingAngle < 0 || firingAngle > Math.PI;
+                                const ballDepth = isShootingUp ? 5000 : 25000;
+
+                                // Muzzle flash
+                                const flash = this.add.graphics();
+                                flash.fillStyle(0xffaa00, 0.9);
+                                flash.fillCircle(0, 0, 8);
+                                flash.fillStyle(0xffff00, 0.7);
+                                flash.fillCircle(0, 0, 4);
+                                flash.setPosition(muzzleX, muzzleY);
+                                flash.setDepth(ballDepth);
+                                this.tweens.add({
+                                    targets: flash,
+                                    scale: 2, alpha: 0,
+                                    duration: 150,
+                                    onComplete: () => flash.destroy()
+                                });
+
+                                // Cannonball projectile - 2x SMALLER (3px radius)
+                                const ball = this.add.graphics();
+                                ball.fillStyle(0x2a2a2a, 1);
+                                ball.fillCircle(0, 0, 3);
+                                ball.fillStyle(0x4a4a4a, 1);
+                                ball.fillCircle(-0.5, -0.5, 1);
+                                ball.setPosition(ballX, ballY);
+                                ball.setDepth(ballDepth);
+
+                                // Smoke puff at muzzle - smaller
+                                const smoke = this.add.graphics();
+                                smoke.fillStyle(0x555555, 0.5);
+                                smoke.fillCircle(0, 0, 4);
+                                smoke.setPosition(muzzleX, muzzleY);
+                                smoke.setDepth(ballDepth - 1);
+                                this.tweens.add({
+                                    targets: smoke,
+                                    scale: 2.5, alpha: 0,
+                                    x: muzzleX + (Math.random() - 0.5) * 15,
+                                    y: muzzleY - 15,
+                                    duration: 600,
+                                    onComplete: () => smoke.destroy()
+                                });
+
+                                // Light screen shake on fire
+                                this.cameras.main.shake(50, 0.001);
+
+                                // ROTATE AFTER SHOT - delayed until cannonball is in flight
+                                const newAngle = currentAngle + Math.PI / 4;
+                                this.time.delayedCall(150, () => {
+                                    const rotationTarget = { angle: currentAngle };
+                                    this.tweens.add({
+                                        targets: rotationTarget,
+                                        angle: newAngle,
+                                        duration: 200,
+                                        ease: 'Quad.easeOut',
+                                        onUpdate: () => {
+                                            troop.facingAngle = rotationTarget.angle % (Math.PI * 2);
+                                            this.redrawTroopWithMovement(troop, false);
+                                        }
+                                    });
+                                });
+
+                                // Store target reference for damage application
+                                const targetRef = targetBuilding;
+                                const damage = stats.damage;
+
+                                // Cannonball flies to target - FASTER, damage on IMPACT
+                                this.tweens.add({
+                                    targets: ball,
+                                    x: targetPos.x,
+                                    y: targetPos.y - 10,
+                                    duration: 200,  // Faster flight
+                                    ease: 'Quad.easeIn',
+                                    onComplete: () => {
+                                        // Impact effect - smaller
+                                        const impact = this.add.graphics();
+                                        impact.fillStyle(0xff6600, 0.6);
+                                        impact.fillCircle(0, 0, 8);
+                                        impact.setPosition(targetPos.x, targetPos.y - 10);
+                                        impact.setDepth(5000);
+                                        this.tweens.add({
+                                            targets: impact,
+                                            scale: 1.5, alpha: 0,
+                                            duration: 200,
+                                            onComplete: () => impact.destroy()
+                                        });
+                                        ball.destroy();
+
+                                        // DAMAGE APPLIED ON IMPACT
+                                        if (targetRef && targetRef.health > 0) {
+                                            targetRef.health -= damage;
+                                            this.showHitEffect(targetRef.graphics);
+                                            this.updateHealthBar(targetRef);
+
+                                            if (targetRef.health <= 0) {
+                                                this.destroyBuilding(targetRef);
+                                                troop.target = null;
+                                            }
+                                        }
+                                    }
+                                });
+
+                            } else if (troop.type === 'phalanx') {
+                                // PHALANX - Spear thrust attack
+                                const targetBuilding = troop.target;
+
+                                // Reset and tilt facing angle toward target
+                                const tankPos = IsoUtils.cartToIso(troop.gridX, troop.gridY);
+                                const targetInfo = BUILDINGS[targetBuilding.type];
+                                const targetPos = IsoUtils.cartToIso(
+                                    targetBuilding.gridX + targetInfo.width / 2,
+                                    targetBuilding.gridY + targetInfo.height / 2
+                                );
+                                troop.facingAngle = Math.atan2(targetPos.y - tankPos.y, targetPos.x - tankPos.x);
+
+                                // Spear thrust animation
+                                troop.phalanxSpearOffset = 0;
+                                this.tweens.add({
+                                    targets: troop,
+                                    phalanxSpearOffset: 1,
+                                    duration: 150,
+                                    yoyo: true,
+                                    ease: 'Quad.easeIn',
+                                    onUpdate: () => {
+                                        this.redrawTroopWithMovement(troop, false);
+                                    },
+                                    onComplete: () => {
+                                        troop.phalanxSpearOffset = 0;
+                                        this.redrawTroopWithMovement(troop, false);
+                                    }
+                                });
+
+                                // Apply damage directly
+                                targetBuilding.health -= stats.damage;
+                                this.showHitEffect(targetBuilding.graphics);
+                                this.updateHealthBar(targetBuilding);
+
+                                if (targetBuilding.health <= 0) {
+                                    this.destroyBuilding(targetBuilding);
+                                    troop.target = null;
+                                }
                             } else {
                                 // Melee: immediate damage (Warrior, Giant, Ram)
                                 let finalDamage = stats.damage;
@@ -5879,8 +1584,8 @@ export class MainScene extends Phaser.Scene {
                                 this.showHitEffect(troop.target.graphics);
                                 this.updateHealthBar(troop.target);
 
-                                const currentPos = this.cartToIso(troop.gridX, troop.gridY);
-                                const targetPos = this.cartToIso(bx + tw / 2, by + th / 2);
+                                const currentPos = IsoUtils.cartToIso(troop.gridX, troop.gridY);
+                                const targetPos = IsoUtils.cartToIso(bx + tw / 2, by + th / 2);
                                 const angle = Math.atan2(targetPos.y - currentPos.y, targetPos.x - currentPos.x);
 
                                 // Ram gets a bigger punch animation
@@ -5892,6 +1597,11 @@ export class MainScene extends Phaser.Scene {
                                     duration: troop.type === 'ram' ? 100 : 50,
                                     yoyo: true
                                 });
+
+                                // Screen shake for Ram impact
+                                if (troop.type === 'ram') {
+                                    this.cameras.main.shake(80, 0.004);
+                                }
 
                                 if (troop.target.health <= 0) {
                                     this.destroyBuilding(troop.target);
@@ -5909,8 +1619,8 @@ export class MainScene extends Phaser.Scene {
 
     private shootMortarAt(mortar: PlacedBuilding, troop: Troop) {
         const info = BUILDINGS['mortar'];
-        const start = this.cartToIso(mortar.gridX + info.width / 2, mortar.gridY + info.height / 2);
-        const end = this.cartToIso(troop.gridX, troop.gridY);
+        const start = IsoUtils.cartToIso(mortar.gridX + info.width / 2, mortar.gridY + info.height / 2);
+        const end = IsoUtils.cartToIso(troop.gridX, troop.gridY);
 
         // Set angle for subtle mortar rotation
         const angle = Math.atan2(end.y - start.y, end.x - start.x);
@@ -6158,8 +1868,8 @@ export class MainScene extends Phaser.Scene {
         const targetTroop = troop;
 
         const info = BUILDINGS['cannon'];
-        const start = this.cartToIso(cannon.gridX + info.width / 2, cannon.gridY + info.height / 2);
-        const end = this.cartToIso(targetTroop.gridX, targetTroop.gridY);
+        const start = IsoUtils.cartToIso(cannon.gridX + info.width / 2, cannon.gridY + info.height / 2);
+        const end = IsoUtils.cartToIso(targetTroop.gridX, targetTroop.gridY);
         const angle = Math.atan2(end.y - (start.y - 14), end.x - start.x);
 
         // Set target angle for smooth rotation (same system as ballista/xbow)
@@ -6248,7 +1958,7 @@ export class MainScene extends Phaser.Scene {
                     this.updateHealthBar(targetTroop);
 
                     // Hit flash effect (pixelated rectangle)
-                    const troopPos = this.cartToIso(targetTroop.gridX, targetTroop.gridY);
+                    const troopPos = IsoUtils.cartToIso(targetTroop.gridX, targetTroop.gridY);
                     const hitFlash = this.add.graphics();
                     hitFlash.fillStyle(0xffffff, 0.6);
                     hitFlash.fillRect(troopPos.x - 8, troopPos.y - 18, 16, 16);
@@ -6263,7 +1973,7 @@ export class MainScene extends Phaser.Scene {
 
 
     private shootTeslaAt(tesla: PlacedBuilding, troop: Troop) {
-        const start = this.cartToIso(tesla.gridX + 0.5, tesla.gridY + 0.5);
+        const start = IsoUtils.cartToIso(tesla.gridX + 0.5, tesla.gridY + 0.5);
         start.y -= 40; // From the orb
 
         // Orb pulse effect (pixelated rectangle)
@@ -6293,7 +2003,7 @@ export class MainScene extends Phaser.Scene {
         // Visualize electric chain
         currentTargets.filter(t => t !== null).forEach((t, idx) => {
             if (!t) return;
-            const end = this.cartToIso(t.gridX, t.gridY);
+            const end = IsoUtils.cartToIso(t.gridX, t.gridY);
 
             // Draw multiple lightning layers for thickness effect
             for (let layer = 0; layer < 3; layer++) {
@@ -6376,9 +2086,9 @@ export class MainScene extends Phaser.Scene {
     // === PRISM TOWER - CONTINUOUS CRAZY LASER BEAM ===
     private shootPrismContinuousLaser(prism: PlacedBuilding, target: Troop, time: number) {
         const info = BUILDINGS['prism'];
-        const start = this.cartToIso(prism.gridX + info.width / 2, prism.gridY + info.height / 2);
+        const start = IsoUtils.cartToIso(prism.gridX + info.width / 2, prism.gridY + info.height / 2);
         start.y -= 55; // From the crystal tip
-        const end = this.cartToIso(target.gridX, target.gridY);
+        const end = IsoUtils.cartToIso(target.gridX, target.gridY);
 
         // Calculate beam thickness based on time for pulsing effect
         const pulseThickness = 8 + Math.sin(time / 30) * 4;
@@ -6560,66 +2270,76 @@ export class MainScene extends Phaser.Scene {
     }
 
     // === MAGMA VENT - MASSIVE VOLCANIC ERUPTION ===
+    // === MAGMA VENT - MASSIVE VOLCANIC ERUPTION ===
     private shootMagmaEruption(magma: PlacedBuilding) {
-        magma.lastFireTime = this.time.now;
+        const stats = getBuildingStats('magmavent', magma.level || 1);
         const info = BUILDING_DEFINITIONS['magmavent'];
-        const center = this.cartToIso(magma.gridX + info.width / 2, magma.gridY + info.height / 2);
+        const center = IsoUtils.cartToIso(magma.gridX + info.width / 2, magma.gridY + info.height / 2);
         center.y -= 30; // From crater
 
-        // Very subtle screen shake
-        this.cameras.main.shake(250, 0.002);
+        // Stronger screen shake for the volcano
+        this.cameras.main.shake(400, 0.005);
 
-        const aoeRadius = info.range || 6;
-        const damage = info.damage || 60;
+        const aoeRadius = stats.range || 4.2;
 
-        // Manual Circular Smoke Clouds (as requested)
-        for (let i = 0; i < 6; i++) {
-            this.time.delayedCall(i * 100, () => {
+        // Black billowing smoke that rises after firing
+        for (let i = 0; i < 3; i++) {
+            this.time.delayedCall(150 + i * 120, () => {
                 const smoke = this.add.graphics();
-                const size = 15 + Math.random() * 15;
-                smoke.fillStyle(0x888888, 0.4);
-                smoke.fillCircle(0, 0, size);
-                smoke.setPosition(center.x + (Math.random() - 0.5) * 20, center.y - 10);
-                smoke.setDepth(30000); // High depth to ensure visibility over buildings
+                const size = 8 + Math.random() * 5;
+
+                // Dark black/charcoal smoke - small squares
+                smoke.fillStyle(0x111111, 0.55);
+                smoke.fillRect(-size / 2, -size / 2, size, size);
+
+                smoke.setPosition(center.x + (Math.random() - 0.5) * 20, center.y - 5);
+                smoke.setDepth(30000);
 
                 this.tweens.add({
                     targets: smoke,
-                    y: center.y - 80 - Math.random() * 60,
-                    x: smoke.x + (Math.random() - 0.5) * 40,
-                    scale: 1.5,
+                    y: center.y - 60 - Math.random() * 40,
+                    x: smoke.x + (Math.random() - 0.5) * 30,
+                    scale: { from: 1, to: 2 },
                     alpha: 0,
-                    duration: 2000 + Math.random() * 1000,
+                    duration: 1400 + Math.random() * 600,
                     onComplete: () => smoke.destroy()
                 });
             });
         }
 
-        // Central explosion flash (pixelated rectangle)
+        // Central blast - NO huge circles off screen. Just a sharp local flash.
         const flash = this.add.graphics();
         flash.setPosition(center.x, center.y);
-        flash.fillStyle(0xff6600, 0.8);
-        flash.fillRect(-15, -15, 30, 30);
-        flash.setDepth(30001); // High depth
+        flash.fillStyle(0xffaa00, 0.9);
+        // Star/Spike shape for blast instead of big rect
+        flash.beginPath();
+        for (let j = 0; j < 8; j++) {
+            const angle = (j / 8) * Math.PI * 2;
+            const r = j % 2 === 0 ? 30 : 10;
+            flash.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
+        }
+        flash.closePath();
+        flash.fillPath();
+
+        flash.setDepth(30001);
         this.tweens.add({
             targets: flash,
-            scale: 2,
+            scale: { from: 0.5, to: 1.5 },
             alpha: 0,
-            duration: 150,
+            duration: 200, // Very fast pop
             onComplete: () => flash.destroy()
         });
 
         // === AOE INDICATOR - Shows damage radius ===
-        // Using SQRT2 for proper isometric circle-to-ellipse mapping
         const aoePixelsX = aoeRadius * this.tileWidth * 0.5 * Math.SQRT2;
         const aoePixelsY = aoeRadius * this.tileHeight * 0.5 * Math.SQRT2;
 
         const aoeIndicator = this.add.graphics();
-        aoeIndicator.fillStyle(0xff4400, 0.25);
-        // Reverted to Ellipse as requested
+        aoeIndicator.fillStyle(0xff4400, 0.15); // Lighter alpha
         aoeIndicator.fillEllipse(center.x, center.y + 20, aoePixelsX * 2, aoePixelsY * 2);
-        aoeIndicator.lineStyle(3, 0xff6600, 0.8);
+        aoeIndicator.lineStyle(2, 0xff6600, 0.5);
         aoeIndicator.strokeEllipse(center.x, center.y + 20, aoePixelsX * 2, aoePixelsY * 2);
-        aoeIndicator.setDepth(5); // Ground level
+        aoeIndicator.setDepth(5);
         this.tweens.add({
             targets: aoeIndicator,
             alpha: 0,
@@ -6628,29 +2348,23 @@ export class MainScene extends Phaser.Scene {
             onComplete: () => aoeIndicator.destroy()
         });
 
-        // Flying lava rocks (Increased debris count and range)
+        // Flying lava rocks
         for (let i = 0; i < 20; i++) {
             const angle = Math.random() * Math.PI * 2;
-            // Increased range: goes farther
-            const dist = 40 + Math.random() * 60;
+            const dist = 30 + Math.random() * 70; // Varied range
             const peakHeight = 40 + Math.random() * 50;
 
             const rock = this.add.graphics();
-            // Consistent lava colors (Orange/Red/Yellow range)
             const rockColors = [0xff2200, 0xff4400, 0xff6600, 0xff8800];
             rock.fillStyle(rockColors[Math.floor(Math.random() * rockColors.length)], 1);
             const rockSize = 3 + Math.floor(Math.random() * 3);
             rock.fillRect(-rockSize / 2, -rockSize / 2, rockSize, rockSize);
-            // Hot glowing core
-            rock.fillStyle(0xffff00, 0.6);
-            rock.fillRect(-rockSize / 4, -rockSize / 4, rockSize / 2, rockSize / 2);
             rock.setPosition(center.x, center.y);
-            rock.setDepth(30002); // High depth
+            rock.setDepth(30002);
 
             const endX = center.x + Math.cos(angle) * dist;
             const endY = center.y + Math.sin(angle) * dist * 0.5 + 30;
 
-            // Parabolic arc
             this.tweens.add({
                 targets: rock,
                 x: endX,
@@ -6660,65 +2374,37 @@ export class MainScene extends Phaser.Scene {
                     const t = tween.progress;
                     rock.y = center.y - Math.sin(t * Math.PI) * peakHeight + t * (endY - center.y);
 
-                    // Trail particles
-                    if (Math.random() > 0.8) {
+                    // Reduced trail frequency
+                    if (Math.random() > 0.85) {
                         const trail = this.add.graphics();
-                        trail.fillStyle(0xff4400, 0.8);
+                        trail.fillStyle(0xff4400, 0.6);
                         trail.fillRect(-1, -1, 2, 2);
                         trail.setPosition(rock.x, rock.y);
                         trail.setDepth(30001);
                         this.tweens.add({
-                            targets: trail,
-                            alpha: 0,
-                            scale: 0.3,
-                            duration: 150,
-                            onComplete: () => trail.destroy()
+                            targets: trail, alpha: 0, scale: 0.1, duration: 200, onComplete: () => trail.destroy()
                         });
                     }
                 },
                 onComplete: () => {
-                    // Ground burn mark (stays longer)
+                    // Ground burn mark
                     const scorch = this.add.graphics();
-                    scorch.fillStyle(0x331100, 0.7); // Dark char
-                    scorch.fillEllipse(endX, endY, 12, 6);
-                    scorch.setDepth(4); // Ground level
+                    scorch.fillStyle(0x331100, 0.6);
+                    scorch.fillEllipse(endX, endY, 10, 5);
+                    scorch.setDepth(4);
 
-                    // Fading ember inside
-                    const ember = this.add.graphics();
-                    ember.fillStyle(0xff4400, 0.8);
-                    ember.fillRect(endX - 2, endY - 1, 4, 2);
-                    ember.setDepth(5);
-                    this.tweens.add({
-                        targets: ember,
-                        alpha: 0,
-                        duration: 800,
-                        onComplete: () => ember.destroy()
-                    });
-
-                    this.tweens.add({
-                        targets: scorch,
-                        alpha: 0,
-                        duration: 4000, // Lasts much longer
-                        onComplete: () => scorch.destroy()
-                    });
+                    this.tweens.add({ targets: scorch, alpha: 0, duration: 2000, onComplete: () => scorch.destroy() });
                     rock.destroy();
                 }
             });
         }
 
-
-
-        // Area damage glow (subtle) - ground level
+        // Area damage glow (subtle)
         const aoeGlow = this.add.graphics();
-        aoeGlow.fillStyle(0xff4400, 0.2);
-        aoeGlow.fillEllipse(center.x, center.y + 25, aoePixelsX * 2.2, aoePixelsY * 2.2);
-        aoeGlow.setDepth(4); // Below everything
-        this.tweens.add({
-            targets: aoeGlow,
-            alpha: 0,
-            duration: 800,
-            onComplete: () => aoeGlow.destroy()
-        });
+        aoeGlow.fillStyle(0xff4400, 0.1);
+        aoeGlow.fillEllipse(center.x, center.y + 25, aoePixelsX * 2, aoePixelsY * 2);
+        aoeGlow.setDepth(4);
+        this.tweens.add({ targets: aoeGlow, alpha: 0, duration: 600, onComplete: () => aoeGlow.destroy() });
 
         // Light smoke (removed old one in favor of createSmokeEffect)
 
@@ -6732,6 +2418,7 @@ export class MainScene extends Phaser.Scene {
             );
             if (dist <= aoeRadius) {
                 // More damage at center (100% at center, 50% at edge)
+                const damage = stats.damage || 80;
                 const damageMult = 1 - (dist / aoeRadius * 0.5);
                 t.health -= damage * damageMult;
                 t.hasTakenDamage = true;
@@ -6739,7 +2426,7 @@ export class MainScene extends Phaser.Scene {
                 // Hit flash on troop
                 const hitFlash = this.add.graphics();
                 hitFlash.fillStyle(0xff4400, 0.8);
-                const troopPos = this.cartToIso(t.gridX, t.gridY);
+                const troopPos = IsoUtils.cartToIso(t.gridX, t.gridY);
                 hitFlash.fillCircle(troopPos.x, troopPos.y, 15);
                 hitFlash.setDepth(10006);
                 this.tweens.add({
@@ -6757,9 +2444,9 @@ export class MainScene extends Phaser.Scene {
     }
 
     private showArcherProjectile(troop: Troop, target: PlacedBuilding, damage: number) {
-        const start = this.cartToIso(troop.gridX, troop.gridY);
+        const start = IsoUtils.cartToIso(troop.gridX, troop.gridY);
         const info = BUILDINGS[target.type];
-        const end = this.cartToIso(target.gridX + info.width / 2, target.gridY + info.height / 2);
+        const end = IsoUtils.cartToIso(target.gridX + info.width / 2, target.gridY + info.height / 2);
         const angle = Math.atan2(end.y - start.y, end.x - start.x);
 
         const targetBuilding = target;
@@ -6845,11 +2532,311 @@ export class MainScene extends Phaser.Scene {
         });
     }
 
+    private showSharpshooterProjectile(troop: Troop, target: PlacedBuilding, damage: number) {
+        const start = IsoUtils.cartToIso(troop.gridX, troop.gridY);
+        const info = BUILDINGS[target.type];
+        const end = IsoUtils.cartToIso(target.gridX + info.width / 2, target.gridY + info.height / 2);
+        const angle = Math.atan2(end.y - start.y, end.x - start.x);
+
+        const targetBuilding = target;
+
+        troop.facingAngle = angle;
+
+        // Initialize bow draw if not set
+        if (troop.bowDrawProgress === undefined) {
+            troop.bowDrawProgress = 0;
+        }
+
+        // ANIMATED BOW DRAW SEQUENCE
+        // Phase 1: Draw the bow back
+        this.tweens.add({
+            targets: troop,
+            bowDrawProgress: 1,
+            duration: 300,
+            ease: 'Power2',
+            onUpdate: () => {
+                this.redrawTroop(troop);
+            },
+            onComplete: () => {
+                // Phase 2: Hold briefly then release
+                this.time.delayedCall(80, () => {
+                    // RELEASE!
+                    // Snap bow back with spring animation
+                    this.tweens.add({
+                        targets: troop,
+                        bowDrawProgress: 0,
+                        duration: 100,
+                        ease: 'Back.easeOut',
+                        onUpdate: () => {
+                            this.redrawTroop(troop);
+                        }
+                    });
+
+                    // Body reaction on release
+                    this.tweens.add({
+                        targets: troop.gameObject,
+                        scaleX: 0.9,
+                        scaleY: 1.05,
+                        duration: 50,
+                        yoyo: true,
+                        ease: 'Power2'
+                    });
+
+                    // Launch the arrow
+                    this.launchSharpshooterArrow(troop, start, end, angle, targetBuilding, damage);
+                });
+            }
+        });
+    }
+
+    private launchSharpshooterArrow(_troop: Troop, start: Phaser.Math.Vector2, end: Phaser.Math.Vector2, angle: number, targetBuilding: PlacedBuilding, damage: number) {
+        // Large arrow with proper design
+        const arrow = this.add.graphics();
+        // Arrow shaft
+        arrow.fillStyle(0x5d4037, 1);
+        arrow.fillRect(-16, -2, 32, 4);
+        // Metal tip
+        arrow.fillStyle(0x888888, 1);
+        arrow.fillTriangle(18, 0, 12, -4, 12, 4);
+        arrow.fillStyle(0xcccccc, 1);
+        arrow.fillTriangle(18, 0, 14, -2, 14, 2);
+        // Green fletching
+        arrow.fillStyle(0x2e7d32, 1);
+        arrow.fillTriangle(-16, 0, -12, -5, -12, 5);
+        arrow.fillTriangle(-18, -3, -16, 0, -12, -3);
+        arrow.fillTriangle(-18, 3, -16, 0, -12, 3);
+
+        arrow.setPosition(start.x, start.y - 12);
+        arrow.setRotation(angle);
+        arrow.setDepth(10000);
+
+        // Trail effect
+        const trail = this.add.graphics();
+        trail.lineStyle(2, 0x88ff88, 0.5);
+        trail.lineBetween(start.x, start.y - 12, start.x, start.y - 12);
+        trail.setDepth(9999);
+
+        const endY = end.y - 25;
+        const dist = Math.sqrt((end.x - start.x) ** 2 + (endY - (start.y - 12)) ** 2);
+        const duration = Math.min(350, 80 + dist * 0.25); // Fast arrow
+
+        this.tweens.add({
+            targets: arrow,
+            x: end.x,
+            y: endY,
+            duration: duration,
+            ease: 'Linear',
+            onUpdate: () => {
+                // Update trail
+                trail.clear();
+                trail.lineStyle(2, 0x88ff88, 0.3);
+                trail.lineBetween(start.x, start.y - 12, arrow.x, arrow.y);
+            },
+            onComplete: () => {
+                arrow.destroy();
+                trail.destroy();
+
+                if (targetBuilding && targetBuilding.health > 0) {
+                    targetBuilding.health -= damage;
+                    this.showHitEffect(targetBuilding.graphics);
+                    this.updateHealthBar(targetBuilding);
+
+                    if (targetBuilding.health <= 0) {
+                        this.destroyBuilding(targetBuilding);
+                    }
+                }
+
+                // Bigger impact effect
+                const thud = this.add.circle(end.x, endY, 8, 0x2e7d32, 0.8);
+                thud.setDepth(100);
+                this.tweens.add({ targets: thud, scale: 0.2, alpha: 0, duration: 180, onComplete: () => thud.destroy() });
+            }
+        });
+    }
+
+    private showMobileMortarShot(troop: Troop, target: PlacedBuilding, damage: number) {
+        const stats = TROOP_DEFINITIONS[troop.type as keyof typeof TROOP_DEFINITIONS] as any;
+        const start = IsoUtils.cartToIso(troop.gridX, troop.gridY);
+        const info = BUILDINGS[target.type];
+        const end = IsoUtils.cartToIso(target.gridX + info.width / 2, target.gridY + info.height / 2);
+
+        // Mortar is offset to the left of the troop position
+        // Face target
+        const angle = Math.atan2(end.y - start.y, end.x - start.x);
+        troop.facingAngle = angle;
+
+        // Mortar is offset relative to the troop based on facing direction
+        const facingLeft = Math.abs(angle) > Math.PI / 2;
+        const flip = facingLeft ? -1 : 1;
+        const mortarX = start.x - (12 * flip);
+        const mortarY = start.y - 22;
+
+        // MORTAR RECOIL - animates only the mortar, not the soldier
+        // Initialize if needed
+        if (troop.mortarRecoil === undefined) {
+            troop.mortarRecoil = 0;
+        }
+
+        // Animate the mortar jumping back
+        this.tweens.add({
+            targets: troop,
+            mortarRecoil: 3, // Mortar kicks down slightly
+            duration: 60,
+            ease: 'Power2',
+            yoyo: true,
+            onUpdate: () => {
+                this.redrawTroop(troop);
+            },
+            onComplete: () => {
+                troop.mortarRecoil = 0;
+                this.redrawTroop(troop);
+            }
+        });
+
+        // Mortar shell - spawns from the mortar position
+        const shell = this.add.graphics();
+        shell.fillStyle(0x3a3a3a, 1);
+        shell.fillCircle(0, 0, 5);
+        shell.fillStyle(0x555555, 1);
+        shell.fillCircle(-1.5, -1.5, 2.5);
+        shell.setPosition(mortarX, mortarY);
+        shell.setDepth(10000);
+
+        // Muzzle flash at mortar position
+        const flash = this.add.graphics();
+        flash.fillStyle(0xff6600, 0.9);
+        flash.fillCircle(0, 0, 10);
+        flash.fillStyle(0xffaa00, 0.7);
+        flash.fillCircle(0, 0, 6);
+        flash.fillStyle(0xffffcc, 0.5);
+        flash.fillCircle(0, 0, 3);
+        flash.setPosition(mortarX, mortarY);
+        flash.setDepth(10001);
+        this.tweens.add({
+            targets: flash,
+            alpha: 0,
+            scale: 1.8,
+            duration: 100,
+            onComplete: () => flash.destroy()
+        });
+
+        // THIN BLACK SMOKE - rising slowly from mortar muzzle
+        for (let i = 0; i < 6; i++) {
+            const smoke = this.add.graphics();
+            // Thin wispy smoke
+            smoke.fillStyle(0x222222, 0.4 + Math.random() * 0.2);
+            smoke.fillRect(-1, -3 - Math.random() * 4, 2 + Math.random() * 2, 6 + Math.random() * 4);
+            smoke.setPosition(mortarX + (Math.random() - 0.5) * 6, mortarY);
+            smoke.setDepth(10002);
+
+            this.tweens.add({
+                targets: smoke,
+                y: mortarY - 40 - Math.random() * 30, // Rise up slowly
+                x: mortarX + (Math.random() - 0.5) * 20, // Slight drift
+                alpha: 0,
+                scaleY: 2.5, // Stretch vertically as it rises
+                scaleX: 0.5, // Get thinner
+                duration: 1200 + Math.random() * 600, // Much slower
+                delay: i * 80,
+                ease: 'Linear',
+                onComplete: () => smoke.destroy()
+            });
+        }
+
+        // Arcing trajectory
+        const midY = Math.min(start.y - 20, end.y - 25) - 80;
+        const endY = end.y;
+
+        this.tweens.add({
+            targets: shell,
+            x: { value: (start.x + end.x) / 2, duration: 300, ease: 'Linear' },
+            y: { value: midY, duration: 300, ease: 'Quad.easeOut' },
+            onComplete: () => {
+                this.tweens.add({
+                    targets: shell,
+                    x: { value: end.x, duration: 300, ease: 'Linear' },
+                    y: { value: endY, duration: 300, ease: 'Quad.easeIn' },
+                    onComplete: () => {
+                        shell.destroy();
+
+                        // Explosion effect
+                        this.cameras.main.shake(50, 0.002);
+
+                        const explosion = this.add.graphics();
+                        explosion.fillStyle(0xff4400, 0.8);
+                        explosion.fillCircle(0, 0, 20);
+                        explosion.fillStyle(0xff8800, 0.6);
+                        explosion.fillCircle(0, 0, 12);
+                        explosion.fillStyle(0xffcc00, 0.4);
+                        explosion.fillCircle(0, 0, 6);
+                        explosion.setPosition(end.x, endY);
+                        explosion.setDepth(5000);
+                        this.tweens.add({
+                            targets: explosion,
+                            alpha: 0,
+                            scale: 2,
+                            duration: 200,
+                            onComplete: () => explosion.destroy()
+                        });
+
+                        // Splash damage to all buildings in radius
+                        const targetInfo = BUILDINGS[target.type];
+                        const tCenterX = target.gridX + targetInfo.width / 2;
+                        const tCenterY = target.gridY + targetInfo.height / 2;
+                        const sRadius = stats.splashRadius || 2;
+
+                        this.buildings.forEach(b => {
+                            if (b.owner !== troop.owner && b.health > 0) {
+                                const bInfo = BUILDINGS[b.type];
+                                const bCenterX = b.gridX + bInfo.width / 2;
+                                const bCenterY = b.gridY + bInfo.height / 2;
+                                const bdx = bCenterX - tCenterX;
+                                const bdy = bCenterY - tCenterY;
+                                const bdist = Math.sqrt(bdx * bdx + bdy * bdy);
+
+                                if (bdist <= sRadius) {
+                                    // Full damage at center, half at edge
+                                    const splashDamage = bdist < 0.5 ? damage : damage * 0.6;
+                                    b.health -= splashDamage;
+                                    this.showHitEffect(b.graphics);
+                                    this.updateHealthBar(b);
+                                    if (b.health <= 0) {
+                                        this.destroyBuilding(b);
+                                    }
+                                }
+                            }
+                        });
+
+                        // Debris
+                        for (let i = 0; i < 6; i++) {
+                            const debris = this.add.graphics();
+                            debris.fillStyle(0x555555, 0.8);
+                            debris.fillCircle(0, 0, 2 + Math.random() * 2);
+                            debris.setPosition(end.x, endY);
+                            debris.setDepth(5001);
+                            const debrisAngle = Math.random() * Math.PI * 2;
+                            const debrisDist = 15 + Math.random() * 25;
+                            this.tweens.add({
+                                targets: debris,
+                                x: end.x + Math.cos(debrisAngle) * debrisDist,
+                                y: endY + Math.sin(debrisAngle) * debrisDist * 0.5 - 10,
+                                alpha: 0,
+                                duration: 300,
+                                ease: 'Quad.easeOut',
+                                onComplete: () => debris.destroy()
+                            });
+                        }
+                    }
+                });
+            }
+        });
+    }
+
     private showStormLightning(troop: Troop, target: PlacedBuilding, damage: number) {
         // Redraw to show attack pose (could be facing change or effect)
-        const start = this.cartToIso(troop.gridX, troop.gridY);
+        const start = IsoUtils.cartToIso(troop.gridX, troop.gridY);
         const info = BUILDINGS[target.type];
-        const end = this.cartToIso(target.gridX + info.width / 2, target.gridY + info.height / 2);
+        const end = IsoUtils.cartToIso(target.gridX + info.width / 2, target.gridY + info.height / 2);
 
         // Face target
         const angle = Math.atan2(end.y - start.y, end.x - start.x);
@@ -6857,8 +2844,8 @@ export class MainScene extends Phaser.Scene {
         this.redrawTroop(troop);
 
         // Calculate chain targets
-        const chainCount = TROOP_STATS.stormmage.chainCount || 4;
-        const chainRange = TROOP_STATS.stormmage.chainRange || 5;
+        const chainCount = TROOP_DEFINITIONS.stormmage.chainCount || 4;
+        const chainRange = TROOP_DEFINITIONS.stormmage.chainRange || 5;
         const targets = this.findChainTargets(target, chainCount, chainRange, troop.owner);
 
         // Initial Zap Visual (Troop -> First Target)
@@ -6880,10 +2867,10 @@ export class MainScene extends Phaser.Scene {
                 if (nextTarget.health > 0 && (previous.health > 0 || index === 0)) { // Allow chaining from dead primary
                     const pInfo = BUILDINGS[previous.type];
                     // Get center of previous, or its last known pos if dead (approx)
-                    const pPos = this.cartToIso(previous.gridX + pInfo.width / 2, previous.gridY + pInfo.height / 2);
+                    const pPos = IsoUtils.cartToIso(previous.gridX + pInfo.width / 2, previous.gridY + pInfo.height / 2);
 
                     const nInfo = BUILDINGS[nextTarget.type];
-                    const nPos = this.cartToIso(nextTarget.gridX + nInfo.width / 2, nextTarget.gridY + nInfo.height / 2);
+                    const nPos = IsoUtils.cartToIso(nextTarget.gridX + nInfo.width / 2, nextTarget.gridY + nInfo.height / 2);
 
                     this.drawLightningBolt(pPos.x, pPos.y - 15, nPos.x, nPos.y - 15, 0x00ccff);
                     this.applyLightningDamage(nextTarget, currentDamage);
@@ -7020,8 +3007,8 @@ export class MainScene extends Phaser.Scene {
 
     private shootBallistaAt(ballista: PlacedBuilding, troop: Troop) {
         const info = BUILDINGS['ballista'];
-        const start = this.cartToIso(ballista.gridX + info.width / 2, ballista.gridY + info.height / 2);
-        const end = this.cartToIso(troop.gridX, troop.gridY);
+        const start = IsoUtils.cartToIso(ballista.gridX + info.width / 2, ballista.gridY + info.height / 2);
+        const end = IsoUtils.cartToIso(troop.gridX, troop.gridY);
         const angle = Math.atan2(end.y - start.y, end.x - start.x);
         const targetTroop = troop;
 
@@ -7226,8 +3213,8 @@ export class MainScene extends Phaser.Scene {
 
     private shootXBowAt(xbow: PlacedBuilding, troop: Troop) {
         const info = BUILDINGS['xbow'];
-        const start = this.cartToIso(xbow.gridX + info.width / 2, xbow.gridY + info.height / 2);
-        const end = this.cartToIso(troop.gridX, troop.gridY);
+        const start = IsoUtils.cartToIso(xbow.gridX + info.width / 2, xbow.gridY + info.height / 2);
+        const end = IsoUtils.cartToIso(troop.gridX, troop.gridY);
         const angle = Math.atan2(end.y - start.y, end.x - start.x);
         const targetTroop = troop;
 
@@ -7304,13 +3291,13 @@ export class MainScene extends Phaser.Scene {
     }
 
     private showWardLaser(troop: Troop, target: Troop | PlacedBuilding, damage: number) {
-        const start = this.cartToIso(troop.gridX, troop.gridY);
+        const start = IsoUtils.cartToIso(troop.gridX, troop.gridY);
 
         const isBuilding = ('type' in target && !!BUILDINGS[target.type]);
         const width = isBuilding ? BUILDINGS[target.type].width : 0.5;
         const height = isBuilding ? BUILDINGS[target.type].height : 0.5;
 
-        const end = this.cartToIso(target.gridX + width / 2, target.gridY + height / 2);
+        const end = IsoUtils.cartToIso(target.gridX + width / 2, target.gridY + height / 2);
 
         const angle = Math.atan2(end.y - start.y, end.x - start.x);
         troop.facingAngle = angle;
@@ -7379,7 +3366,13 @@ export class MainScene extends Phaser.Scene {
     private redrawTroop(troop: Troop) {
         const g = troop.gameObject;
         g.clear();
-        this.drawTroopVisual(g, troop.type, troop.owner, troop.facingAngle);
+        TroopRenderer.drawTroopVisual(g, troop.type, troop.owner, troop.facingAngle, true, troop.slamOffset || 0, troop.bowDrawProgress || 0, troop.mortarRecoil || 0, false, troop.phalanxSpearOffset || 0);
+    }
+
+    private redrawTroopWithMovement(troop: Troop, isMoving: boolean) {
+        const g = troop.gameObject;
+        g.clear();
+        TroopRenderer.drawTroopVisual(g, troop.type, troop.owner, troop.facingAngle, isMoving, troop.slamOffset || 0, troop.bowDrawProgress || 0, troop.mortarRecoil || 0, false, troop.phalanxSpearOffset || 0);
     }
 
 
@@ -7387,9 +3380,24 @@ export class MainScene extends Phaser.Scene {
 
     private updateTroops(delta: number) {
         this.troops.forEach(troop => {
-            // Redraw chronoswarm every frame for animated aura
-            if (troop.type === 'chronoswarm' && troop.health > 0) {
-                this.redrawTroop(troop);
+            // Redraw animated troops every frame
+            if ((troop.type === 'warrior' || troop.type === 'archer' || troop.type === 'giant' || troop.type === 'ram' || troop.type === 'golem' || troop.type === 'sharpshooter' || troop.type === 'mobilemortar' || troop.type === 'davincitank' || troop.type === 'phalanx' || troop.type === 'romanwarrior') && troop.health > 0) {
+                // Determine if troop is actually moving (not in attack range)
+                let isActuallyMoving = true;
+                if (troop.target) {
+                    const b = troop.target;
+                    const isBuilding = ('type' in b && BUILDINGS[b.type]);
+                    const tw = isBuilding ? BUILDINGS[b.type].width : 0.5;
+                    const th = isBuilding ? BUILDINGS[b.type].height : 0.5;
+                    const bx = isBuilding ? b.gridX : b.gridX - tw / 2;
+                    const by = isBuilding ? b.gridY : b.gridY - th / 2;
+                    const edx = Math.max(bx - troop.gridX, 0, troop.gridX - (bx + tw));
+                    const edy = Math.max(by - troop.gridY, 0, troop.gridY - (by + th));
+                    const dist = Math.sqrt(edx * edx + edy * edy);
+                    const stats = TROOP_DEFINITIONS[troop.type];
+                    isActuallyMoving = dist > stats.range;
+                }
+                this.redrawTroopWithMovement(troop, isActuallyMoving);
             }
             if (troop.target && troop.health > 0) {
                 const b = troop.target;
@@ -7406,7 +3414,7 @@ export class MainScene extends Phaser.Scene {
                 const edx = Math.max(bx - troop.gridX, 0, troop.gridX - (bx + tw));
                 const edy = Math.max(by - troop.gridY, 0, troop.gridY - (by + th));
                 const dist = Math.sqrt(edx * edx + edy * edy);
-                const stats = TROOP_STATS[troop.type];
+                const stats = TROOP_DEFINITIONS[troop.type];
 
                 if (dist > stats.range) {
                     const time = this.time.now;
@@ -7416,7 +3424,7 @@ export class MainScene extends Phaser.Scene {
                     if (troop.type !== 'ram' && (!troop.path || time >= (troop.nextPathTime || 0))) {
                         let finalTarget: any = troop.target;
 
-                        troop.path = this.findPath(troop, finalTarget) || undefined;
+                        troop.path = PathfindingSystem.findPath(troop, finalTarget, this.buildings, this.troops) || undefined;
                         troop.lastPathTime = time;
                         const interval = troop.type === 'ward' ? 250 : 500;
                         troop.nextPathTime = time + interval + Math.random() * interval;
@@ -7500,51 +3508,39 @@ export class MainScene extends Phaser.Scene {
                             }
                         });
 
-                        // Chrono Swarm speed boost: check for nearby chronoswarm allies
-                        let chronoBoost = 1.0;
-                        if (troop.type !== 'chronoswarm') { // Chrono swarm doesn't boost itself
-                            for (const other of this.troops) {
-                                if (other.type === 'chronoswarm' && other.owner === troop.owner && other.id !== troop.id) {
-                                    const d = Phaser.Math.Distance.Between(troop.gridX, troop.gridY, other.gridX, other.gridY);
-                                    const boostRadius = TROOP_STATS.chronoswarm.boostRadius ?? 4.0;
-                                    if (d < boostRadius) {
-                                        chronoBoost = Math.max(chronoBoost, TROOP_STATS.chronoswarm.boostAmount ?? 1.5);
-                                    }
-                                }
-                            }
-                        }
-
-                        const speed = stats.speed * troop.speedMult * chronoBoost * delta;
+                        const speed = stats.speed * troop.speedMult * delta;
                         troop.gridX += (moveDir.x + sepX) * speed;
                         troop.gridY += (moveDir.y + sepY) * speed;
 
-                        const pos = this.cartToIso(troop.gridX, troop.gridY);
+                        const pos = IsoUtils.cartToIso(troop.gridX, troop.gridY);
                         troop.gameObject.setPosition(pos.x, pos.y);
                         this.updateHealthBar(troop);
-                        troop.gameObject.setDepth((troop.gridX + troop.gridY) * 10);
+                        // Consistent depth: add 1000 to ensure it's ALWAYS above the -1000 floor even with negative coords
+                        troop.gameObject.setDepth(1000 + (troop.gridX + troop.gridY + (troop.type === 'golem' ? 2 : 0)) * 10);
 
-                        // Archer Rotation
-                        if (troop.type === 'archer') {
-                            const targetPos = this.cartToIso(tx, ty);
+                        // Update facing angle for troops that need it (facing movement direction)
+                        if (troop.type === 'archer' || troop.type === 'ram' || troop.type === 'golem' || troop.type === 'sharpshooter' || troop.type === 'mobilemortar' || troop.type === 'phalanx' || troop.type === 'romanwarrior') {
+                            const targetPos = IsoUtils.cartToIso(tx, ty);
                             const newFacing = Math.atan2(targetPos.y - pos.y, targetPos.x - pos.x);
-                            if (Math.abs(newFacing - troop.facingAngle) > 0.1) {
-                                troop.facingAngle = newFacing;
+                            troop.facingAngle = newFacing;
+                            // Redraw troops that have direction-dependent visuals
+                            if ((troop.type === 'sharpshooter' || troop.type === 'mobilemortar' || troop.type === 'phalanx' || troop.type === 'romanwarrior') && Math.abs(newFacing - troop.facingAngle) > 0.1) {
                                 this.redrawTroop(troop);
                             }
                         }
                     }
                 } else {
-                    // In range - update facing direction for archers
-                    if (troop.type === 'archer' && troop.target) {
-                        const pos = this.cartToIso(troop.gridX, troop.gridY);
-                        const targetPos = this.cartToIso(tx, ty);
+                    // In range - update facing direction for ranged/directional troops
+                    if ((troop.type === 'archer' || troop.type === 'sharpshooter' || troop.type === 'mobilemortar' || troop.type === 'phalanx' || troop.type === 'romanwarrior') && troop.target) {
+                        const pos = IsoUtils.cartToIso(troop.gridX, troop.gridY);
+                        const targetPos = IsoUtils.cartToIso(tx, ty);
                         const newFacing = Math.atan2(targetPos.y - pos.y, targetPos.x - pos.x);
                         if (Math.abs(newFacing - troop.facingAngle) > 0.1) {
                             troop.facingAngle = newFacing;
                             this.redrawTroop(troop);
                         }
                     }
-                    if (!troop.target) troop.target = this.findNearestEnemyBuilding(troop);
+                    if (!troop.target) troop.target = TargetingSystem.findTarget(troop, this.buildings);
                 }
             }
         });
@@ -7575,149 +3571,11 @@ export class MainScene extends Phaser.Scene {
         return null;
     }
 
-    private findNearestEnemyBuilding(troop: Troop): PlacedBuilding | null {
-        const enemies = this.buildings.filter(b => b.owner !== troop.owner && b.health > 0);
-        if (enemies.length === 0) return null;
-
-        const isWall = (b: PlacedBuilding) => b.type === 'wall';
-        const isDefense = (b: PlacedBuilding) => BUILDINGS[b.type].category === 'defense';
-
-        // Check if only walls remain - if so, don't target anything (battle is essentially over)
-        const nonWallBuildings = enemies.filter(b => !isWall(b));
-        if (nonWallBuildings.length === 0) {
-            // Only walls left - don't target them, let the battle end
-            return null;
-        }
-
-        let targets: PlacedBuilding[] = [];
-
-        if (troop.type === 'giant') {
-            // Giants: Prioritize Defenses.
-            // 1. Non-Wall Defenses
-            targets = enemies.filter(b => !isWall(b) && isDefense(b));
-            if (targets.length === 0) {
-                // 2. Any Non-Wall (Act as if no logic/Warriors)
-                targets = nonWallBuildings;
-            }
-        } else if (troop.type === 'ward') {
-            // Ward: Assistance Mode (No walls)
-            targets = nonWallBuildings;
-        } else if (troop.type === 'ram') {
-            // Ram: Prioritize Town Hall
-            const th = enemies.find(b => b.type === 'town_hall');
-            if (th) {
-                targets = [th];
-            } else {
-                targets = nonWallBuildings;
-            }
-        } else {
-            // Regular/StormMage: Prioritize Non-Walls
-            targets = nonWallBuildings;
-        }
-
-        if (targets.length === 0) return null;
-
-        let nearest: PlacedBuilding | null = null;
-        let minDist = Infinity;
-        targets.forEach(b => {
-            const info = BUILDINGS[b.type];
-            const dist = Phaser.Math.Distance.Between(troop.gridX, troop.gridY, b.gridX + info.width / 2, b.gridY + info.height / 2);
-            if (dist < minDist) { minDist = dist; nearest = b; }
-        });
-
-        return nearest;
-    }
 
 
 
-    private findPath(troop: Troop, target: any): Phaser.Math.Vector2[] | null {
-        const width = this.mapSize;
-        const height = this.mapSize;
-        // Default cost 10
-        const grid = new Int32Array(width * height).fill(10);
 
-        this.buildings.forEach(b => {
-            if (b.health <= 0) return;
-            const isTarget = (b.id === target.id);
-            // Wall Cost 5000. Blocked 999999. Target 0.
-            let wallCost = 5000;
-            if (troop.type === 'ram') wallCost = 50; // Rams plow through walls
-            const cost = isTarget ? 0 : (b.type === 'wall' ? wallCost : 999999);
-            const info = BUILDINGS[b.type];
-            for (let x = b.gridX; x < b.gridX + info.width; x++) {
-                for (let y = b.gridY; y < b.gridY + info.height; y++) {
-                    if (x >= 0 && x < width && y >= 0 && y < height) grid[y * width + x] = cost;
-                }
-            }
-        });
 
-        // Troop obstacles for fanning
-        this.troops.forEach(t => {
-            if (t !== troop && t.health > 0) {
-                const tx = Math.floor(t.gridX);
-                const ty = Math.floor(t.gridY);
-                if (tx >= 0 && tx < width && ty >= 0 && ty < height) {
-                    const idx = ty * width + tx;
-                    if (grid[idx] < 1000) grid[idx] += 40;
-                }
-            }
-        });
-
-        const bTarget = target as any;
-        const isBuilding = ('type' in bTarget && BUILDINGS[bTarget.type]);
-
-        const open: any[] = [];
-        const closed = new Uint8Array(width * height);
-        open.push({ x: Math.floor(troop.gridX), y: Math.floor(troop.gridY), f: 0, g: 0, p: null });
-
-        while (open.length > 0) {
-            open.sort((a, b) => a.f - b.f);
-            const curr = open.shift();
-
-            const tx = isBuilding ? bTarget.gridX : Math.floor(bTarget.gridX);
-            const ty = isBuilding ? bTarget.gridY : Math.floor(bTarget.gridY);
-            const thw = isBuilding ? BUILDINGS[bTarget.type].width : 1;
-            const thh = isBuilding ? BUILDINGS[bTarget.type].height : 1;
-
-            if (curr.x >= tx && curr.x < tx + thw &&
-                curr.y >= ty && curr.y < ty + thh) {
-                const path = [];
-                let p = curr;
-                while (p.p) {
-                    path.push(new Phaser.Math.Vector2(p.x, p.y));
-                    p = p.p;
-                }
-                return path.reverse();
-            }
-
-            const idx = curr.y * width + curr.x;
-            if (closed[idx]) continue;
-            closed[idx] = 1;
-
-            const neighbors = [{ x: curr.x + 1, y: curr.y }, { x: curr.x - 1, y: curr.y }, { x: curr.x, y: curr.y + 1 }, { x: curr.x, y: curr.y - 1 }];
-
-            for (let n of neighbors) {
-                if (n.x < 0 || n.x >= width || n.y < 0 || n.y >= height) continue;
-                const nIdx = n.y * width + n.x;
-                if (closed[nIdx]) continue;
-
-                const cellCost = grid[nIdx];
-                if (cellCost >= 900000) continue;
-
-                const g = curr.g + cellCost;
-                const h = (Math.abs(n.x - target.gridX) + Math.abs(n.y - target.gridY)) * 10;
-                const f = g + h;
-
-                const existing = open.find((o: any) => o.x === n.x && o.y === n.y);
-                if (existing) {
-                    if (g < existing.g) { existing.g = g; existing.f = f; existing.p = curr; }
-                } else {
-                    open.push({ x: n.x, y: n.y, f, g, p: curr });
-                }
-            }
-        }
-        return null;
-    }
 
     private destroyBuilding(b: PlacedBuilding) {
         const index = this.buildings.findIndex(x => x.id === b.id);
@@ -7738,7 +3596,7 @@ export class MainScene extends Phaser.Scene {
         }
 
         const info = BUILDINGS[b.type];
-        const pos = this.cartToIso(b.gridX + info.width / 2, b.gridY + info.height / 2);
+        const pos = IsoUtils.cartToIso(b.gridX + info.width / 2, b.gridY + info.height / 2);
         const size = Math.max(info.width, info.height);
 
         // Screen shake proportional to building size
@@ -7912,7 +3770,7 @@ export class MainScene extends Phaser.Scene {
             }
             // Remove from backend when player building is deleted
             if (b.owner === 'PLAYER') {
-                Backend.removeBuilding('player_home', b.id);
+                Backend.removeBuilding(this.userId, b.id);
             }
         }
     }
@@ -7929,7 +3787,7 @@ export class MainScene extends Phaser.Scene {
 
     private destroyTroop(t: Troop) {
         if (t.id === 'dummy_target') return; // Ignore dummy targets used for fun shooting
-        const pos = this.cartToIso(t.gridX, t.gridY);
+        const pos = IsoUtils.cartToIso(t.gridX, t.gridY);
 
         // RECURSION SPLIT: Spawn two smaller recursions on death if generation < 2
         if (t.type === 'recursion' && (t.recursionGen ?? 0) < 2) {
@@ -7950,15 +3808,315 @@ export class MainScene extends Phaser.Scene {
                 { dx: 0.5, dy: 0.3 }
             ];
             for (const off of offsets) {
+                this.pendingSpawnCount++;
                 this.time.delayedCall(50, () => {
                     this.spawnTroop(t.gridX + off.dx, t.gridY + off.dy, 'recursion', t.owner, nextGen);
+                    this.pendingSpawnCount--;
                 });
             }
         }
 
+        // === GOLEM DEATH ANIMATION ===
+        if (t.type === 'golem') {
+            const isPlayer = t.owner === 'PLAYER';
+            // Stone colors with ancient weathering - EXACTLY as in drawTroopVisual
+            const stoneBase = isPlayer ? 0x5a6a7a : 0x6a5a5a;
+            const stoneDark = isPlayer ? 0x3a4a5a : 0x4a3a3a;
+            const stoneLight = isPlayer ? 0x7a8a9a : 0x8a7a7a;
+            const stoneAccent = isPlayer ? 0x4a5a6a : 0x5a4a4a;
+            const mossColor = isPlayer ? 0x4a6a3a : 0x5a4a3a;
+
+            // Remove the troop immediately but keep visual debris
+            this.troops = this.troops.filter(x => x.id !== t.id);
+            t.gameObject.destroy();
+            t.healthBar.destroy();
+
+            // Debris Depth: Render at the bottom (on ground level)
+            const debrisDepth = 5;
+
+            // 1. LEFT ARM PIECE
+            const leftArm = this.add.graphics();
+            leftArm.setPosition(pos.x, pos.y);
+            leftArm.setDepth(debrisDepth);
+            // Reconstruct Left Arm exactly:
+            const lax = -18; const lay = -20;
+            leftArm.fillStyle(stoneDark, 1);
+            leftArm.beginPath(); leftArm.moveTo(lax - 4, lay); leftArm.lineTo(lax - 8, lay + 18); leftArm.lineTo(lax + 4, lay + 20); leftArm.lineTo(lax + 4, lay + 2); leftArm.closePath(); leftArm.fillPath();
+            leftArm.fillStyle(stoneBase, 1);
+            leftArm.beginPath(); leftArm.moveTo(lax - 2, lay + 2); leftArm.lineTo(lax - 4, lay + 16); leftArm.lineTo(lax + 2, lay + 17); leftArm.lineTo(lax + 2, lay + 3); leftArm.closePath(); leftArm.fillPath();
+            const lfx = lax - 2; const lfy = lay + 18;
+            leftArm.fillStyle(stoneAccent, 1);
+            leftArm.beginPath(); leftArm.moveTo(lfx - 5, lfy); leftArm.lineTo(lfx - 7, lfy + 17); leftArm.lineTo(lfx + 5, lfy + 18); leftArm.lineTo(lfx + 6, lfy + 1); leftArm.closePath(); leftArm.fillPath();
+            const lfistX = lfx - 1; const lfistY = lfy + 22;
+            leftArm.fillStyle(stoneDark, 1); leftArm.fillCircle(lfistX, lfistY, 9);
+            leftArm.fillStyle(stoneBase, 1); leftArm.fillCircle(lfistX - 1, lfistY - 1, 7);
+            leftArm.fillStyle(stoneLight, 0.5); leftArm.fillCircle(lfistX - 4, lfistY - 3, 2); leftArm.fillCircle(lfistX, lfistY - 4, 2); leftArm.fillCircle(lfistX + 4, lfistY - 3, 2);
+
+            this.tweens.add({
+                targets: leftArm,
+                x: pos.x - 12, y: pos.y + 10, rotation: -1.2, // Arms not as far (-22 -> -12)
+                duration: 2800, // Slower (2400 -> 2800)
+                ease: 'Bounce.easeOut',
+                onComplete: () => {
+                    this.tweens.add({ targets: leftArm, alpha: 0, duration: 4000, delay: 5000, onComplete: () => leftArm.destroy() });
+                }
+            });
+
+            // 2. RIGHT ARM PIECE
+            const rightArm = this.add.graphics();
+            rightArm.setPosition(pos.x, pos.y);
+            rightArm.setDepth(debrisDepth);
+            // Reconstruct Right Arm exactly:
+            const rax = 18; const ray = -20;
+            rightArm.fillStyle(stoneDark, 1);
+            rightArm.beginPath(); rightArm.moveTo(rax + 4, ray); rightArm.lineTo(rax + 8, ray + 18); rightArm.lineTo(rax - 4, ray + 20); rightArm.lineTo(rax - 4, ray + 2); rightArm.closePath(); rightArm.fillPath();
+            rightArm.fillStyle(stoneBase, 1);
+            rightArm.beginPath(); rightArm.moveTo(rax + 2, ray + 2); rightArm.lineTo(rax + 4, ray + 16); rightArm.lineTo(rax - 2, ray + 17); rightArm.lineTo(rax - 2, ray + 3); rightArm.closePath(); rightArm.fillPath();
+            const rfx = rax + 2; const rfy = ray + 18;
+            rightArm.fillStyle(stoneAccent, 1);
+            rightArm.beginPath(); rightArm.moveTo(rfx + 5, rfy); rightArm.lineTo(rfx + 7, rfy + 17); rightArm.lineTo(rfx - 5, rfy + 18); rightArm.lineTo(rfx - 6, rfy + 1); rightArm.closePath(); rightArm.fillPath();
+            const rfistX = rfx + 1; const rfistY = rfy + 22;
+            rightArm.fillStyle(stoneDark, 1); rightArm.fillCircle(rfistX, rfistY, 9);
+            rightArm.fillStyle(stoneBase, 1); rightArm.fillCircle(rfistX + 1, rfistY - 1, 7);
+            rightArm.fillStyle(stoneLight, 0.5); rightArm.fillCircle(rfistX + 4, rfistY - 3, 2); rightArm.fillCircle(rfistX, rfistY - 4, 2); rightArm.fillCircle(rfistX - 4, rfistY - 3, 2);
+
+            this.tweens.add({
+                targets: rightArm,
+                x: pos.x + 15, y: pos.y + 15, rotation: 1.4, // Arms not as far (+28 -> +15)
+                duration: 3000, // Slower (2600 -> 3000)
+                ease: 'Bounce.easeOut',
+                onComplete: () => {
+                    this.tweens.add({ targets: rightArm, alpha: 0, duration: 4000, delay: 4800, onComplete: () => rightArm.destroy() });
+                }
+            });
+
+            // 3. LEFT LEG PIECE
+            const leftLeg = this.add.graphics();
+            leftLeg.setPosition(pos.x, pos.y);
+            leftLeg.setDepth(debrisDepth);
+            const legSpread = 12;
+            leftLeg.fillStyle(stoneDark, 1);
+            leftLeg.beginPath(); leftLeg.moveTo(-legSpread - 6, -5); leftLeg.lineTo(-legSpread - 8, 12); leftLeg.lineTo(-legSpread + 4, 14); leftLeg.lineTo(-legSpread + 2, -3); leftLeg.closePath(); leftLeg.fillPath();
+            leftLeg.fillStyle(stoneBase, 1);
+            leftLeg.beginPath(); leftLeg.moveTo(-legSpread - 4, -4); leftLeg.lineTo(-legSpread - 5, 10); leftLeg.lineTo(-legSpread, 11); leftLeg.lineTo(-legSpread + 1, -3); leftLeg.closePath(); leftLeg.fillPath();
+            leftLeg.fillStyle(stoneDark, 1); leftLeg.fillRect(-legSpread - 10, 12, 16, 6);
+            leftLeg.fillStyle(stoneAccent, 1); leftLeg.fillRect(-legSpread - 8, 11, 12, 3);
+
+            this.tweens.add({
+                targets: leftLeg,
+                x: pos.x - 10, y: pos.y + 15, rotation: -0.5,
+                duration: 2300, // Slightly slower (2000 -> 2300)
+                ease: 'Bounce.easeOut',
+                onComplete: () => {
+                    this.tweens.add({ targets: leftLeg, alpha: 0, duration: 4000, delay: 5200, onComplete: () => leftLeg.destroy() });
+                }
+            });
+
+            // 4. RIGHT LEG PIECE
+            const rightLeg = this.add.graphics();
+            rightLeg.setPosition(pos.x, pos.y);
+            rightLeg.setDepth(debrisDepth);
+            rightLeg.fillStyle(stoneDark, 1);
+            rightLeg.beginPath(); rightLeg.moveTo(legSpread + 6, -5); rightLeg.lineTo(legSpread + 8, 12); rightLeg.lineTo(legSpread - 4, 14); rightLeg.lineTo(legSpread - 2, -3); rightLeg.closePath(); rightLeg.fillPath();
+            rightLeg.fillStyle(stoneBase, 1);
+            rightLeg.beginPath(); rightLeg.moveTo(legSpread + 4, -4); rightLeg.lineTo(legSpread + 5, 10); rightLeg.lineTo(legSpread, 11); rightLeg.lineTo(legSpread - 1, -3); rightLeg.closePath(); rightLeg.fillPath();
+            rightLeg.fillStyle(stoneDark, 1); rightLeg.fillRect(legSpread - 6, 12, 16, 6);
+            rightLeg.fillStyle(stoneAccent, 1); rightLeg.fillRect(legSpread - 4, 11, 12, 3);
+
+            this.tweens.add({
+                targets: rightLeg,
+                x: pos.x + 12, y: pos.y + 12, rotation: 0.6,
+                duration: 2500, // Slightly slower (2200 -> 2500)
+                ease: 'Bounce.easeOut',
+                onComplete: () => {
+                    this.tweens.add({ targets: rightLeg, alpha: 0, duration: 4000, delay: 5100, onComplete: () => rightLeg.destroy() });
+                }
+            });
+
+            // 5. TORSO RUIN
+            const torso = this.add.graphics();
+            torso.setPosition(pos.x, pos.y);
+            torso.setDepth(debrisDepth);
+            // Reconstruct Torso exactly. Note bodySlam=0 now.
+            torso.fillStyle(stoneDark, 1);
+            torso.beginPath(); torso.moveTo(-22, -8); torso.lineTo(-18, -28); torso.lineTo(18, -28); torso.lineTo(22, -8); torso.lineTo(16, 2); torso.lineTo(-16, 2); torso.closePath(); torso.fillPath();
+            torso.fillStyle(stoneBase, 1);
+            torso.beginPath(); torso.moveTo(-20, -10); torso.lineTo(-16, -30); torso.lineTo(16, -30); torso.lineTo(20, -10); torso.lineTo(14, 0); torso.lineTo(-14, 0); torso.closePath(); torso.fillPath();
+            torso.fillStyle(stoneLight, 1);
+            torso.beginPath(); torso.moveTo(-12, -24); torso.lineTo(-8, -28); torso.lineTo(8, -28); torso.lineTo(12, -24); torso.lineTo(10, -14); torso.lineTo(-10, -14); torso.closePath(); torso.fillPath();
+            // DARK EYES on chest rune (no glow)
+            torso.fillStyle(stoneDark, 1);
+            torso.beginPath(); torso.moveTo(0, -26); torso.lineTo(-4, -22); torso.lineTo(0, -18); torso.lineTo(4, -22); torso.closePath(); torso.fillPath();
+            // Cracks
+            torso.lineStyle(1, stoneDark, 0.6); torso.lineBetween(-15, -20, -10, -15); torso.lineBetween(12, -25, 16, -18); torso.lineBetween(-8, -8, -3, -12); torso.lineBetween(5, -6, 10, -10);
+            // Moss
+            torso.fillStyle(mossColor, 0.7); torso.fillCircle(-14, -16, 3); torso.fillCircle(16, -12, 2.5); torso.fillCircle(-8, -4, 2);
+            // Neck
+            torso.fillStyle(stoneDark, 1); torso.fillRect(-8, -38, 16, 10);
+            // Head
+            torso.fillStyle(stoneBase, 1);
+            torso.beginPath(); torso.moveTo(-14, -36); torso.lineTo(-16, -48); torso.lineTo(-10, -54); torso.lineTo(10, -54); torso.lineTo(16, -48); torso.lineTo(14, -36); torso.closePath(); torso.fillPath();
+            torso.fillStyle(stoneDark, 1);
+            torso.beginPath(); torso.moveTo(-14, -46); torso.lineTo(-12, -50); torso.lineTo(12, -50); torso.lineTo(14, -46); torso.lineTo(10, -44); torso.lineTo(-10, -44); torso.closePath(); torso.fillPath();
+            // DARK EYES (lights off)
+            torso.fillStyle(0x1a1a1a, 1); torso.fillCircle(-6, -45, 4); torso.fillCircle(6, -45, 4);
+
+            this.tweens.add({
+                targets: torso,
+                y: pos.y + 5, scaleY: 0.85, rotation: 0.15, // Tilted to the side
+                duration: 1600, // Even slower
+                ease: 'Bounce.easeOut',
+                onComplete: () => {
+                    // (Rubble spawn removed as per request to fix "weird rectangles")
+                    this.tweens.add({ targets: torso, alpha: 0, duration: 14000, delay: 8000, onComplete: () => torso.destroy() });
+                }
+            });
+
+            // Dust cloud
+            const dust = this.add.graphics();
+            dust.fillStyle(0x888888, 0.1);
+            dust.fillCircle(0, 0, 40);
+            dust.setPosition(pos.x, pos.y + 10);
+            dust.setDepth(debrisDepth - 2);
+            this.tweens.add({
+                targets: dust,
+                scale: 3, alpha: 0, y: pos.y - 15,
+                duration: 4800, // Even slower
+                ease: 'Quad.easeOut',
+                onComplete: () => dust.destroy()
+            });
+
+            return; // Skip normal death effects
+        }
+        // === END GOLEM DEATH ANIMATION ===
+
+        // === PHALANX DEATH - Splits into 9 warriors ===
+        if (t.type === 'phalanx') {
+            // Flash effect
+            const splitFlash = this.add.circle(pos.x, pos.y, 25, 0xffaa00, 0.8);
+            splitFlash.setDepth(30002);
+            this.tweens.add({
+                targets: splitFlash,
+                scale: 2, alpha: 0,
+                duration: 300,
+                onComplete: () => splitFlash.destroy()
+            });
+
+            // Spawn 9 warriors in a 3x3 grid
+            const offsets = [
+                { dx: -0.5, dy: -0.5 }, { dx: 0, dy: -0.5 }, { dx: 0.5, dy: -0.5 },
+                { dx: -0.5, dy: 0 }, { dx: 0, dy: 0 }, { dx: 0.5, dy: 0 },
+                { dx: -0.5, dy: 0.5 }, { dx: 0, dy: 0.5 }, { dx: 0.5, dy: 0.5 }
+            ];
+            for (let i = 0; i < offsets.length; i++) {
+                const off = offsets[i];
+                this.pendingSpawnCount++;
+                this.time.delayedCall(i * 30, () => { // Staggered spawn
+                    this.spawnTroop(t.gridX + off.dx, t.gridY + off.dy, 'romanwarrior', t.owner);
+                    this.pendingSpawnCount--;
+                });
+            }
+
+            // Debris dust
+            const dust = this.add.graphics();
+            dust.fillStyle(0x888888, 0.3);
+            dust.fillCircle(0, 0, 20);
+            dust.setPosition(pos.x, pos.y);
+            dust.setDepth(5);
+            this.tweens.add({
+                targets: dust,
+                scale: 2.5, alpha: 0,
+                duration: 800,
+                onComplete: () => dust.destroy()
+            });
+
+            // Don't return - let normal death cleanup happen
+        }
+
+        // === DA VINCI TANK DEATH - Leaves deactivated husk ===
+        if (t.type === 'davincitank') {
+            const isPlayer = t.owner === 'PLAYER';
+
+            // Remove the troop from active list
+            this.troops = this.troops.filter(x => x.id !== t.id);
+            t.gameObject.destroy();
+            t.healthBar.destroy();
+
+            // === SMOKE BURST to cover the transition ===
+            // Create multiple small smoke puffs
+            for (let i = 0; i < 8; i++) {
+                const smoke = this.add.graphics();
+                smoke.fillStyle(0x1a1a1a, 0.85);  // Very dark black smoke
+                const smokeSize = 2 + Math.random() * 2;  // TINY (2-4px radius)
+                smoke.fillCircle(0, 0, smokeSize);
+                const offsetX = (Math.random() - 0.5) * 15;  // Tight spread
+                const offsetY = (Math.random() - 0.5) * 10 - 5;
+                smoke.setPosition(pos.x + offsetX, pos.y + offsetY);
+                smoke.setDepth(30000 + i);  // Above everything temporarily
+
+                this.tweens.add({
+                    targets: smoke,
+                    scale: 1.5, alpha: 0,  // Minimal expansion
+                    x: pos.x + offsetX + (Math.random() - 0.5) * 10,
+                    y: pos.y + offsetY - 15 - Math.random() * 10,
+                    duration: 1800 + Math.random() * 800,
+                    delay: i * 50,
+                    ease: 'Quad.easeOut',
+                    onComplete: () => smoke.destroy()
+                });
+            }
+
+            // Fire/explosion spark at center
+            const spark = this.add.graphics();
+            spark.fillStyle(0xff6600, 0.8);
+            spark.fillCircle(0, 0, 15);
+            spark.setPosition(pos.x, pos.y - 15);
+            spark.setDepth(30010);
+            this.tweens.add({
+                targets: spark,
+                scale: 2, alpha: 0,
+                duration: 200,
+                onComplete: () => spark.destroy()
+            });
+
+            // Create husk AFTER smoke starts (delayed slightly)
+            this.time.delayedCall(100, () => {
+                const husk = this.add.graphics();
+                husk.setPosition(pos.x, pos.y);
+                husk.setDepth(5); // Ground level, like golem debris
+
+                // Draw the deactivated tank
+                TroopRenderer.drawDaVinciTank(husk, isPlayer, false, true, t.facingAngle || 0);
+
+                // Small dust cloud on impact
+                const dust = this.add.graphics();
+                dust.fillStyle(0x888888, 0.2);
+                dust.fillCircle(0, 0, 30);
+                dust.setPosition(pos.x, pos.y + 10);
+                dust.setDepth(4);
+                this.tweens.add({
+                    targets: dust,
+                    scale: 2.5, alpha: 0, y: pos.y - 5,
+                    duration: 2500,
+                    ease: 'Quad.easeOut',
+                    onComplete: () => dust.destroy()
+                });
+
+                // Fade out husk slowly over time
+                this.tweens.add({
+                    targets: husk,
+                    alpha: 0,
+                    duration: 20000,
+                    delay: 15000,
+                    onComplete: () => husk.destroy()
+                });
+            });
+
+            return; // Skip normal death effects
+        }
+        // === END DA VINCI TANK DEATH ===
         // Death explosion effect (pixelated rectangle)
         const flash = this.add.graphics();
-        flash.fillStyle(0xffffff, 0.8);
         flash.fillRect(-6, -6, 12, 12);
         flash.setPosition(pos.x, pos.y);
         flash.setDepth(30001);
@@ -7968,8 +4126,7 @@ export class MainScene extends Phaser.Scene {
         const particleColors = t.type === 'warrior' ? [0xffff00, 0xffcc00] :
             t.type === 'archer' ? [0x00ccff, 0x0088cc] :
                 t.type === 'recursion' ? [0x00ffaa, 0x00cc88] :
-                    t.type === 'chronoswarm' ? [0xffcc00, 0xffaa00] :
-                        [0xff8800, 0xcc6600];
+                    [0xff8800, 0xcc6600];
         for (let i = 0; i < 8; i++) {
             const angle = (i / 8) * Math.PI * 2;
             const particle = this.add.graphics();
@@ -8007,13 +4164,70 @@ export class MainScene extends Phaser.Scene {
         t.healthBar.destroy();
     }
 
-    private showHitEffect(graphics: Phaser.GameObjects.Graphics, color: number = 0xffffff) {
+    private showHitEffect(_graphics: Phaser.GameObjects.Graphics, _color: number = 0xffffff) {
         // Simple distinct tint flash if possible, or just ignore for now as requested by user previously
         // But for lightning we might want a blue tint.
-        if (color !== 0xffffff) {
+        if (_color !== 0xffffff) {
             // If we wanted to tint, we'd need to ensure the graphics object supports it nicely or overlay.
             // For now, let's just leave it empty or minimal to avoid visual clutter as per previous preference.
         }
+    }
+
+    private showGolemCrackEffect(x: number, y: number) {
+        // Create ground crack effect for Golem ground pound
+        const crackGraphics = this.add.graphics();
+        crackGraphics.setPosition(x, y);
+        crackGraphics.setDepth(5);
+
+        // Draw radial cracks
+        const crackColor = 0x3a3a3a;
+        const crackCount = 8;
+        const maxLength = 60;
+
+        for (let i = 0; i < crackCount; i++) {
+            const angle = (i / crackCount) * Math.PI * 2 + Math.random() * 0.3;
+            const length = maxLength * (0.6 + Math.random() * 0.4);
+
+            // Main crack line
+            crackGraphics.lineStyle(3, crackColor, 0.8);
+            crackGraphics.beginPath();
+            crackGraphics.moveTo(0, 0);
+
+            // Jagged path
+            let cx = 0, cy = 0;
+            const segments = 3;
+            for (let s = 1; s <= segments; s++) {
+                const progress = s / segments;
+                const jitter = (Math.random() - 0.5) * 15;
+                cx = Math.cos(angle) * length * progress + Math.cos(angle + Math.PI / 2) * jitter;
+                cy = Math.sin(angle) * length * progress * 0.5 + Math.sin(angle + Math.PI / 2) * jitter * 0.5;
+                crackGraphics.lineTo(cx, cy);
+            }
+            crackGraphics.strokePath();
+
+            // Branch cracks
+            if (Math.random() > 0.4) {
+                const branchAngle = angle + (Math.random() - 0.5) * 0.8;
+                const branchLen = length * 0.4;
+                crackGraphics.lineStyle(2, crackColor, 0.6);
+                crackGraphics.beginPath();
+                crackGraphics.moveTo(cx * 0.6, cy * 0.6);
+                crackGraphics.lineTo(
+                    cx * 0.6 + Math.cos(branchAngle) * branchLen,
+                    cx * 0.6 + Math.sin(branchAngle) * branchLen * 0.5
+                );
+                crackGraphics.strokePath();
+            }
+        }
+
+        // Fade out cracks
+        this.tweens.add({
+            targets: crackGraphics,
+            alpha: 0,
+            duration: 1200, // Slightly longer fade for better "settling" feel
+            delay: 400,
+            onComplete: () => crackGraphics.destroy()
+        });
     }
 
     private updateResources(time: number) {
@@ -8031,22 +4245,23 @@ export class MainScene extends Phaser.Scene {
     }
 
 
-    private spawnTroop(gx: number, gy: number, type: 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'chronoswarm' = 'warrior', owner: 'PLAYER' | 'ENEMY' = 'PLAYER', recursionGen: number = 0) {
-        // Bounds check - STRICT
-        if (gx < 0 || gy < 0 || gx >= this.mapSize || gy >= this.mapSize) {
+    private spawnTroop(gx: number, gy: number, type: 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'ram' | 'stormmage' | 'golem' | 'sharpshooter' | 'mobilemortar' | 'davincitank' | 'phalanx' | 'romanwarrior' = 'warrior', owner: 'PLAYER' | 'ENEMY' = 'PLAYER', recursionGen: number = 0) {
+        // Bounds check - Relaxed for deployment margin
+        const margin = 2;
+        if (gx < -margin || gy < -margin || gx >= this.mapSize + margin || gy >= this.mapSize + margin) {
             return;
         }
-        const stats = TROOP_STATS[type];
-        const pos = this.cartToIso(gx, gy);
+        const stats = TROOP_DEFINITIONS[type];
+        const pos = IsoUtils.cartToIso(gx, gy);
 
         // Scale factor for recursions based on generation (each split = 75% size)
         const scaleFactor = type === 'recursion' ? Math.pow(0.75, recursionGen) : 1;
 
         // Create detailed troop graphic
         const troopGraphic = this.add.graphics();
-        this.drawTroopVisual(troopGraphic, type, owner);
+        TroopRenderer.drawTroopVisual(troopGraphic, type, owner);
         troopGraphic.setPosition(pos.x, pos.y);
-        troopGraphic.setDepth((gx + gy) * 10);
+        troopGraphic.setDepth(1000 + (gx + gy) * 10);
 
         // Spawn dust effect
         for (let i = 0; i < 5; i++) {
@@ -8091,8 +4306,8 @@ export class MainScene extends Phaser.Scene {
             gridX: gx, gridY: gy,
             health: troopHealth, maxHealth: troopHealth,
             target: null, owner: owner,
-            lastAttackTime: 0,
-            attackDelay: 700 + Math.random() * 300,
+            lastAttackTime: type === 'golem' ? -1500 : (type === 'mobilemortar' ? -1000 : 0), // Golem waits 1.5s, mortar waits 1s before first attack
+            attackDelay: type === 'golem' ? 3000 : (type === 'mobilemortar' ? 2000 : (700 + Math.random() * 300)),
             speedMult: 0.9 + Math.random() * 0.2,
             hasTakenDamage: false,
             facingAngle: 0,
@@ -8102,1019 +4317,15 @@ export class MainScene extends Phaser.Scene {
         this.troops.push(troop);
         this.hasDeployed = true;
         this.updateHealthBar(troop);
-        troop.target = this.findNearestEnemyBuilding(troop);
+        troop.target = TargetingSystem.findTarget(troop, this.buildings);
 
         if (this.mode === 'ATTACK') {
-            this.deploymentGraphics.setAlpha(0.3);
+            // Alpha handled by lerp in updateDeploymentHighlight
         }
     }
 
-    private drawTroopVisual(graphics: Phaser.GameObjects.Graphics, type: 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'chronoswarm' | 'ram' | 'stormmage', owner: 'PLAYER' | 'ENEMY', facingAngle: number = 0) {
-        const isPlayer = owner === 'PLAYER';
 
-        switch (type) {
-            case 'warrior': {
-                // Body (yellow/gold for player, purple for enemy)
-                const bodyColor = isPlayer ? 0xf1c40f : 0x9b59b6;
-                const darkBody = isPlayer ? 0xd4a500 : 0x7d3c98;
 
-                // Shadow
-                graphics.fillStyle(0x000000, 0.3);
-                graphics.fillEllipse(0, 5, 14, 6);
-
-                // Body
-                graphics.fillStyle(darkBody, 1);
-                graphics.fillCircle(0, 0, 9);
-                graphics.fillStyle(bodyColor, 1);
-                graphics.fillCircle(0, -1, 8);
-
-                // Highlight
-                graphics.fillStyle(0xffffff, 0.3);
-                graphics.fillCircle(-2, -4, 3);
-
-                // Sword
-                graphics.fillStyle(0xaaaaaa, 1);
-                graphics.fillRect(6, -8, 2, 10);
-                graphics.fillStyle(0x666666, 1);
-                graphics.fillRect(4, -2, 6, 2);
-                break;
-            }
-            case 'archer': {
-                const bodyColor = isPlayer ? 0x00bcd4 : 0xe91e63;
-                const darkBody = isPlayer ? 0x0097a7 : 0xc2185b;
-
-                // Shadow
-                graphics.fillStyle(0x000000, 0.3);
-                graphics.fillEllipse(0, 5, 12, 5);
-
-                // Body
-                graphics.fillStyle(darkBody, 1);
-                graphics.fillCircle(0, 0, 8);
-                graphics.fillStyle(bodyColor, 1);
-                graphics.fillCircle(0, -1, 7);
-
-                // Highlight
-                graphics.fillStyle(0xffffff, 0.3);
-                graphics.fillCircle(-2, -3, 2);
-
-                // Bow - rotates based on facing angle
-                const bowAngle = facingAngle || 0;
-                const bowX = Math.cos(bowAngle) * 6;
-                const bowY = Math.sin(bowAngle) * 4;
-
-                graphics.lineStyle(2, 0x8b4513, 1);
-                graphics.beginPath();
-                graphics.arc(bowX, bowY, 8, bowAngle - Math.PI / 3, bowAngle + Math.PI / 3);
-                graphics.strokePath();
-
-                graphics.lineStyle(1, 0xcccccc, 1);
-                const stringStart = { x: bowX + Math.cos(bowAngle - Math.PI / 3) * 8, y: bowY + Math.sin(bowAngle - Math.PI / 3) * 8 };
-                const stringEnd = { x: bowX + Math.cos(bowAngle + Math.PI / 3) * 8, y: bowY + Math.sin(bowAngle + Math.PI / 3) * 8 };
-                graphics.lineBetween(stringStart.x, stringStart.y, stringEnd.x, stringEnd.y);
-                break;
-            }
-            case 'giant': {
-                const bodyColor = isPlayer ? 0xe67e22 : 0x8e44ad;
-                const darkBody = isPlayer ? 0xd35400 : 0x6c3483;
-
-                // Shadow
-                graphics.fillStyle(0x000000, 0.3);
-                graphics.fillEllipse(0, 8, 22, 10);
-
-                // Body (larger)
-                graphics.fillStyle(darkBody, 1);
-                graphics.fillCircle(0, 0, 14);
-                graphics.fillStyle(bodyColor, 1);
-                graphics.fillCircle(0, -2, 12);
-
-                // Muscle highlights
-                graphics.fillStyle(0xffffff, 0.2);
-                graphics.fillCircle(-4, -6, 4);
-                graphics.fillCircle(4, -4, 3);
-
-                // Belt
-                graphics.fillStyle(0x5d4e37, 1);
-                graphics.fillRect(-10, 2, 20, 4);
-                graphics.fillStyle(0xffd700, 1);
-                graphics.fillRect(-2, 2, 4, 4);
-                break;
-            }
-            case 'golem': {
-                // COLOSSAL STONE GOLEM - Massive animated rock titan
-                const now = Date.now();
-
-                // Walking animation - heavy, lumbering steps
-                const walkPhase = (now % 1200) / 1200;
-                const stepBob = Math.abs(Math.sin(walkPhase * Math.PI * 2)) * 4;
-                const armSwing = Math.sin(walkPhase * Math.PI * 2) * 0.3;
-                const shoulderRoll = Math.sin(walkPhase * Math.PI) * 2;
-
-                // Stone colors with ancient weathering
-                const stoneBase = isPlayer ? 0x5a6a7a : 0x6a5a5a;
-                const stoneDark = isPlayer ? 0x3a4a5a : 0x4a3a3a;
-                const stoneLight = isPlayer ? 0x7a8a9a : 0x8a7a7a;
-                const stoneAccent = isPlayer ? 0x4a5a6a : 0x5a4a4a;
-                const mossColor = isPlayer ? 0x4a6a3a : 0x5a4a3a;
-                const glowColor = isPlayer ? 0x44aaff : 0xff4444;
-                const glowColorBright = isPlayer ? 0x88ccff : 0xff8888;
-
-                // MASSIVE shadow
-                graphics.fillStyle(0x000000, 0.45);
-                graphics.fillEllipse(0, 18, 40, 20);
-
-                // === LEGS (massive stone pillars) ===
-                const legSpread = 12;
-                const leftLegPhase = walkPhase;
-                const rightLegPhase = (walkPhase + 0.5) % 1;
-                const leftLegLift = Math.max(0, Math.sin(leftLegPhase * Math.PI * 2)) * 6;
-                const rightLegLift = Math.max(0, Math.sin(rightLegPhase * Math.PI * 2)) * 6;
-
-                // Left leg
-                graphics.fillStyle(stoneDark, 1);
-                graphics.beginPath();
-                graphics.moveTo(-legSpread - 6, -5 + stepBob);
-                graphics.lineTo(-legSpread - 8, 12 - leftLegLift);
-                graphics.lineTo(-legSpread + 4, 14 - leftLegLift);
-                graphics.lineTo(-legSpread + 2, -3 + stepBob);
-                graphics.closePath();
-                graphics.fillPath();
-                // Leg highlight
-                graphics.fillStyle(stoneBase, 1);
-                graphics.beginPath();
-                graphics.moveTo(-legSpread - 4, -4 + stepBob);
-                graphics.lineTo(-legSpread - 5, 10 - leftLegLift);
-                graphics.lineTo(-legSpread, 11 - leftLegLift);
-                graphics.lineTo(-legSpread + 1, -3 + stepBob);
-                graphics.closePath();
-                graphics.fillPath();
-                // Left foot (massive stone block)
-                graphics.fillStyle(stoneDark, 1);
-                graphics.fillRect(-legSpread - 10, 12 - leftLegLift, 16, 6);
-                graphics.fillStyle(stoneAccent, 1);
-                graphics.fillRect(-legSpread - 8, 11 - leftLegLift, 12, 3);
-
-                // Right leg
-                graphics.fillStyle(stoneDark, 1);
-                graphics.beginPath();
-                graphics.moveTo(legSpread + 6, -5 + stepBob);
-                graphics.lineTo(legSpread + 8, 12 - rightLegLift);
-                graphics.lineTo(legSpread - 4, 14 - rightLegLift);
-                graphics.lineTo(legSpread - 2, -3 + stepBob);
-                graphics.closePath();
-                graphics.fillPath();
-                // Leg highlight
-                graphics.fillStyle(stoneBase, 1);
-                graphics.beginPath();
-                graphics.moveTo(legSpread + 4, -4 + stepBob);
-                graphics.lineTo(legSpread + 5, 10 - rightLegLift);
-                graphics.lineTo(legSpread, 11 - rightLegLift);
-                graphics.lineTo(legSpread - 1, -3 + stepBob);
-                graphics.closePath();
-                graphics.fillPath();
-                // Right foot
-                graphics.fillStyle(stoneDark, 1);
-                graphics.fillRect(legSpread - 6, 12 - rightLegLift, 16, 6);
-                graphics.fillStyle(stoneAccent, 1);
-                graphics.fillRect(legSpread - 4, 11 - rightLegLift, 12, 3);
-
-                // === TORSO (massive boulder body) ===
-                // Back layer - darker
-                graphics.fillStyle(stoneDark, 1);
-                graphics.beginPath();
-                graphics.moveTo(-22, -8 + stepBob);
-                graphics.lineTo(-18, -28 + stepBob);
-                graphics.lineTo(18, -28 + stepBob);
-                graphics.lineTo(22, -8 + stepBob);
-                graphics.lineTo(16, 2 + stepBob);
-                graphics.lineTo(-16, 2 + stepBob);
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Main body
-                graphics.fillStyle(stoneBase, 1);
-                graphics.beginPath();
-                graphics.moveTo(-20, -10 + stepBob);
-                graphics.lineTo(-16, -30 + stepBob);
-                graphics.lineTo(16, -30 + stepBob);
-                graphics.lineTo(20, -10 + stepBob);
-                graphics.lineTo(14, 0 + stepBob);
-                graphics.lineTo(-14, 0 + stepBob);
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Chest stone plates
-                graphics.fillStyle(stoneLight, 1);
-                graphics.beginPath();
-                graphics.moveTo(-12, -24 + stepBob);
-                graphics.lineTo(-8, -28 + stepBob);
-                graphics.lineTo(8, -28 + stepBob);
-                graphics.lineTo(12, -24 + stepBob);
-                graphics.lineTo(10, -14 + stepBob);
-                graphics.lineTo(-10, -14 + stepBob);
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Glowing rune on chest
-                graphics.fillStyle(glowColor, 0.8);
-                graphics.beginPath();
-                graphics.moveTo(0, -26 + stepBob);
-                graphics.lineTo(-4, -22 + stepBob);
-                graphics.lineTo(0, -18 + stepBob);
-                graphics.lineTo(4, -22 + stepBob);
-                graphics.closePath();
-                graphics.fillPath();
-                graphics.fillStyle(glowColorBright, 0.6);
-                graphics.fillCircle(0, -22 + stepBob, 2);
-
-                // Stone texture cracks
-                graphics.lineStyle(1, stoneDark, 0.6);
-                graphics.lineBetween(-15, -20 + stepBob, -10, -15 + stepBob);
-                graphics.lineBetween(12, -25 + stepBob, 16, -18 + stepBob);
-                graphics.lineBetween(-8, -8 + stepBob, -3, -12 + stepBob);
-                graphics.lineBetween(5, -6 + stepBob, 10, -10 + stepBob);
-
-                // Moss patches
-                graphics.fillStyle(mossColor, 0.7);
-                graphics.fillCircle(-14, -16 + stepBob, 3);
-                graphics.fillCircle(16, -12 + stepBob, 2.5);
-                graphics.fillCircle(-8, -4 + stepBob, 2);
-
-                // === ARMS (boulder appendages) ===
-                // Arm swing offsets
-                const leftArmSwingX = armSwing * 8;
-                const leftArmSwingY = Math.abs(armSwing) * 4;
-                const rightArmSwingX = -armSwing * 8;
-                const rightArmSwingY = Math.abs(armSwing) * 4;
-
-                // Left arm base position
-                const lax = -18;
-                const lay = -20 + stepBob + shoulderRoll;
-
-                // Left arm - upper
-                graphics.fillStyle(stoneDark, 1);
-                graphics.beginPath();
-                graphics.moveTo(lax - 4, lay);
-                graphics.lineTo(lax - 8 + leftArmSwingX, lay + 18 + leftArmSwingY);
-                graphics.lineTo(lax + 4 + leftArmSwingX, lay + 20 + leftArmSwingY);
-                graphics.lineTo(lax + 4, lay + 2);
-                graphics.closePath();
-                graphics.fillPath();
-                graphics.fillStyle(stoneBase, 1);
-                graphics.beginPath();
-                graphics.moveTo(lax - 2, lay + 2);
-                graphics.lineTo(lax - 4 + leftArmSwingX * 0.5, lay + 16 + leftArmSwingY * 0.5);
-                graphics.lineTo(lax + 2 + leftArmSwingX * 0.5, lay + 17 + leftArmSwingY * 0.5);
-                graphics.lineTo(lax + 2, lay + 3);
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Left forearm
-                const lfx = lax - 2 + leftArmSwingX;
-                const lfy = lay + 18 + leftArmSwingY;
-                graphics.fillStyle(stoneAccent, 1);
-                graphics.beginPath();
-                graphics.moveTo(lfx - 5, lfy);
-                graphics.lineTo(lfx - 7 + leftArmSwingX * 0.5, lfy + 17);
-                graphics.lineTo(lfx + 5 + leftArmSwingX * 0.5, lfy + 18);
-                graphics.lineTo(lfx + 6, lfy + 1);
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Left fist
-                const lfistX = lfx - 1 + leftArmSwingX * 0.5;
-                const lfistY = lfy + 22;
-                graphics.fillStyle(stoneDark, 1);
-                graphics.fillCircle(lfistX, lfistY, 9);
-                graphics.fillStyle(stoneBase, 1);
-                graphics.fillCircle(lfistX - 1, lfistY - 1, 7);
-                graphics.fillStyle(stoneLight, 0.5);
-                graphics.fillCircle(lfistX - 4, lfistY - 3, 2);
-                graphics.fillCircle(lfistX, lfistY - 4, 2);
-                graphics.fillCircle(lfistX + 4, lfistY - 3, 2);
-
-                // Right arm base position
-                const rax = 18;
-                const ray = -20 + stepBob - shoulderRoll;
-
-                // Right arm - upper
-                graphics.fillStyle(stoneDark, 1);
-                graphics.beginPath();
-                graphics.moveTo(rax + 4, ray);
-                graphics.lineTo(rax + 8 + rightArmSwingX, ray + 18 + rightArmSwingY);
-                graphics.lineTo(rax - 4 + rightArmSwingX, ray + 20 + rightArmSwingY);
-                graphics.lineTo(rax - 4, ray + 2);
-                graphics.closePath();
-                graphics.fillPath();
-                graphics.fillStyle(stoneBase, 1);
-                graphics.beginPath();
-                graphics.moveTo(rax + 2, ray + 2);
-                graphics.lineTo(rax + 4 + rightArmSwingX * 0.5, ray + 16 + rightArmSwingY * 0.5);
-                graphics.lineTo(rax - 2 + rightArmSwingX * 0.5, ray + 17 + rightArmSwingY * 0.5);
-                graphics.lineTo(rax - 2, ray + 3);
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Right forearm
-                const rfx = rax + 2 + rightArmSwingX;
-                const rfy = ray + 18 + rightArmSwingY;
-                graphics.fillStyle(stoneAccent, 1);
-                graphics.beginPath();
-                graphics.moveTo(rfx + 5, rfy);
-                graphics.lineTo(rfx + 7 + rightArmSwingX * 0.5, rfy + 17);
-                graphics.lineTo(rfx - 5 + rightArmSwingX * 0.5, rfy + 18);
-                graphics.lineTo(rfx - 6, rfy + 1);
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Right fist
-                const rfistX = rfx + 1 + rightArmSwingX * 0.5;
-                const rfistY = rfy + 22;
-                graphics.fillStyle(stoneDark, 1);
-                graphics.fillCircle(rfistX, rfistY, 9);
-                graphics.fillStyle(stoneBase, 1);
-                graphics.fillCircle(rfistX + 1, rfistY - 1, 7);
-                graphics.fillStyle(stoneLight, 0.5);
-                graphics.fillCircle(rfistX + 4, rfistY - 3, 2);
-                graphics.fillCircle(rfistX, rfistY - 4, 2);
-                graphics.fillCircle(rfistX - 4, rfistY - 3, 2);
-
-                // === HEAD (craggy boulder with glowing eyes) ===
-                // Neck
-                graphics.fillStyle(stoneDark, 1);
-                graphics.fillRect(-8, -38 + stepBob, 16, 10);
-
-                // Head base
-                graphics.fillStyle(stoneBase, 1);
-                graphics.beginPath();
-                graphics.moveTo(-14, -36 + stepBob);
-                graphics.lineTo(-16, -48 + stepBob);
-                graphics.lineTo(-10, -54 + stepBob);
-                graphics.lineTo(10, -54 + stepBob);
-                graphics.lineTo(16, -48 + stepBob);
-                graphics.lineTo(14, -36 + stepBob);
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Brow ridge
-                graphics.fillStyle(stoneDark, 1);
-                graphics.beginPath();
-                graphics.moveTo(-14, -46 + stepBob);
-                graphics.lineTo(-12, -50 + stepBob);
-                graphics.lineTo(12, -50 + stepBob);
-                graphics.lineTo(14, -46 + stepBob);
-                graphics.lineTo(10, -44 + stepBob);
-                graphics.lineTo(-10, -44 + stepBob);
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Eye sockets (dark)
-                graphics.fillStyle(0x1a1a1a, 1);
-                graphics.fillCircle(-6, -45 + stepBob, 4);
-                graphics.fillCircle(6, -45 + stepBob, 4);
-
-                // Glowing eyes
-                const eyePulse = 0.7 + Math.sin(now / 200) * 0.3;
-                graphics.fillStyle(glowColor, eyePulse);
-                graphics.fillCircle(-6, -45 + stepBob, 3);
-                graphics.fillCircle(6, -45 + stepBob, 3);
-                graphics.fillStyle(glowColorBright, eyePulse * 0.8);
-                graphics.fillCircle(-6, -45 + stepBob, 1.5);
-                graphics.fillCircle(6, -45 + stepBob, 1.5);
-
-                // Eye glow effect
-                graphics.lineStyle(2, glowColor, eyePulse * 0.4);
-                graphics.strokeCircle(-6, -45 + stepBob, 5);
-                graphics.strokeCircle(6, -45 + stepBob, 5);
-
-                // Jagged mouth
-                graphics.fillStyle(0x2a2a2a, 1);
-                graphics.beginPath();
-                graphics.moveTo(-8, -40 + stepBob);
-                graphics.lineTo(-5, -38 + stepBob);
-                graphics.lineTo(-2, -40 + stepBob);
-                graphics.lineTo(2, -38 + stepBob);
-                graphics.lineTo(5, -40 + stepBob);
-                graphics.lineTo(8, -38 + stepBob);
-                graphics.lineTo(6, -36 + stepBob);
-                graphics.lineTo(-6, -36 + stepBob);
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Head cracks and details
-                graphics.lineStyle(1, stoneDark, 0.7);
-                graphics.lineBetween(-10, -52 + stepBob, -8, -46 + stepBob);
-                graphics.lineBetween(12, -50 + stepBob, 10, -44 + stepBob);
-                graphics.lineBetween(0, -54 + stepBob, 0, -50 + stepBob);
-
-                // Ancient runes on forehead
-                graphics.lineStyle(2, glowColor, eyePulse * 0.6);
-                graphics.lineBetween(-3, -52 + stepBob, 3, -52 + stepBob);
-                graphics.lineBetween(0, -54 + stepBob, 0, -50 + stepBob);
-
-                // Shoulder spikes/crystals
-                graphics.fillStyle(stoneLight, 1);
-                // Left spike
-                graphics.beginPath();
-                graphics.moveTo(-20, -26 + stepBob);
-                graphics.lineTo(-26, -34 + stepBob);
-                graphics.lineTo(-18, -30 + stepBob);
-                graphics.closePath();
-                graphics.fillPath();
-                // Right spike
-                graphics.beginPath();
-                graphics.moveTo(20, -26 + stepBob);
-                graphics.lineTo(26, -34 + stepBob);
-                graphics.lineTo(18, -30 + stepBob);
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Glowing crystal cores in spikes
-                graphics.fillStyle(glowColor, eyePulse * 0.7);
-                graphics.fillCircle(-22, -30 + stepBob, 2);
-                graphics.fillCircle(22, -30 + stepBob, 2);
-
-                break;
-            }
-            case 'ward': {
-                const bodyColor = isPlayer ? 0x2ecc71 : 0x27ae60;
-                const darkBody = isPlayer ? 0x1e8449 : 0x196f3d;
-                const glowColor = isPlayer ? 0x58d68d : 0x45b39d;
-
-                // Larger heal radius - 7 tiles instead of 5
-                const healRadiusPixels = 7 * 32; // 224 pixels in isometric Y
-                const pulseAlpha = 0.1 + Math.sin(Date.now() / 300) * 0.05;
-                const now = Date.now();
-
-                // Draw noisy/magical edge using multiple points - 4x faster shimmer
-                graphics.lineStyle(3, glowColor, pulseAlpha + 0.15);
-                graphics.beginPath();
-                const segments = 48;
-                for (let i = 0; i <= segments; i++) {
-                    const theta = (i / segments) * Math.PI * 2;
-                    // Add noise using multiple sine waves at different frequencies (4x faster)
-                    const noise = Math.sin(now / 25 + theta * 3) * 4 +
-                        Math.sin(now / 37 + theta * 7) * 2 +
-                        Math.sin(now / 20 + theta * 11) * 1.5;
-                    const rx = (healRadiusPixels + noise) * Math.cos(theta);
-                    const ry = ((healRadiusPixels / 2) + noise * 0.5) * Math.sin(theta);
-                    if (i === 0) {
-                        graphics.moveTo(rx, 5 + ry);
-                    } else {
-                        graphics.lineTo(rx, 5 + ry);
-                    }
-                }
-                graphics.closePath();
-                graphics.strokePath();
-
-                // Fill with semi-transparent magical glow
-                graphics.fillStyle(glowColor, pulseAlpha * 0.25);
-                graphics.fillEllipse(0, 5, healRadiusPixels, healRadiusPixels / 2);
-
-                // Inner pulsing aura glow
-                const innerPulse = 0.25 + Math.sin(Date.now() / 200) * 0.1;
-                graphics.fillStyle(glowColor, innerPulse);
-                graphics.fillCircle(0, 0, 30);
-                graphics.fillStyle(glowColor, innerPulse * 0.5);
-                graphics.fillCircle(0, 0, 45);
-
-                // Shadow
-                graphics.fillStyle(0x000000, 0.3);
-                graphics.fillEllipse(0, 5, 16, 7);
-
-                // Robe body (larger for tankiness)
-                graphics.fillStyle(darkBody, 1);
-                graphics.fillCircle(0, 1, 11);
-                graphics.fillStyle(bodyColor, 1);
-                graphics.fillCircle(0, 0, 10);
-
-                // Highlight
-                graphics.fillStyle(0xffffff, 0.3);
-                graphics.fillCircle(-3, -4, 4);
-
-                // Staff (thicker)
-                graphics.fillStyle(0x5d4e37, 1);
-                graphics.fillRect(8, -18, 4, 24);
-                graphics.fillStyle(0x4a3520, 1);
-                graphics.fillRect(9, -18, 2, 24);
-
-                // Crystal orb on staff (larger)
-                graphics.fillStyle(0x88ffcc, 0.9);
-                graphics.fillCircle(10, -20, 6);
-                graphics.fillStyle(0xffffff, 0.6);
-                graphics.fillCircle(8, -22, 2);
-
-                // Glow around orb
-                graphics.lineStyle(3, 0xaaffdd, 0.5);
-                graphics.strokeCircle(10, -20, 9);
-                break;
-            }
-
-            // === NOVEL UNITS ===
-            case 'recursion': {
-                // Fractal/geometric entity that splits on death
-                const bodyColor = isPlayer ? 0x00ffaa : 0xaa00ff;
-                const innerColor = isPlayer ? 0x00aa77 : 0x7700aa;
-                const now = Date.now();
-
-                // Shadow
-                graphics.fillStyle(0x000000, 0.3);
-                graphics.fillEllipse(0, 5, 14, 6);
-
-                // Outer hexagonal shell (rotating slowly)
-                const rot = now / 2000;
-                graphics.fillStyle(bodyColor, 0.9);
-                graphics.beginPath();
-                for (let i = 0; i < 6; i++) {
-                    const angle = rot + (i / 6) * Math.PI * 2;
-                    const px = Math.cos(angle) * 10;
-                    const py = Math.sin(angle) * 10 * 0.6 - 2;
-                    if (i === 0) graphics.moveTo(px, py);
-                    else graphics.lineTo(px, py);
-                }
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Inner hexagon (counter-rotating)
-                graphics.fillStyle(innerColor, 1);
-                graphics.beginPath();
-                for (let i = 0; i < 6; i++) {
-                    const angle = -rot * 1.5 + (i / 6) * Math.PI * 2;
-                    const px = Math.cos(angle) * 5;
-                    const py = Math.sin(angle) * 5 * 0.6 - 2;
-                    if (i === 0) graphics.moveTo(px, py);
-                    else graphics.lineTo(px, py);
-                }
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Central core with split symbol
-                graphics.fillStyle(0xffffff, 0.9);
-                graphics.fillCircle(0, -2, 2.5);
-                graphics.lineStyle(1, bodyColor, 1);
-                graphics.lineBetween(-1.5, -2, 1.5, -2);
-                graphics.lineBetween(0, -3.5, 0, -0.5);
-                break;
-            }
-
-            case 'chronoswarm': {
-                // Mechanical time-bending insects
-                const shellColor = isPlayer ? 0xffcc00 : 0x00ccff;
-                const innerColor = isPlayer ? 0xaa8800 : 0x0088aa;
-                const now = Date.now();
-
-                // Large visible speed aura - corresponds to 4 tile boost radius
-                // In isometric: 4 tiles ≈ 160px wide, 80px tall
-                const auraScale = 0.85 + Math.sin(now / 200) * 0.15;
-                const auraAlpha = 0.15 + Math.sin(now / 150) * 0.08;
-                graphics.lineStyle(2, shellColor, auraAlpha);
-                graphics.strokeEllipse(0, 0, 160 * auraScale, 80 * auraScale);
-                // Inner aura ring
-                graphics.lineStyle(1, 0xffffff, auraAlpha * 0.5);
-                graphics.strokeEllipse(0, 0, 140 * auraScale, 70 * auraScale);
-                // Speed particles orbiting
-                const particleCount = 6;
-                for (let i = 0; i < particleCount; i++) {
-                    const pAngle = (now / 500) + (i / particleCount) * Math.PI * 2;
-                    const px = Math.cos(pAngle) * 70;
-                    const py = Math.sin(pAngle) * 35;
-                    graphics.fillStyle(shellColor, 0.4 + Math.sin(now / 100 + i) * 0.2);
-                    graphics.fillCircle(px, py, 3);
-                }
-
-                // Shadow
-                graphics.fillStyle(0x000000, 0.25);
-                graphics.fillEllipse(0, 4, 18, 8);
-
-                // Main beetle body (isometric oval)
-                graphics.fillStyle(innerColor, 1);
-                graphics.fillEllipse(0, 0, 12, 8);
-                graphics.fillStyle(shellColor, 1);
-                graphics.fillEllipse(0, -1, 10, 7);
-
-                // Clockwork pattern on shell
-                graphics.lineStyle(1, innerColor, 0.6);
-                graphics.lineBetween(-4, -1, 4, -1);
-                graphics.lineBetween(0, -4, 0, 2);
-
-                // Gear symbols
-                const gearRot = now / 100;
-                graphics.lineStyle(1, 0xffffff, 0.5);
-                for (let i = 0; i < 4; i++) {
-                    const ga = gearRot + (i / 4) * Math.PI * 2;
-                    const gx = Math.cos(ga) * 3;
-                    const gy = Math.sin(ga) * 2 - 1;
-                    graphics.fillStyle(0xffffff, 0.6);
-                    graphics.fillCircle(gx, gy, 1);
-                }
-
-                // Antennae (vibrating fast)
-                const antVib = Math.sin(now / 30) * 2;
-                graphics.lineStyle(1, shellColor, 0.8);
-                graphics.lineBetween(-3, -5, -5 + antVib, -10);
-                graphics.lineBetween(3, -5, 5 - antVib, -10);
-
-                // Glowing eyes
-                graphics.fillStyle(0xffffff, 0.9);
-                graphics.fillCircle(-2, -3, 1.5);
-                graphics.fillCircle(2, -3, 1.5);
-                break;
-            }
-
-            case 'ram': {
-                // MASSIVE BATTERING RAM - Huge meaty tree trunk with iron tip, carried by two warriors
-                const now = Date.now();
-                const cos = Math.cos(facingAngle);
-                const sin = Math.sin(facingAngle);
-
-                // Running animation phase - warriors bob up and down as they run
-                const runPhase = (now % 300) / 300;
-                const runBob = Math.sin(runPhase * Math.PI * 2) * 2;
-                const chargeForward = Math.abs(Math.sin(runPhase * Math.PI)) * 3;
-
-                // Ram dimensions - MASSIVE tree trunk
-                const ramLength = 48;
-                const ramWidth = 14;
-                const ramHeight = 16;
-
-                // Calculate ram endpoints based on direction
-                const backX = -cos * (ramLength / 2) - cos * chargeForward;
-                const backY = -sin * (ramLength / 2) * 0.5 + runBob - sin * chargeForward * 0.5;
-                const frontX = cos * (ramLength / 2) + cos * chargeForward;
-                const frontY = sin * (ramLength / 2) * 0.5 + runBob + sin * chargeForward * 0.5;
-
-                // Perpendicular offset for width
-                const perpX = -sin * (ramWidth / 2);
-                const perpY = cos * (ramWidth / 2) * 0.5;
-
-                // Giant shadow
-                graphics.fillStyle(0x000000, 0.4);
-                graphics.fillEllipse(cos * 3, 10 + sin * 2, 44, 18);
-
-                // === WARRIORS CARRYING THE RAM ===
-                const warrior1Phase = runPhase;
-                const warrior2Phase = (runPhase + 0.5) % 1;
-                const warrior1Bob = Math.sin(warrior1Phase * Math.PI * 2) * 3;
-                const warrior2Bob = Math.sin(warrior2Phase * Math.PI * 2) * 3;
-
-                const skinColor = isPlayer ? 0xdeb887 : 0xc9a66b;
-                const skinDark = isPlayer ? 0xcd9b5a : 0xb8956a;
-                const armorColor = isPlayer ? 0x8b4513 : 0x654321;
-                const armorDark = isPlayer ? 0x5c3317 : 0x4a2f1a;
-
-                // Warrior positions - at back and middle of ram
-                const w1Offset = -0.35; // Back warrior
-                const w2Offset = 0.1;   // Front warrior
-
-                for (const [wOffset, wBob, legPhase] of [[w1Offset, warrior1Bob, warrior1Phase], [w2Offset, warrior2Bob, warrior2Phase]] as [number, number, number][]) {
-                    const wx = backX + (frontX - backX) * (wOffset + 0.5);
-                    const wy = backY + (frontY - backY) * (wOffset + 0.5);
-                    const legKick = Math.sin(legPhase * Math.PI * 2) * 3;
-
-                    // Warrior shadow
-                    graphics.fillStyle(0x000000, 0.25);
-                    graphics.fillEllipse(wx, wy + 12, 10, 5);
-
-                    // Running legs
-                    graphics.fillStyle(armorDark, 1);
-                    // Back leg
-                    graphics.beginPath();
-                    graphics.moveTo(wx - 2, wy + 4);
-                    graphics.lineTo(wx - 3 - legKick, wy + 10);
-                    graphics.lineTo(wx - 1 - legKick, wy + 10);
-                    graphics.lineTo(wx, wy + 4);
-                    graphics.closePath();
-                    graphics.fillPath();
-                    // Front leg
-                    graphics.beginPath();
-                    graphics.moveTo(wx + 2, wy + 4);
-                    graphics.lineTo(wx + 3 + legKick, wy + 10);
-                    graphics.lineTo(wx + 5 + legKick, wy + 10);
-                    graphics.lineTo(wx + 4, wy + 4);
-                    graphics.closePath();
-                    graphics.fillPath();
-
-                    // Feet
-                    graphics.fillStyle(0x3a2a1a, 1);
-                    graphics.fillEllipse(wx - 2 - legKick, wy + 11, 3, 2);
-                    graphics.fillEllipse(wx + 4 + legKick, wy + 11, 3, 2);
-
-                    // Body (leather armor)
-                    graphics.fillStyle(armorColor, 1);
-                    graphics.fillCircle(wx, wy + wBob, 6);
-                    graphics.fillStyle(armorDark, 1);
-                    graphics.fillCircle(wx + 1, wy + wBob + 1, 5);
-
-                    // Arms reaching up to hold ram
-                    graphics.fillStyle(skinColor, 1);
-                    // Left arm
-                    graphics.beginPath();
-                    graphics.moveTo(wx - 4, wy + wBob - 2);
-                    graphics.lineTo(wx - 5, wy + wBob - 10);
-                    graphics.lineTo(wx - 3, wy + wBob - 10);
-                    graphics.lineTo(wx - 2, wy + wBob - 2);
-                    graphics.closePath();
-                    graphics.fillPath();
-                    // Right arm
-                    graphics.beginPath();
-                    graphics.moveTo(wx + 4, wy + wBob - 2);
-                    graphics.lineTo(wx + 5, wy + wBob - 10);
-                    graphics.lineTo(wx + 3, wy + wBob - 10);
-                    graphics.lineTo(wx + 2, wy + wBob - 2);
-                    graphics.closePath();
-                    graphics.fillPath();
-
-                    // Hands gripping (shown as small circles at top of arms)
-                    graphics.fillStyle(skinDark, 1);
-                    graphics.fillCircle(wx - 4, wy + wBob - 11, 2);
-                    graphics.fillCircle(wx + 4, wy + wBob - 11, 2);
-
-                    // Head
-                    graphics.fillStyle(skinColor, 1);
-                    graphics.fillCircle(wx, wy + wBob - 6, 4);
-                    // Helmet
-                    graphics.fillStyle(0x555555, 1);
-                    graphics.beginPath();
-                    graphics.arc(wx, wy + wBob - 7, 4, Math.PI, 0, false);
-                    graphics.closePath();
-                    graphics.fillPath();
-                    // Helmet spike
-                    graphics.fillStyle(0x666666, 1);
-                    graphics.beginPath();
-                    graphics.moveTo(wx - 1, wy + wBob - 11);
-                    graphics.lineTo(wx, wy + wBob - 14);
-                    graphics.lineTo(wx + 1, wy + wBob - 11);
-                    graphics.closePath();
-                    graphics.fillPath();
-                }
-
-                // === MASSIVE TREE TRUNK ===
-                // Dark bark base layer
-                graphics.fillStyle(0x3d2817, 1);
-                graphics.beginPath();
-                graphics.moveTo(backX + perpX * 1.1, backY + perpY * 1.1 - ramHeight + 2);
-                graphics.lineTo(frontX + perpX * 0.9, frontY + perpY * 0.9 - ramHeight + 2);
-                graphics.lineTo(frontX - perpX * 0.9, frontY - perpY * 0.9 - ramHeight + 2);
-                graphics.lineTo(backX - perpX * 1.1, backY - perpY * 1.1 - ramHeight + 2);
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Main trunk body - rich brown wood
-                graphics.fillStyle(0x5d3a1a, 1);
-                graphics.beginPath();
-                graphics.moveTo(backX + perpX, backY + perpY - ramHeight);
-                graphics.lineTo(frontX + perpX * 0.85, frontY + perpY * 0.85 - ramHeight);
-                graphics.lineTo(frontX - perpX * 0.85, frontY - perpY * 0.85 - ramHeight);
-                graphics.lineTo(backX - perpX, backY - perpY - ramHeight);
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Wood highlight - top surface
-                graphics.fillStyle(0x7a4a2a, 1);
-                graphics.beginPath();
-                graphics.moveTo(backX + perpX * 0.8, backY + perpY * 0.8 - ramHeight - 4);
-                graphics.lineTo(frontX + perpX * 0.7, frontY + perpY * 0.7 - ramHeight - 4);
-                graphics.lineTo(frontX - perpX * 0.4, frontY - perpY * 0.4 - ramHeight - 3);
-                graphics.lineTo(backX - perpX * 0.4, backY - perpY * 0.4 - ramHeight - 3);
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Bark texture - deep grooves running lengthwise
-                graphics.lineStyle(2, 0x2a1a0a, 0.7);
-                for (let i = 0; i < 5; i++) {
-                    const offset = (i - 2) * 0.15;
-                    const gx1 = backX + perpX * offset;
-                    const gy1 = backY + perpY * offset - ramHeight - 1;
-                    const gx2 = frontX + perpX * offset * 0.8;
-                    const gy2 = frontY + perpY * offset * 0.8 - ramHeight - 1;
-                    graphics.lineBetween(gx1, gy1, gx2, gy2);
-                }
-
-                // Knots and wood details
-                graphics.fillStyle(0x4a2a15, 1);
-                const knot1T = 0.3;
-                const knot1X = backX + (frontX - backX) * knot1T + perpX * 0.3;
-                const knot1Y = backY + (frontY - backY) * knot1T + perpY * 0.3 - ramHeight - 2;
-                graphics.fillCircle(knot1X, knot1Y, 3);
-                graphics.fillStyle(0x3a1a0a, 1);
-                graphics.fillCircle(knot1X, knot1Y, 1.5);
-
-                const knot2T = 0.65;
-                const knot2X = backX + (frontX - backX) * knot2T - perpX * 0.2;
-                const knot2Y = backY + (frontY - backY) * knot2T - perpY * 0.2 - ramHeight - 1;
-                graphics.fillStyle(0x4a2a15, 1);
-                graphics.fillCircle(knot2X, knot2Y, 2.5);
-                graphics.fillStyle(0x3a1a0a, 1);
-                graphics.fillCircle(knot2X, knot2Y, 1);
-
-                // === IRON REINFORCEMENT RINGS ===
-                graphics.fillStyle(0x3a3a3a, 1);
-                for (const t of [0.15, 0.45, 0.75]) {
-                    const bx = backX + (frontX - backX) * t;
-                    const by = backY + (frontY - backY) * t - ramHeight;
-                    // Ring body
-                    graphics.beginPath();
-                    graphics.moveTo(bx + perpX * 1.15, by + perpY * 1.15 + 2);
-                    graphics.lineTo(bx - perpX * 1.15, by - perpY * 1.15 + 2);
-                    graphics.lineTo(bx - perpX * 1.15, by - perpY * 1.15 - 4);
-                    graphics.lineTo(bx + perpX * 1.15, by + perpY * 1.15 - 4);
-                    graphics.closePath();
-                    graphics.fillPath();
-                }
-                // Ring highlights
-                graphics.fillStyle(0x5a5a5a, 0.8);
-                for (const t of [0.15, 0.45, 0.75]) {
-                    const bx = backX + (frontX - backX) * t;
-                    const by = backY + (frontY - backY) * t - ramHeight - 3;
-                    graphics.fillRect(bx - perpX * 0.3 - 3, by, 6, 1.5);
-                }
-                // Rivets on rings
-                graphics.fillStyle(0x6a6a6a, 1);
-                for (const t of [0.15, 0.45, 0.75]) {
-                    const bx = backX + (frontX - backX) * t;
-                    const by = backY + (frontY - backY) * t - ramHeight - 1;
-                    graphics.fillCircle(bx + perpX * 0.9, by + perpY * 0.9, 1.5);
-                    graphics.fillCircle(bx - perpX * 0.9, by - perpY * 0.9, 1.5);
-                }
-
-                // === MASSIVE IRON RAM HEAD ===
-                const headLength = 18;
-                const tipX = frontX + cos * headLength + cos * chargeForward;
-                const tipY = frontY + sin * headLength * 0.5 - ramHeight + sin * chargeForward * 0.5;
-
-                // Iron collar connecting to wood
-                graphics.fillStyle(0x2a2a2a, 1);
-                graphics.beginPath();
-                graphics.moveTo(frontX + perpX * 1.3, frontY + perpY * 1.3 - ramHeight + 3);
-                graphics.lineTo(frontX - perpX * 1.3, frontY - perpY * 1.3 - ramHeight + 3);
-                graphics.lineTo(frontX - perpX * 1.3, frontY - perpY * 1.3 - ramHeight - 6);
-                graphics.lineTo(frontX + perpX * 1.3, frontY + perpY * 1.3 - ramHeight - 6);
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Main iron head - shaped like a beast
-                graphics.fillStyle(0x4a4a4a, 1);
-                graphics.beginPath();
-                graphics.moveTo(tipX, tipY - 2);
-                graphics.lineTo(frontX + perpX * 1.2, frontY + perpY * 1.2 - ramHeight + 2);
-                graphics.lineTo(frontX + perpX * 1.2, frontY + perpY * 1.2 - ramHeight - 5);
-                graphics.closePath();
-                graphics.fillPath();
-
-                graphics.fillStyle(0x3a3a3a, 1);
-                graphics.beginPath();
-                graphics.moveTo(tipX, tipY - 2);
-                graphics.lineTo(frontX - perpX * 1.2, frontY - perpY * 1.2 - ramHeight + 2);
-                graphics.lineTo(frontX - perpX * 1.2, frontY - perpY * 1.2 - ramHeight - 5);
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Pointed tip highlight
-                graphics.fillStyle(0x6a6a6a, 1);
-                graphics.beginPath();
-                graphics.moveTo(tipX + 1, tipY - 4);
-                graphics.lineTo(frontX + perpX * 0.3, frontY + perpY * 0.3 - ramHeight - 4);
-                graphics.lineTo(frontX + perpX * 0.6, frontY + perpY * 0.6 - ramHeight - 2);
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Decorative ram horns on the head
-                graphics.fillStyle(0x555555, 1);
-                // Left horn
-                graphics.beginPath();
-                graphics.moveTo(frontX + perpX * 1.1 + cos * 4, frontY + perpY * 1.1 - ramHeight - 4);
-                graphics.lineTo(frontX + perpX * 1.8 + cos * 2, frontY + perpY * 1.8 - ramHeight - 8);
-                graphics.lineTo(frontX + perpX * 1.5 + cos * 6, frontY + perpY * 1.5 - ramHeight - 6);
-                graphics.closePath();
-                graphics.fillPath();
-                // Right horn
-                graphics.beginPath();
-                graphics.moveTo(frontX - perpX * 1.1 + cos * 4, frontY - perpY * 1.1 - ramHeight - 4);
-                graphics.lineTo(frontX - perpX * 1.8 + cos * 2, frontY - perpY * 1.8 - ramHeight - 8);
-                graphics.lineTo(frontX - perpX * 1.5 + cos * 6, frontY - perpY * 1.5 - ramHeight - 6);
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Menacing eyes on ram head
-                graphics.fillStyle(0xff3300, 0.9);
-                graphics.fillCircle(frontX + perpX * 0.5 + cos * 8, frontY + perpY * 0.5 - ramHeight - 2, 2);
-                graphics.fillCircle(frontX - perpX * 0.5 + cos * 8, frontY - perpY * 0.5 - ramHeight - 2, 2);
-                graphics.fillStyle(0xffff00, 0.7);
-                graphics.fillCircle(frontX + perpX * 0.5 + cos * 8.5, frontY + perpY * 0.5 - ramHeight - 2.5, 0.8);
-                graphics.fillCircle(frontX - perpX * 0.5 + cos * 8.5, frontY - perpY * 0.5 - ramHeight - 2.5, 0.8);
-
-                // === BACK END - Rough cut wood ===
-                graphics.fillStyle(0x6a4a2a, 1);
-                graphics.beginPath();
-                graphics.arc(backX, backY - ramHeight - 1, ramWidth * 0.45, 0, Math.PI * 2);
-                graphics.closePath();
-                graphics.fillPath();
-                // Tree rings
-                graphics.lineStyle(1, 0x5a3a1a, 0.6);
-                graphics.strokeCircle(backX, backY - ramHeight - 1, ramWidth * 0.3);
-                graphics.strokeCircle(backX, backY - ramHeight - 1, ramWidth * 0.15);
-                graphics.fillStyle(0x4a2a15, 1);
-                graphics.fillCircle(backX, backY - ramHeight - 1, 2);
-
-                // === ROPE HANDLES ===
-                graphics.lineStyle(3, 0x8a7a5a, 0.9);
-                // Rope loops at carrying positions
-                const rope1X = backX + (frontX - backX) * 0.15;
-                const rope1Y = backY + (frontY - backY) * 0.15 - ramHeight + 3;
-                const rope2X = backX + (frontX - backX) * 0.6;
-                const rope2Y = backY + (frontY - backY) * 0.6 - ramHeight + 3;
-
-                graphics.beginPath();
-                graphics.arc(rope1X, rope1Y, 4, 0, Math.PI);
-                graphics.strokePath();
-                graphics.beginPath();
-                graphics.arc(rope2X, rope2Y, 4, 0, Math.PI);
-                graphics.strokePath();
-
-                break;
-            }
-
-            case 'stormmage': {
-                // Mysterious wizard with electric aura
-                const now = Date.now();
-                const robeColor = isPlayer ? 0x4444ff : 0xaa2222;
-                const capeColor = isPlayer ? 0x2222aa : 0x771111;
-                const glowColor = 0x00ffff;
-
-                // Static electricity particles
-                for (let i = 0; i < 3; i++) {
-                    const angle = (now / 100 + i * 2) % (Math.PI * 2);
-                    const dist = 12 + Math.sin(now / 200 + i) * 4;
-                    const px = Math.cos(angle) * dist;
-                    const py = Math.sin(angle) * dist * 0.6 - 15;
-                    graphics.fillStyle(glowColor, 0.4 + Math.sin(now / 50 + i) * 0.3);
-                    graphics.fillCircle(px, py, 1.5);
-                }
-
-                // Shadow
-                graphics.fillStyle(0x000000, 0.3);
-                graphics.fillEllipse(0, 5, 16, 7);
-
-                // Robe
-                graphics.fillStyle(capeColor, 1);
-                graphics.fillCircle(0, 0, 9);
-                graphics.fillStyle(robeColor, 1);
-                graphics.fillCircle(0, -1, 8);
-
-                // Hood/Face area
-                graphics.fillStyle(0x1a1a1a, 1);
-                graphics.fillCircle(0, -8, 6);
-
-                // Glowing eyes
-                const eyeGlow = 0.6 + Math.sin(now / 100) * 0.4;
-                graphics.fillStyle(glowColor, eyeGlow);
-                graphics.fillCircle(-2, -9, 1.5);
-                graphics.fillCircle(2, -9, 1.5);
-
-                // Magical staff
-                graphics.lineStyle(2, 0x4a3a2a, 1);
-                graphics.lineBetween(8, -25, 8, 5);
-
-                // Staff tip (electric crystal)
-                const crystalGlow = 0.5 + Math.sin(now / 80) * 0.5;
-                graphics.fillStyle(glowColor, 0.3 * crystalGlow);
-                graphics.fillCircle(8, -25, 8);
-                graphics.fillStyle(0xffffff, 0.9);
-                graphics.fillCircle(8, -25, 3);
-
-                // Arcs on staff
-                if (Math.random() > 0.8) {
-                    graphics.lineStyle(1, 0xffffff, 0.8);
-                    graphics.beginPath();
-                    graphics.moveTo(8, -25);
-                    graphics.lineTo(8 + (Math.random() - 0.5) * 10, -25 + (Math.random() - 0.5) * 10);
-                    graphics.strokePath();
-                }
-                break;
-            }
-
-        }
-
-        // Outline
-        graphics.lineStyle(1, 0x000000, 0.5);
-        const radius = type === 'giant' ? 12 : (type === 'ward' ? 8 : 8);
-        graphics.strokeCircle(0, type === 'giant' ? -2 : (type === 'ward' ? 0 : -1), radius);
-    }
-
-
-
-    private cartToIso(x: number, y: number): Phaser.Math.Vector2 {
-        const tx = (x - y) * (this.tileWidth / 2);
-        const ty = (x + y) * (this.tileHeight / 2);
-        return new Phaser.Math.Vector2(tx, ty);
-    }
-
-    private isoToCart(screenX: number, screenY: number): Phaser.Math.Vector2 {
-        const halfW = this.tileWidth / 2;
-        const halfH = this.tileHeight / 2;
-        const y = (screenY / halfH - screenX / halfW) / 2;
-        const x = (screenY / halfH + screenX / halfW) / 2;
-        return new Phaser.Math.Vector2(x, y);
-    }
 
     private getBuildingsBounds(owner: 'PLAYER' | 'ENEMY') {
         const ownerBuildings = this.buildings.filter(b => b.owner === owner);
@@ -9128,41 +4339,262 @@ export class MainScene extends Phaser.Scene {
             maxY = Math.max(maxY, b.gridY + info.height);
         });
         const buffer = 1;
-        return { minX: minX - buffer, minY: minY - buffer, maxX: maxX + buffer, maxY: maxY + buffer };
+        // Clamp to map bounds
+        return {
+            minX: Math.max(0, minX - buffer),
+            minY: Math.max(0, minY - buffer),
+            maxX: Math.min(this.mapSize, maxX + buffer),
+            maxY: Math.min(this.mapSize, maxY + buffer)
+        };
     }
 
     private updateDeploymentHighlight() {
         this.deploymentGraphics.clear();
+        this.forbiddenGraphics.clear();
+
         if (this.mode !== 'ATTACK') {
             this.deploymentGraphics.setVisible(false);
+            this.forbiddenGraphics.setVisible(false);
             return;
         }
-        const bounds = this.getBuildingsBounds('ENEMY');
-        if (!bounds) return;
-        this.deploymentGraphics.setVisible(true);
-        // Persist subtly even during placing
-        if (!this.deploymentGraphics.alpha) this.deploymentGraphics.setAlpha(0.3);
 
-        this.deploymentGraphics.lineStyle(2, 0xff0000, 0.4);
-        const c1 = this.cartToIso(bounds.minX, bounds.minY);
-        const c2 = this.cartToIso(bounds.maxX, bounds.minY);
-        const c3 = this.cartToIso(bounds.maxX, bounds.maxY);
-        const c4 = this.cartToIso(bounds.minX, bounds.maxY);
-        this.deploymentGraphics.strokePoints([c1, c2, c3, c4], true, true);
-        this.deploymentGraphics.fillStyle(0xff0000, 0.1);
-        this.deploymentGraphics.fillPoints([c1, c2, c3, c4], true);
+        this.deploymentGraphics.setVisible(true);
+        this.forbiddenGraphics.setVisible(true);
+
+        const isRecentlyDeployed = (this.time.now - this.lastDeployTime < 1000);
+        const isPointerDown = this.input.activePointer.isDown;
+        const isInteractingWithForbidden = (this.time.now - this.lastForbiddenInteractionTime < 1500);
+
+        const targetMarginAlpha = (isPointerDown || isRecentlyDeployed) ? 0.6 : 0.15;
+        const targetForbiddenAlpha = isInteractingWithForbidden ? 0.6 : 0.0;
+
+        // Smoothly lerp alphas for immersion
+        this.deploymentGraphics.alpha += (targetMarginAlpha - this.deploymentGraphics.alpha) * 0.15;
+
+        // Red zone fades slower (0.02 factor on fade out for extra grace, 0.2 on fade in)
+        const redLerp = this.forbiddenGraphics.alpha < targetForbiddenAlpha ? 0.2 : 0.02;
+        this.forbiddenGraphics.alpha += (targetForbiddenAlpha - this.forbiddenGraphics.alpha) * redLerp;
+
+        const margin = 2;
+
+        // 1. Draw LUSH LIGHT GREEN deployment margin
+        const m1 = IsoUtils.cartToIso(-margin, -margin);
+        const m2 = IsoUtils.cartToIso(this.mapSize + margin, -margin);
+        const m3 = IsoUtils.cartToIso(this.mapSize + margin, this.mapSize + margin);
+        const m4 = IsoUtils.cartToIso(-margin, this.mapSize + margin);
+
+        const i1 = IsoUtils.cartToIso(0, 0);
+        const i2 = IsoUtils.cartToIso(this.mapSize, 0);
+        const i3 = IsoUtils.cartToIso(this.mapSize, this.mapSize);
+        const i4 = IsoUtils.cartToIso(0, this.mapSize);
+
+        // Deployment area fill
+        this.deploymentGraphics.fillStyle(0x7ed957, 0.4);
+        this.deploymentGraphics.fillPoints([m1, m2, m3, m4], true);
+
+        // Map boundary separator
+        this.deploymentGraphics.lineStyle(2, 0xffffff, 0.4);
+        this.deploymentGraphics.strokePoints([i1, i2, i3, i4], true, true);
+
+        // Grid highlight
+        this.deploymentGraphics.lineStyle(2, 0xadffad, 0.6);
+        this.deploymentGraphics.strokePoints([m1, m2, m3, m4], true, true);
+
+        // 2. Draw INNER forbidden zone (into red graphics)
+        const bounds = this.getBuildingsBounds('ENEMY');
+        if (bounds) {
+            const b1 = IsoUtils.cartToIso(bounds.minX, bounds.minY);
+            const b2 = IsoUtils.cartToIso(bounds.maxX, bounds.minY);
+            const b3 = IsoUtils.cartToIso(bounds.maxX, bounds.maxY);
+            const b4 = IsoUtils.cartToIso(bounds.minX, bounds.maxY);
+
+            // Red zone fill
+            this.forbiddenGraphics.fillStyle(0xff0000, 0.2);
+            this.forbiddenGraphics.fillPoints([b1, b2, b3, b4], true);
+
+            // Red zone border
+            this.forbiddenGraphics.lineStyle(2, 0xff0000, 0.5);
+            this.forbiddenGraphics.strokePoints([b1, b2, b3, b4], true, true);
+        }
+
         this.deploymentGraphics.setDepth(5);
+    }
+
+    private playUpgradeEffect(building: PlacedBuilding) {
+        const bInfo = BUILDINGS[building.type];
+
+        // Calculate VISUAL center (considering isometric height)
+        const groundCenter = IsoUtils.cartToIso(building.gridX + bInfo.width / 2, building.gridY + bInfo.height / 2);
+
+        // Approximate visual center based on building type (most have some height)
+        let heightOffset = 50;
+        if (building.type === 'wall' || building.type === 'bomb' || building.type === 'spring_trap') heightOffset = 10;
+        else if (building.type === 'army_camp') heightOffset = 20;
+        else if (building.type === 'tesla' || building.type === 'archer_tower' || building.type === 'wizard_tower') heightOffset = 80;
+
+        const centerX = groundCenter.x;
+        const centerY = groundCenter.y - heightOffset / 2;
+
+        // Create sparkle particles
+        const numParticles = 12;
+        for (let i = 0; i < numParticles; i++) {
+            const angle = (i / numParticles) * Math.PI * 2;
+            const speed = 40 + Math.random() * 40;
+            const particle = this.add.graphics();
+            particle.setDepth(building.graphics.depth + 100);
+
+            // Random gold/yellow/white colors
+            const colors = [0xFFD700, 0xFFA500, 0xFFFF00, 0xFFFFFF, 0xFFE4B5];
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            const size = 3 + Math.random() * 3;
+
+            particle.fillStyle(color, 1);
+            particle.fillCircle(0, 0, size);
+            particle.x = centerX;
+            particle.y = centerY;
+
+            this.tweens.add({
+                targets: particle,
+                x: centerX + Math.cos(angle) * speed,
+                y: centerY + Math.sin(angle) * speed - 40 - Math.random() * 30,
+                alpha: 0,
+                scale: { from: 1, to: 0.2 },
+                duration: 800 + Math.random() * 400,
+                ease: 'Cubic.easeOut',
+                onComplete: () => particle.destroy()
+            });
+        }
+
+        // Create rising star effect
+        for (let i = 0; i < 3; i++) {
+            const star = this.add.graphics();
+            star.setDepth(building.graphics.depth + 110);
+            star.fillStyle(0xFFD700, 1);
+            star.beginPath();
+            star.moveTo(0, -6);
+            star.lineTo(2, -2);
+            star.lineTo(6, 0);
+            star.lineTo(2, 2);
+            star.lineTo(0, 6);
+            star.lineTo(-2, 2);
+            star.lineTo(-6, 0);
+            star.lineTo(-2, -2);
+            star.closePath();
+            star.fillPath();
+            star.x = centerX + (Math.random() - 0.5) * 30;
+            star.y = centerY;
+
+            this.tweens.add({
+                targets: star,
+                y: centerY - 60 - Math.random() * 40,
+                alpha: { from: 1, to: 0 },
+                scale: { from: 1.5, to: 0.5 },
+                duration: 800 + Math.random() * 400,
+                delay: i * 100,
+                ease: 'Cubic.easeOut',
+                onComplete: () => star.destroy()
+            });
+        }
+
+        // Pop Animation
+        this.tweens.killTweensOf(building.graphics);
+        if (building.baseGraphics) this.tweens.killTweensOf(building.baseGraphics);
+
+        building.graphics.y = 0;
+        if (building.baseGraphics) building.baseGraphics.y = 0;
+
+        this.tweens.add({
+            targets: building.graphics,
+            y: -10,
+            duration: 150,
+            yoyo: true,
+            ease: 'Quad.easeOut',
+            onComplete: () => { building.graphics.y = 0; }
+        });
+
+        if (building.baseGraphics) {
+            this.tweens.add({
+                targets: building.baseGraphics,
+                y: -5,
+                duration: 150,
+                yoyo: true,
+                ease: 'Quad.easeOut',
+                onComplete: () => { if (building.baseGraphics) building.baseGraphics.y = 0; }
+            });
+        }
     }
 
     private onPointerDown(pointer: Phaser.Input.Pointer) {
         if (pointer.button === 0) {
+            this.isManualFiring = false; // Reset firing on interaction start
+
+            // If a building is selected, we can start manual firing immediately on press
+            if (this.selectedInWorld && !this.selectedBuildingType && !this.isMoving) {
+                const info = BUILDINGS[this.selectedInWorld.type];
+                if (info && info.category === 'defense') {
+                    const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+                    const gridPosFloat = IsoUtils.isoToCart(worldPoint.x, worldPoint.y);
+                    const centerX = this.selectedInWorld.gridX + info.width / 2;
+                    const centerY = this.selectedInWorld.gridY + info.height / 2;
+                    const dist = Phaser.Math.Distance.Between(gridPosFloat.x, gridPosFloat.y, centerX, centerY);
+
+                    if (dist <= (info.range || 10)) {
+                        this.isManualFiring = true;
+                    }
+                }
+            }
+
+            // Just set up for potential drag
+            this.isDragging = false;
+            this.dragOrigin.set(pointer.x, pointer.y);
+
+            // Anchor for robust panning
+            this.dragStartCam.set(this.cameras.main.scrollX, this.cameras.main.scrollY);
+            this.dragStartScreen.set(pointer.position.x, pointer.position.y);
+
+            // Start deployment timer and spawn first troop immediately for responsiveness
+            if (this.mode === 'ATTACK') {
+                this.deployStartTime = this.time.now;
+                const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+                const gridPosFloat = IsoUtils.isoToCart(worldPoint.x, worldPoint.y);
+                const bounds = this.getBuildingsBounds('ENEMY');
+                const margin = 2;
+                const isInsideMap = gridPosFloat.x >= -margin && gridPosFloat.x < this.mapSize + margin &&
+                    gridPosFloat.y >= -margin && gridPosFloat.y < this.mapSize + margin;
+                const isForbidden = bounds && gridPosFloat.x >= bounds.minX && gridPosFloat.x <= bounds.maxX &&
+                    gridPosFloat.y >= bounds.minY && gridPosFloat.y <= bounds.maxY;
+
+                if (isInsideMap && !isForbidden) {
+                    const army = (window as any).getArmy();
+                    const selectedType = (window as any).getSelectedTroopType();
+                    this.isLockingDragForTroops = true; // Lock camera panning for this drag
+                    if (selectedType && army[selectedType] > 0) {
+                        this.spawnTroop(gridPosFloat.x, gridPosFloat.y, selectedType, 'PLAYER');
+                        (window as any).deployTroop(selectedType);
+                        this.lastDeployTime = this.time.now;
+                    }
+                }
+            }
+        }
+    }
+
+    private async onPointerUp(pointer: Phaser.Input.Pointer) {
+        // Calculate drag distance
+        const dist = Phaser.Math.Distance.Between(pointer.downX, pointer.downY, pointer.upX, pointer.upY);
+
+        // If moved significantly, treat as drag and do nothing else
+        if (dist > 10) {
+            this.isDragging = false;
+            return;
+        }
+
+        // --- CLICK HANDLING (Previously in onPointerDown) ---
+        if (pointer.button === 0) {
             const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-            const gridPosFloat = this.isoToCart(worldPoint.x, worldPoint.y);
+            const gridPosFloat = IsoUtils.isoToCart(worldPoint.x, worldPoint.y);
             const gridPosSnap = new Phaser.Math.Vector2(Math.floor(gridPosFloat.x), Math.floor(gridPosFloat.y));
 
             if (this.mode === 'ATTACK') {
-                const bounds = this.getBuildingsBounds('ENEMY');
-
                 // Check if clicking on an enemy building to show its range
                 const clickedBuilding = this.buildings.find(b => {
                     if (b.owner !== 'ENEMY' || b.health <= 0) return false;
@@ -9172,46 +4604,18 @@ export class MainScene extends Phaser.Scene {
                 });
 
                 if (clickedBuilding) {
-                    // Show range indicator for this building
-                    this.showBuildingRangeIndicator(clickedBuilding);
-                    // Flash the red zone
-                    this.tweens.add({
-                        targets: this.deploymentGraphics,
-                        alpha: 0.8,
-                        duration: 100,
-                        yoyo: true,
-                        onComplete: () => this.deploymentGraphics.setAlpha(0.3)
-                    });
+                    // Toggle range indicator: If already active, clear it. Else show it.
+                    if (clickedBuilding.rangeIndicator) {
+                        this.clearBuildingRangeIndicator();
+                    } else {
+                        this.showBuildingRangeIndicator(clickedBuilding);
+                    }
+                    this.lastForbiddenInteractionTime = this.time.now;
                     return;
                 }
 
                 // Clear any existing range indicator when clicking elsewhere
                 this.clearBuildingRangeIndicator();
-
-                if (bounds && gridPosFloat.x >= bounds.minX && gridPosFloat.x <= bounds.maxX && gridPosFloat.y >= bounds.minY && gridPosFloat.y <= bounds.maxY) {
-                    // Flash the red zone
-                    this.tweens.add({
-                        targets: this.deploymentGraphics,
-                        alpha: 0.8,
-                        duration: 100,
-                        yoyo: true,
-                        onComplete: () => this.deploymentGraphics.setAlpha(0.3)
-                    });
-                    // Don't return - allow dragging even in forbidden zone
-                }
-
-                const army = (window as any).getArmy();
-                const selectedType = (window as any).getSelectedTroopType();
-                if (selectedType && army[selectedType] > 0 && (!bounds || !(gridPosFloat.x >= bounds.minX && gridPosFloat.x <= bounds.maxX && gridPosFloat.y >= bounds.minY && gridPosFloat.y <= bounds.maxY))) {
-                    this.spawnTroop(gridPosFloat.x, gridPosFloat.y, selectedType, 'PLAYER');
-                    (window as any).deployTroop(selectedType);
-                    this.lastDeployTime = this.time.now;
-                    return; // Don't start dragging when deploying
-                }
-
-                // Enable camera dragging in attack mode
-                this.isDragging = true;
-                this.dragOrigin.set(pointer.x, pointer.y);
                 return;
             }
 
@@ -9227,20 +4631,17 @@ export class MainScene extends Phaser.Scene {
                     this.drawBuildingVisuals(this.selectedInWorld.graphics, gridPosSnap.x, gridPosSnap.y, this.selectedInWorld.type, 1, null, this.selectedInWorld);
                     const depth = (gridPosSnap.x + BUILDINGS[this.selectedInWorld.type].width) + (gridPosSnap.y + BUILDINGS[this.selectedInWorld.type].height);
                     this.selectedInWorld.graphics.setDepth(depth * 10);
-                    // For ballista/xbow, update barrel graphics depth
                     if (this.selectedInWorld.barrelGraphics) {
                         this.selectedInWorld.barrelGraphics.setDepth(this.selectedInWorld.graphics.depth + 1);
                     }
                     this.updateHealthBar(this.selectedInWorld);
-                    // Update range indicator to follow the moved building
                     if (this.selectedInWorld.rangeIndicator) {
                         this.showBuildingRangeIndicator(this.selectedInWorld);
                     }
                     this.isMoving = false;
                     this.ghostBuilding.setVisible(false);
-                    // Persist move in backend
                     if (this.selectedInWorld.owner === 'PLAYER') {
-                        Backend.moveBuilding('player_home', this.selectedInWorld.id, gridPosSnap.x, gridPosSnap.y);
+                        await Backend.moveBuilding(this.userId, this.selectedInWorld.id, gridPosSnap.x, gridPosSnap.y);
                     }
                 }
                 return;
@@ -9254,12 +4655,11 @@ export class MainScene extends Phaser.Scene {
             if (this.selectedBuildingType) {
                 if (this.isPositionValid(gridPosSnap.x, gridPosSnap.y, this.selectedBuildingType)) {
                     const type = this.selectedBuildingType;
-                    const success = this.placeBuilding(gridPosSnap.x, gridPosSnap.y, type, 'PLAYER');
+                    const success = await this.placeBuilding(gridPosSnap.x, gridPosSnap.y, type, 'PLAYER');
 
                     if (success) {
-                        // Successful placement effect
                         const info = BUILDINGS[type];
-                        const pos = this.cartToIso(gridPosSnap.x + info.width / 2, gridPosSnap.y + info.height / 2);
+                        const pos = IsoUtils.cartToIso(gridPosSnap.x + info.width / 2, gridPosSnap.y + info.height / 2);
                         this.createSmokeEffect(pos.x, pos.y, 8);
 
                         if (type !== 'wall') {
@@ -9268,7 +4668,6 @@ export class MainScene extends Phaser.Scene {
                             (window as any).onPlacementCancelled?.();
                         }
                     } else {
-                        // Shake the ghost building to indicate failure (likely max limit reached)
                         this.tweens.add({
                             targets: this.ghostBuilding,
                             x: this.ghostBuilding.x + 5,
@@ -9287,16 +4686,24 @@ export class MainScene extends Phaser.Scene {
                     gridPosSnap.y >= b.gridY && gridPosSnap.y < b.gridY + info.height && b.owner === 'PLAYER';
             });
             if (clicked) {
-                // If clicking a different building, clear previous range indicator
-                if (this.selectedInWorld !== clicked) {
+                if (this.selectedInWorld === clicked) {
+                    this.selectedInWorld = null;
+                    (window as any).onBuildingSelected?.(null);
                     this.clearBuildingRangeIndicator();
+                    if (clicked.type === 'prism') {
+                        this.cleanupPrismLaser(clicked);
+                    }
+                } else {
+                    if (this.selectedInWorld !== clicked) {
+                        this.clearBuildingRangeIndicator();
+                    }
+                    this.selectedInWorld = clicked;
+                    (window as any).onBuildingSelected?.({ id: clicked.id, type: clicked.type, level: clicked.level || 1 });
+                    this.showBuildingRangeIndicator(clicked);
                 }
-                this.selectedInWorld = clicked;
-                (window as any).onBuildingSelected?.({ id: clicked.id, type: clicked.type, level: clicked.level || 1 });
-                // Show range indicator for defensive buildings in home mode too
-                this.showBuildingRangeIndicator(clicked);
+                this.isManualFiring = false;
+                return;
             } else {
-                // Check if we have a defense selected that should shoot AND input is within range
                 if (this.selectedInWorld &&
                     ['cannon', 'ballista', 'xbow', 'mortar', 'tesla', 'magmavent', 'prism'].includes(this.selectedInWorld.type)) {
 
@@ -9306,34 +4713,96 @@ export class MainScene extends Phaser.Scene {
                     const dist = Phaser.Math.Distance.Between(gridPosFloat.x, gridPosFloat.y, centerX, centerY);
 
                     if (dist <= (info.range || 10)) {
-                        // Start manual firing sequence
-                        this.isManualFiring = true;
-                        return; // Don't deselect!
+                        this.updateManualFire(this.time.now);
+                        this.isManualFiring = false;
+                        return;
                     }
                 }
 
-                // Clicking elsewhere - deselect
                 if (this.selectedInWorld && this.selectedInWorld.type === 'prism') {
                     this.cleanupPrismLaser(this.selectedInWorld);
                 }
                 this.selectedInWorld = null;
                 (window as any).onBuildingSelected?.(null);
-                // Clear range indicator when clicking elsewhere
                 this.clearBuildingRangeIndicator();
                 this.isManualFiring = false;
-                this.isDragging = true;
-                this.dragOrigin.set(pointer.x, pointer.y);
             }
+        }
+
+        // Final cleanup for interactions that rely on holding mouse down (like prism)
+        this.isDragging = false;
+        this.isManualFiring = false;
+        this.isLockingDragForTroops = false;
+        if (this.selectedInWorld && (this.selectedInWorld as any).type === 'prism') {
+            this.cleanupPrismLaser(this.selectedInWorld);
         }
     }
 
     private onPointerMove(pointer: Phaser.Input.Pointer) {
+        // 1. Calculate common coordinate data immediately to avoid redundancy and shadowing
         const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-        const cartFloat = this.isoToCart(worldPoint.x, worldPoint.y);
+        const cartFloat = IsoUtils.isoToCart(worldPoint.x, worldPoint.y);
         const gridPosSnap = new Phaser.Math.Vector2(Math.floor(cartFloat.x), Math.floor(cartFloat.y));
         const gridPosFloat = cartFloat;
 
         this.hoverGrid.set(gridPosSnap.x, gridPosSnap.y);
+
+        // Drag detection threshold
+        if (pointer.isDown) {
+            if (!this.isDragging) {
+                // Check if moved enough to start drag
+                const dist = Phaser.Math.Distance.Between(pointer.downX, pointer.downY, pointer.x, pointer.y);
+                if (dist > 10) {
+                    this.isDragging = true;
+                    // Optional: Reset anchor here to avoid 'jump', but keeping it means we SNAP to the cursor, which feels tighter.
+                    // To avoid snap, we would do:
+                    // this.dragStartCam.set(this.cameras.main.scrollX, this.cameras.main.scrollY);
+                    // this.dragStartScreen.set(pointer.position.x, pointer.position.y);
+                    // Reset the anchor to prevent the "jump" artifact when drag starts
+                    this.dragStartCam.set(this.cameras.main.scrollX, this.cameras.main.scrollY);
+                    this.dragStartScreen.set(pointer.position.x, pointer.position.y);
+                }
+            }
+
+            if (this.isDragging) {
+                // Camera Drag Logic - Anchor Based for 1:1 movement
+                // Fix: explicit exception for walls to prevent panning while painting walls
+                const isWallPlacement = this.selectedBuildingType === 'wall';
+
+                // Fix: explicit exception for troops to prevent panning while deploying army
+                // BUT: if dragging on red area (forbidden), we SHOULD pan
+
+
+                // Determine if we are hovering a valid deployment zone
+                // We reuse the pre-calculated coordinates
+                const bounds = this.getBuildingsBounds('ENEMY');
+                const isForbidden = bounds && cartFloat.x >= bounds.minX && cartFloat.x <= bounds.maxX &&
+                    cartFloat.y >= bounds.minY && cartFloat.y <= bounds.maxY;
+
+                // Is strictly placing troops (Attack mode, troop selected, AND in valid spot OR already locked)
+                const isTroopPlacement = this.mode === 'ATTACK' && this.isLockingDragForTroops && !isForbidden;
+
+                if (!isWallPlacement && !isTroopPlacement && (this.mode === 'ATTACK' || (!this.selectedBuildingType && !this.selectedInWorld) || (this.selectedInWorld && !this.isMoving))) {
+                    // formula: currentScroll = startScroll + (startScreen - currentScreen) / zoom
+                    const diffX = this.dragStartScreen.x - pointer.position.x;
+                    const diffY = this.dragStartScreen.y - pointer.position.y;
+
+                    this.cameras.main.scrollX = this.dragStartCam.x + diffX / this.cameras.main.zoom;
+                    this.cameras.main.scrollY = this.dragStartCam.y + diffY / this.cameras.main.zoom;
+                }
+            }
+
+            // Update manual firing state during movement (allows following cursor with laser/gun)
+            if (this.mode === 'HOME' && this.selectedInWorld && !this.selectedBuildingType && !this.isMoving && !this.isDragging) {
+                const info = BUILDINGS[this.selectedInWorld.type];
+                if (info && info.category === 'defense') {
+                    const centerX = this.selectedInWorld.gridX + info.width / 2;
+                    const centerY = this.selectedInWorld.gridY + info.height / 2;
+                    const dist = Phaser.Math.Distance.Between(gridPosFloat.x, gridPosFloat.y, centerX, centerY);
+                    this.isManualFiring = dist <= (info.range || 10);
+                }
+            }
+        }
 
         // Drag to build walls
         if (pointer.isDown && this.selectedBuildingType === 'wall') {
@@ -9344,32 +4813,38 @@ export class MainScene extends Phaser.Scene {
 
         if (this.mode === 'ATTACK' && pointer.isDown) {
             const now = this.time.now;
-            if (now - this.lastDeployTime > 333) {
+            const holdDuration = now - this.deployStartTime;
 
+            // Ramping fire rate: Start slow (500ms), speed up (250ms), then turbo (100ms)
+            let interval = 500;
+            if (holdDuration > 1000) interval = 100;
+            else if (holdDuration > 500) interval = 250;
+
+            if (now - this.lastDeployTime > interval) {
                 const bounds = this.getBuildingsBounds('ENEMY');
-                const isForbidden = bounds && gridPosFloat.x >= bounds.minX && gridPosFloat.x <= bounds.maxX && gridPosFloat.y >= bounds.minY && gridPosFloat.y <= bounds.maxY;
+                const margin = 2;
+                const isInsideMap = gridPosFloat.x >= -margin && gridPosFloat.x < this.mapSize + margin &&
+                    gridPosFloat.y >= -margin && gridPosFloat.y < this.mapSize + margin;
+                const isForbidden = bounds && gridPosFloat.x >= bounds.minX && gridPosFloat.x <= bounds.maxX &&
+                    gridPosFloat.y >= bounds.minY && gridPosFloat.y <= bounds.maxY;
 
-                if (!isForbidden) {
+                if (isForbidden) {
+                    this.lastForbiddenInteractionTime = now;
+                }
+
+                if (isInsideMap && !isForbidden) {
                     const army = (window as any).getArmy();
                     const selectedType = (window as any).getSelectedTroopType();
                     if (selectedType && army[selectedType] > 0) {
                         this.spawnTroop(gridPosFloat.x, gridPosFloat.y, selectedType, 'PLAYER');
                         (window as any).deployTroop(selectedType);
                         this.lastDeployTime = now;
-                        return; // Don't drag camera when actually deploying
+                        return;
                     }
                 }
             }
         }
 
-
-        if (this.isDragging) {
-            const dx = (pointer.x - this.dragOrigin.x) * this.cameraSensitivity;
-            const dy = (pointer.y - this.dragOrigin.y) * this.cameraSensitivity;
-            this.cameras.main.scrollX -= dx / this.cameras.main.zoom;
-            this.cameras.main.scrollY -= dy / this.cameras.main.zoom;
-            this.dragOrigin.set(pointer.x, pointer.y);
-        }
 
         this.ghostBuilding.clear();
         if (this.selectedBuildingType || (this.isMoving && this.selectedInWorld)) {
@@ -9395,13 +4870,7 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
-    private onPointerUp() {
-        this.isDragging = false;
-        this.isManualFiring = false;
-        if (this.selectedInWorld && this.selectedInWorld.type === 'prism') {
-            this.cleanupPrismLaser(this.selectedInWorld);
-        }
-    }
+
 
     private updateTooltip() {
         // Disabled: User requested legacy tooltip removal. UI now handles info via selection panel.
@@ -9427,14 +4896,14 @@ export class MainScene extends Phaser.Scene {
         if (range === 0) return;
 
         // Calculate center position
-        const center = this.cartToIso(building.gridX + info.width / 2, building.gridY + info.height / 2);
+        const center = IsoUtils.cartToIso(building.gridX + info.width / 2, building.gridY + info.height / 2);
 
         // Create range indicator graphics
         const rangeGraphics = this.add.graphics();
         rangeGraphics.setDepth(5);
 
         // Calculate isometric ellipse size (range in pixels)
-        // Note: We need Math.SQRT2 factor because isometric projection of a grid-circle 
+        // Note: We need Math.SQRT2 factor because isometric projection of a grid-circle
         // creates an ellipse where the major axis corresponds to the grid diagonal.
         const radiusX = range * this.tileWidth * 0.5 * Math.SQRT2;
         const radiusY = range * this.tileHeight * 0.5 * Math.SQRT2;
@@ -9542,10 +5011,10 @@ export class MainScene extends Phaser.Scene {
             const info = BUILDINGS[b.type];
 
             // Draw bright border around base
-            const p1 = this.cartToIso(b.gridX, b.gridY);
-            const p2 = this.cartToIso(b.gridX + info.width, b.gridY);
-            const p3 = this.cartToIso(b.gridX + info.width, b.gridY + info.height);
-            const p4 = this.cartToIso(b.gridX, b.gridY + info.height);
+            const p1 = IsoUtils.cartToIso(b.gridX, b.gridY);
+            const p2 = IsoUtils.cartToIso(b.gridX + info.width, b.gridY);
+            const p3 = IsoUtils.cartToIso(b.gridX + info.width, b.gridY + info.height);
+            const p4 = IsoUtils.cartToIso(b.gridX, b.gridY + info.height);
 
             this.selectionGraphics.lineStyle(4, 0x00ffff, 1); // Bright Cyan
             this.selectionGraphics.beginPath();
@@ -9632,10 +5101,10 @@ export class MainScene extends Phaser.Scene {
             if (!this.selectedBuildingType) this.ghostBuilding.setVisible(false);
         };
         (window as any).startAttack = () => {
-            this.showCloudTransition(() => {
+            this.showCloudTransition(async () => {
                 this.mode = 'ATTACK';
                 this.clearScene();
-                this.generateEnemyVillage();
+                await this.generateEnemyVillage();
                 this.centerCamera();
                 // Initialize battle stats
                 this.initialEnemyBuildings = this.buildings.filter(b => b.owner === 'ENEMY' && b.type !== 'wall').length;
@@ -9649,21 +5118,21 @@ export class MainScene extends Phaser.Scene {
         };
 
         (window as any).startPracticeAttack = () => {
-            this.showCloudTransition(() => {
+            this.showCloudTransition(async () => {
                 this.mode = 'ATTACK';
                 this.clearScene();
                 // Load player's own base as the enemy
-                const playerWorld = Backend.getWorld('player_home');
+                const playerWorld = await Backend.getWorld(this.userId);
                 if (playerWorld && playerWorld.buildings.length > 0) {
                     // Distribute loot
                     const lootMap = LootSystem.calculateLootDistribution(playerWorld.buildings, playerWorld.resources.gold, playerWorld.resources.elixir);
-                    playerWorld.buildings.forEach(b => {
+                    playerWorld.buildings.forEach((b: any) => {
                         const inst = this.instantiateBuilding(b, 'ENEMY'); // Load as enemy so defenses work
                         if (inst) inst.loot = lootMap.get(b.id);
                     });
                 } else {
                     // Fallback to default village if no saved base
-                    this.placeDefaultVillage();
+                    await this.placeDefaultVillage();
                     // Convert all to enemy
                     this.buildings.forEach(b => b.owner = 'ENEMY');
                 }
@@ -9688,10 +5157,10 @@ export class MainScene extends Phaser.Scene {
                 return;
             }
 
-            this.showCloudTransition(() => {
+            this.showCloudTransition(async () => {
                 // Clear and regenerate enemy village
                 this.clearScene();
-                this.generateEnemyVillage();
+                await this.generateEnemyVillage();
                 this.centerCamera();
                 // Reset battle stats for new village
                 this.initialEnemyBuildings = this.buildings.filter(b => b.owner === 'ENEMY' && b.type !== 'wall').length;
@@ -9703,8 +5172,8 @@ export class MainScene extends Phaser.Scene {
         };
 
         (window as any).goHome = () => {
-            this.showCloudTransition(() => {
-                this.goHome();
+            this.showCloudTransition(async () => {
+                await this.goHome();
             });
         };
         (window as any).deleteSelectedBuilding = () => {
@@ -9730,6 +5199,9 @@ export class MainScene extends Phaser.Scene {
                 this.drawBuildingVisuals(this.selectedInWorld.graphics, this.selectedInWorld.gridX, this.selectedInWorld.gridY, this.selectedInWorld.type, 1, null, this.selectedInWorld, this.selectedInWorld.baseGraphics);
                 this.updateHealthBar(this.selectedInWorld);
 
+                // Play effect for the main building
+                this.playUpgradeEffect(this.selectedInWorld);
+
                 // COHERENT UPDATE: If Wall, upgrade ALL other walls of the previous level
                 if (this.selectedInWorld.type === 'wall') {
                     this.buildings.forEach(b => {
@@ -9740,6 +5212,8 @@ export class MainScene extends Phaser.Scene {
                             b.graphics.clear();
                             if (b.baseGraphics) b.baseGraphics.clear();
                             this.drawBuildingVisuals(b.graphics, b.gridX, b.gridY, b.type, 1, null, b, b.baseGraphics);
+                            // Play effect for each wall
+                            this.playUpgradeEffect(b);
                         }
                     });
                 }
@@ -9774,14 +5248,14 @@ export class MainScene extends Phaser.Scene {
         };
     }
 
-    public goHome() {
+    public async goHome() {
         this.cancelPlacement();
         this.mode = 'HOME';
         this.hasDeployed = false;
         this.clearScene();
         // Load saved base instead of default
-        if (!this.loadSavedBase()) {
-            this.placeDefaultVillage();
+        if (!await this.loadSavedBase()) {
+            await this.placeDefaultVillage();
         }
         this.centerCamera();
         const campLevels = this.buildings.filter(b => b.type === 'army_camp').map(b => b.level ?? 1);
@@ -9807,35 +5281,29 @@ export class MainScene extends Phaser.Scene {
         this.clearObstacles();
     }
 
-    private placeDefaultVillage() {
+    private async placeDefaultVillage() {
         // Clear existing if any (safety)
         this.buildings = [];
 
-        // Town Hall
-        this.placeBuilding(10, 10, 'town_hall', 'PLAYER');
+        // Core Layout - Starter Clean Slate
+        const cx = 11;
+        const cy = 11;
 
-        // Defenses
-        this.placeBuilding(8, 8, 'cannon', 'PLAYER');
-        this.placeBuilding(13, 11, 'cannon', 'PLAYER');
-        this.placeBuilding(7, 12, 'cannon', 'PLAYER'); // Placeholder for archer tower
-        this.placeBuilding(12, 7, 'mortar', 'PLAYER');
-        this.placeBuilding(3, 14, 'dragons_breath', 'PLAYER'); // New heavy defense
+        // Town Hall (Central)
+        await this.placeBuilding(cx, cy, 'town_hall', 'PLAYER', true);
 
-        // Resources
-        this.placeBuilding(6, 6, 'mine', 'PLAYER');
-        this.placeBuilding(15, 12, 'mine', 'PLAYER');
-        this.placeBuilding(8, 14, 'elixir_collector', 'PLAYER');
-        this.placeBuilding(14, 8, 'elixir_collector', 'PLAYER');
+        // Essential Starter Buildings
+        await this.placeBuilding(cx - 3, cy, 'cannon', 'PLAYER', true);         // Defense
+        await this.placeBuilding(cx + 4, cy, 'barracks', 'PLAYER', true);       // Troops
+        await this.placeBuilding(cx, cy + 4, 'army_camp', 'PLAYER', true);      // Army
+        await this.placeBuilding(cx + 3, cy + 3, 'mine', 'PLAYER', true);       // Resource
+        await this.placeBuilding(cx - 3, cy - 3, 'elixir_collector', 'PLAYER', true); // Resource
 
-        // Army
-        this.placeBuilding(5, 10, 'barracks', 'PLAYER');
-        this.placeBuilding(16, 9, 'army_camp', 'PLAYER');
-
-        // Spawn random wildlife/obstacles
-        this.spawnRandomObstacles(15);
+        // Spawn random wildlife/obstacles (Fewer for clean slate)
+        this.spawnRandomObstacles(8);
     }
 
-    public resetVillage() {
+    public async resetVillage() {
         this.buildings.forEach(b => {
             b.graphics.destroy();
             if (b.barrelGraphics) b.barrelGraphics.destroy();
@@ -9846,16 +5314,17 @@ export class MainScene extends Phaser.Scene {
         this.selectedInWorld = null;
         this.selectedBuildingType = null;
 
-        localStorage.removeItem('clashIsoBase');
-        this.placeDefaultVillage();
+        await Backend.resetWorld(this.userId);
+        await this.placeDefaultVillage();
 
         // Refresh camp capacity state in React
         const campLevels = this.buildings.filter(b => b.type === 'army_camp').map(b => b.level ?? 1);
+        (window as any).refreshBuildingCounts?.();
         (window as any).refreshCampCapacity?.(campLevels);
     }
 
-    private generateEnemyVillage() {
-        const enemyWorld = Backend.generateEnemyWorld();
+    private async generateEnemyVillage() {
+        const enemyWorld = await Backend.generateEnemyWorld();
         // Give fake resources for loot
         enemyWorld.resources = {
             gold: Math.floor(10000 + Math.random() * 40000),
@@ -9896,7 +5365,7 @@ export class MainScene extends Phaser.Scene {
         }
 
         // 3. Enemy
-        return this.findNearestEnemyBuilding(ward);
+        return TargetingSystem.findTarget(ward, this.buildings);
     }
     private createSmokeEffect(x: number, y: number, count: number = 5, scale: number = 1, duration: number = 800) {
         for (let i = 0; i < count; i++) {
@@ -9925,7 +5394,7 @@ export class MainScene extends Phaser.Scene {
 
     private shootDragonsBreathAt(db: PlacedBuilding, troop: Troop) {
         const info = BUILDING_DEFINITIONS['dragons_breath'];
-        const start = this.cartToIso(db.gridX + info.width / 2, db.gridY + info.height / 2);
+        const start = IsoUtils.cartToIso(db.gridX + info.width / 2, db.gridY + info.height / 2);
         const stats = getBuildingStats('dragons_breath', db.level || 1);
         const range = stats.range || 13;
 
@@ -9958,7 +5427,7 @@ export class MainScene extends Phaser.Scene {
     }
 
     private shootDragonPod(db: PlacedBuilding, start: { x: number, y: number }, targetGridX: number, targetGridY: number, damage: number) {
-        const end = this.cartToIso(targetGridX, targetGridY);
+        const end = IsoUtils.cartToIso(targetGridX, targetGridY);
 
         // Create firecracker rocket graphics
         const pod = this.add.graphics();

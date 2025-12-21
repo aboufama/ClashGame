@@ -1,0 +1,1087 @@
+/* ALL GAME ICONS - Large detailed pixel art 48x48 */
+
+/* WARRIOR - Barbarian with sword, leather straps, muscular */
+.warrior-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #DEB887;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Spiky hair / bald head */
+        -2px -18px #CD853F, 0 -18px #DEB887, 2px -18px #CD853F,
+        -4px -16px #DEB887, -2px -16px #F5DEB3, 0 -16px #FFE4C4, 2px -16px #F5DEB3, 4px -16px #DEB887,
+        /* Angry face */
+        -4px -14px #DEB887, -2px -14px #8B0000, 0 -14px #DEB887, 2px -14px #8B0000, 4px -14px #DEB887,
+        -4px -12px #CD853F, -2px -12px #DEB887, 0 -12px #8B4513, 2px -12px #DEB887, 4px -12px #CD853F,
+        /* Neck */
+        -2px -10px #CD853F, 0 -10px #DEB887, 2px -10px #CD853F,
+        /* Muscular shoulders & arms */
+        -12px -8px #CD853F, -10px -8px #DEB887, -8px -8px #F5DEB3, -6px -8px #DEB887,
+        6px -8px #DEB887, 8px -8px #F5DEB3, 10px -8px #DEB887, 12px -8px #CD853F,
+        /* Leather straps on chest */
+        -4px -8px #5C3317, -2px -8px #DEB887, 0 -8px #5C3317, 2px -8px #DEB887, 4px -8px #5C3317,
+        -4px -6px #DEB887, -2px -6px #5C3317, 0 -6px #DEB887, 2px -6px #5C3317, 4px -6px #DEB887,
+        /* Arms extended */
+        -14px -6px #DEB887, -12px -6px #F5DEB3, -10px -6px #DEB887,
+        10px -6px #DEB887, 12px -6px #F5DEB3, 14px -6px #DEB887,
+        /* Hands */
+        -16px -4px #CD853F, -14px -4px #DEB887,
+        /* Sword in right hand */
+        14px -4px #DEB887, 16px -4px #696969, 18px -4px #808080, 20px -4px #A9A9A9,
+        16px -6px #505050, 18px -6px #696969, 20px -6px #808080, 22px -6px #A9A9A9, 24px -6px #C0C0C0,
+        /* Belt */
+        -6px -4px #8B4513, -4px -4px #654321, -2px -4px #8B4513, 0 -4px #654321, 2px -4px #8B4513, 4px -4px #654321, 6px -4px #8B4513,
+        /* Fur kilt */
+        -6px -2px #5C3317, -4px -2px #8B4513, -2px -2px #654321, 0 -2px #8B4513, 2px -2px #654321, 4px -2px #8B4513, 6px -2px #5C3317,
+        -6px 0 #3E2723, -4px 0 #5C3317, -2px 0 #8B4513, 0 0 #5C3317, 2px 0 #8B4513, 4px 0 #5C3317, 6px 0 #3E2723,
+        /* Legs */
+        -4px 2px #CD853F, -2px 2px #DEB887, 2px 2px #DEB887, 4px 2px #CD853F,
+        -4px 4px #CD853F, -2px 4px #DEB887, 2px 4px #DEB887, 4px 4px #CD853F,
+        /* Boots */
+        -6px 6px #3E2723, -4px 6px #5C3317, -2px 6px #3E2723,
+        2px 6px #3E2723, 4px 6px #5C3317, 6px 6px #3E2723;
+}
+
+
+/* ARCHER - Female archer with pink ponytail, GREEN hooded cloak, bow drawn */
+.archer-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #228B22;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Pink ponytail */
+        4px -18px #FF1493, 6px -18px #FF69B4, 8px -16px #FF1493, 10px -14px #FF69B4,
+        /* Green Hood */
+        -4px -16px #1B5E20, -2px -16px #228B22, 0 -16px #228B22, 2px -16px #1B5E20,
+        -6px -14px #1B5E20, -4px -14px #228B22, -2px -14px #2E7D32, 0 -14px #228B22, 2px -14px #1B5E20,
+        /* Face */
+        -4px -12px #DEB887, -2px -12px #F5DEB3, 0 -12px #DEB887, 2px -12px #F5DEB3, 4px -12px #DEB887,
+        /* Eyes */
+        -2px -12px #228B22, 2px -12px #228B22,
+        /* Green cloak/body */
+        -6px -10px #145214, -4px -10px #1B5E20, -2px -10px #228B22, 0 -10px #1B5E20, 2px -10px #228B22, 4px -10px #1B5E20, 6px -10px #145214,
+        -6px -8px #0D3D0D, -4px -8px #145214, -2px -8px #1B5E20, 0 -8px #145214, 2px -8px #1B5E20, 4px -8px #145214, 6px -8px #0D3D0D,
+        /* Left arm holding bow */
+        -10px -8px #DEB887, -12px -6px #DEB887, -14px -6px #CD853F,
+        /* BOW (curved on left) */
+        -18px -12px #8B4513, -18px -10px #654321, -18px -8px #8B4513, -18px -6px #654321, -18px -4px #8B4513, -18px -2px #654321, -18px 0 #8B4513,
+        -16px -14px #654321, -16px 2px #654321,
+        /* Bowstring */
+        -16px -12px #A9A9A9, -14px -10px #C0C0C0, -12px -8px #A9A9A9, -14px -4px #C0C0C0, -16px -2px #A9A9A9,
+        /* Arrow nocked */
+        -14px -6px #8B4513, -12px -6px #654321, -10px -6px #8B4513, -8px -6px #C0C0C0, -6px -6px #A9A9A9,
+        /* Right arm drawing */
+        8px -8px #DEB887, 10px -6px #DEB887, 12px -6px #CD853F,
+        /* Lower green body */
+        -4px -6px #145214, -2px -6px #1B5E20, 0 -6px #145214, 2px -6px #1B5E20, 4px -6px #145214,
+        /* Legs */
+        -4px -4px #0D3D0D, -2px -4px #145214, 2px -4px #145214, 4px -4px #0D3D0D,
+        -4px -2px #DEB887, -2px -2px #CD853F, 2px -2px #CD853F, 4px -2px #DEB887,
+        /* Boots */
+        -4px 0 #5C3317, -2px 0 #8B4513, 2px 0 #8B4513, 4px 0 #5C3317,
+        -4px 2px #3E2723, -2px 2px #5C3317, 2px 2px #5C3317, 4px 2px #3E2723;
+}
+
+/* GIANT - Massive bald muscular man with ORANGE skin and red beard */
+.giant-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #FF8C00;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Bald orange head */
+        -4px -22px #FF8C00, -2px -22px #FFA500, 0 -22px #FFA500, 2px -22px #FFA500, 4px -22px #FF8C00,
+        -6px -20px #FF8C00, -4px -20px #FFA500, -2px -20px #FFB347, 0 -20px #FFCC66, 2px -20px #FFB347, 4px -20px #FFA500, 6px -20px #FF8C00,
+        /* Face */
+        -6px -18px #FF8C00, -4px -18px #FFA500, -2px -18px #FFB347, 0 -18px #FFA500, 2px -18px #FFB347, 4px -18px #FFA500, 6px -18px #FF8C00,
+        /* Eyes (angry) */
+        -4px -16px #1A1A1A, -2px -16px #FFA500, 2px -16px #FFA500, 4px -16px #1A1A1A,
+        /* Red beard */
+        -6px -14px #CC0000, -4px -14px #FF0000, -2px -14px #CC0000, 0 -14px #FF0000, 2px -14px #CC0000, 4px -14px #FF0000, 6px -14px #CC0000,
+        -8px -12px #990000, -6px -12px #CC0000, -4px -12px #FF0000, -2px -12px #CC0000, 0 -12px #FF0000, 2px -12px #CC0000, 4px -12px #FF0000, 6px -12px #CC0000, 8px -12px #990000,
+        /* Thick orange neck */
+        -4px -10px #FF8C00, -2px -10px #FFA500, 0 -10px #FFA500, 2px -10px #FFA500, 4px -10px #FF8C00,
+        /* MASSIVE orange shoulders and arms */
+        -18px -8px #FF8C00, -16px -8px #FFA500, -14px -8px #FFB347, -12px -8px #FFA500, -10px -8px #FF8C00,
+        10px -8px #FF8C00, 12px -8px #FFA500, 14px -8px #FFB347, 16px -8px #FFA500, 18px -8px #FF8C00,
+        /* Chest */
+        -8px -8px #FF8C00, -6px -8px #FFA500, -4px -8px #FFB347, -2px -8px #FFA500, 0 -8px #FFB347, 2px -8px #FFA500, 4px -8px #FFB347, 6px -8px #FFA500, 8px -8px #FF8C00,
+        -8px -6px #FF8C00, -6px -6px #FFA500, -4px -6px #FFA500, -2px -6px #FFB347, 0 -6px #FFA500, 2px -6px #FFB347, 4px -6px #FFA500, 6px -6px #FFA500, 8px -6px #FF8C00,
+        /* Huge arms going down */
+        -20px -6px #FFA500, -18px -6px #FFB347, -16px -6px #FFA500,
+        16px -6px #FFA500, 18px -6px #FFB347, 20px -6px #FFA500,
+        -20px -4px #FF8C00, -18px -4px #FFA500, -16px -4px #FF8C00,
+        16px -4px #FF8C00, 18px -4px #FFA500, 20px -4px #FF8C00,
+        /* Fists raised */
+        -22px -2px #FF8C00, -20px -2px #FFA500, -18px -2px #FFB347, -16px -2px #FFA500,
+        16px -2px #FFA500, 18px -2px #FFB347, 20px -2px #FFA500, 22px -2px #FF8C00,
+        /* Belt */
+        -8px -4px #5C3317, -6px -4px #8B4513, -4px -4px #654321, -2px -4px #8B4513, 0 -4px #654321, 2px -4px #8B4513, 4px -4px #654321, 6px -4px #8B4513, 8px -4px #5C3317,
+        /* Brown shorts */
+        -8px -2px #654321, -6px -2px #8B4513, -4px -2px #654321, -2px -2px #8B4513, 0 -2px #654321, 2px -2px #8B4513, 4px -2px #654321, 6px -2px #8B4513, 8px -2px #654321,
+        -6px 0 #5C3317, -4px 0 #654321, -2px 0 #5C3317, 2px 0 #5C3317, 4px 0 #654321, 6px 0 #5C3317,
+        /* Thick orange legs */
+        -6px 2px #FF8C00, -4px 2px #FFA500, -2px 2px #FF8C00, 2px 2px #FF8C00, 4px 2px #FFA500, 6px 2px #FF8C00,
+        -6px 4px #FF8C00, -4px 4px #FFA500, -2px 4px #FF8C00, 2px 4px #FF8C00, 4px 4px #FFA500, 6px 4px #FF8C00,
+        -6px 6px #E67300, -4px 6px #FF8C00, -2px 6px #E67300, 2px 6px #E67300, 4px 6px #FF8C00, 6px 6px #E67300,
+        /* Big bare orange feet */
+        -8px 8px #FF8C00, -6px 8px #FFA500, -4px 8px #FF8C00, -2px 8px #E67300,
+        2px 8px #E67300, 4px 8px #FF8C00, 6px 8px #FFA500, 8px 8px #FF8C00;
+}
+
+
+
+/* WARD - Magical GREEN shield aura */
+.ward-icon::before {
+    content: '';
+    position: absolute;
+    width: 3px;
+    height: 3px;
+    background: #00FF00;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        0 -12px #CCFFCC, 0 -9px #90EE90,
+        -9px -6px #228B22, -6px -6px #90EE90, 0 -6px #CCFFCC, 6px -6px #90EE90, 9px -6px #228B22,
+        -12px 0 #228B22, -6px 0 #32CD32, 0 0 #90EE90, 6px 0 #32CD32, 12px 0 #228B22,
+        -9px 6px #228B22, -6px 6px #90EE90, 6px 6px #90EE90, 9px 6px #228B22,
+        0 9px #32CD32, 0 12px #228B22;
+}
+
+
+/* RECURSION - Crystal mage */
+.recursion-icon::before {
+    content: '';
+    position: absolute;
+    width: 3px;
+    height: 3px;
+    background: #00FFAA;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        0 -12px #00FFDD, 0 -9px #00FFAA,
+        -6px -6px #00CC88, 0 -6px #00FFDD, 6px -6px #00CC88,
+        -9px -3px #00AA66, -3px -3px #00FFAA, 0 -3px #00FFDD, 3px -3px #00FFAA, 9px -3px #00AA66,
+        -9px 0 #008844, -3px 0 #00CC88, 0 0 #00FFAA, 3px 0 #00CC88, 9px 0 #008844,
+        -6px 3px #006633, 0 3px #00AA66, 6px 3px #006633,
+        0 6px #004422;
+}
+
+/* RAM - Battering ram siege weapon with log, metal head, wooden frame, wheels */
+.ram-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #8B4513;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Metal ram head (left side) - pointed */
+        -20px -4px #505050, -18px -4px #696969, -16px -4px #808080,
+        -20px -2px #404040, -18px -2px #505050, -16px -2px #696969, -14px -2px #808080,
+        -20px 0 #303030, -18px 0 #404040, -16px 0 #505050, -14px 0 #696969,
+        -20px 2px #404040, -18px 2px #505050, -16px 2px #696969, -14px 2px #808080,
+        -20px 4px #505050, -18px 4px #696969, -16px 4px #808080,
+        /* Main battering log */
+        -12px -4px #654321, -10px -4px #8B4513, -8px -4px #A0522D, -6px -4px #8B4513, -4px -4px #A0522D, -2px -4px #8B4513, 0 -4px #A0522D, 2px -4px #8B4513, 4px -4px #A0522D, 6px -4px #8B4513,
+        -12px -2px #5C3317, -10px -2px #654321, -8px -2px #8B4513, -6px -2px #A0522D, -4px -2px #8B4513, -2px -2px #A0522D, 0 -2px #8B4513, 2px -2px #A0522D, 4px -2px #8B4513, 6px -2px #654321,
+        -12px 0 #5C3317, -10px 0 #654321, -8px 0 #8B4513, -6px 0 #8B4513, -4px 0 #A0522D, -2px 0 #8B4513, 0 0 #A0522D, 2px 0 #8B4513, 4px 0 #8B4513, 6px 0 #654321,
+        -12px 2px #5C3317, -10px 2px #654321, -8px 2px #8B4513, -6px 2px #A0522D, -4px 2px #8B4513, -2px 2px #A0522D, 0 2px #8B4513, 2px 2px #A0522D, 4px 2px #8B4513, 6px 2px #654321,
+        -12px 4px #654321, -10px 4px #8B4513, -8px 4px #A0522D, -6px 4px #8B4513, -4px 4px #A0522D, -2px 4px #8B4513, 0 4px #A0522D, 2px 4px #8B4513, 4px 4px #A0522D, 6px 4px #8B4513,
+        /* Ropes/chains suspending ram */
+        -8px -8px #696969, -4px -8px #808080, 0 -8px #696969, 4px -8px #808080,
+        -8px -6px #505050, -4px -6px #696969, 0 -6px #505050, 4px -6px #696969,
+        /* Wooden frame top */
+        -12px -10px #5C3317, -10px -10px #654321, -8px -10px #8B4513, -6px -10px #654321, -4px -10px #8B4513, -2px -10px #654321, 0 -10px #8B4513, 2px -10px #654321, 4px -10px #8B4513, 6px -10px #654321, 8px -10px #5C3317,
+        /* Frame supports */
+        -12px -8px #5C3317, 8px -8px #5C3317,
+        -14px -6px #3E2723, 10px -6px #3E2723,
+        /* Wheels left */
+        -14px 6px #3E2723, -12px 6px #5C3317, -10px 6px #3E2723,
+        -16px 8px #3E2723, -14px 8px #654321, -12px 8px #8B4513, -10px 8px #654321, -8px 8px #3E2723,
+        -14px 10px #3E2723, -12px 10px #5C3317, -10px 10px #3E2723,
+        /* Wheels right */
+        6px 6px #3E2723, 8px 6px #5C3317, 10px 6px #3E2723,
+        4px 8px #3E2723, 6px 8px #654321, 8px 8px #8B4513, 10px 8px #654321, 12px 8px #3E2723,
+        6px 10px #3E2723, 8px 10px #5C3317, 10px 10px #3E2723;
+}
+
+
+/* STORMMAGE - Lightning mage */
+.stormmage-icon::before {
+    content: '';
+    position: absolute;
+    width: 3px;
+    height: 3px;
+    background: #4169E1;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        -6px -12px #FFF, 0 -12px #FFFF00, 6px -12px #FFF,
+        -3px -9px #FFFF00, 0 -9px #FFF, 3px -9px #FFFF00,
+        -6px -6px #4169E1, 0 -6px #1E90FF, 6px -6px #4169E1,
+        -6px -3px #4169E1, 0 -3px #1E90FF, 6px -3px #4169E1,
+        -6px 0 #0000CD, 0 0 #4169E1, 6px 0 #0000CD,
+        -6px 3px #00008B, 0 3px #0000CD, 6px 3px #00008B;
+}
+
+/* GOLEM - Massive stone humanoid with glowing eyes, rock body, thick limbs */
+.golem-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #696969;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Boxy head */
+        -4px -20px #808080, -2px -20px #909090, 0 -20px #909090, 2px -20px #909090, 4px -20px #808080,
+        -6px -18px #707070, -4px -18px #808080, -2px -18px #909090, 0 -18px #A0A0A0, 2px -18px #909090, 4px -18px #808080, 6px -18px #707070,
+        /* Glowing eyes */
+        -4px -16px #FFFF00, -2px -16px #FFA500, 2px -16px #FFFF00, 4px -16px #FFA500,
+        -6px -16px #606060, 0 -16px #707070, 6px -16px #606060,
+        /* Mouth/jaw */
+        -4px -14px #505050, -2px -14px #606060, 0 -14px #404040, 2px -14px #606060, 4px -14px #505050,
+        /* Neck */
+        -2px -12px #505050, 0 -12px #606060, 2px -12px #505050,
+        /* Broad shoulders */
+        -14px -10px #606060, -12px -10px #707070, -10px -10px #808080, -8px -10px #707070,
+        8px -10px #707070, 10px -10px #808080, 12px -10px #707070, 14px -10px #606060,
+        -4px -10px #606060, -2px -10px #707070, 0 -10px #808080, 2px -10px #707070, 4px -10px #606060,
+        /* Left arm */
+        -16px -8px #505050, -14px -8px #606060, -12px -8px #707070, -10px -8px #606060,
+        -18px -6px #404040, -16px -6px #505050, -14px -6px #606060, -12px -6px #505050,
+        -18px -4px #505050, -16px -4px #606060, -14px -4px #505050,
+        -18px -2px #404040, -16px -2px #505050, -14px -2px #404040,
+        /* Left fist */
+        -20px 0 #505050, -18px 0 #606060, -16px 0 #707070, -14px 0 #606060,
+        -20px 2px #404040, -18px 2px #505050, -16px 2px #606060, -14px 2px #505050,
+        /* Right arm */
+        10px -8px #606060, 12px -8px #707070, 14px -8px #606060, 16px -8px #505050,
+        12px -6px #505050, 14px -6px #606060, 16px -6px #505050, 18px -6px #404040,
+        14px -4px #505050, 16px -4px #606060, 18px -4px #505050,
+        14px -2px #404040, 16px -2px #505050, 18px -2px #404040,
+        /* Right fist */
+        14px 0 #606060, 16px 0 #707070, 18px 0 #606060, 20px 0 #505050,
+        14px 2px #505050, 16px 2px #606060, 18px 2px #505050, 20px 2px #404040,
+        /* Chest/torso with rocky cracks */
+        -8px -8px #606060, -6px -8px #707070, -4px -8px #808080, -2px -8px #707070, 0 -8px #808080, 2px -8px #707070, 4px -8px #808080, 6px -8px #707070, 8px -8px #606060,
+        -8px -6px #505050, -6px -6px #606060, -4px -6px #707070, -2px -6px #404040, 0 -6px #707070, 2px -6px #404040, 4px -6px #707070, 6px -6px #606060, 8px -6px #505050,
+        -8px -4px #505050, -6px -4px #606060, -4px -4px #505050, -2px -4px #606060, 0 -4px #707070, 2px -4px #606060, 4px -4px #505050, 6px -4px #606060, 8px -4px #505050,
+        -8px -2px #404040, -6px -2px #505050, -4px -2px #606060, -2px -2px #505050, 0 -2px #606060, 2px -2px #505050, 4px -2px #606060, 6px -2px #505050, 8px -2px #404040,
+        /* Lower torso */
+        -6px 0 #404040, -4px 0 #505050, -2px 0 #606060, 0 0 #505050, 2px 0 #606060, 4px 0 #505050, 6px 0 #404040,
+        /* Left leg */
+        -6px 2px #404040, -4px 2px #505050, -2px 2px #404040,
+        -6px 4px #303030, -4px 4px #404040, -2px 4px #505050,
+        -8px 6px #303030, -6px 6px #404040, -4px 6px #505050, -2px 6px #404040,
+        -8px 8px #202020, -6px 8px #303030, -4px 8px #404040, -2px 8px #303030,
+        /* Right leg */
+        2px 2px #404040, 4px 2px #505050, 6px 2px #404040,
+        2px 4px #505050, 4px 4px #404040, 6px 4px #303030,
+        2px 6px #404040, 4px 6px #505050, 6px 6px #404040, 8px 6px #303030,
+        2px 8px #303030, 4px 8px #404040, 6px 8px #303030, 8px 8px #202020;
+}
+
+/* SHARPSHOOTER - Elite hooded crossbow marksman with scope */
+.sharpshooter-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #228B22;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Hood/head */
+        -4px -18px #1B5E20, -2px -18px #228B22, 0 -18px #228B22, 2px -18px #1B5E20,
+        -6px -16px #145214, -4px -16px #1B5E20, -2px -16px #228B22, 0 -16px #2E7D32, 2px -16px #228B22, 4px -16px #1B5E20, 6px -16px #145214,
+        /* Face peeking from hood */
+        -4px -14px #1B5E20, -2px -14px #DEB887, 0 -14px #F5DEB3, 2px -14px #DEB887, 4px -14px #1B5E20,
+        /* Eyes */
+        -2px -14px #654321, 2px -14px #654321,
+        /* Dark green cloak body */
+        -6px -12px #145214, -4px -12px #1B5E20, -2px -12px #228B22, 0 -12px #1B5E20, 2px -12px #228B22, 4px -12px #1B5E20, 6px -12px #145214,
+        -6px -10px #0D3D0D, -4px -10px #145214, -2px -10px #1B5E20, 0 -10px #228B22, 2px -10px #1B5E20, 4px -10px #145214, 6px -10px #0D3D0D,
+        /* Arms holding crossbow */
+        -10px -10px #DEB887, -8px -8px #DEB887, -10px -8px #145214,
+        8px -10px #DEB887, 10px -10px #145214,
+        /* CROSSBOW (held horizontally) */
+        -18px -8px #654321, -16px -8px #8B4513, -14px -8px #654321, -12px -8px #8B4513,
+        /* Crossbow bow arms */
+        -18px -12px #5C3317, -16px -12px #654321, -16px -14px #5C3317,
+        -18px -4px #5C3317, -16px -4px #654321, -16px -2px #5C3317,
+        /* Bowstring */
+        -14px -12px #A9A9A9, -12px -10px #C0C0C0, -12px -8px #A9A9A9, -12px -6px #C0C0C0, -14px -4px #A9A9A9,
+        /* Scope on crossbow */
+        -10px -10px #505050, -8px -10px #696969, -6px -10px #87CEEB,
+        /* Bolt loaded */
+        -10px -8px #8B4513, -8px -8px #654321, -6px -8px #C0C0C0,
+        /* Body/torso */
+        -6px -8px #0D3D0D, -4px -8px #145214, -2px -8px #1B5E20, 0 -8px #145214, 2px -8px #1B5E20, 4px -8px #145214, 6px -8px #0D3D0D,
+        /* Quiver on back */
+        6px -12px #5C3317, 8px -12px #654321, 10px -12px #5C3317,
+        6px -10px #654321, 8px -10px #8B4513, 10px -10px #654321,
+        8px -14px #C0C0C0, 10px -14px #C0C0C0, 12px -14px #C0C0C0,
+        /* Belt with pouches */
+        -6px -6px #5C3317, -4px -6px #654321, -2px -6px #8B4513, 0 -6px #654321, 2px -6px #8B4513, 4px -6px #654321, 6px -6px #5C3317,
+        /* Legs */
+        -4px -4px #0D3D0D, -2px -4px #145214, 2px -4px #145214, 4px -4px #0D3D0D,
+        -4px -2px #0D3D0D, -2px -2px #145214, 2px -2px #145214, 4px -2px #0D3D0D,
+        /* Boots */
+        -6px 0 #3E2723, -4px 0 #5C3317, -2px 0 #3E2723,
+        2px 0 #3E2723, 4px 0 #5C3317, 6px 0 #3E2723;
+}
+
+
+/* MOBILEMORTAR - Soldier dragging mortar on wheeled cart */
+.mobilemortar-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #696969;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* SOLDIER (on left, pulling) */
+        /* Helmet */
+        -18px -14px #505050, -16px -14px #606060, -14px -14px #505050,
+        -18px -12px #404040, -16px -12px #505050, -14px -12px #404040,
+        /* Face */
+        -16px -10px #DEB887, -14px -10px #F5DEB3,
+        /* Body/torso */
+        -18px -8px #8B0000, -16px -8px #B22222, -14px -8px #8B0000,
+        -18px -6px #660000, -16px -6px #8B0000, -14px -6px #660000,
+        /* Arms pulling rope */
+        -20px -6px #DEB887, -12px -6px #DEB887,
+        -12px -4px #8B4513, -10px -4px #A0522D, -8px -4px #8B4513,
+        /* Legs */
+        -18px -4px #4A4A4A, -16px -4px #5A5A5A, -14px -4px #4A4A4A,
+        -18px -2px #3A3A3A, -14px -2px #3A3A3A,
+        -18px 0 #2A2A2A, -14px 0 #2A2A2A,
+        /* ROPE connecting to cart */
+        -6px -4px #A0522D, -4px -2px #8B4513, -2px 0 #A0522D,
+        /* MORTAR on cart (right side) */
+        /* Mortar barrel opening */
+        2px -12px #303030, 4px -12px #404040, 6px -12px #505050, 8px -12px #404040, 10px -12px #303030,
+        0 -10px #404040, 2px -10px #1A1A1A, 4px -10px #0A0A0A, 6px -10px #0A0A0A, 8px -10px #1A1A1A, 10px -10px #404040, 12px -10px #303030,
+        /* Mortar body */
+        0 -8px #505050, 2px -8px #606060, 4px -8px #696969, 6px -8px #808080, 8px -8px #696969, 10px -8px #606060, 12px -8px #505050,
+        0 -6px #404040, 2px -6px #505050, 4px -6px #606060, 6px -6px #696969, 8px -6px #606060, 10px -6px #505050, 12px -6px #404040,
+        /* Mortar base */
+        0 -4px #303030, 2px -4px #404040, 4px -4px #505050, 6px -4px #606060, 8px -4px #505050, 10px -4px #404040, 12px -4px #303030,
+        /* Cart platform */
+        -2px -2px #5C3317, 0 -2px #654321, 2px -2px #8B4513, 4px -2px #654321, 6px -2px #8B4513, 8px -2px #654321, 10px -2px #8B4513, 12px -2px #654321, 14px -2px #5C3317,
+        -2px 0 #3E2723, 0 0 #5C3317, 2px 0 #654321, 4px 0 #5C3317, 6px 0 #654321, 8px 0 #5C3317, 10px 0 #654321, 12px 0 #5C3317, 14px 0 #3E2723,
+        /* Cart wheels (left) */
+        -2px 2px #3E2723, 0 2px #5C3317, 2px 2px #3E2723,
+        -4px 4px #3E2723, -2px 4px #654321, 0 4px #8B4513, 2px 4px #654321, 4px 4px #3E2723,
+        -2px 6px #3E2723, 0 6px #5C3317, 2px 6px #3E2723,
+        /* Cart wheels (right) */
+        10px 2px #3E2723, 12px 2px #5C3317, 14px 2px #3E2723,
+        8px 4px #3E2723, 10px 4px #654321, 12px 4px #8B4513, 14px 4px #654321, 16px 4px #3E2723,
+        10px 6px #3E2723, 12px 6px #5C3317, 14px 6px #3E2723;
+}
+
+/* DA VINCI TANK - Leonardo's iconic conical armored war machine with cannons */
+.davincitank-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #C9A07A;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Top finial/spike */
+        0 -20px #505050, 0 -18px #606060,
+        /* Upper turret cone */
+        -2px -16px #C9A07A, 0 -16px #DAB898, 2px -16px #C9A07A,
+        -4px -14px #B08560, -2px -14px #C9A07A, 0 -14px #DAB898, 2px -14px #C9A07A, 4px -14px #B08560,
+        /* Upper metal band */
+        -6px -12px #505050, -4px -12px #606060, -2px -12px #505050, 0 -12px #606060, 2px -12px #505050, 4px -12px #606060, 6px -12px #505050,
+        /* Middle cone section */
+        -8px -10px #9A7050, -6px -10px #B08560, -4px -10px #C9A07A, -2px -10px #B08560, 0 -10px #C9A07A, 2px -10px #B08560, 4px -10px #C9A07A, 6px -10px #B08560, 8px -10px #9A7050,
+        -10px -8px #8A6548, -8px -8px #9A7050, -6px -8px #B08560, -4px -8px #C9A07A, -2px -8px #B08560, 0 -8px #C9A07A, 2px -8px #B08560, 4px -8px #C9A07A, 6px -8px #B08560, 8px -8px #9A7050, 10px -8px #8A6548,
+        /* Lower metal band with rivets */
+        -12px -6px #404040, -10px -6px #505050, -8px -6px #606060, -6px -6px #505050, -4px -6px #606060, -2px -6px #505050, 0 -6px #606060, 2px -6px #505050, 4px -6px #606060, 6px -6px #505050, 8px -6px #606060, 10px -6px #505050, 12px -6px #404040,
+        /* Lower cone (widest) */
+        -14px -4px #8A6548, -12px -4px #9A7050, -10px -4px #B08560, -8px -4px #C9A07A, -6px -4px #B08560, -4px -4px #C9A07A, -2px -4px #B08560, 0 -4px #C9A07A, 2px -4px #B08560, 4px -4px #C9A07A, 6px -4px #B08560, 8px -4px #C9A07A, 10px -4px #B08560, 12px -4px #9A7050, 14px -4px #8A6548,
+        /* Cannon barrels sticking out */
+        -18px -2px #1A1A1A, -16px -2px #303030,
+        18px -2px #1A1A1A, 16px -2px #303030,
+        -20px 0 #1A1A1A, -18px 0 #303030,
+        20px 0 #1A1A1A, 18px 0 #303030,
+        /* Base platform */
+        -14px -2px #654321, -12px -2px #8B4513, -10px -2px #9A7050, -8px -2px #8B4513, -6px -2px #9A7050, -4px -2px #8B4513, -2px -2px #9A7050, 0 -2px #8B4513, 2px -2px #9A7050, 4px -2px #8B4513, 6px -2px #9A7050, 8px -2px #8B4513, 10px -2px #9A7050, 12px -2px #8B4513, 14px -2px #654321,
+        -12px 0 #5C3317, -10px 0 #654321, -8px 0 #8B4513, -6px 0 #654321, -4px 0 #8B4513, -2px 0 #654321, 0 0 #8B4513, 2px 0 #654321, 4px 0 #8B4513, 6px 0 #654321, 8px 0 #8B4513, 10px 0 #654321, 12px 0 #5C3317,
+        /* Ground base */
+        -10px 2px #3E2723, -8px 2px #5C3317, -6px 2px #654321, -4px 2px #5C3317, -2px 2px #654321, 0 2px #5C3317, 2px 2px #654321, 4px 2px #5C3317, 6px 2px #654321, 8px 2px #5C3317, 10px 2px #3E2723;
+}
+
+/* PHALANX - Roman Testudo Formation (3x3 shield wall) */
+.phalanx-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #CC3333;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Back row shields (3) */
+        -10px -12px #CC3333, -8px -12px #CC3333, -6px -12px #D4A84B,
+        0 -12px #CC3333, -2px -12px #CC3333, 2px -12px #D4A84B,
+        10px -12px #CC3333, 8px -12px #CC3333, 6px -12px #D4A84B,
+        /* Middle row shields (3) */
+        -10px -6px #CC3333, -8px -6px #AA2222, -6px -6px #D4A84B,
+        0 -6px #CC3333, -2px -6px #AA2222, 2px -6px #D4A84B,
+        10px -6px #CC3333, 8px -6px #AA2222, 6px -6px #D4A84B,
+        /* Front row shields (3) */
+        -10px 0 #CC3333, -8px 0 #AA2222, -6px 0 #D4A84B,
+        0 0 #CC3333, -2px 0 #AA2222, 2px 0 #D4A84B,
+        10px 0 #CC3333, 8px 0 #AA2222, 6px 0 #D4A84B,
+        /* Gold shield bosses */
+        -8px -10px #FFD700, 0 -10px #FFD700, 8px -10px #FFD700,
+        -8px -4px #FFD700, 0 -4px #FFD700, 8px -4px #FFD700,
+        -8px 2px #FFD700, 0 2px #FFD700, 8px 2px #FFD700,
+        /* Spear tips sticking out top */
+        -8px -16px #666677, 0 -16px #666677, 8px -16px #666677,
+        -8px -18px #555566, 0 -18px #555566, 8px -18px #555566,
+        /* Banner pole */
+        0 -20px #5D4E37,
+        /* Banner */
+        -2px -22px #CC3333, 0 -22px #FFD700, 2px -22px #CC3333,
+        /* Soldier legs visible at bottom */
+        -10px 4px #BB2222, -8px 4px #BB2222,
+        0 4px #BB2222, 2px 4px #BB2222,
+        10px 4px #BB2222, 8px 4px #BB2222;
+}
+
+
+/* ROMAN WARRIOR - Individual soldier with Scutum shield */
+.romanwarrior-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #D4A574;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Red Helmet crest */
+        -2px -20px #CC2222, 0 -20px #CC2222, 2px -20px #CC2222,
+        /* Helmet (silver) */
+        -4px -18px #888899, -2px -18px #AAAAAA, 0 -18px #AAAAAA, 2px -18px #AAAAAA, 4px -18px #888899,
+        -4px -16px #888899, -2px -16px #D4A574, 0 -16px #D4A574, 2px -16px #D4A574, 4px -16px #888899,
+        /* Neck */
+        -2px -14px #D4A574, 0 -14px #D4A574, 2px -14px #D4A574,
+        /* Red Tunic & Armor */
+        -6px -12px #BB2222, -4px -12px #888899, -2px -12px #AAAAAA, 0 -12px #AAAAAA, 2px -12px #AAAAAA, 4px -12px #888899, 6px -12px #BB2222,
+        -6px -10px #BB2222, -4px -10px #BB2222, -2px -10px #BB2222, 0 -10px #BB2222, 2px -10px #BB2222, 4px -10px #BB2222, 6px -10px #BB2222,
+        /* Scutum Shield (front) */
+        -8px -8px #CC3333, -6px -8px #D4A84B, -4px -8px #CC3333, -2px -8px #CC3333, 0 -8px #CC3333, 2px -8px #CC3333, 4px -8px #CC3333, 6px -8px #D4A84B, 8px -8px #CC3333,
+        -8px -6px #CC3333, -6px -6px #D4A84B, -4px -6px #CC3333, -2px -6px #FFD700, 0 -6px #FFD700, 2px -6px #FFD700, 4px -6px #CC3333, 6px -6px #D4A84B, 8px -6px #CC3333,
+        -8px -4px #CC3333, -6px -4px #D4A84B, -4px -4px #CC3333, -2px -4px #FFD700, 0 -4px #FFD700, 2px -4px #FFD700, 4px -4px #CC3333, 6px -4px #D4A84B, 8px -4px #CC3333,
+        -8px -2px #CC3333, -6px -2px #D4A84B, -4px -2px #CC3333, -2px -2px #CC3333, 0 -2px #CC3333, 2px -2px #CC3333, 4px -2px #CC3333, 6px -2px #D4A84B, 8px -2px #CC3333,
+        -8px 0 #CC3333, -6px 0 #D4A84B, -4px 0 #CC3333, -2px 0 #CC3333, 0 0 #CC3333, 2px 0 #CC3333, 4px 0 #CC3333, 6px 0 #D4A84B, 8px 0 #CC3333,
+        /* Gold Shield Boss (center) */
+        -2px -6px #FFD700, 0 -6px #FFD700, 2px -6px #FFD700,
+        -2px -4px #FFD700, 0 -4px #FFD700, 2px -4px #FFD700,
+        /* Legs and sandals */
+        -4px 4px #BB2222, 4px 4px #BB2222,
+        -6px 6px #4A3A2A, 6px 6px #4A3A2A;
+}
+
+/* GOLD COIN - Detailed shiny coin with $ symbol */
+.gold-icon {
+    position: relative !important;
+    overflow: hidden;
+}
+
+.gold-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #FFD700;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Top edge highlight */
+        -2px -10px #FFFACD, 0 -10px #FFF, 2px -10px #FFFACD,
+        -4px -8px #FFD700, -2px -8px #FFFACD, 0 -8px #FFF, 2px -8px #FFFACD, 4px -8px #FFD700,
+        /* Upper body */
+        -6px -6px #DAA520, -4px -6px #FFD700, -2px -6px #FFFACD, 0 -6px #FFF, 2px -6px #FFFACD, 4px -6px #FFD700, 6px -6px #DAA520,
+        -8px -4px #B8860B, -6px -4px #DAA520, -4px -4px #FFD700, -2px -4px #FFFACD, 0 -4px #FFF, 2px -4px #FFD700, 4px -4px #FFD700, 6px -4px #DAA520, 8px -4px #B8860B,
+        /* Center with S shape */
+        -8px -2px #B8860B, -6px -2px #DAA520, -4px -2px #FFD700, -2px -2px #8B6914, 0 -2px #FFD700, 2px -2px #FFD700, 4px -2px #FFD700, 6px -2px #DAA520, 8px -2px #B8860B,
+        -10px 0 #8B6914, -8px 0 #B8860B, -6px 0 #DAA520, -4px 0 #8B6914, -2px 0 #8B6914, 0 0 #FFD700, 2px 0 #8B6914, 4px 0 #FFD700, 6px 0 #DAA520, 8px 0 #B8860B, 10px 0 #8B6914,
+        -8px 2px #B8860B, -6px 2px #DAA520, -4px 2px #FFD700, -2px 2px #FFD700, 0 2px #FFD700, 2px 2px #8B6914, 4px 2px #FFD700, 6px 2px #DAA520, 8px 2px #B8860B,
+        /* Lower body */
+        -8px 4px #8B6914, -6px 4px #B8860B, -4px 4px #DAA520, -2px 4px #FFD700, 0 4px #FFD700, 2px 4px #FFD700, 4px 4px #DAA520, 6px 4px #B8860B, 8px 4px #8B6914,
+        -6px 6px #8B6914, -4px 6px #B8860B, -2px 6px #DAA520, 0 6px #DAA520, 2px 6px #DAA520, 4px 6px #B8860B, 6px 6px #8B6914,
+        /* Bottom edge */
+        -4px 8px #6B5610, -2px 8px #8B6914, 0 8px #B8860B, 2px 8px #8B6914, 4px 8px #6B5610,
+        -2px 10px #6B5610, 0 10px #8B6914, 2px 10px #6B5610;
+}
+
+/* ELIXIR BOTTLE - Detailed potion bottle with cork */
+.elixir-icon {
+    position: relative !important;
+    overflow: hidden;
+}
+
+.elixir-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #9370DB;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Cork */
+        -2px -12px #8B4513, 0 -12px #A0522D, 2px -12px #8B4513,
+        -2px -10px #654321, 0 -10px #8B4513, 2px -10px #654321,
+        /* Bottle neck */
+        -2px -8px #696969, 0 -8px #808080, 2px -8px #696969,
+        -2px -6px #505050, 0 -6px #9370DB, 2px -6px #505050,
+        /* Bottle body widens */
+        -4px -4px #505050, -2px -4px #9370DB, 0 -4px #BA55D3, 2px -4px #9370DB, 4px -4px #505050,
+        -6px -2px #505050, -4px -2px #8B008B, -2px -2px #9370DB, 0 -2px #DDA0DD, 2px -2px #9370DB, 4px -2px #8B008B, 6px -2px #505050,
+        /* Main body with glow */
+        -8px 0 #404040, -6px 0 #505050, -4px 0 #8B008B, -2px 0 #BA55D3, 0 0 #FF00FF, 2px 0 #BA55D3, 4px 0 #8B008B, 6px 0 #505050, 8px 0 #404040,
+        -8px 2px #404040, -6px 2px #696969, -4px 2px #9370DB, -2px 2px #DDA0DD, 0 2px #FF00FF, 2px 2px #DDA0DD, 4px 2px #9370DB, 6px 2px #696969, 8px 2px #404040,
+        -8px 4px #505050, -6px 4px #696969, -4px 4px #8B008B, -2px 4px #9370DB, 0 4px #BA55D3, 2px 4px #9370DB, 4px 4px #8B008B, 6px 4px #696969, 8px 4px #505050,
+        /* Bottom of bottle */
+        -6px 6px #404040, -4px 6px #505050, -2px 6px #8B008B, 0 6px #9370DB, 2px 6px #8B008B, 4px 6px #505050, 6px 6px #404040,
+        -4px 8px #303030, -2px 8px #404040, 0 8px #505050, 2px 8px #404040, 4px 8px #303030,
+        /* Base */
+        -2px 10px #303030, 0 10px #404040, 2px 10px #303030;
+}
+
+/* TOWN HALL - Grand building with gold dome, red roof, stone walls */
+.town_hall-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #FFD700;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Flag pole and flag */
+        0 -20px #DC143C, 2px -20px #FF0000, 4px -20px #DC143C,
+        0 -18px #DC143C, 2px -18px #DC143C,
+        0 -16px #696969, 0 -14px #696969,
+        /* Gold dome top */
+        -2px -12px #FFFACD, 0 -12px #FFF, 2px -12px #FFFACD,
+        -4px -10px #FFD700, -2px -10px #FFFACD, 0 -10px #FFF, 2px -10px #FFFACD, 4px -10px #FFD700,
+        -6px -8px #DAA520, -4px -8px #FFD700, -2px -8px #FFFACD, 0 -8px #FFFACD, 2px -8px #FFFACD, 4px -8px #FFD700, 6px -8px #DAA520,
+        /* Red roof layer */
+        -10px -6px #8B0000, -8px -6px #B22222, -6px -6px #DC143C, -4px -6px #DC143C, -2px -6px #FF4500, 0 -6px #FF4500, 2px -6px #FF4500, 4px -6px #DC143C, 6px -6px #DC143C, 8px -6px #B22222, 10px -6px #8B0000,
+        -12px -4px #660000, -10px -4px #8B0000, -8px -4px #B22222, -6px -4px #DC143C, -4px -4px #DC143C, -2px -4px #DC143C, 0 -4px #DC143C, 2px -4px #DC143C, 4px -4px #DC143C, 6px -4px #DC143C, 8px -4px #B22222, 10px -4px #8B0000, 12px -4px #660000,
+        /* Stone walls */
+        -12px -2px #8B4513, -10px -2px #A0522D, -8px -2px #D2691E, -6px -2px #CD853F, -4px -2px #D2691E, -2px -2px #CD853F, 0 -2px #DEB887, 2px -2px #CD853F, 4px -2px #D2691E, 6px -2px #CD853F, 8px -2px #D2691E, 10px -2px #A0522D, 12px -2px #8B4513,
+        -12px 0 #654321, -10px 0 #8B4513, -8px 0 #A0522D, -6px 0 #CD853F, -4px 0 #D2691E, -2px 0 #000, 0 0 #2A1A0A, 2px 0 #000, 4px 0 #D2691E, 6px 0 #CD853F, 8px 0 #A0522D, 10px 0 #8B4513, 12px 0 #654321,
+        -12px 2px #5C3317, -10px 2px #654321, -8px 2px #8B4513, -6px 2px #A0522D, -4px 2px #8B4513, -2px 2px #3E2723, 0 2px #2A1A0A, 2px 2px #3E2723, 4px 2px #8B4513, 6px 2px #A0522D, 8px 2px #8B4513, 10px 2px #654321, 12px 2px #5C3317,
+        /* Windows */
+        -8px 0 #87CEEB, -6px 0 #B0E0E6, 6px 0 #87CEEB, 8px 0 #B0E0E6,
+        /* Stone foundation */
+        -14px 4px #404040, -12px 4px #505050, -10px 4px #606060, -8px 4px #505050, -6px 4px #606060, -4px 4px #505050, -2px 4px #606060, 0 4px #505050, 2px 4px #606060, 4px 4px #505050, 6px 4px #606060, 8px 4px #505050, 10px 4px #606060, 12px 4px #505050, 14px 4px #404040,
+        -14px 6px #303030, -12px 6px #404040, -10px 6px #505050, -8px 6px #404040, -6px 6px #505050, -4px 6px #404040, -2px 6px #505050, 0 6px #404040, 2px 6px #505050, 4px 6px #404040, 6px 6px #505050, 8px 6px #404040, 10px 6px #505050, 12px 6px #404040, 14px 6px #303030;
+}
+
+
+/* CANNON - Detailed artillery cannon on wooden carriage with wheels */
+.cannon-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #505050;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Barrel muzzle */
+        -2px -18px #404040, 0 -18px #505050, 2px -18px #404040,
+        -4px -16px #505050, -2px -16px #696969, 0 -16px #808080, 2px -16px #696969, 4px -16px #505050,
+        /* Long barrel body */
+        -4px -14px #404040, -2px -14px #606060, 0 -14px #808080, 2px -14px #606060, 4px -14px #404040,
+        -4px -12px #505050, -2px -12px #696969, 0 -12px #A9A9A9, 2px -12px #696969, 4px -12px #505050,
+        -4px -10px #505050, -2px -10px #707070, 0 -10px #909090, 2px -10px #707070, 4px -10px #505050,
+        -4px -8px #404040, -2px -8px #606060, 0 -8px #808080, 2px -8px #606060, 4px -8px #404040,
+        /* Barrel base ring */
+        -6px -6px #404040, -4px -6px #505050, -2px -6px #606060, 0 -6px #696969, 2px -6px #606060, 4px -6px #505050, 6px -6px #404040,
+        /* Wooden carriage */
+        -8px -4px #8B4513, -6px -4px #A0522D, -4px -4px #D2691E, -2px -4px #CD853F, 0 -4px #D2691E, 2px -4px #CD853F, 4px -4px #D2691E, 6px -4px #A0522D, 8px -4px #8B4513,
+        -10px -2px #654321, -8px -2px #8B4513, -6px -2px #A0522D, -4px -2px #8B4513, -2px -2px #A0522D, 0 -2px #8B4513, 2px -2px #A0522D, 4px -2px #8B4513, 6px -2px #A0522D, 8px -2px #8B4513, 10px -2px #654321,
+        /* Axle */
+        -14px 0 #404040, -12px 0 #505050, -10px 0 #404040, 10px 0 #404040, 12px 0 #505050, 14px 0 #404040,
+        /* Left wheel */
+        -16px -4px #3A2A1A, -14px -4px #5C3317, -12px -4px #3A2A1A,
+        -18px -2px #3A2A1A, -16px -2px #654321, -14px -2px #8B4513, -12px -2px #654321, -10px -2px #3A2A1A,
+        -18px 0 #3A2A1A, -16px 0 #8B4513, -14px 0 #A0522D, -12px 0 #8B4513, -10px 0 #3A2A1A,
+        -18px 2px #3A2A1A, -16px 2px #654321, -14px 2px #8B4513, -12px 2px #654321, -10px 2px #3A2A1A,
+        -16px 4px #3A2A1A, -14px 4px #5C3317, -12px 4px #3A2A1A,
+        /* Right wheel */
+        12px -4px #3A2A1A, 14px -4px #5C3317, 16px -4px #3A2A1A,
+        10px -2px #3A2A1A, 12px -2px #654321, 14px -2px #8B4513, 16px -2px #654321, 18px -2px #3A2A1A,
+        10px 0 #3A2A1A, 12px 0 #8B4513, 14px 0 #A0522D, 16px 0 #8B4513, 18px 0 #3A2A1A,
+        10px 2px #3A2A1A, 12px 2px #654321, 14px 2px #8B4513, 16px 2px #654321, 18px 2px #3A2A1A,
+        12px 4px #3A2A1A, 14px 4px #5C3317, 16px 4px #3A2A1A;
+}
+
+/* MORTAR - Wide stumpy barrel on rotating stone base */
+.mortar-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #505050;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Wide barrel opening with dark inside */
+        -6px -14px #303030, -4px -14px #404040, -2px -14px #505050, 0 -14px #606060, 2px -14px #505050, 4px -14px #404040, 6px -14px #303030,
+        -8px -12px #404040, -6px -12px #505050, -4px -12px #1A1A1A, -2px -12px #0A0A0A, 0 -12px #0A0A0A, 2px -12px #0A0A0A, 4px -12px #1A1A1A, 6px -12px #505050, 8px -12px #404040,
+        /* Barrel body */
+        -10px -10px #505050, -8px -10px #606060, -6px -10px #696969, -4px -10px #808080, -2px -10px #909090, 0 -10px #A0A0A0, 2px -10px #909090, 4px -10px #808080, 6px -10px #696969, 8px -10px #606060, 10px -10px #505050,
+        -10px -8px #404040, -8px -8px #505050, -6px -8px #606060, -4px -8px #696969, -2px -8px #808080, 0 -8px #909090, 2px -8px #808080, 4px -8px #696969, 6px -8px #606060, 8px -8px #505050, 10px -8px #404040,
+        /* Barrel base */
+        -8px -6px #303030, -6px -6px #404040, -4px -6px #505050, -2px -6px #606060, 0 -6px #696969, 2px -6px #606060, 4px -6px #505050, 6px -6px #404040, 8px -6px #303030,
+        /* Stone rotating base */
+        -12px -4px #4A4A4A, -10px -4px #5A5A5A, -8px -4px #6A6A6A, -6px -4px #7A7A7A, -4px -4px #8A8A8A, -2px -4px #7A7A7A, 0 -4px #8A8A8A, 2px -4px #7A7A7A, 4px -4px #8A8A8A, 6px -4px #7A7A7A, 8px -4px #6A6A6A, 10px -4px #5A5A5A, 12px -4px #4A4A4A,
+        -14px -2px #393939, -12px -2px #494949, -10px -2px #595959, -8px -2px #696969, -6px -2px #797979, -4px -2px #696969, -2px -2px #797979, 0 -2px #696969, 2px -2px #797979, 4px -2px #696969, 6px -2px #797979, 8px -2px #696969, 10px -2px #595959, 12px -2px #494949, 14px -2px #393939,
+        /* Ground base */
+        -14px 0 #2A2A2A, -12px 0 #393939, -10px 0 #494949, -8px 0 #595959, -6px 0 #494949, -4px 0 #595959, -2px 0 #494949, 0 0 #595959, 2px 0 #494949, 4px 0 #595959, 6px 0 #494949, 8px 0 #595959, 10px 0 #494949, 12px 0 #393939, 14px 0 #2A2A2A,
+        -12px 2px #1A1A1A, -10px 2px #2A2A2A, -8px 2px #393939, -6px 2px #2A2A2A, -4px 2px #393939, -2px 2px #2A2A2A, 0 2px #393939, 2px 2px #2A2A2A, 4px 2px #393939, 6px 2px #2A2A2A, 8px 2px #393939, 10px 2px #2A2A2A, 12px 2px #1A1A1A;
+}
+
+
+/* BALLISTA - Detailed mounted crossbow with arrow, bow arms, string */
+.ballista-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #8B4513;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Arrow/bolt tip */
+        0 -20px #B0C4DE, 0 -18px #C0C0C0,
+        -2px -16px #A9A9A9, 0 -16px #C0C0C0, 2px -16px #A9A9A9,
+        /* Arrow shaft */
+        0 -14px #8B4513, 0 -12px #A0522D, 0 -10px #8B4513, 0 -8px #A0522D, 0 -6px #8B4513,
+        /* Fletching */
+        -2px -6px #DC143C, 2px -6px #DC143C,
+        -2px -4px #B22222, 2px -4px #B22222,
+        /* Bow arm - left curving */
+        -4px -10px #654321, -6px -10px #8B4513,
+        -8px -8px #654321, -10px -8px #8B4513, -12px -8px #654321,
+        -14px -6px #5C3317, -16px -6px #654321, -18px -4px #5C3317,
+        -18px -2px #654321, -16px 0 #8B4513,
+        /* Bow arm - right curving */
+        4px -10px #654321, 6px -10px #8B4513,
+        8px -8px #654321, 10px -8px #8B4513, 12px -8px #654321,
+        14px -6px #5C3317, 16px -6px #654321, 18px -4px #5C3317,
+        18px -2px #654321, 16px 0 #8B4513,
+        /* Bowstring - taut */
+        -16px -2px #808080, -14px -2px #909090, -12px -4px #909090, -10px -4px #A0A0A0, -8px -4px #909090, -6px -4px #909090, -4px -4px #808080,
+        4px -4px #808080, 6px -4px #909090, 8px -4px #909090, 10px -4px #A0A0A0, 12px -4px #909090, 14px -2px #909090, 16px -2px #808080,
+        /* Main crossbow body */
+        -4px -2px #654321, -2px -2px #8B4513, 0 -2px #A0522D, 2px -2px #8B4513, 4px -2px #654321,
+        -6px 0 #5C3317, -4px 0 #654321, -2px 0 #8B4513, 0 0 #A0522D, 2px 0 #8B4513, 4px 0 #654321, 6px 0 #5C3317,
+        /* Tripod stand */
+        -8px 2px #5C3317, -4px 2px #654321, 0 2px #8B4513, 4px 2px #654321, 8px 2px #5C3317,
+        -12px 4px #3A2A1A, -10px 4px #5C3317, -6px 4px #654321, 0 4px #8B4513, 6px 4px #654321, 10px 4px #5C3317, 12px 4px #3A2A1A,
+        -14px 6px #2A1A0A, -12px 6px #3A2A1A, 0 6px #5C3317, 12px 6px #3A2A1A, 14px 6px #2A1A0A;
+}
+
+
+/* XBOW - Rapid fire turret with X-shaped arms and ammo magazine */
+.xbow-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #8B008B;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Barrel pointing up */
+        0 -18px #505050, 0 -16px #606060, 0 -14px #505050,
+        -2px -12px #404040, 0 -12px #505050, 2px -12px #404040,
+        /* X-shaped bow arms - left upper */
+        -4px -14px #9B30FF, -6px -12px #8B008B, -8px -10px #9B30FF, -10px -8px #8B008B, -12px -6px #9B30FF,
+        /* X-shaped bow arms - right upper */
+        4px -14px #9B30FF, 6px -12px #8B008B, 8px -10px #9B30FF, 10px -8px #8B008B, 12px -6px #9B30FF,
+        /* X-shaped bow arms - left lower */
+        -12px -4px #8B008B, -10px -2px #9B30FF, -8px 0 #8B008B,
+        /* X-shaped bow arms - right lower */
+        12px -4px #8B008B, 10px -2px #9B30FF, 8px 0 #8B008B,
+        /* Center turret body */
+        -6px -8px #404040, -4px -8px #505050, -2px -8px #606060, 0 -8px #8B008B, 2px -8px #606060, 4px -8px #505050, 6px -8px #404040,
+        -6px -6px #303030, -4px -6px #8B008B, -2px -6px #9B30FF, 0 -6px #BA55D3, 2px -6px #9B30FF, 4px -6px #8B008B, 6px -6px #303030,
+        -6px -4px #404040, -4px -4px #505050, -2px -4px #8B008B, 0 -4px #9B30FF, 2px -4px #8B008B, 4px -4px #505050, 6px -4px #404040,
+        /* Ammo magazine */
+        -4px -2px #FFD700, -2px -2px #FFA500, 0 -2px #FFD700, 2px -2px #FFA500, 4px -2px #FFD700,
+        /* Rotating base */
+        -8px 0 #404040, -6px 0 #505050, -4px 0 #606060, -2px 0 #505050, 0 0 #606060, 2px 0 #505050, 4px 0 #606060, 6px 0 #505050, 8px 0 #404040,
+        -10px 2px #303030, -8px 2px #404040, -6px 2px #505050, -4px 2px #404040, -2px 2px #505050, 0 2px #404040, 2px 2px #505050, 4px 2px #404040, 6px 2px #505050, 8px 2px #404040, 10px 2px #303030,
+        -8px 4px #202020, -6px 4px #303030, -4px 4px #404040, -2px 4px #303030, 0 4px #404040, 2px 4px #303030, 4px 4px #404040, 6px 4px #303030, 8px 4px #202020;
+}
+
+/* TESLA COIL - Electric tower with glowing orb and lightning */
+.tesla-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #00BFFF;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Lightning sparks branching out */
+        -8px -20px #FFFF00, -6px -18px #FFF, -4px -16px #FFFF00,
+        8px -20px #FFFF00, 6px -18px #FFF, 4px -16px #FFFF00,
+        0 -22px #FFF, 0 -20px #FFFF00, 0 -18px #FFF,
+        /* Glowing electric orb */
+        -4px -14px #4169E1, -2px -14px #00BFFF, 0 -14px #87CEEB, 2px -14px #00BFFF, 4px -14px #4169E1,
+        -6px -12px #0000CD, -4px -12px #4169E1, -2px -12px #00BFFF, 0 -12px #FFF, 2px -12px #00BFFF, 4px -12px #4169E1, 6px -12px #0000CD,
+        -6px -10px #0000CD, -4px -10px #00BFFF, -2px -10px #87CEEB, 0 -10px #FFF, 2px -10px #87CEEB, 4px -10px #00BFFF, 6px -10px #0000CD,
+        -4px -8px #4169E1, -2px -8px #00BFFF, 0 -8px #87CEEB, 2px -8px #00BFFF, 4px -8px #4169E1,
+        /* Coil rings */
+        -4px -6px #B87333, -2px -6px #CD7F32, 0 -6px #D4AF37, 2px -6px #CD7F32, 4px -6px #B87333,
+        -4px -4px #8B6914, -2px -4px #B87333, 0 -4px #CD7F32, 2px -4px #B87333, 4px -4px #8B6914,
+        /* Metal pole */
+        -2px -2px #505050, 0 -2px #696969, 2px -2px #505050,
+        -2px 0 #404040, 0 0 #505050, 2px 0 #404040,
+        /* Metal base platform */
+        -8px 2px #404040, -6px 2px #505050, -4px 2px #606060, -2px 2px #505050, 0 2px #606060, 2px 2px #505050, 4px 2px #606060, 6px 2px #505050, 8px 2px #404040,
+        -10px 4px #303030, -8px 4px #404040, -6px 4px #505050, -4px 4px #404040, -2px 4px #505050, 0 4px #404040, 2px 4px #505050, 4px 4px #404040, 6px 4px #505050, 8px 4px #404040, 10px 4px #303030,
+        -8px 6px #202020, -6px 6px #303030, -4px 6px #404040, -2px 6px #303030, 0 6px #404040, 2px 6px #303030, 4px 6px #404040, 6px 6px #303030, 8px 6px #202020;
+}
+
+/* PRISM TOWER - Tall faceted glowing crystal on stone pedestal */
+.prism-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #FF69B4;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Crystal tip - bright white glow */
+        0 -20px #FFF, 0 -18px #FFF,
+        -2px -16px #FFB6C1, 0 -16px #FFF, 2px -16px #FFB6C1,
+        /* Upper crystal facets */
+        -4px -14px #FF69B4, -2px -14px #FFB6C1, 0 -14px #FFF, 2px -14px #FFB6C1, 4px -14px #FF69B4,
+        -6px -12px #FF1493, -4px -12px #FF69B4, -2px -12px #FFB6C1, 0 -12px #FFF, 2px -12px #FFB6C1, 4px -12px #FF69B4, 6px -12px #FF1493,
+        /* Middle crystal body */
+        -6px -10px #C71585, -4px -10px #FF1493, -2px -10px #FF69B4, 0 -10px #FFB6C1, 2px -10px #FF69B4, 4px -10px #FF1493, 6px -10px #C71585,
+        -6px -8px #8B008B, -4px -8px #C71585, -2px -8px #FF1493, 0 -8px #FF69B4, 2px -8px #FF1493, 4px -8px #C71585, 6px -8px #8B008B,
+        -6px -6px #800080, -4px -6px #8B008B, -2px -6px #C71585, 0 -6px #FF1493, 2px -6px #C71585, 4px -6px #8B008B, 6px -6px #800080,
+        /* Crystal base */
+        -4px -4px #4B0082, -2px -4px #8B008B, 0 -4px #C71585, 2px -4px #8B008B, 4px -4px #4B0082,
+        /* Stone pedestal */
+        -8px -2px #606060, -6px -2px #707070, -4px -2px #808080, -2px -2px #707070, 0 -2px #808080, 2px -2px #707070, 4px -2px #808080, 6px -2px #707070, 8px -2px #606060,
+        -10px 0 #505050, -8px 0 #606060, -6px 0 #707070, -4px 0 #606060, -2px 0 #707070, 0 0 #606060, 2px 0 #707070, 4px 0 #606060, 6px 0 #707070, 8px 0 #606060, 10px 0 #505050,
+        -10px 2px #404040, -8px 2px #505050, -6px 2px #606060, -4px 2px #505050, -2px 2px #606060, 0 2px #505050, 2px 2px #606060, 4px 2px #505050, 6px 2px #606060, 8px 2px #505050, 10px 2px #404040,
+        -8px 4px #303030, -6px 4px #404040, -4px 4px #505050, -2px 4px #404040, 0 4px #505050, 2px 4px #404040, 4px 4px #505050, 6px 4px #404040, 8px 4px #303030;
+}
+
+/* MAGMA VENT - Volcanic crater with bubbling lava and smoke */
+.magmavent-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #FF4500;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Rising flames/smoke */
+        -4px -18px #808080, 0 -18px #606060, 4px -18px #808080,
+        -6px -16px #FFFF00, -2px -16px #FF8C00, 2px -16px #FFFF00, 6px -16px #FF8C00,
+        -4px -14px #FF4500, 0 -14px #FFFF00, 4px -14px #FF4500,
+        /* Crater rim */
+        -10px -12px #5C3317, -8px -12px #654321, -6px -12px #8B0000, -4px -12px #DC143C, -2px -12px #FF4500, 0 -12px #FF6347, 2px -12px #FF4500, 4px -12px #DC143C, 6px -12px #8B0000, 8px -12px #654321, 10px -12px #5C3317,
+        /* Lava pool inside */
+        -8px -10px #654321, -6px -10px #8B0000, -4px -10px #FF4500, -2px -10px #FF8C00, 0 -10px #FFFF00, 2px -10px #FF8C00, 4px -10px #FF4500, 6px -10px #8B0000, 8px -10px #654321,
+        -8px -8px #5C3317, -6px -8px #DC143C, -4px -8px #FF6347, -2px -8px #FF8C00, 0 -8px #FFFF00, 2px -8px #FF8C00, 4px -8px #FF6347, 6px -8px #DC143C, 8px -8px #5C3317,
+        /* Rocky outer ring */
+        -12px -6px #3C2415, -10px -6px #5C3317, -8px -6px #654321, -6px -6px #8B0000, -4px -6px #DC143C, -2px -6px #FF4500, 0 -6px #FF6347, 2px -6px #FF4500, 4px -6px #DC143C, 6px -6px #8B0000, 8px -6px #654321, 10px -6px #5C3317, 12px -6px #3C2415,
+        /* Base rocks */
+        -14px -4px #2A1A0A, -12px -4px #3C2415, -10px -4px #5C3317, -8px -4px #654321, -6px -4px #5C3317, -4px -4px #654321, -2px -4px #5C3317, 0 -4px #654321, 2px -4px #5C3317, 4px -4px #654321, 6px -4px #5C3317, 8px -4px #654321, 10px -4px #5C3317, 12px -4px #3C2415, 14px -4px #2A1A0A,
+        -12px -2px #1A0A00, -10px -2px #2A1A0A, -8px -2px #3C2415, -6px -2px #2A1A0A, -4px -2px #3C2415, -2px -2px #2A1A0A, 0 -2px #3C2415, 2px -2px #2A1A0A, 4px -2px #3C2415, 6px -2px #2A1A0A, 8px -2px #3C2415, 10px -2px #2A1A0A, 12px -2px #1A0A00,
+        -10px 0 #0A0000, -8px 0 #1A0A00, -6px 0 #2A1A0A, -4px 0 #1A0A00, -2px 0 #2A1A0A, 0 0 #1A0A00, 2px 0 #2A1A0A, 4px 0 #1A0A00, 6px 0 #2A1A0A, 8px 0 #1A0A00, 10px 0 #0A0000;
+}
+
+/* DRAGON'S BREATH - Fearsome dragon head statue breathing fire */
+.dragons_breath-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #CC0000;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Flames shooting out */
+        -12px -16px #FFFF00, -10px -14px #FF8C00, -8px -12px #FFFF00,
+        -14px -14px #FF4500, -12px -12px #FF8C00, -10px -10px #FFFF00,
+        -16px -12px #FF4500, -14px -10px #FF6347, -12px -8px #FF8C00, -10px -6px #FFFF00,
+        /* Dragon head - snout */
+        -8px -14px #8B0000, -6px -14px #CC0000, -4px -14px #8B0000,
+        -6px -12px #CC0000, -4px -12px #DC143C, -2px -12px #CC0000,
+        /* Dragon head - main */
+        -4px -10px #8B0000, -2px -10px #CC0000, 0 -10px #DC143C, 2px -10px #CC0000, 4px -10px #8B0000,
+        -6px -8px #660000, -4px -8px #8B0000, -2px -8px #CC0000, 0 -8px #DC143C, 2px -8px #CC0000, 4px -8px #8B0000, 6px -8px #660000,
+        /* Dragon eyes */
+        0 -8px #FFFF00, 2px -8px #FF8C00,
+        /* Dragon horns */
+        -8px -8px #5C3317, 8px -8px #5C3317,
+        -10px -6px #654321, 10px -6px #654321,
+        /* Dragon neck/body */
+        -6px -6px #660000, -4px -6px #8B0000, -2px -6px #CC0000, 0 -6px #CC0000, 2px -6px #CC0000, 4px -6px #8B0000, 6px -6px #660000,
+        -6px -4px #4A0000, -4px -4px #660000, -2px -4px #8B0000, 0 -4px #8B0000, 2px -4px #8B0000, 4px -4px #660000, 6px -4px #4A0000,
+        /* Stone base */
+        -10px -2px #505050, -8px -2px #606060, -6px -2px #707070, -4px -2px #606060, -2px -2px #707070, 0 -2px #606060, 2px -2px #707070, 4px -2px #606060, 6px -2px #707070, 8px -2px #606060, 10px -2px #505050,
+        -12px 0 #404040, -10px 0 #505050, -8px 0 #606060, -6px 0 #505050, -4px 0 #606060, -2px 0 #505050, 0 0 #606060, 2px 0 #505050, 4px 0 #606060, 6px 0 #505050, 8px 0 #606060, 10px 0 #505050, 12px 0 #404040,
+        -10px 2px #303030, -8px 2px #404040, -6px 2px #505050, -4px 2px #404040, -2px 2px #505050, 0 2px #404040, 2px 2px #505050, 4px 2px #404040, 6px 2px #505050, 8px 2px #404040, 10px 2px #303030;
+}
+
+/* BARRACKS - Military training building with red roof, door, and crossed swords */
+.barracks-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #DC143C;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Sword crossed on roof (left) */
+        -8px -18px #C0C0C0, -6px -16px #A9A9A9, -4px -14px #C0C0C0,
+        /* Sword crossed on roof (right) */
+        8px -18px #C0C0C0, 6px -16px #A9A9A9, 4px -14px #C0C0C0,
+        /* Red peaked roof */
+        -2px -16px #8B0000, 0 -16px #DC143C, 2px -16px #8B0000,
+        -6px -14px #8B0000, -4px -14px #B22222, -2px -14px #DC143C, 0 -14px #FF4500, 2px -14px #DC143C, 4px -14px #B22222, 6px -14px #8B0000,
+        -10px -12px #660000, -8px -12px #8B0000, -6px -12px #B22222, -4px -12px #DC143C, -2px -12px #DC143C, 0 -12px #DC143C, 2px -12px #DC143C, 4px -12px #DC143C, 6px -12px #B22222, 8px -12px #8B0000, 10px -12px #660000,
+        /* Stone building walls */
+        -10px -10px #8B4513, -8px -10px #A0522D, -6px -10px #D2691E, -4px -10px #CD853F, -2px -10px #D2691E, 0 -10px #CD853F, 2px -10px #D2691E, 4px -10px #CD853F, 6px -10px #D2691E, 8px -10px #A0522D, 10px -10px #8B4513,
+        -10px -8px #654321, -8px -8px #8B4513, -6px -8px #A0522D, -4px -8px #8B4513, -2px -8px #A0522D, 0 -8px #8B4513, 2px -8px #A0522D, 4px -8px #8B4513, 6px -8px #A0522D, 8px -8px #8B4513, 10px -8px #654321,
+        /* Windows */
+        -6px -8px #4169E1, -4px -8px #87CEEB, 4px -8px #4169E1, 6px -8px #87CEEB,
+        /* More walls */
+        -10px -6px #5C3317, -8px -6px #654321, -6px -6px #8B4513, -4px -6px #654321, -2px -6px #8B4513, 0 -6px #654321, 2px -6px #8B4513, 4px -6px #654321, 6px -6px #8B4513, 8px -6px #654321, 10px -6px #5C3317,
+        /* Door (center) */
+        -10px -4px #5C3317, -8px -4px #654321, -6px -4px #8B4513, -4px -4px #3E2723, -2px -4px #2A1A0A, 0 -4px #2A1A0A, 2px -4px #2A1A0A, 4px -4px #3E2723, 6px -4px #8B4513, 8px -4px #654321, 10px -4px #5C3317,
+        -10px -2px #3E2723, -8px -2px #5C3317, -6px -2px #654321, -4px -2px #3E2723, -2px -2px #1A0A00, 0 -2px #1A0A00, 2px -2px #1A0A00, 4px -2px #3E2723, 6px -2px #654321, 8px -2px #5C3317, 10px -2px #3E2723,
+        /* Foundation */
+        -12px 0 #404040, -10px 0 #505050, -8px 0 #606060, -6px 0 #505050, -4px 0 #606060, -2px 0 #505050, 0 0 #606060, 2px 0 #505050, 4px 0 #606060, 6px 0 #505050, 8px 0 #606060, 10px 0 #505050, 12px 0 #404040,
+        -10px 2px #303030, -8px 2px #404040, -6px 2px #505050, -4px 2px #404040, -2px 2px #505050, 0 2px #404040, 2px 2px #505050, 4px 2px #404040, 6px 2px #505050, 8px 2px #404040, 10px 2px #303030;
+}
+
+/* GOLD MINE - Mineshaft entrance with tracks, cart, and gold pile */
+.mine-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #FFD700;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Pickaxe at top */
+        -10px -16px #696969, -8px -16px #808080, -6px -14px #696969,
+        -8px -14px #8B4513, -6px -12px #8B4513, -4px -10px #654321,
+        /* Mine shaft wooden frame */
+        -8px -12px #654321, -6px -12px #8B4513, -4px -12px #654321,
+        8px -12px #654321, 6px -12px #8B4513, 4px -12px #654321,
+        -8px -10px #5C3317, 8px -10px #5C3317,
+        -8px -8px #654321, 8px -8px #654321,
+        /* Dark mine entrance */
+        -6px -10px #1A1A1A, -4px -10px #0A0A0A, -2px -10px #0A0A0A, 0 -10px #0A0A0A, 2px -10px #0A0A0A, 4px -10px #0A0A0A, 6px -10px #1A1A1A,
+        -6px -8px #1A1A1A, -4px -8px #0A0A0A, -2px -8px #1A1A1A, 0 -8px #0A0A0A, 2px -8px #1A1A1A, 4px -8px #0A0A0A, 6px -8px #1A1A1A,
+        /* Rails/tracks */
+        -10px -6px #404040, -8px -6px #505050, -6px -6px #404040, -4px -6px #505050, -2px -6px #404040, 0 -6px #505050, 2px -6px #404040, 4px -6px #505050, 6px -6px #404040, 8px -6px #505050, 10px -6px #404040,
+        /* Gold pile */
+        -4px -4px #B8860B, -2px -4px #FFD700, 0 -4px #FFFACD, 2px -4px #FFD700, 4px -4px #B8860B,
+        -6px -2px #8B6914, -4px -2px #DAA520, -2px -2px #FFD700, 0 -2px #FFFACD, 2px -2px #FFD700, 4px -2px #DAA520, 6px -2px #8B6914,
+        -8px 0 #6B5610, -6px 0 #8B6914, -4px 0 #B8860B, -2px 0 #DAA520, 0 0 #FFD700, 2px 0 #DAA520, 4px 0 #B8860B, 6px 0 #8B6914, 8px 0 #6B5610,
+        -6px 2px #5C4C0A, -4px 2px #6B5610, -2px 2px #8B6914, 0 2px #B8860B, 2px 2px #8B6914, 4px 2px #6B5610, 6px 2px #5C4C0A;
+}
+
+/* ELIXIR COLLECTOR - Glass tank with bubbling purple elixir and pump machinery */
+.elixir_collector-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #9370DB;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Pump mechanism at top */
+        -2px -16px #505050, 0 -16px #606060, 2px -16px #505050,
+        -4px -14px #404040, -2px -14px #505050, 0 -14px #696969, 2px -14px #505050, 4px -14px #404040,
+        /* Glass tank frame */
+        -6px -12px #696969, -4px -12px #808080, 4px -12px #808080, 6px -12px #696969,
+        /* Elixir bubbles in tank */
+        -4px -12px #9370DB, -2px -12px #BA55D3, 0 -12px #DDA0DD, 2px -12px #BA55D3, 4px -12px #9370DB,
+        -6px -10px #505050, -4px -10px #8B008B, -2px -10px #9370DB, 0 -10px #FF00FF, 2px -10px #9370DB, 4px -10px #8B008B, 6px -10px #505050,
+        -6px -8px #505050, -4px -8px #9370DB, -2px -8px #DDA0DD, 0 -8px #FF00FF, 2px -8px #DDA0DD, 4px -8px #9370DB, 6px -8px #505050,
+        -6px -6px #505050, -4px -6px #8B008B, -2px -6px #BA55D3, 0 -6px #DDA0DD, 2px -6px #BA55D3, 4px -6px #8B008B, 6px -6px #505050,
+        -6px -4px #696969, -4px -4px #808080, -2px -4px #9370DB, 0 -4px #BA55D3, 2px -4px #9370DB, 4px -4px #808080, 6px -4px #696969,
+        /* Tank base */
+        -8px -2px #404040, -6px -2px #505050, -4px -2px #606060, -2px -2px #505050, 0 -2px #606060, 2px -2px #505050, 4px -2px #606060, 6px -2px #505050, 8px -2px #404040,
+        /* Pipe and base */
+        -10px 0 #303030, -8px 0 #404040, -6px 0 #505050, -4px 0 #404040, -2px 0 #505050, 0 0 #404040, 2px 0 #505050, 4px 0 #404040, 6px 0 #505050, 8px 0 #404040, 10px 0 #303030,
+        -8px 2px #202020, -6px 2px #303030, -4px 2px #404040, -2px 2px #303030, 0 2px #404040, 2px 2px #303030, 4px 2px #404040, 6px 2px #303030, 8px 2px #202020;
+}
+
+/* ARMY CAMP - Military tent with campfire and weapons rack */
+.army_camp-icon::before,
+.training_camp-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #D2691E;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Tent pole flag */
+        0 -20px #DC143C, 2px -20px #FF0000, 4px -20px #DC143C,
+        0 -18px #DC143C, 2px -18px #B22222,
+        0 -16px #654321,
+        /* Tent top */
+        -2px -14px #D2691E, 0 -14px #A0522D, 2px -14px #D2691E,
+        -4px -12px #CD853F, -2px -12px #D2691E, 0 -12px #A0522D, 2px -12px #D2691E, 4px -12px #CD853F,
+        -6px -10px #A0522D, -4px -10px #D2691E, -2px -10px #CD853F, 0 -10px #D2691E, 2px -10px #CD853F, 4px -10px #D2691E, 6px -10px #A0522D,
+        -8px -8px #8B4513, -6px -8px #A0522D, -4px -8px #D2691E, -2px -8px #CD853F, 0 -8px #D2691E, 2px -8px #CD853F, 4px -8px #D2691E, 6px -8px #A0522D, 8px -8px #8B4513,
+        /* Tent body */
+        -10px -6px #654321, -8px -6px #8B4513, -6px -6px #A0522D, -4px -6px #8B4513, -2px -6px #A0522D, 0 -6px #8B4513, 2px -6px #A0522D, 4px -6px #8B4513, 6px -6px #A0522D, 8px -6px #8B4513, 10px -6px #654321,
+        /* Tent entrance (dark) */
+        -10px -4px #5C3317, -8px -4px #654321, -6px -4px #8B4513, -4px -4px #2A1A0A, -2px -4px #1A0A00, 0 -4px #1A0A00, 2px -4px #1A0A00, 4px -4px #2A1A0A, 6px -4px #8B4513, 8px -4px #654321, 10px -4px #5C3317,
+        /* Campfire in front */
+        -2px -2px #FF4500, 0 -2px #FFFF00, 2px -2px #FF4500,
+        -4px 0 #FF8C00, -2px 0 #FFFF00, 0 0 #FFF, 2px 0 #FFFF00, 4px 0 #FF8C00,
+        /* Logs */
+        -6px 2px #5C3317, -4px 2px #654321, -2px 2px #8B0000, 0 2px #DC143C, 2px 2px #8B0000, 4px 2px #654321, 6px 2px #5C3317,
+        -4px 4px #3E2723, -2px 4px #5C3317, 0 4px #654321, 2px 4px #5C3317, 4px 4px #3E2723;
+}
+
+/* WALL - Strong stone fortification block */
+.wall-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #808080;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Top battlements */
+        -10px -14px #808080, -8px -14px #909090, -6px -14px #808080,
+        2px -14px #808080, 4px -14px #909090, 6px -14px #808080,
+        -10px -12px #707070, -8px -12px #808080, -6px -12px #707070,
+        2px -12px #707070, 4px -12px #808080, 6px -12px #707070,
+        /* Wall face - upper */
+        -10px -10px #606060, -8px -10px #707070, -6px -10px #808080, -4px -10px #707070, -2px -10px #808080, 0 -10px #707070, 2px -10px #808080, 4px -10px #707070, 6px -10px #808080, 8px -10px #707070, 10px -10px #606060,
+        -10px -8px #505050, -8px -8px #606060, -6px -8px #707070, -4px -8px #808080, -2px -8px #707070, 0 -8px #808080, 2px -8px #707070, 4px -8px #808080, 6px -8px #707070, 8px -8px #606060, 10px -8px #505050,
+        /* Stone blocks pattern */
+        -10px -6px #606060, -8px -6px #707070, -6px -6px #505050, -4px -6px #707070, -2px -6px #606060, 0 -6px #707070, 2px -6px #505050, 4px -6px #707070, 6px -6px #606060, 8px -6px #707070, 10px -6px #606060,
+        -10px -4px #505050, -8px -4px #606060, -6px -4px #707070, -4px -4px #606060, -2px -4px #707070, 0 -4px #606060, 2px -4px #707070, 4px -4px #606060, 6px -4px #707070, 8px -4px #606060, 10px -4px #505050,
+        /* Lower wall */
+        -10px -2px #404040, -8px -2px #505050, -6px -2px #606060, -4px -2px #505050, -2px -2px #606060, 0 -2px #505050, 2px -2px #606060, 4px -2px #505050, 6px -2px #606060, 8px -2px #505050, 10px -2px #404040,
+        -10px 0 #303030, -8px 0 #404040, -6px 0 #505050, -4px 0 #404040, -2px 0 #505050, 0 0 #404040, 2px 0 #505050, 4px 0 #404040, 6px 0 #505050, 8px 0 #404040, 10px 0 #303030,
+        /* Foundation */
+        -12px 2px #202020, -10px 2px #303030, -8px 2px #404040, -6px 2px #303030, -4px 2px #404040, -2px 2px #303030, 0 2px #404040, 2px 2px #303030, 4px 2px #404040, 6px 2px #303030, 8px 2px #404040, 10px 2px #303030, 12px 2px #202020,
+        -10px 4px #101010, -8px 4px #202020, -6px 4px #303030, -4px 4px #202020, -2px 4px #303030, 0 4px #202020, 2px 4px #303030, 4px 4px #202020, 6px 4px #303030, 8px 4px #202020, 10px 4px #101010;
+}
+
+/* Tree and rock obstacles - keep simpler */
+.tree-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #228B22;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        0 -14px #006400, 0 -12px #228B22,
+        -2px -10px #006400, 0 -10px #32CD32, 2px -10px #006400,
+        -4px -8px #228B22, -2px -8px #32CD32, 0 -8px #90EE90, 2px -8px #32CD32, 4px -8px #228B22,
+        -4px -6px #006400, -2px -6px #228B22, 0 -6px #32CD32, 2px -6px #228B22, 4px -6px #006400,
+        -2px -4px #006400, 0 -4px #228B22, 2px -4px #006400,
+        0 -2px #8B4513, 0 0 #654321, 0 2px #5C3317;
+}
+
+.rock-icon::before,
+.bush-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #808080;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        -2px -8px #909090, 0 -8px #A0A0A0, 2px -8px #909090,
+        -4px -6px #707070, -2px -6px #808080, 0 -6px #909090, 2px -6px #808080, 4px -6px #707070,
+        -6px -4px #606060, -4px -4px #707070, -2px -4px #808080, 0 -4px #909090, 2px -4px #808080, 4px -4px #707070, 6px -4px #606060,
+        -6px -2px #505050, -4px -2px #606060, -2px -2px #707070, 0 -2px #808080, 2px -2px #707070, 4px -2px #606060, 6px -2px #505050,
+        -4px 0 #404040, -2px 0 #505050, 0 0 #606060, 2px 0 #505050, 4px 0 #404040;
+}
