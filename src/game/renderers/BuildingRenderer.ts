@@ -8,7 +8,7 @@ export class BuildingRenderer {
     /**
      * Draws the Town Hall with all its ornate details.
      */
-    static drawTownHall(graphics: Phaser.GameObjects.Graphics, gridX: number, gridY: number, time: number, alpha: number = 1, tint: number | null = null, baseGraphics?: Phaser.GameObjects.Graphics) {
+    static drawTownHall(graphics: Phaser.GameObjects.Graphics, gridX: number, gridY: number, time: number, alpha: number = 1, tint: number | null = null, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
         const info = BUILDING_DEFINITIONS['town_hall'];
         const c1 = IsoUtils.cartToIso(gridX, gridY);
         const c2 = IsoUtils.cartToIso(gridX + info.width, gridY);
@@ -24,171 +24,176 @@ export class BuildingRenderer {
         const t3 = new Phaser.Math.Vector2(c3.x, c3.y - height);
         const t4 = new Phaser.Math.Vector2(c4.x, c4.y - height);
 
-        // === ORNATE STONE FOUNDATION ===
-        g.fillStyle(tint ?? 0x7a6a5a, alpha);
-        g.fillPoints([c1, c2, c3, c4], true);
+        if (!skipBase) {
+            // === ORNATE STONE FOUNDATION ===
+            g.fillStyle(tint ?? 0x7a6a5a, alpha);
+            g.fillPoints([c1, c2, c3, c4], true);
 
-        // Foundation borders
-        g.lineStyle(2, 0x5a4a3a, alpha);
-        g.strokePoints([c1, c2, c3, c4], true, true);
+            // Foundation borders
+            g.lineStyle(2, 0x5a4a3a, alpha);
+            g.strokePoints([c1, c2, c3, c4], true, true);
 
-        // Red carpet leading to door
-        g.fillStyle(0xaa2222, alpha);
-        g.fillCircle(center.x, center.y, 10);
+            // Red carpet leading to door
+            g.fillStyle(0xaa2222, alpha);
+            g.fillCircle(center.x, center.y, 10);
 
-        // Foundation stone texture (moved to baseGraphics)
-        g.fillStyle(0x6a5a4a, alpha * 0.4);
-        for (let i = 0; i < 6; i++) {
-            const px = center.x + Math.sin(i * 2.3) * 20;
-            const py = center.y + Math.cos(i * 1.7) * 12;
-            g.fillCircle(px, py, 3 + Math.sin(i) * 1.5);
+            // Foundation stone texture (moved to baseGraphics)
+            g.fillStyle(0x6a5a4a, alpha * 0.4);
+            for (let i = 0; i < 6; i++) {
+                const px = center.x + Math.sin(i * 2.3) * 20;
+                const py = center.y + Math.cos(i * 1.7) * 12;
+                g.fillCircle(px, py, 3 + Math.sin(i) * 1.5);
+            }
         }
 
-        // === MAGNIFICENT WALLS ===
-        // Right wall (shadow side) - clean surface
-        graphics.fillStyle(tint ?? 0x5a4a3a, alpha);
-        graphics.fillPoints([c2, c3, t3, t2], true);
+        if (!onlyBase) {
+            // === MAGNIFICENT WALLS ===
+            // Right wall (shadow side) - clean surface
+            graphics.fillStyle(tint ?? 0x5a4a3a, alpha);
+            graphics.fillPoints([c2, c3, t3, t2], true);
 
-        // Left wall (lit side) - clean surface
-        graphics.fillStyle(tint ?? 0x8a7a6a, alpha);
-        graphics.fillPoints([c3, c4, t4, t3], true);
+            // Left wall (lit side) - clean surface
+            graphics.fillStyle(tint ?? 0x8a7a6a, alpha);
+            graphics.fillPoints([c3, c4, t4, t3], true);
 
-        // Wall edges
-        graphics.lineStyle(2, 0x3a2a1a, 0.5 * alpha);
-        graphics.strokePoints([c2, c3, t3, t2], true, true);
-        graphics.strokePoints([c3, c4, t4, t3], true, true);
+            // Wall edges
+            graphics.lineStyle(2, 0x3a2a1a, 0.5 * alpha);
+            graphics.strokePoints([c2, c3, t3, t2], true, true);
+            graphics.strokePoints([c3, c4, t4, t3], true, true);
 
-        // === ARCHED WINDOWS WITH WARM GLOW (ISOMETRIC) ===
-        // Window glow
-        const windowGlow = 0.6 + Math.sin(time / 300) * 0.15;
+            // === ARCHED WINDOWS WITH WARM GLOW (ISOMETRIC) ===
+            // Window glow
+            const windowGlow = 0.6 + Math.sin(time / 300) * 0.15;
 
-        // Calculate wall directions for isometric window placement
-        const rightWallDirX = (c3.x - c2.x);
-        const rightWallDirY = (c3.y - c2.y);
-        const leftWallDirX = (c4.x - c3.x);
-        const leftWallDirY = (c4.y - c3.y);
+            // Calculate wall directions for isometric window placement
+            const rightWallDirX = (c3.x - c2.x);
+            const rightWallDirY = (c3.y - c2.y);
+            const leftWallDirX = (c4.x - c3.x);
+            const leftWallDirY = (c4.y - c3.y);
 
-        // Right wall windows
-        for (let i = 0; i < 2; i++) {
-            const t = 0.3 + i * 0.4;
-            const baseX = c2.x + rightWallDirX * t;
-            const baseY = c2.y + rightWallDirY * t - height * 0.5;
-            const wh = 14;
-            const skewX = rightWallDirX * 0.08;
-            const skewY = rightWallDirY * 0.08;
-            graphics.fillStyle(0x3a2a1a, alpha);
+            // Right wall windows
+            for (let i = 0; i < 2; i++) {
+                const t = 0.3 + i * 0.4;
+                const baseX = c2.x + rightWallDirX * t;
+                const baseY = c2.y + rightWallDirY * t - height * 0.5;
+                const wh = 14;
+                const skewX = rightWallDirX * 0.08;
+                const skewY = rightWallDirY * 0.08;
+                graphics.fillStyle(0x3a2a1a, alpha);
+                graphics.beginPath();
+                graphics.moveTo(baseX - skewX * 2, baseY - wh / 2);
+                graphics.lineTo(baseX + skewX * 2, baseY - wh / 2 + skewY * 4);
+                graphics.lineTo(baseX + skewX * 2, baseY + wh / 2 + skewY * 4);
+                graphics.lineTo(baseX - skewX * 2, baseY + wh / 2);
+                graphics.closePath();
+                graphics.fillPath();
+                graphics.fillStyle(0xffdd88, alpha * windowGlow);
+                graphics.beginPath();
+                graphics.moveTo(baseX - skewX * 1.5, baseY - wh / 2 + 2);
+                graphics.lineTo(baseX + skewX * 1.5, baseY - wh / 2 + 2 + skewY * 3);
+                graphics.lineTo(baseX + skewX * 1.5, baseY + wh / 2 - 2 + skewY * 3);
+                graphics.lineTo(baseX - skewX * 1.5, baseY + wh / 2 - 2);
+                graphics.closePath();
+                graphics.fillPath();
+            }
+
+            // Left wall windows
+            for (let i = 0; i < 2; i++) {
+                const t = 0.3 + i * 0.4;
+                const baseX = c3.x + leftWallDirX * t;
+                const baseY = c3.y + leftWallDirY * t - height * 0.5;
+                const wh = 14;
+                const skewX = leftWallDirX * 0.08;
+                const skewY = leftWallDirY * 0.08;
+                graphics.fillStyle(0x3a2a1a, alpha);
+                graphics.beginPath();
+                graphics.moveTo(baseX - skewX * 2, baseY - wh / 2);
+                graphics.lineTo(baseX + skewX * 2, baseY - wh / 2 + skewY * 4);
+                graphics.lineTo(baseX + skewX * 2, baseY + wh / 2 + skewY * 4);
+                graphics.lineTo(baseX - skewX * 2, baseY + wh / 2);
+                graphics.closePath();
+                graphics.fillPath();
+                graphics.fillStyle(0xffdd88, alpha * windowGlow);
+                graphics.beginPath();
+                graphics.moveTo(baseX - skewX * 1.5, baseY - wh / 2 + 2);
+                graphics.lineTo(baseX + skewX * 1.5, baseY - wh / 2 + 2 + skewY * 3);
+                graphics.lineTo(baseX + skewX * 1.5, baseY + wh / 2 - 2 + skewY * 3);
+                graphics.lineTo(baseX - skewX * 1.5, baseY + wh / 2 - 2);
+                graphics.closePath();
+                graphics.fillPath();
+            }
+
+            // === DECORATIVE CORNER TOWERS ===
+            const towerHeight = 25;
+            const towerPositions = [
+                { x: c1.x + 8, y: c1.y - 5 }
+            ];
+
+            for (const pos of towerPositions) {
+                graphics.fillStyle(0x6a5a4a, alpha);
+                graphics.fillRect(pos.x - 6, pos.y - height - towerHeight, 12, height + towerHeight);
+                graphics.lineStyle(1, 0x4a3a2a, alpha);
+                graphics.strokeRect(pos.x - 6, pos.y - height - towerHeight, 12, height + towerHeight);
+
+                graphics.fillStyle(0xb84c4c, alpha);
+                graphics.beginPath();
+                graphics.moveTo(pos.x, pos.y - height - towerHeight - 15);
+                graphics.lineTo(pos.x - 8, pos.y - height - towerHeight);
+                graphics.lineTo(pos.x + 8, pos.y - height - towerHeight);
+                graphics.closePath();
+                graphics.fillPath();
+
+                graphics.lineStyle(1, 0xd85c5c, alpha * 0.5);
+                graphics.lineBetween(pos.x, pos.y - height - towerHeight - 15, pos.x + 8, pos.y - height - towerHeight);
+
+                graphics.fillStyle(0xffdd88, alpha * windowGlow);
+                graphics.fillCircle(pos.x, pos.y - height - 10, 4);
+            }
+
+            // === MAGNIFICENT ROOF ===
+            const roofColor = tint ?? 0xc86444;
+
+            graphics.fillStyle(roofColor, alpha);
+            graphics.fillPoints([t1, t2, t3, t4], true);
+
+            const peakHeight = 20;
+            const peak = new Phaser.Math.Vector2(center.x, center.y - height - peakHeight);
+
+            graphics.fillStyle(0xb85434, alpha);
+            graphics.fillTriangle(t1.x, t1.y, t2.x, t2.y, peak.x, peak.y);
+            graphics.fillStyle(0x983424, alpha);
+            graphics.fillTriangle(t2.x, t2.y, t3.x, t3.y, peak.x, peak.y);
+            graphics.fillTriangle(t3.x, t3.y, t4.x, t4.y, peak.x, peak.y);
+            graphics.fillStyle(0xc86444, alpha);
+            graphics.fillTriangle(t4.x, t4.y, t1.x, t1.y, peak.x, peak.y);
+
+            graphics.lineStyle(2, 0xd4a04a, alpha);
+            graphics.lineBetween(t1.x, t1.y, t2.x, t2.y);
+            graphics.lineBetween(t1.x, t1.y, t4.x, t4.y);
+            graphics.lineBetween(t2.x, t2.y, peak.x, peak.y);
+            graphics.lineBetween(t4.x, t4.y, peak.x, peak.y);
+
+            graphics.fillStyle(0xd4a04a, alpha);
+            graphics.fillCircle(peak.x, peak.y - 2, 4);
+            graphics.lineStyle(2, 0xffffff, alpha * 0.6);
+            graphics.lineBetween(peak.x, peak.y - 4, peak.x, peak.y - 12);
+
+            // Flag (simplified for renderer) - You can add the flag part if needed or keep it simple
+            const flagWave = Math.sin(time / 200) * 5;
+            graphics.fillStyle(0xdd2222, alpha);
             graphics.beginPath();
-            graphics.moveTo(baseX - skewX * 2, baseY - wh / 2);
-            graphics.lineTo(baseX + skewX * 2, baseY - wh / 2 + skewY * 4);
-            graphics.lineTo(baseX + skewX * 2, baseY + wh / 2 + skewY * 4);
-            graphics.lineTo(baseX - skewX * 2, baseY + wh / 2);
-            graphics.closePath();
-            graphics.fillPath();
-            graphics.fillStyle(0xffdd88, alpha * windowGlow);
-            graphics.beginPath();
-            graphics.moveTo(baseX - skewX * 1.5, baseY - wh / 2 + 2);
-            graphics.lineTo(baseX + skewX * 1.5, baseY - wh / 2 + 2 + skewY * 3);
-            graphics.lineTo(baseX + skewX * 1.5, baseY + wh / 2 - 2 + skewY * 3);
-            graphics.lineTo(baseX - skewX * 1.5, baseY + wh / 2 - 2);
+            graphics.moveTo(peak.x, peak.y - 12);
+            graphics.lineTo(peak.x + 12, peak.y - 10 + flagWave * 0.2);
+            graphics.lineTo(peak.x + 12, peak.y - 4 + flagWave * 0.2);
+            graphics.lineTo(peak.x, peak.y - 6);
             graphics.closePath();
             graphics.fillPath();
         }
-
-        // Left wall windows
-        for (let i = 0; i < 2; i++) {
-            const t = 0.3 + i * 0.4;
-            const baseX = c3.x + leftWallDirX * t;
-            const baseY = c3.y + leftWallDirY * t - height * 0.5;
-            const wh = 14;
-            const skewX = leftWallDirX * 0.08;
-            const skewY = leftWallDirY * 0.08;
-            graphics.fillStyle(0x3a2a1a, alpha);
-            graphics.beginPath();
-            graphics.moveTo(baseX - skewX * 2, baseY - wh / 2);
-            graphics.lineTo(baseX + skewX * 2, baseY - wh / 2 + skewY * 4);
-            graphics.lineTo(baseX + skewX * 2, baseY + wh / 2 + skewY * 4);
-            graphics.lineTo(baseX - skewX * 2, baseY + wh / 2);
-            graphics.closePath();
-            graphics.fillPath();
-            graphics.fillStyle(0xffdd88, alpha * windowGlow);
-            graphics.beginPath();
-            graphics.moveTo(baseX - skewX * 1.5, baseY - wh / 2 + 2);
-            graphics.lineTo(baseX + skewX * 1.5, baseY - wh / 2 + 2 + skewY * 3);
-            graphics.lineTo(baseX + skewX * 1.5, baseY + wh / 2 - 2 + skewY * 3);
-            graphics.lineTo(baseX - skewX * 1.5, baseY + wh / 2 - 2);
-            graphics.closePath();
-            graphics.fillPath();
-        }
-
-        // === DECORATIVE CORNER TOWERS ===
-        const towerHeight = 25;
-        const towerPositions = [
-            { x: c1.x + 8, y: c1.y - 5 }
-        ];
-
-        for (const pos of towerPositions) {
-            graphics.fillStyle(0x6a5a4a, alpha);
-            graphics.fillRect(pos.x - 6, pos.y - height - towerHeight, 12, height + towerHeight);
-            graphics.lineStyle(1, 0x4a3a2a, alpha);
-            graphics.strokeRect(pos.x - 6, pos.y - height - towerHeight, 12, height + towerHeight);
-
-            graphics.fillStyle(0xb84c4c, alpha);
-            graphics.beginPath();
-            graphics.moveTo(pos.x, pos.y - height - towerHeight - 15);
-            graphics.lineTo(pos.x - 8, pos.y - height - towerHeight);
-            graphics.lineTo(pos.x + 8, pos.y - height - towerHeight);
-            graphics.closePath();
-            graphics.fillPath();
-
-            graphics.lineStyle(1, 0xd85c5c, alpha * 0.5);
-            graphics.lineBetween(pos.x, pos.y - height - towerHeight - 15, pos.x + 8, pos.y - height - towerHeight);
-
-            graphics.fillStyle(0xffdd88, alpha * windowGlow);
-            graphics.fillCircle(pos.x, pos.y - height - 10, 4);
-        }
-
-        // === MAGNIFICENT ROOF ===
-        const roofColor = tint ?? 0xc86444;
-
-        graphics.fillStyle(roofColor, alpha);
-        graphics.fillPoints([t1, t2, t3, t4], true);
-
-        const peakHeight = 20;
-        const peak = new Phaser.Math.Vector2(center.x, center.y - height - peakHeight);
-
-        graphics.fillStyle(0xb85434, alpha);
-        graphics.fillTriangle(t1.x, t1.y, t2.x, t2.y, peak.x, peak.y);
-        graphics.fillStyle(0x983424, alpha);
-        graphics.fillTriangle(t2.x, t2.y, t3.x, t3.y, peak.x, peak.y);
-        graphics.fillTriangle(t3.x, t3.y, t4.x, t4.y, peak.x, peak.y);
-        graphics.fillStyle(0xc86444, alpha);
-        graphics.fillTriangle(t4.x, t4.y, t1.x, t1.y, peak.x, peak.y);
-
-        graphics.lineStyle(2, 0xd4a04a, alpha);
-        graphics.lineBetween(t1.x, t1.y, t2.x, t2.y);
-        graphics.lineBetween(t1.x, t1.y, t4.x, t4.y);
-        graphics.lineBetween(t2.x, t2.y, peak.x, peak.y);
-        graphics.lineBetween(t4.x, t4.y, peak.x, peak.y);
-
-        graphics.fillStyle(0xd4a04a, alpha);
-        graphics.fillCircle(peak.x, peak.y - 2, 4);
-        graphics.lineStyle(2, 0xffffff, alpha * 0.6);
-        graphics.lineBetween(peak.x, peak.y - 4, peak.x, peak.y - 12);
-
-        // Flag (simplified for renderer) - You can add the flag part if needed or keep it simple
-        const flagWave = Math.sin(time / 200) * 5;
-        graphics.fillStyle(0xdd2222, alpha);
-        graphics.beginPath();
-        graphics.moveTo(peak.x, peak.y - 12);
-        graphics.lineTo(peak.x + 12, peak.y - 10 + flagWave * 0.2);
-        graphics.lineTo(peak.x + 12, peak.y - 4 + flagWave * 0.2);
-        graphics.lineTo(peak.x, peak.y - 6);
-        graphics.closePath();
-        graphics.fillPath();
     }
 
-    static drawBarracks(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null) {
+    static drawBarracks(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
         const wallHeight = 28;
+        const g = baseGraphics || graphics;
 
         // Wall top corners
         const t1 = new Phaser.Math.Vector2(c1.x, c1.y - wallHeight);
@@ -196,1863 +201,1916 @@ export class BuildingRenderer {
         const t3 = new Phaser.Math.Vector2(c3.x, c3.y - wallHeight);
         const t4 = new Phaser.Math.Vector2(c4.x, c4.y - wallHeight);
 
-        // === STONE FOUNDATION ===
-        graphics.fillStyle(tint ?? 0x7a6a5a, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
+        if (!skipBase) {
+            // === STONE FOUNDATION ===
+            g.fillStyle(tint ?? 0x7a6a5a, alpha);
+            g.fillPoints([c1, c2, c3, c4], true);
 
-        // Foundation texture
-        graphics.fillStyle(0x6a5a4a, alpha * 0.4);
-        graphics.fillCircle(center.x - 8, center.y + 3, 3);
-        graphics.fillCircle(center.x + 6, center.y + 5, 2);
+            // Foundation texture
+            g.fillStyle(0x6a5a4a, alpha * 0.4);
+            g.fillCircle(center.x - 8, center.y + 3, 3);
+            g.fillCircle(center.x + 6, center.y + 5, 2);
+        }
 
-        // === WALLS (proper isometric 3D) ===
-        // Right wall (shadow side - SE facing)
-        graphics.fillStyle(tint ?? 0x8b3030, alpha);
-        graphics.fillPoints([c2, c3, t3, t2], true);
+        if (!onlyBase) {
+            // === WALLS (proper isometric 3D) ===
+            // Right wall (shadow side - SE facing)
+            graphics.fillStyle(tint ?? 0x8b3030, alpha);
+            graphics.fillPoints([c2, c3, t3, t2], true);
 
-        // Left wall (lit side - SW facing)
-        graphics.fillStyle(tint ?? 0xa04040, alpha);
-        graphics.fillPoints([c3, c4, t4, t3], true);
+            // Left wall (lit side - SW facing)
+            graphics.fillStyle(tint ?? 0xa04040, alpha);
+            graphics.fillPoints([c3, c4, t4, t3], true);
 
-        // Wall edge outlines
-        graphics.lineStyle(1, 0x4a1a1a, 0.6 * alpha);
-        graphics.lineBetween(c2.x, c2.y, t2.x, t2.y);
-        graphics.lineBetween(c3.x, c3.y, t3.x, t3.y);
-        graphics.lineBetween(c4.x, c4.y, t4.x, t4.y);
+            // Wall edge outlines
+            graphics.lineStyle(1, 0x4a1a1a, 0.6 * alpha);
+            graphics.lineBetween(c2.x, c2.y, t2.x, t2.y);
+            graphics.lineBetween(c3.x, c3.y, t3.x, t3.y);
+            graphics.lineBetween(c4.x, c4.y, t4.x, t4.y);
 
-        // === DOORWAY (on front-facing wall - SW wall between c3 and c4) ===
-        // Door must follow isometric angle of the wall
-        const doorHeight = 16;
+            // === DOORWAY (on front-facing wall - SW wall between c3 and c4) ===
+            // Door must follow isometric angle of the wall
+            const doorHeight = 16;
 
-        // Wall direction vector (c3 to c4)
-        const wallDirX = (c4.x - c3.x);
-        const wallDirY = (c4.y - c3.y);
-        const wallLen = Math.sqrt(wallDirX * wallDirX + wallDirY * wallDirY);
-        const normX = wallDirX / wallLen;
-        const normY = wallDirY / wallLen;
+            // Wall direction vector (c3 to c4)
+            const wallDirX = (c4.x - c3.x);
+            const wallDirY = (c4.y - c3.y);
+            const wallLen = Math.sqrt(wallDirX * wallDirX + wallDirY * wallDirY);
+            const normX = wallDirX / wallLen;
+            const normY = wallDirY / wallLen;
 
-        // Door center on the wall
-        const doorCenterX = (c3.x + c4.x) / 2;
-        const doorCenterY = (c3.y + c4.y) / 2;
-        const doorHalfWidth = 10;
+            // Door center on the wall
+            const doorCenterX = (c3.x + c4.x) / 2;
+            const doorCenterY = (c3.y + c4.y) / 2;
+            const doorHalfWidth = 10;
 
-        // Bottom corners of door (on wall line)
-        const dbl = { x: doorCenterX - normX * doorHalfWidth, y: doorCenterY - normY * doorHalfWidth };
-        const dbr = { x: doorCenterX + normX * doorHalfWidth, y: doorCenterY + normY * doorHalfWidth };
-        // Top corners (straight up in screen space)
-        const dtl = { x: dbl.x, y: dbl.y - doorHeight };
-        const dtr = { x: dbr.x, y: dbr.y - doorHeight };
+            // Bottom corners of door (on wall line)
+            const dbl = { x: doorCenterX - normX * doorHalfWidth, y: doorCenterY - normY * doorHalfWidth };
+            const dbr = { x: doorCenterX + normX * doorHalfWidth, y: doorCenterY + normY * doorHalfWidth };
+            // Top corners (straight up in screen space)
+            const dtl = { x: dbl.x, y: dbl.y - doorHeight };
+            const dtr = { x: dbr.x, y: dbr.y - doorHeight };
 
-        // Door opening (dark interior)
-        graphics.fillStyle(0x1a0a0a, alpha);
-        graphics.fillPoints([
-            new Phaser.Math.Vector2(dbl.x, dbl.y),
-            new Phaser.Math.Vector2(dbr.x, dbr.y),
-            new Phaser.Math.Vector2(dtr.x, dtr.y),
-            new Phaser.Math.Vector2(dtl.x, dtl.y)
-        ], true);
+            // Door opening (dark interior)
+            graphics.fillStyle(0x1a0a0a, alpha);
+            graphics.fillPoints([
+                new Phaser.Math.Vector2(dbl.x, dbl.y),
+                new Phaser.Math.Vector2(dbr.x, dbr.y),
+                new Phaser.Math.Vector2(dtr.x, dtr.y),
+                new Phaser.Math.Vector2(dtl.x, dtl.y)
+            ], true);
 
-        // Door frame
-        graphics.lineStyle(2, 0x5d4e37, alpha);
-        graphics.lineBetween(dbl.x, dbl.y, dtl.x, dtl.y);
-        graphics.lineBetween(dbr.x, dbr.y, dtr.x, dtr.y);
-        graphics.lineBetween(dtl.x, dtl.y, dtr.x, dtr.y);
+            // Door frame
+            graphics.lineStyle(2, 0x5d4e37, alpha);
+            graphics.lineBetween(dbl.x, dbl.y, dtl.x, dtl.y);
+            graphics.lineBetween(dbr.x, dbr.y, dtr.x, dtr.y);
+            graphics.lineBetween(dtl.x, dtl.y, dtr.x, dtr.y);
 
-        // === ISOMETRIC ROOF ===
-        const roofHeight = 18;
-        const roofOverhang = 4;
+            // === ISOMETRIC ROOF ===
+            const roofHeight = 18;
+            const roofOverhang = 4;
 
-        // Roof base corners (with overhang)
-        const r1 = new Phaser.Math.Vector2(t1.x, t1.y - roofOverhang);
-        const r2 = new Phaser.Math.Vector2(t2.x + roofOverhang, t2.y);
-        const r3 = new Phaser.Math.Vector2(t3.x, t3.y + roofOverhang);
-        const r4 = new Phaser.Math.Vector2(t4.x - roofOverhang, t4.y);
+            // Roof base corners (with overhang)
+            const r1 = new Phaser.Math.Vector2(t1.x, t1.y - roofOverhang);
+            const r2 = new Phaser.Math.Vector2(t2.x + roofOverhang, t2.y);
+            const r3 = new Phaser.Math.Vector2(t3.x, t3.y + roofOverhang);
+            const r4 = new Phaser.Math.Vector2(t4.x - roofOverhang, t4.y);
 
-        // Roof peak (ridge line along the isometric axis)
-        const peakFront = new Phaser.Math.Vector2(center.x + 10, center.y - wallHeight - roofHeight + 5);
-        const peakBack = new Phaser.Math.Vector2(center.x - 10, center.y - wallHeight - roofHeight - 5);
+            // Roof peak (ridge line along the isometric axis)
+            const peakFront = new Phaser.Math.Vector2(center.x + 10, center.y - wallHeight - roofHeight + 5);
+            const peakBack = new Phaser.Math.Vector2(center.x - 10, center.y - wallHeight - roofHeight - 5);
 
-        // Roof panels (4 triangular sections for pitched roof)
-        // Back-left panel (darkest)
-        graphics.fillStyle(0x3a2515, alpha);
-        graphics.fillTriangle(r1.x, r1.y, r4.x, r4.y, peakBack.x, peakBack.y);
+            // Roof panels (4 triangular sections for pitched roof)
+            // Back-left panel (darkest)
+            graphics.fillStyle(0x3a2515, alpha);
+            graphics.fillTriangle(r1.x, r1.y, r4.x, r4.y, peakBack.x, peakBack.y);
 
-        // Back-right panel
-        graphics.fillStyle(0x4a3020, alpha);
-        graphics.fillTriangle(r1.x, r1.y, r2.x, r2.y, peakBack.x, peakBack.y);
+            // Back-right panel
+            graphics.fillStyle(0x4a3020, alpha);
+            graphics.fillTriangle(r1.x, r1.y, r2.x, r2.y, peakBack.x, peakBack.y);
 
-        // Front-right panel (medium)
-        graphics.fillStyle(0x5a3a25, alpha);
-        graphics.fillTriangle(r2.x, r2.y, r3.x, r3.y, peakFront.x, peakFront.y);
-        graphics.fillTriangle(r2.x, r2.y, peakBack.x, peakBack.y, peakFront.x, peakFront.y);
+            // Front-right panel (medium)
+            graphics.fillStyle(0x5a3a25, alpha);
+            graphics.fillTriangle(r2.x, r2.y, r3.x, r3.y, peakFront.x, peakFront.y);
+            graphics.fillTriangle(r2.x, r2.y, peakBack.x, peakBack.y, peakFront.x, peakFront.y);
 
-        // Front-left panel (lightest)
-        graphics.fillStyle(0x6a4a30, alpha);
-        graphics.fillTriangle(r3.x, r3.y, r4.x, r4.y, peakFront.x, peakFront.y);
-        graphics.fillTriangle(r4.x, r4.y, peakBack.x, peakBack.y, peakFront.x, peakFront.y);
+            // Front-left panel (lightest)
+            graphics.fillStyle(0x6a4a30, alpha);
+            graphics.fillTriangle(r3.x, r3.y, r4.x, r4.y, peakFront.x, peakFront.y);
+            graphics.fillTriangle(r4.x, r4.y, peakBack.x, peakBack.y, peakFront.x, peakFront.y);
 
-        // Roof ridge line
-        graphics.lineStyle(2, 0x2a1510, alpha);
-        graphics.lineBetween(peakBack.x, peakBack.y, peakFront.x, peakFront.y);
+            // Roof ridge line
+            graphics.lineStyle(2, 0x2a1510, alpha);
+            graphics.lineBetween(peakBack.x, peakBack.y, peakFront.x, peakFront.y);
 
-        // Roof edge highlights
-        graphics.lineStyle(1, 0x7a5a40, alpha * 0.6);
-        graphics.lineBetween(r3.x, r3.y, peakFront.x, peakFront.y);
-        graphics.lineBetween(r4.x, r4.y, peakFront.x, peakFront.y);
+            // Roof edge highlights
+            graphics.lineStyle(1, 0x7a5a40, alpha * 0.6);
+            graphics.lineBetween(r4.x, r4.y, peakFront.x, peakFront.y);
+        }
     }
 
-    static drawCannon(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any) {
+    static drawCannon(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
         // Get the rotation angle from building (same system as ballista/xbow)
         const angle = building?.ballistaAngle ?? Math.PI / 4; // Default facing bottom-right (isometric forward)
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
+        const g = baseGraphics || graphics;
 
-        // === STONE FOUNDATION PLATFORM ===
-        // Main stone base (isometric diamond)
-        graphics.fillStyle(tint ?? 0x7a7a7a, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
+        if (!skipBase) {
+            // === STONE FOUNDATION PLATFORM ===
+            // Main stone base (isometric diamond)
+            g.fillStyle(tint ?? 0x7a7a7a, alpha);
+            g.fillPoints([c1, c2, c3, c4], true);
 
-        // Stone texture - lighter edges for 3D effect
-        graphics.lineStyle(2, 0x9a9a9a, alpha * 0.8);
-        graphics.lineBetween(c1.x, c1.y, c2.x, c2.y);
-        graphics.lineBetween(c1.x, c1.y, c4.x, c4.y);
-        graphics.lineStyle(2, 0x4a4a4a, alpha * 0.8);
-        graphics.lineBetween(c2.x, c2.y, c3.x, c3.y);
-        graphics.lineBetween(c3.x, c3.y, c4.x, c4.y);
+            // Stone texture - lighter edges for 3D effect
+            g.lineStyle(2, 0x9a9a9a, alpha * 0.8);
+            g.lineBetween(c1.x, c1.y, c2.x, c2.y);
+            g.lineBetween(c1.x, c1.y, c4.x, c4.y);
+            g.lineStyle(2, 0x4a4a4a, alpha * 0.8);
+            g.lineBetween(c2.x, c2.y, c3.x, c3.y);
+            g.lineBetween(c3.x, c3.y, c4.x, c4.y);
 
-        // Stone decorative details
-        graphics.fillStyle(0x6a6a6a, alpha * 0.6);
-        graphics.fillCircle(center.x - 10, center.y + 6, 3);
-        graphics.fillCircle(center.x + 8, center.y + 4, 2);
+            // Stone decorative details
+            g.fillStyle(0x6a6a6a, alpha * 0.6);
+            g.fillCircle(center.x - 10, center.y + 6, 3);
+            g.fillCircle(center.x + 8, center.y + 4, 2);
 
-        // === WOODEN ROTATING BASE (Isometric ellipse) ===
-        const baseRadiusX = 22;
-        const baseRadiusY = 13; // Squashed for isometric view
-        const baseY = center.y - 3;
+            // === WOODEN ROTATING BASE (Isometric ellipse) ===
+            const baseRadiusX = 22;
+            const baseRadiusY = 13; // Squashed for isometric view
+            const baseY = center.y - 3;
 
-        // Wood shadow underneath
-        graphics.fillStyle(0x1a1008, alpha * 0.5);
-        graphics.fillEllipse(center.x + 2, baseY + 4, baseRadiusX, baseRadiusY);
+            // Wood shadow underneath
+            g.fillStyle(0x1a1008, alpha * 0.5);
+            g.fillEllipse(center.x + 2, baseY + 4, baseRadiusX, baseRadiusY);
 
-        // Main wooden base
-        graphics.fillStyle(0x5a4030, alpha);
-        graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+            // Main wooden base
+            g.fillStyle(0x5a4030, alpha);
+            g.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
 
-        // Wood grain rings
-        graphics.lineStyle(2, 0x4a3020, alpha * 0.6);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX - 4, baseRadiusY - 2);
-        graphics.lineStyle(1, 0x3a2515, alpha * 0.4);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX - 8, baseRadiusY - 5);
+            // Wood grain rings
+            g.lineStyle(2, 0x4a3020, alpha * 0.6);
+            g.strokeEllipse(center.x, baseY, baseRadiusX - 4, baseRadiusY - 2);
+            g.lineStyle(1, 0x3a2515, alpha * 0.4);
+            g.strokeEllipse(center.x, baseY, baseRadiusX - 8, baseRadiusY - 5);
 
-        // Metal reinforcement ring on wooden base
-        graphics.lineStyle(3, 0x444444, alpha);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-        graphics.lineStyle(1, 0x666666, alpha * 0.6);
-        graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
+            // Metal reinforcement ring on wooden base
+            g.lineStyle(3, 0x444444, alpha);
+            g.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+            g.lineStyle(1, 0x666666, alpha * 0.6);
+            g.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
 
 
 
-        // === ROTATING CANNON BARREL ===
-        const barrelHeight = -14; // Height above base
-        const barrelLength = 28;  // Length of barrel
-        const barrelWidth = 10;   // Thickness
-
-        // Apply recoil offset (pulls barrel back in opposite direction of firing)
-        const recoilAmount = (building?.cannonRecoilOffset ?? 0) * 8; // Max 8 pixels recoil
-        const recoilOffsetX = -cos * recoilAmount;
-        const recoilOffsetY = -sin * 0.5 * recoilAmount;
-
-        // Calculate barrel end position based on angle (with recoil)
-        const barrelTipX = center.x + cos * barrelLength + recoilOffsetX;
-        const barrelTipY = center.y + barrelHeight + sin * 0.5 * barrelLength + recoilOffsetY;
-
-        // Barrel shadow on ground
-        graphics.fillStyle(0x1a1a1a, alpha * 0.3);
-        graphics.fillEllipse(center.x + cos * (barrelLength * 0.5) + 3, center.y + 4, barrelLength * 0.6, 5);
-
-        // === BARREL CARRIAGE (holds the barrel) ===
-        // Two side supports from the rotating base
-        const supportOffsetX = -sin * 8;
-        const supportOffsetY = cos * 4;
-
-        // Left support
-        graphics.fillStyle(0x4a3525, alpha);
-        graphics.beginPath();
-        graphics.moveTo(center.x - supportOffsetX, baseY - supportOffsetY);
-        graphics.lineTo(center.x - supportOffsetX * 0.5, center.y + barrelHeight + 4);
-        graphics.lineTo(center.x + cos * 5 - supportOffsetX * 0.5, center.y + barrelHeight + sin * 2.5 + 4);
-        graphics.lineTo(center.x + cos * 5, center.y + barrelHeight + sin * 2.5);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Right support
-        graphics.fillStyle(0x3a2515, alpha);
-        graphics.beginPath();
-        graphics.moveTo(center.x + supportOffsetX, baseY + supportOffsetY);
-        graphics.lineTo(center.x + supportOffsetX * 0.5, center.y + barrelHeight + 4);
-        graphics.lineTo(center.x + cos * 5 + supportOffsetX * 0.5, center.y + barrelHeight + sin * 2.5 + 4);
-        graphics.lineTo(center.x + cos * 5, center.y + barrelHeight + sin * 2.5);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // === CONDITIONAL RENDER ORDER ===
-        // If pointing down (sin >= 0), barrel is in front, so draw pivot FIRST (behind barrel)
-        // If pointing up (sin < 0), barrel is behind, so draw pivot LAST (on top of barrel)
-
-        const drawPivot = () => {
-            // === CENTRAL PIVOT MECHANISM ===
-            const pivotX = center.x + recoilOffsetX;
-            const pivotY = center.y + barrelHeight + 3 + recoilOffsetY;
-
-            graphics.fillStyle(0x333333, alpha);
-            graphics.fillCircle(pivotX, pivotY, 8);
-            graphics.fillStyle(0x444444, alpha);
-            graphics.fillCircle(pivotX, pivotY, 6);
-            graphics.fillStyle(0x555555, alpha);
-            graphics.fillCircle(pivotX, pivotY, 4);
-            graphics.fillStyle(0x666666, alpha * 0.7);
-            graphics.fillCircle(pivotX - 1, pivotY - 1, 2);
-        };
-
-        if (sin >= 0) drawPivot();
-
-        // === BARREL BASE ===
-        // Large reinforced base where barrel meets carriage (with recoil)
-        // Moved here to be BEHIND the barrel body
-        const baseJointX = center.x + cos * 3 + recoilOffsetX;
-        const baseJointY = center.y + barrelHeight + sin * 1.5 + recoilOffsetY;
-        graphics.fillStyle(0x555555, alpha);
-        graphics.fillEllipse(baseJointX, baseJointY, 14, 8);
-        graphics.fillStyle(0x444444, alpha);
-        graphics.fillEllipse(baseJointX, baseJointY, 10, 6);
-        graphics.fillStyle(0x333333, alpha);
-        graphics.fillEllipse(baseJointX, baseJointY, 6, 4);
-
-        // === MAIN BARREL BODY ===
-        // Draw the barrel as multiple layers for depth
-        // Barrel base point (with recoil)
-        const barrelBaseX = center.x + recoilOffsetX;
-        const barrelBaseY = center.y + barrelHeight + recoilOffsetY;
-
-        // Barrel outer shadow
-        graphics.lineStyle(barrelWidth + 4, 0x1a1a1a, alpha);
-        graphics.lineBetween(barrelBaseX, barrelBaseY + 2, barrelTipX, barrelTipY + 2);
-
-        // Barrel main body - dark iron
-        graphics.lineStyle(barrelWidth, 0x2a2a2a, alpha);
-        graphics.lineBetween(barrelBaseX, barrelBaseY, barrelTipX, barrelTipY);
-
-        // Barrel highlight strip (top)
-        graphics.lineStyle(barrelWidth - 4, 0x3a3a3a, alpha);
-        graphics.lineBetween(center.x, center.y + barrelHeight - 1, barrelTipX, barrelTipY - 1);
-
-        // Bright highlight
-        graphics.lineStyle(2, 0x5a5a5a, alpha * 0.8);
-        graphics.lineBetween(barrelBaseX, barrelBaseY - 2, barrelTipX, barrelTipY - 2);
-
-        // === DECORATIVE BARREL BANDS (iron) ===
-        const bands = [0.15, 0.4, 0.7, 0.9];
-        for (const t of bands) {
-            const bandX = center.x + cos * barrelLength * t + recoilOffsetX;
-            const bandY = center.y + barrelHeight + sin * 0.5 * barrelLength * t + recoilOffsetY;
-
-            // Iron bands
-            graphics.fillStyle(0x4a4a4a, alpha);
-            graphics.fillEllipse(bandX, bandY, 7, 4);
-            graphics.fillStyle(0x5a5a5a, alpha * 0.6);
-            graphics.fillCircle(bandX - 1, bandY - 1, 1.5);
-            graphics.lineStyle(1, 0x333333, alpha);
-            graphics.strokeEllipse(bandX, bandY, 7, 4);
         }
 
-        // Barrel Base moved before barrel body
+        if (!onlyBase) {
+            // === ROTATING CANNON BARREL ===
+            const baseY = center.y - 3;
+            const barrelHeight = -14; // Height above base
+            const barrelLength = 28;  // Length of barrel
+            const barrelWidth = 10;   // Thickness
+
+            // Apply recoil offset (pulls barrel back in opposite direction of firing)
+            const recoilAmount = (building?.cannonRecoilOffset ?? 0) * 8; // Max 8 pixels recoil
+            const recoilOffsetX = -cos * recoilAmount;
+            const recoilOffsetY = -sin * 0.5 * recoilAmount;
+
+            // Calculate barrel end position based on angle (with recoil)
+            const barrelTipX = center.x + cos * barrelLength + recoilOffsetX;
+            const barrelTipY = center.y + barrelHeight + sin * 0.5 * barrelLength + recoilOffsetY;
+
+            // Barrel shadow on ground
+            g.fillStyle(0x1a1a1a, alpha * 0.3);
+            g.fillEllipse(center.x + cos * (barrelLength * 0.5) + 3, center.y + 4, barrelLength * 0.6, 5);
+
+            // === BARREL CARRIAGE (holds the barrel) ===
+            // Two side supports from the rotating base
+            const supportOffsetX = -sin * 8;
+            const supportOffsetY = cos * 4;
+
+            // Left support
+            graphics.fillStyle(0x4a3525, alpha);
+            graphics.beginPath();
+            graphics.moveTo(center.x - supportOffsetX, baseY - supportOffsetY);
+            graphics.lineTo(center.x - supportOffsetX * 0.5, center.y + barrelHeight + 4);
+            graphics.lineTo(center.x + cos * 5 - supportOffsetX * 0.5, center.y + barrelHeight + sin * 2.5 + 4);
+            graphics.lineTo(center.x + cos * 5, center.y + barrelHeight + sin * 2.5);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Right support
+            graphics.fillStyle(0x3a2515, alpha);
+            graphics.beginPath();
+            graphics.moveTo(center.x + supportOffsetX, baseY + supportOffsetY);
+            graphics.lineTo(center.x + supportOffsetX * 0.5, center.y + barrelHeight + 4);
+            graphics.lineTo(center.x + cos * 5 + supportOffsetX * 0.5, center.y + barrelHeight + sin * 2.5 + 4);
+            graphics.lineTo(center.x + cos * 5, center.y + barrelHeight + sin * 2.5);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // === CONDITIONAL RENDER ORDER ===
+            // If pointing down (sin >= 0), barrel is in front, so draw pivot FIRST (behind barrel)
+            // If pointing up (sin < 0), barrel is behind, so draw pivot LAST (on top of barrel)
+
+            const drawPivot = () => {
+                // === CENTRAL PIVOT MECHANISM ===
+                const pivotX = center.x + recoilOffsetX;
+                const pivotY = center.y + barrelHeight + 3 + recoilOffsetY;
+
+                graphics.fillStyle(0x333333, alpha);
+                graphics.fillCircle(pivotX, pivotY, 8);
+                graphics.fillStyle(0x444444, alpha);
+                graphics.fillCircle(pivotX, pivotY, 6);
+                graphics.fillStyle(0x555555, alpha);
+                graphics.fillCircle(pivotX, pivotY, 4);
+                graphics.fillStyle(0x666666, alpha * 0.7);
+                graphics.fillCircle(pivotX - 1, pivotY - 1, 2);
+            };
+
+            if (sin >= 0) drawPivot();
+
+            // === BARREL BASE ===
+            // Large reinforced base where barrel meets carriage (with recoil)
+            // Moved here to be BEHIND the barrel body
+            const baseJointX = center.x + cos * 3 + recoilOffsetX;
+            const baseJointY = center.y + barrelHeight + sin * 1.5 + recoilOffsetY;
+            graphics.fillStyle(0x555555, alpha);
+            graphics.fillEllipse(baseJointX, baseJointY, 14, 8);
+            graphics.fillStyle(0x444444, alpha);
+            graphics.fillEllipse(baseJointX, baseJointY, 10, 6);
+            graphics.fillStyle(0x333333, alpha);
+            graphics.fillEllipse(baseJointX, baseJointY, 6, 4);
+
+            // === MAIN BARREL BODY ===
+            // Draw the barrel as multiple layers for depth
+            // Barrel base point (with recoil)
+            const barrelBaseX = center.x + recoilOffsetX;
+            const barrelBaseY = center.y + barrelHeight + recoilOffsetY;
+
+            // Barrel outer shadow
+            graphics.lineStyle(barrelWidth + 4, 0x1a1a1a, alpha);
+            graphics.lineBetween(barrelBaseX, barrelBaseY + 2, barrelTipX, barrelTipY + 2);
+
+            // Barrel main body - dark iron
+            graphics.lineStyle(barrelWidth, 0x2a2a2a, alpha);
+            graphics.lineBetween(barrelBaseX, barrelBaseY, barrelTipX, barrelTipY);
+
+            // Barrel highlight strip (top)
+            graphics.lineStyle(barrelWidth - 4, 0x3a3a3a, alpha);
+            graphics.lineBetween(center.x, center.y + barrelHeight - 1, barrelTipX, barrelTipY - 1);
+
+            // Bright highlight
+            graphics.lineStyle(2, 0x5a5a5a, alpha * 0.8);
+            graphics.lineBetween(barrelBaseX, barrelBaseY - 2, barrelTipX, barrelTipY - 2);
+
+            // === DECORATIVE BARREL BANDS (iron) ===
+            const bands = [0.15, 0.4, 0.7, 0.9];
+            for (const t of bands) {
+                const bandX = center.x + cos * barrelLength * t + recoilOffsetX;
+                const bandY = center.y + barrelHeight + sin * 0.5 * barrelLength * t + recoilOffsetY;
+
+                // Iron bands
+                graphics.fillStyle(0x4a4a4a, alpha);
+                graphics.fillEllipse(bandX, bandY, 7, 4);
+                graphics.fillStyle(0x5a5a5a, alpha * 0.6);
+                graphics.fillCircle(bandX - 1, bandY - 1, 1.5);
+                graphics.lineStyle(1, 0x333333, alpha);
+                graphics.strokeEllipse(bandX, bandY, 7, 4);
+            }
+
+            // Barrel Base moved before barrel body
 
 
-        // Muzzle removed - barrel just ends with the line strokes
+            // Muzzle removed - barrel just ends with the line strokes
 
-        // If pointing up (sin < 0), draw pivot LAST (on top of barrel)
-        if (sin < 0) drawPivot();
+            // If pointing up (sin < 0), draw pivot LAST (on top of barrel)
+            if (sin < 0) drawPivot();
+        }
     }
 
-    static drawCannonLevel2(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any) {
+    static drawCannonLevel2(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
         // LEVEL 2 CANNON: Reinforced single barrel with iron plating and copper accents
         const angle = building?.ballistaAngle ?? Math.PI / 4;
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
+        const g = baseGraphics || graphics;
 
-        // === REINFORCED STONE FOUNDATION ===
-        graphics.fillStyle(tint ?? 0x6a6a6a, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
+        if (!skipBase) {
+            // === REINFORCED STONE FOUNDATION ===
+            g.fillStyle(tint ?? 0x6a6a6a, alpha);
+            g.fillPoints([c1, c2, c3, c4], true);
 
-        // Iron corner brackets
-        graphics.lineStyle(2, 0x555555, alpha * 0.9);
-        graphics.lineBetween(c1.x, c1.y, c2.x, c2.y);
-        graphics.lineBetween(c1.x, c1.y, c4.x, c4.y);
-        graphics.lineStyle(2, 0x3a3a3a, alpha * 0.8);
-        graphics.lineBetween(c2.x, c2.y, c3.x, c3.y);
-        graphics.lineBetween(c3.x, c3.y, c4.x, c4.y);
+            // Iron corner brackets
+            g.lineStyle(2, 0x555555, alpha * 0.9);
+            g.lineBetween(c1.x, c1.y, c2.x, c2.y);
+            g.lineBetween(c1.x, c1.y, c4.x, c4.y);
+            g.lineStyle(2, 0x3a3a3a, alpha * 0.8);
+            g.lineBetween(c2.x, c2.y, c3.x, c3.y);
+            g.lineBetween(c3.x, c3.y, c4.x, c4.y);
 
-        // Corner rivets (iron)
-        graphics.fillStyle(0x666666, alpha * 0.9);
-        graphics.fillCircle(c1.x, c1.y, 2.5);
-        graphics.fillCircle(c2.x, c2.y, 2);
-        graphics.fillCircle(c3.x, c3.y, 2);
-        graphics.fillCircle(c4.x, c4.y, 2);
+            // Corner rivets (iron)
+            g.fillStyle(0x666666, alpha * 0.9);
+            g.fillCircle(c1.x, c1.y, 2.5);
+            g.fillCircle(c2.x, c2.y, 2);
+            g.fillCircle(c3.x, c3.y, 2);
+            g.fillCircle(c4.x, c4.y, 2);
 
-        // === WOODEN ROTATING BASE WITH IRON REINFORCEMENT ===
-        const baseRadiusX = 23;
-        const baseRadiusY = 13.5;
-        const baseY = center.y - 3;
+            // === WOODEN ROTATING BASE WITH IRON REINFORCEMENT ===
+            const baseRadiusX = 23;
+            const baseRadiusY = 13.5;
+            const baseY = center.y - 3;
 
-        // Shadow underneath
-        graphics.fillStyle(0x1a1008, alpha * 0.5);
-        graphics.fillEllipse(center.x + 2, baseY + 4, baseRadiusX, baseRadiusY);
+            // Shadow underneath
+            g.fillStyle(0x1a1008, alpha * 0.5);
+            g.fillEllipse(center.x + 2, baseY + 4, baseRadiusX, baseRadiusY);
 
-        // Main wooden base (darker, treated wood)
-        graphics.fillStyle(0x4a3525, alpha);
-        graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+            // Main wooden base (darker, treated wood)
+            g.fillStyle(0x4a3525, alpha);
+            g.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
 
-        // Wood grain rings
-        graphics.lineStyle(2, 0x3a2515, alpha * 0.6);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX - 4, baseRadiusY - 2);
-        graphics.lineStyle(1, 0x2a1a0a, alpha * 0.4);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX - 8, baseRadiusY - 5);
+            // Wood grain rings
+            g.lineStyle(2, 0x3a2515, alpha * 0.6);
+            g.strokeEllipse(center.x, baseY, baseRadiusX - 4, baseRadiusY - 2);
+            g.lineStyle(1, 0x2a1a0a, alpha * 0.4);
+            g.strokeEllipse(center.x, baseY, baseRadiusX - 8, baseRadiusY - 5);
 
-        // Heavy iron reinforcement ring
-        graphics.lineStyle(4, 0x3a3a3a, alpha);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-        graphics.lineStyle(2, 0x555555, alpha * 0.6);
-        graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
+            // Heavy iron reinforcement ring
+            g.lineStyle(4, 0x3a3a3a, alpha);
+            g.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+            g.lineStyle(2, 0x555555, alpha * 0.6);
+            g.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
 
-        // === BIGGER REINFORCED BARREL ===
-        const barrelHeight = -14;
-        const barrelLength = 30;  // Longer barrel
-        const barrelWidth = 12;   // Thicker barrel
-
-        // Recoil
-        const recoilAmount = (building?.cannonRecoilOffset ?? 0) * 9;
-        const recoilOffsetX = -cos * recoilAmount;
-        const recoilOffsetY = -sin * 0.5 * recoilAmount;
-
-        const barrelTipX = center.x + cos * barrelLength + recoilOffsetX;
-        const barrelTipY = center.y + barrelHeight + sin * 0.5 * barrelLength + recoilOffsetY;
-
-        // Barrel shadow
-        graphics.fillStyle(0x1a1a1a, alpha * 0.35);
-        graphics.fillEllipse(center.x + cos * (barrelLength * 0.5) + 3, center.y + 5, barrelLength * 0.65, 5);
-
-        // === BARREL CARRIAGE (heavier supports) ===
-        const supportOffsetX = -sin * 9;
-        const supportOffsetY = cos * 4.5;
-
-        // Left support
-        graphics.fillStyle(0x3a2a1a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(center.x - supportOffsetX, baseY - supportOffsetY);
-        graphics.lineTo(center.x - supportOffsetX * 0.5, center.y + barrelHeight + 5);
-        graphics.lineTo(center.x + cos * 6 - supportOffsetX * 0.5, center.y + barrelHeight + sin * 3 + 5);
-        graphics.lineTo(center.x + cos * 6, center.y + barrelHeight + sin * 3);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Right support
-        graphics.fillStyle(0x2a1a0a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(center.x + supportOffsetX, baseY + supportOffsetY);
-        graphics.lineTo(center.x + supportOffsetX * 0.5, center.y + barrelHeight + 5);
-        graphics.lineTo(center.x + cos * 6 + supportOffsetX * 0.5, center.y + barrelHeight + sin * 3 + 5);
-        graphics.lineTo(center.x + cos * 6, center.y + barrelHeight + sin * 3);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // === CENTRAL PIVOT (reinforced) ===
-        const drawPivot = () => {
-            const pivotX = center.x + recoilOffsetX;
-            const pivotY = center.y + barrelHeight + 3 + recoilOffsetY;
-
-            graphics.fillStyle(0x2a2a2a, alpha);
-            graphics.fillCircle(pivotX, pivotY, 9);
-            graphics.fillStyle(0x3a3a3a, alpha);
-            graphics.fillCircle(pivotX, pivotY, 7);
-            graphics.fillStyle(0x4a4a4a, alpha);
-            graphics.fillCircle(pivotX, pivotY, 5);
-            // Copper accent
-            graphics.fillStyle(0xb87333, alpha * 0.8);
-            graphics.fillCircle(pivotX - 1, pivotY - 1, 2.5);
-        };
-
-        if (sin >= 0) drawPivot();
-
-        // === BARREL BASE JOINT ===
-        const baseJointX = center.x + cos * 3 + recoilOffsetX;
-        const baseJointY = center.y + barrelHeight + sin * 1.5 + recoilOffsetY;
-        graphics.fillStyle(0x4a4a4a, alpha);
-        graphics.fillEllipse(baseJointX, baseJointY, 15, 9);
-        graphics.fillStyle(0x3a3a3a, alpha);
-        graphics.fillEllipse(baseJointX, baseJointY, 11, 7);
-        graphics.fillStyle(0x2a2a2a, alpha);
-        graphics.fillEllipse(baseJointX, baseJointY, 7, 4);
-
-        // === MAIN BARREL BODY (reinforced) ===
-        const barrelBaseX = center.x + recoilOffsetX;
-        const barrelBaseY = center.y + barrelHeight + recoilOffsetY;
-
-        // Barrel outer shadow
-        graphics.lineStyle(barrelWidth + 4, 0x1a1a1a, alpha);
-        graphics.lineBetween(barrelBaseX, barrelBaseY + 2, barrelTipX, barrelTipY + 2);
-
-        // Barrel main body - dark iron
-        graphics.lineStyle(barrelWidth, 0x2a2a2a, alpha);
-        graphics.lineBetween(barrelBaseX, barrelBaseY, barrelTipX, barrelTipY);
-
-        // Barrel highlight strip
-        graphics.lineStyle(barrelWidth - 4, 0x3a3a3a, alpha);
-        graphics.lineBetween(barrelBaseX, barrelBaseY - 1, barrelTipX, barrelTipY - 1);
-
-        // Bright highlight
-        graphics.lineStyle(2, 0x5a5a5a, alpha * 0.85);
-        graphics.lineBetween(barrelBaseX, barrelBaseY - 2, barrelTipX, barrelTipY - 2);
-
-        // === IRON BANDS (heavier than level 1) ===
-        const bands = [0.12, 0.35, 0.58, 0.82];
-        for (const t of bands) {
-            const bandX = center.x + cos * barrelLength * t + recoilOffsetX;
-            const bandY = center.y + barrelHeight + sin * 0.5 * barrelLength * t + recoilOffsetY;
-
-            // Iron bands with copper rivets
-            graphics.fillStyle(0x3a3a3a, alpha);
-            graphics.fillEllipse(bandX, bandY, 8, 4.5);
-            graphics.fillStyle(0xb87333, alpha * 0.7);
-            graphics.fillCircle(bandX - 2, bandY - 1, 1.5);
-            graphics.fillCircle(bandX + 2, bandY + 1, 1.5);
-            graphics.lineStyle(1, 0x2a2a2a, alpha);
-            graphics.strokeEllipse(bandX, bandY, 8, 4.5);
         }
+        if (!onlyBase) {
+            const baseY = center.y - 2;
 
-        // If pointing up (sin < 0), draw pivot LAST
-        if (sin < 0) drawPivot();
+            // === BIGGER REINFORCED BARREL ===
+            const barrelHeight = -14;
+            const barrelLength = 30;  // Longer barrel
+            const barrelWidth = 12;   // Thicker barrel
+
+            // Recoil
+            const recoilAmount = (building?.cannonRecoilOffset ?? 0) * 9;
+            const recoilOffsetX = -cos * recoilAmount;
+            const recoilOffsetY = -sin * 0.5 * recoilAmount;
+
+            const barrelTipX = center.x + cos * barrelLength + recoilOffsetX;
+            const barrelTipY = center.y + barrelHeight + sin * 0.5 * barrelLength + recoilOffsetY;
+
+            // Barrel shadow
+            g.fillStyle(0x1a1a1a, alpha * 0.35);
+            g.fillEllipse(center.x + cos * (barrelLength * 0.5) + 3, center.y + 5, barrelLength * 0.65, 5);
+
+            // === BARREL CARRIAGE (heavier supports) ===
+            const supportOffsetX = -sin * 9;
+            const supportOffsetY = cos * 4.5;
+
+            // Left support
+            graphics.fillStyle(0x3a2a1a, alpha);
+            graphics.beginPath();
+            graphics.moveTo(center.x - supportOffsetX, baseY - supportOffsetY);
+            graphics.lineTo(center.x - supportOffsetX * 0.5, center.y + barrelHeight + 5);
+            graphics.lineTo(center.x + cos * 6 - supportOffsetX * 0.5, center.y + barrelHeight + sin * 3 + 5);
+            graphics.lineTo(center.x + cos * 6, center.y + barrelHeight + sin * 3);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Right support
+            graphics.fillStyle(0x2a1a0a, alpha);
+            graphics.beginPath();
+            graphics.moveTo(center.x + supportOffsetX, baseY + supportOffsetY);
+            graphics.lineTo(center.x + supportOffsetX * 0.5, center.y + barrelHeight + 5);
+            graphics.lineTo(center.x + cos * 6 + supportOffsetX * 0.5, center.y + barrelHeight + sin * 3 + 5);
+            graphics.lineTo(center.x + cos * 6, center.y + barrelHeight + sin * 3);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // === CENTRAL PIVOT (reinforced) ===
+            const drawPivot = () => {
+                const pivotX = center.x + recoilOffsetX;
+                const pivotY = center.y + barrelHeight + 3 + recoilOffsetY;
+
+                graphics.fillStyle(0x2a2a2a, alpha);
+                graphics.fillCircle(pivotX, pivotY, 9);
+                graphics.fillStyle(0x3a3a3a, alpha);
+                graphics.fillCircle(pivotX, pivotY, 7);
+                graphics.fillStyle(0x4a4a4a, alpha);
+                graphics.fillCircle(pivotX, pivotY, 5);
+                // Copper accent
+                graphics.fillStyle(0xb87333, alpha * 0.8);
+                graphics.fillCircle(pivotX - 1, pivotY - 1, 2.5);
+            };
+
+            if (sin >= 0) drawPivot();
+
+            // === BARREL BASE JOINT ===
+            const baseJointX = center.x + cos * 3 + recoilOffsetX;
+            const baseJointY = center.y + barrelHeight + sin * 1.5 + recoilOffsetY;
+            graphics.fillStyle(0x4a4a4a, alpha);
+            graphics.fillEllipse(baseJointX, baseJointY, 15, 9);
+            graphics.fillStyle(0x3a3a3a, alpha);
+            graphics.fillEllipse(baseJointX, baseJointY, 11, 7);
+            graphics.fillStyle(0x2a2a2a, alpha);
+            graphics.fillEllipse(baseJointX, baseJointY, 7, 4);
+
+            // === MAIN BARREL BODY (reinforced) ===
+            const barrelBaseX = center.x + recoilOffsetX;
+            const barrelBaseY = center.y + barrelHeight + recoilOffsetY;
+
+            // Barrel outer shadow
+            graphics.lineStyle(barrelWidth + 4, 0x1a1a1a, alpha);
+            graphics.lineBetween(barrelBaseX, barrelBaseY + 2, barrelTipX, barrelTipY + 2);
+
+            // Barrel main body - dark iron
+            graphics.lineStyle(barrelWidth, 0x2a2a2a, alpha);
+            graphics.lineBetween(barrelBaseX, barrelBaseY, barrelTipX, barrelTipY);
+
+            // Barrel highlight strip
+            graphics.lineStyle(barrelWidth - 4, 0x3a3a3a, alpha);
+            graphics.lineBetween(barrelBaseX, barrelBaseY - 1, barrelTipX, barrelTipY - 1);
+
+            // Bright highlight
+            graphics.lineStyle(2, 0x5a5a5a, alpha * 0.85);
+            graphics.lineBetween(barrelBaseX, barrelBaseY - 2, barrelTipX, barrelTipY - 2);
+
+            // === IRON BANDS (heavier than level 1) ===
+            const bands = [0.12, 0.35, 0.58, 0.82];
+            for (const t of bands) {
+                const bandX = center.x + cos * barrelLength * t + recoilOffsetX;
+                const bandY = center.y + barrelHeight + sin * 0.5 * barrelLength * t + recoilOffsetY;
+
+                // Iron bands with copper rivets
+                graphics.fillStyle(0x3a3a3a, alpha);
+                graphics.fillEllipse(bandX, bandY, 8, 4.5);
+                graphics.fillStyle(0xb87333, alpha * 0.7);
+                graphics.fillCircle(bandX - 2, bandY - 1, 1.5);
+                graphics.fillCircle(bandX + 2, bandY + 1, 1.5);
+                graphics.lineStyle(1, 0x2a2a2a, alpha);
+                graphics.strokeEllipse(bandX, bandY, 8, 4.5);
+            }
+
+            // If pointing up (sin < 0), draw pivot LAST
+            if (sin < 0) drawPivot();
+        }
     }
 
-    static drawCannonLevel3(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any) {
+    static drawCannonLevel3(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
         // LEVEL 3 CANNON: Fortified single-barrel with armor plating and steel reinforcements
         const angle = building?.ballistaAngle ?? Math.PI / 4;
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
+        const g = baseGraphics || graphics;
 
-        // === ARMORED STEEL FOUNDATION ===
-        // Dark steel base with reinforced edges (isometric diamond)
-        graphics.fillStyle(tint ?? 0x3a3a4a, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
+        if (!skipBase) {
+            // === ARMORED STEEL FOUNDATION ===
+            // Dark steel base with reinforced edges (isometric diamond)
+            g.fillStyle(tint ?? 0x3a3a4a, alpha);
+            g.fillPoints([c1, c2, c3, c4], true);
 
-        // Steel trim edges with subtle blue tint
-        graphics.lineStyle(3, 0x4a4a5a, alpha * 0.9);
-        graphics.lineBetween(c1.x, c1.y, c2.x, c2.y);
-        graphics.lineBetween(c1.x, c1.y, c4.x, c4.y);
-        graphics.lineStyle(2, 0x2a2a3a, alpha * 0.8);
-        graphics.lineBetween(c2.x, c2.y, c3.x, c3.y);
-        graphics.lineBetween(c3.x, c3.y, c4.x, c4.y);
+            // Steel trim edges with subtle blue tint
+            g.lineStyle(3, 0x4a4a5a, alpha * 0.9);
+            g.lineBetween(c1.x, c1.y, c2.x, c2.y);
+            g.lineBetween(c1.x, c1.y, c4.x, c4.y);
+            g.lineStyle(2, 0x2a2a3a, alpha * 0.8);
+            g.lineBetween(c2.x, c2.y, c3.x, c3.y);
+            g.lineBetween(c3.x, c3.y, c4.x, c4.y);
 
-        // Steel corner bolts
-        graphics.fillStyle(0x606070, alpha * 0.9);
-        graphics.fillCircle(c1.x, c1.y, 3);
-        graphics.fillCircle(c2.x, c2.y, 2.5);
-        graphics.fillCircle(c3.x, c3.y, 2.5);
-        graphics.fillCircle(c4.x, c4.y, 2.5);
-        // Bolt highlights
-        graphics.fillStyle(0x808090, alpha * 0.6);
-        graphics.fillCircle(c1.x - 1, c1.y - 1, 1.5);
+            // Steel corner bolts
+            g.fillStyle(0x606070, alpha * 0.9);
+            g.fillCircle(c1.x, c1.y, 3);
+            g.fillCircle(c2.x, c2.y, 2.5);
+            g.fillCircle(c3.x, c3.y, 2.5);
+            g.fillCircle(c4.x, c4.y, 2.5);
+            // Bolt highlights
+            g.fillStyle(0x808090, alpha * 0.6);
+            g.fillCircle(c1.x - 1, c1.y - 1, 1.5);
 
-        // === HEAVY ROTATING BASE ===
-        const baseRadiusX = 22;
-        const baseRadiusY = 13;
-        const baseY = center.y - 3;
+            // === HEAVY ROTATING BASE ===
+            const baseRadiusX = 22;
+            const baseRadiusY = 13;
+            const baseY = center.y - 3;
 
-        // Shadow underneath
-        graphics.fillStyle(0x1a1a1a, alpha * 0.5);
-        graphics.fillEllipse(center.x + 2, baseY + 5, baseRadiusX + 2, baseRadiusY + 1);
+            // Shadow underneath
+            g.fillStyle(0x1a1a1a, alpha * 0.5);
+            g.fillEllipse(center.x + 2, baseY + 5, baseRadiusX + 2, baseRadiusY + 1);
 
-        // Main armored base - dark steel
-        graphics.fillStyle(0x3a3a4a, alpha);
-        graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+            // Main armored base - dark steel
+            g.fillStyle(0x3a3a4a, alpha);
+            g.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
 
-        // Inner steel ring
-        graphics.lineStyle(3, 0x2a2a3a, alpha * 0.8);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX - 4, baseRadiusY - 2);
+            // Inner steel ring
+            g.lineStyle(3, 0x2a2a3a, alpha * 0.8);
+            g.strokeEllipse(center.x, baseY, baseRadiusX - 4, baseRadiusY - 2);
 
-        // Armor plates visible on base (wedge sections)
-        graphics.fillStyle(0x4a4a5a, alpha * 0.6);
-        graphics.beginPath();
-        graphics.arc(center.x - 8, baseY, 8, -0.5, 0.8, false);
-        graphics.fillPath();
-        graphics.beginPath();
-        graphics.arc(center.x + 8, baseY, 8, 2.3, 3.6, false);
-        graphics.fillPath();
+            // Armor plates visible on base (wedge sections)
+            g.fillStyle(0x4a4a5a, alpha * 0.6);
+            g.beginPath();
+            g.arc(center.x - 8, baseY, 8, -0.5, 0.8, false);
+            g.fillPath();
+            g.beginPath();
+            g.arc(center.x + 8, baseY, 8, 2.3, 3.6, false);
+            g.fillPath();
 
-        // Heavy outer ring
-        graphics.lineStyle(4, 0x4a4a5a, alpha);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-        graphics.lineStyle(2, 0x5a5a6a, alpha * 0.5);
-        graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
+            // Heavy outer ring
+            g.lineStyle(4, 0x4a4a5a, alpha);
+            g.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+            g.lineStyle(2, 0x5a5a6a, alpha * 0.5);
+            g.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
 
-        // === FORTIFIED BARREL SETUP ===
-        const barrelHeight = -12;
-        const barrelLength = 28;
-        const barrelWidth = 12;  // Thicker fortified barrel
-
-        // Recoil animation
-        const recoilAmount = (building?.cannonRecoilOffset ?? 0) * 10;
-        const recoilOffsetX = -cos * recoilAmount;
-        const recoilOffsetY = -sin * 0.5 * recoilAmount;
-
-        // Barrel tip position
-        const barrelTipX = center.x + cos * barrelLength + recoilOffsetX;
-        const barrelTipY = center.y + barrelHeight + sin * 0.5 * barrelLength + recoilOffsetY;
-
-        // Barrel shadow on ground
-        graphics.fillStyle(0x1a1a1a, alpha * 0.4);
-        graphics.fillEllipse(center.x + cos * (barrelLength * 0.5) + 3, center.y + 5, barrelLength * 0.7, 6);
-
-        // === ARMORED BARREL CARRIAGE ===
-        const supportOffsetX = -sin * 10;
-        const supportOffsetY = cos * 5;
-
-        // Left support (heavy steel)
-        graphics.fillStyle(0x3a3a4a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(center.x - supportOffsetX, baseY - supportOffsetY);
-        graphics.lineTo(center.x - supportOffsetX * 0.5, center.y + barrelHeight + 5);
-        graphics.lineTo(center.x + cos * 5 - supportOffsetX * 0.5, center.y + barrelHeight + sin * 2.5 + 5);
-        graphics.lineTo(center.x + cos * 5, center.y + barrelHeight + sin * 2.5);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Right support (slightly darker)
-        graphics.fillStyle(0x2a2a3a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(center.x + supportOffsetX, baseY + supportOffsetY);
-        graphics.lineTo(center.x + supportOffsetX * 0.5, center.y + barrelHeight + 5);
-        graphics.lineTo(center.x + cos * 5 + supportOffsetX * 0.5, center.y + barrelHeight + sin * 2.5 + 5);
-        graphics.lineTo(center.x + cos * 5, center.y + barrelHeight + sin * 2.5);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Steel bolts on supports
-        graphics.fillStyle(0x5a5a6a, alpha * 0.8);
-        graphics.fillCircle(center.x - supportOffsetX * 0.7, baseY - supportOffsetY * 0.7 - 3, 2);
-        graphics.fillCircle(center.x + supportOffsetX * 0.7, baseY + supportOffsetY * 0.7 - 3, 2);
-
-        // === CENTRAL PIVOT MECHANISM ===
-        const drawPivot = () => {
-            const pivotX = center.x + recoilOffsetX;
-            const pivotY = center.y + barrelHeight + 4 + recoilOffsetY;
-
-            // Heavy steel pivot
-            graphics.fillStyle(0x2a2a2a, alpha);
-            graphics.fillCircle(pivotX, pivotY, 9);
-            graphics.fillStyle(0x3a3a4a, alpha);
-            graphics.fillCircle(pivotX, pivotY, 7);
-            // Steel center
-            graphics.fillStyle(0x5a5a6a, alpha);
-            graphics.fillCircle(pivotX, pivotY, 4);
-            graphics.fillStyle(0x6a6a7a, alpha * 0.8);
-            graphics.fillCircle(pivotX - 1, pivotY - 1, 2);
-        };
-
-        if (sin >= 0) drawPivot();
-
-        // === BARREL BASE JOINT ===
-        const baseJointX = center.x + cos * 3 + recoilOffsetX;
-        const baseJointY = center.y + barrelHeight + sin * 1.5 + recoilOffsetY;
-        graphics.fillStyle(0x4a4a5a, alpha);
-        graphics.fillEllipse(baseJointX, baseJointY, 14, 9);
-        graphics.fillStyle(0x3a3a4a, alpha * 0.8);
-        graphics.fillEllipse(baseJointX, baseJointY, 10, 6);
-
-        // === FORTIFIED BARREL ===
-        const barrelBaseX = center.x + recoilOffsetX;
-        const barrelBaseY = center.y + barrelHeight + recoilOffsetY;
-
-        // Barrel outer shadow
-        graphics.lineStyle(barrelWidth + 3, 0x1a1a1a, alpha);
-        graphics.lineBetween(barrelBaseX, barrelBaseY + 2, barrelTipX, barrelTipY + 2);
-
-        // Barrel main body - dark steel
-        graphics.lineStyle(barrelWidth, 0x3a3a4a, alpha);
-        graphics.lineBetween(barrelBaseX, barrelBaseY, barrelTipX, barrelTipY);
-
-        // Barrel secondary layer
-        graphics.lineStyle(barrelWidth - 2, 0x4a4a5a, alpha);
-        graphics.lineBetween(barrelBaseX, barrelBaseY - 1, barrelTipX, barrelTipY - 1);
-
-        // Barrel highlight strip
-        graphics.lineStyle(3, 0x5a5a6a, alpha * 0.9);
-        graphics.lineBetween(barrelBaseX, barrelBaseY - 3, barrelTipX, barrelTipY - 3);
-
-        // === ARMOR REINFORCEMENT BANDS ===
-        const bands = [0.15, 0.35, 0.55, 0.75];
-        for (let i = 0; i < bands.length; i++) {
-            const t = bands[i];
-            const bandX = barrelBaseX + cos * barrelLength * t;
-            const bandY = barrelBaseY + sin * 0.5 * barrelLength * t;
-
-            // Steel reinforcement bands
-            graphics.fillStyle(0x4a4a5a, alpha);
-            graphics.fillEllipse(bandX, bandY, 9, 5);
-            // Highlight on bands
-            graphics.fillStyle(0x6a6a7a, alpha * 0.6);
-            graphics.fillCircle(bandX - 2, bandY - 1, 2);
-            graphics.lineStyle(1, 0x2a2a3a, alpha);
-            graphics.strokeEllipse(bandX, bandY, 9, 5);
-
-            // Small rivets on bands
-            if (i % 2 === 0) {
-                graphics.fillStyle(0x5a5a6a, alpha * 0.7);
-                graphics.fillCircle(bandX - 3, bandY, 1.5);
-                graphics.fillCircle(bandX + 3, bandY, 1.5);
-            }
         }
+        if (!onlyBase) {
+            const baseY = center.y - 2;
 
-        // === MUZZLE SHROUD ===
-        const muzzleX = barrelTipX;
-        const muzzleY = barrelTipY;
+            // === FORTIFIED BARREL SETUP ===
+            const barrelHeight = -12;
+            const barrelLength = 28;
+            const barrelWidth = 12;  // Thicker fortified barrel
 
-        // Heavy muzzle ring
-        graphics.fillStyle(0x4a4a5a, alpha);
-        graphics.fillEllipse(muzzleX, muzzleY, 8, 5);
-        graphics.fillStyle(0x5a5a6a, alpha);
-        graphics.fillEllipse(muzzleX, muzzleY, 6, 4);
+            // Recoil animation
+            const recoilAmount = (building?.cannonRecoilOffset ?? 0) * 10;
+            const recoilOffsetX = -cos * recoilAmount;
+            const recoilOffsetY = -sin * 0.5 * recoilAmount;
 
-        // Dark bore
-        graphics.fillStyle(0x1a1a1a, alpha);
-        graphics.fillEllipse(muzzleX + cos * 2, muzzleY + sin, 4, 2.5);
+            // Barrel tip position
+            const barrelTipX = center.x + cos * barrelLength + recoilOffsetX;
+            const barrelTipY = center.y + barrelHeight + sin * 0.5 * barrelLength + recoilOffsetY;
 
-        if (sin < 0) drawPivot();
+            // Barrel shadow on ground
+            g.fillStyle(0x1a1a1a, alpha * 0.4);
+            g.fillEllipse(center.x + cos * (barrelLength * 0.5) + 3, center.y + 5, barrelLength * 0.7, 6);
+
+            // === ARMORED BARREL CARRIAGE ===
+            const supportOffsetX = -sin * 10;
+            const supportOffsetY = cos * 5;
+
+            // Left support (heavy steel)
+            graphics.fillStyle(0x3a3a4a, alpha);
+            graphics.beginPath();
+            graphics.moveTo(center.x - supportOffsetX, baseY - supportOffsetY);
+            graphics.lineTo(center.x - supportOffsetX * 0.5, center.y + barrelHeight + 5);
+            graphics.lineTo(center.x + cos * 5 - supportOffsetX * 0.5, center.y + barrelHeight + sin * 2.5 + 5);
+            graphics.lineTo(center.x + cos * 5, center.y + barrelHeight + sin * 2.5);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Right support (slightly darker)
+            graphics.fillStyle(0x2a2a3a, alpha);
+            graphics.beginPath();
+            graphics.moveTo(center.x + supportOffsetX, baseY + supportOffsetY);
+            graphics.lineTo(center.x + supportOffsetX * 0.5, center.y + barrelHeight + 5);
+            graphics.lineTo(center.x + cos * 5 + supportOffsetX * 0.5, center.y + barrelHeight + sin * 2.5 + 5);
+            graphics.lineTo(center.x + cos * 5, center.y + barrelHeight + sin * 2.5);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Steel bolts on supports
+            graphics.fillStyle(0x5a5a6a, alpha * 0.8);
+            graphics.fillCircle(center.x - supportOffsetX * 0.7, baseY - supportOffsetY * 0.7 - 3, 2);
+            graphics.fillCircle(center.x + supportOffsetX * 0.7, baseY + supportOffsetY * 0.7 - 3, 2);
+
+            // === CENTRAL PIVOT MECHANISM ===
+            const drawPivot = () => {
+                const pivotX = center.x + recoilOffsetX;
+                const pivotY = center.y + barrelHeight + 4 + recoilOffsetY;
+
+                // Heavy steel pivot
+                graphics.fillStyle(0x2a2a2a, alpha);
+                graphics.fillCircle(pivotX, pivotY, 9);
+                graphics.fillStyle(0x3a3a4a, alpha);
+                graphics.fillCircle(pivotX, pivotY, 7);
+                // Steel center
+                graphics.fillStyle(0x5a5a6a, alpha);
+                graphics.fillCircle(pivotX, pivotY, 4);
+                graphics.fillStyle(0x6a6a7a, alpha * 0.8);
+                graphics.fillCircle(pivotX - 1, pivotY - 1, 2);
+            };
+
+            if (sin >= 0) drawPivot();
+
+            // === BARREL BASE JOINT ===
+            const baseJointX = center.x + cos * 3 + recoilOffsetX;
+            const baseJointY = center.y + barrelHeight + sin * 1.5 + recoilOffsetY;
+            graphics.fillStyle(0x4a4a5a, alpha);
+            graphics.fillEllipse(baseJointX, baseJointY, 14, 9);
+            graphics.fillStyle(0x3a3a4a, alpha * 0.8);
+            graphics.fillEllipse(baseJointX, baseJointY, 10, 6);
+
+            // === FORTIFIED BARREL ===
+            const barrelBaseX = center.x + recoilOffsetX;
+            const barrelBaseY = center.y + barrelHeight + recoilOffsetY;
+
+            // Barrel outer shadow
+            graphics.lineStyle(barrelWidth + 3, 0x1a1a1a, alpha);
+            graphics.lineBetween(barrelBaseX, barrelBaseY + 2, barrelTipX, barrelTipY + 2);
+
+            // Barrel main body - dark steel
+            graphics.lineStyle(barrelWidth, 0x3a3a4a, alpha);
+            graphics.lineBetween(barrelBaseX, barrelBaseY, barrelTipX, barrelTipY);
+
+            // Barrel secondary layer
+            graphics.lineStyle(barrelWidth - 2, 0x4a4a5a, alpha);
+            graphics.lineBetween(barrelBaseX, barrelBaseY - 1, barrelTipX, barrelTipY - 1);
+
+            // Barrel highlight strip
+            graphics.lineStyle(3, 0x5a5a6a, alpha * 0.9);
+            graphics.lineBetween(barrelBaseX, barrelBaseY - 3, barrelTipX, barrelTipY - 3);
+
+            // === ARMOR REINFORCEMENT BANDS ===
+            const bands = [0.15, 0.35, 0.55, 0.75];
+            for (let i = 0; i < bands.length; i++) {
+                const t = bands[i];
+                const bandX = barrelBaseX + cos * barrelLength * t;
+                const bandY = barrelBaseY + sin * 0.5 * barrelLength * t;
+
+                // Steel reinforcement bands
+                graphics.fillStyle(0x4a4a5a, alpha);
+                graphics.fillEllipse(bandX, bandY, 9, 5);
+                // Highlight on bands
+                graphics.fillStyle(0x6a6a7a, alpha * 0.6);
+                graphics.fillCircle(bandX - 2, bandY - 1, 2);
+                graphics.lineStyle(1, 0x2a2a3a, alpha);
+                graphics.strokeEllipse(bandX, bandY, 9, 5);
+
+                // Small rivets on bands
+                if (i % 2 === 0) {
+                    graphics.fillStyle(0x5a5a6a, alpha * 0.7);
+                    graphics.fillCircle(bandX - 3, bandY, 1.5);
+                    graphics.fillCircle(bandX + 3, bandY, 1.5);
+                }
+            }
+
+            // === MUZZLE SHROUD ===
+            const muzzleX = barrelTipX;
+            const muzzleY = barrelTipY;
+
+            // Heavy muzzle ring
+            graphics.fillStyle(0x4a4a5a, alpha);
+            graphics.fillEllipse(muzzleX, muzzleY, 8, 5);
+            graphics.fillStyle(0x5a5a6a, alpha);
+            graphics.fillEllipse(muzzleX, muzzleY, 6, 4);
+
+            // Dark bore
+            graphics.fillStyle(0x1a1a1a, alpha);
+            graphics.fillEllipse(muzzleX + cos * 2, muzzleY + sin, 4, 2.5);
+
+            if (sin < 0) drawPivot();
+        }
     }
 
-    static drawCannonLevel4(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any) {
+    static drawCannonLevel4(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
         // LEVEL 4 CANNON: Dual-barrel reinforced cannon with gold/brass accents and glowing effects
         const angle = building?.ballistaAngle ?? Math.PI / 4;
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
+        const g = baseGraphics || graphics;
 
-        // === REINFORCED STEEL FOUNDATION ===
-        // Dark steel base with gold trim (isometric diamond)
-        graphics.fillStyle(tint ?? 0x4a4a5a, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
-
-        // Gold trim edges for premium look
-        graphics.lineStyle(3, 0xb8860b, alpha * 0.9);
-        graphics.lineBetween(c1.x, c1.y, c2.x, c2.y);
-        graphics.lineBetween(c1.x, c1.y, c4.x, c4.y);
-        graphics.lineStyle(2, 0x8b6914, alpha * 0.8);
-        graphics.lineBetween(c2.x, c2.y, c3.x, c3.y);
-        graphics.lineBetween(c3.x, c3.y, c4.x, c4.y);
-
-        // Decorative corner rivets (gold)
-        graphics.fillStyle(0xffd700, alpha * 0.9);
-        graphics.fillCircle(c1.x, c1.y, 3);
-        graphics.fillCircle(c2.x, c2.y, 2);
-        graphics.fillCircle(c3.x, c3.y, 2);
-        graphics.fillCircle(c4.x, c4.y, 2);
-
-        // === REINFORCED ROTATING BASE ===
-        const baseRadiusX = 24;
-        const baseRadiusY = 14;
         const baseY = center.y - 3;
+        if (!skipBase) {
+            // === REINFORCED STEEL FOUNDATION ===
+            // Dark steel base with gold trim (isometric diamond)
+            g.fillStyle(tint ?? 0x4a4a5a, alpha);
+            g.fillPoints([c1, c2, c3, c4], true);
 
-        // Shadow underneath
-        graphics.fillStyle(0x1a1008, alpha * 0.5);
-        graphics.fillEllipse(center.x + 2, baseY + 5, baseRadiusX + 2, baseRadiusY + 1);
+            // Gold trim edges for premium look
+            g.lineStyle(3, 0xb8860b, alpha * 0.9);
+            g.lineBetween(c1.x, c1.y, c2.x, c2.y);
+            g.lineBetween(c1.x, c1.y, c4.x, c4.y);
+            g.lineStyle(2, 0x8b6914, alpha * 0.8);
+            g.lineBetween(c2.x, c2.y, c3.x, c3.y);
+            g.lineBetween(c3.x, c3.y, c4.x, c4.y);
 
-        // Main reinforced steel base with dark blue tint
-        graphics.fillStyle(0x3a3a4a, alpha);
-        graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+            // Decorative corner rivets (gold)
+            g.fillStyle(0xffd700, alpha * 0.9);
+            g.fillCircle(c1.x, c1.y, 3);
+            g.fillCircle(c2.x, c2.y, 2);
+            g.fillCircle(c3.x, c3.y, 2);
+            g.fillCircle(c4.x, c4.y, 2);
 
-        // Inner steel ring
-        graphics.lineStyle(3, 0x2a2a3a, alpha * 0.8);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX - 5, baseRadiusY - 3);
+            // === REINFORCED ROTATING BASE ===
+            const baseRadiusX = 24;
+            const baseRadiusY = 14;
 
-        // Glowing energy ring (orange/red for heat effect)
-        graphics.lineStyle(2, 0xff6600, alpha * 0.6);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX - 8, baseRadiusY - 5);
-        graphics.lineStyle(1, 0xff9900, alpha * 0.4);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX - 9, baseRadiusY - 6);
+            // Shadow underneath
+            g.fillStyle(0x1a1008, alpha * 0.5);
+            g.fillEllipse(center.x + 2, baseY + 5, baseRadiusX + 2, baseRadiusY + 1);
 
-        // Gold reinforcement outer ring
-        graphics.lineStyle(4, 0xb8860b, alpha);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-        graphics.lineStyle(2, 0xffd700, alpha * 0.5);
-        graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
+            // Main reinforced steel base with dark blue tint
+            g.fillStyle(0x3a3a4a, alpha);
+            g.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
 
-        // === DUAL BARREL SETUP ===
-        const barrelHeight = -14;
-        const barrelLength = 30;  // Slightly longer barrels
-        const barrelWidth = 8;    // Slightly thinner for dual setup
-        const barrelSpacing = 5;  // Distance between the two barrels
+            // Inner steel ring
+            g.lineStyle(3, 0x2a2a3a, alpha * 0.8);
+            g.strokeEllipse(center.x, baseY, baseRadiusX - 5, baseRadiusY - 3);
 
-        // Recoil animation
-        const recoilAmount = (building?.cannonRecoilOffset ?? 0) * 10;
-        const recoilOffsetX = -cos * recoilAmount;
-        const recoilOffsetY = -sin * 0.5 * recoilAmount;
+            // Glowing energy ring (orange/red for heat effect)
+            g.lineStyle(2, 0xff6600, alpha * 0.6);
+            g.strokeEllipse(center.x, baseY, baseRadiusX - 8, baseRadiusY - 5);
+            g.lineStyle(1, 0xff9900, alpha * 0.4);
+            g.strokeEllipse(center.x, baseY, baseRadiusX - 9, baseRadiusY - 6);
 
-        // Barrel perpendicular offset for dual barrels
-        const perpX = -sin * barrelSpacing;
-        const perpY = cos * 0.5 * barrelSpacing;
+            // Gold reinforcement outer ring
+            g.lineStyle(4, 0xb8860b, alpha);
+            g.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+            g.lineStyle(2, 0xffd700, alpha * 0.5);
+            g.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
 
-        // Both barrel tip positions
-        const barrelTip1X = center.x + cos * barrelLength + recoilOffsetX + perpX;
-        const barrelTip1Y = center.y + barrelHeight + sin * 0.5 * barrelLength + recoilOffsetY + perpY;
-        const barrelTip2X = center.x + cos * barrelLength + recoilOffsetX - perpX;
-        const barrelTip2Y = center.y + barrelHeight + sin * 0.5 * barrelLength + recoilOffsetY - perpY;
+        }
 
-        // Barrel shadow on ground
-        graphics.fillStyle(0x1a1a1a, alpha * 0.4);
-        graphics.fillEllipse(center.x + cos * (barrelLength * 0.5) + 3, center.y + 5, barrelLength * 0.7, 6);
+        if (!onlyBase) {
+            // === DUAL BARREL SETUP ===
+            const barrelHeight = -14;
+            const barrelLength = 30;  // Slightly longer barrels
+            const barrelWidth = 8;    // Slightly thinner for dual setup
+            const barrelSpacing = 5;  // Distance between the two barrels
 
-        // === REINFORCED BARREL CARRIAGE ===
-        const supportOffsetX = -sin * 10;
-        const supportOffsetY = cos * 5;
+            // Recoil animation
+            const recoilAmount = (building?.cannonRecoilOffset ?? 0) * 10;
+            const recoilOffsetX = -cos * recoilAmount;
+            const recoilOffsetY = -sin * 0.5 * recoilAmount;
 
-        // Left support (reinforced steel)
-        graphics.fillStyle(0x3a3a4a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(center.x - supportOffsetX, baseY - supportOffsetY);
-        graphics.lineTo(center.x - supportOffsetX * 0.5, center.y + barrelHeight + 5);
-        graphics.lineTo(center.x + cos * 6 - supportOffsetX * 0.5, center.y + barrelHeight + sin * 3 + 5);
-        graphics.lineTo(center.x + cos * 6, center.y + barrelHeight + sin * 3);
-        graphics.closePath();
-        graphics.fillPath();
+            // Barrel perpendicular offset for dual barrels
+            const perpX = -sin * barrelSpacing;
+            const perpY = cos * 0.5 * barrelSpacing;
 
-        // Right support
-        graphics.fillStyle(0x2a2a3a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(center.x + supportOffsetX, baseY + supportOffsetY);
-        graphics.lineTo(center.x + supportOffsetX * 0.5, center.y + barrelHeight + 5);
-        graphics.lineTo(center.x + cos * 6 + supportOffsetX * 0.5, center.y + barrelHeight + sin * 3 + 5);
-        graphics.lineTo(center.x + cos * 6, center.y + barrelHeight + sin * 3);
-        graphics.closePath();
-        graphics.fillPath();
+            // Both barrel tip positions
+            const barrelTip1X = center.x + cos * barrelLength + recoilOffsetX + perpX;
+            const barrelTip1Y = center.y + barrelHeight + sin * 0.5 * barrelLength + recoilOffsetY + perpY;
+            const barrelTip2X = center.x + cos * barrelLength + recoilOffsetX - perpX;
+            const barrelTip2Y = center.y + barrelHeight + sin * 0.5 * barrelLength + recoilOffsetY - perpY;
 
-        // Gold trim on supports
-        graphics.lineStyle(1, 0xb8860b, alpha * 0.7);
-        graphics.lineBetween(center.x - supportOffsetX, baseY - supportOffsetY, center.x + cos * 6, center.y + barrelHeight + sin * 3);
-        graphics.lineBetween(center.x + supportOffsetX, baseY + supportOffsetY, center.x + cos * 6, center.y + barrelHeight + sin * 3);
+            // Barrel shadow on ground
+            g.fillStyle(0x1a1a1a, alpha * 0.4);
+            g.fillEllipse(center.x + cos * (barrelLength * 0.5) + 3, center.y + 5, barrelLength * 0.7, 6);
 
-        // === CENTRAL PIVOT MECHANISM (ENHANCED) ===
-        const drawPivot = () => {
-            const pivotX = center.x + recoilOffsetX;
-            const pivotY = center.y + barrelHeight + 4 + recoilOffsetY;
+            // === REINFORCED BARREL CARRIAGE ===
+            const supportOffsetX = -sin * 10;
+            const supportOffsetY = cos * 5;
 
-            // Larger reinforced pivot
-            graphics.fillStyle(0x2a2a2a, alpha);
-            graphics.fillCircle(pivotX, pivotY, 10);
+            // Left support (reinforced steel)
             graphics.fillStyle(0x3a3a4a, alpha);
-            graphics.fillCircle(pivotX, pivotY, 8);
-            // Gold center accent
-            graphics.fillStyle(0xb8860b, alpha);
-            graphics.fillCircle(pivotX, pivotY, 5);
-            graphics.fillStyle(0xffd700, alpha * 0.8);
-            graphics.fillCircle(pivotX - 1, pivotY - 1, 3);
-            // Glowing core
-            graphics.fillStyle(0xff6600, alpha * 0.5);
-            graphics.fillCircle(pivotX, pivotY, 2);
-        };
+            graphics.beginPath();
+            graphics.moveTo(center.x - supportOffsetX, baseY - supportOffsetY);
+            graphics.lineTo(center.x - supportOffsetX * 0.5, center.y + barrelHeight + 5);
+            graphics.lineTo(center.x + cos * 6 - supportOffsetX * 0.5, center.y + barrelHeight + sin * 3 + 5);
+            graphics.lineTo(center.x + cos * 6, center.y + barrelHeight + sin * 3);
+            graphics.closePath();
+            graphics.fillPath();
 
-        if (sin >= 0) drawPivot();
+            // Right support
+            graphics.fillStyle(0x2a2a3a, alpha);
+            graphics.beginPath();
+            graphics.moveTo(center.x + supportOffsetX, baseY + supportOffsetY);
+            graphics.lineTo(center.x + supportOffsetX * 0.5, center.y + barrelHeight + 5);
+            graphics.lineTo(center.x + cos * 6 + supportOffsetX * 0.5, center.y + barrelHeight + sin * 3 + 5);
+            graphics.lineTo(center.x + cos * 6, center.y + barrelHeight + sin * 3);
+            graphics.closePath();
+            graphics.fillPath();
 
-        // === BARREL BASE JOINT (REINFORCED) ===
-        const baseJointX = center.x + cos * 4 + recoilOffsetX;
-        const baseJointY = center.y + barrelHeight + sin * 2 + recoilOffsetY;
-        graphics.fillStyle(0x4a4a5a, alpha);
-        graphics.fillEllipse(baseJointX, baseJointY, 16, 10);
-        graphics.fillStyle(0xb8860b, alpha * 0.8);
-        graphics.fillEllipse(baseJointX, baseJointY, 12, 7);
-        graphics.fillStyle(0x3a3a4a, alpha);
-        graphics.fillEllipse(baseJointX, baseJointY, 8, 5);
+            // Gold trim on supports
+            graphics.lineStyle(1, 0xb8860b, alpha * 0.7);
+            graphics.lineBetween(center.x - supportOffsetX, baseY - supportOffsetY, center.x + cos * 6, center.y + barrelHeight + sin * 3);
+            graphics.lineBetween(center.x + supportOffsetX, baseY + supportOffsetY, center.x + cos * 6, center.y + barrelHeight + sin * 3);
 
-        // === DUAL BARRELS ===
-        const drawBarrel = (tipX: number, tipY: number, offsetX: number, offsetY: number) => {
-            const barrelBaseX = center.x + recoilOffsetX + offsetX;
-            const barrelBaseY = center.y + barrelHeight + recoilOffsetY + offsetY;
+            // === CENTRAL PIVOT MECHANISM (ENHANCED) ===
+            const drawPivot = () => {
+                const pivotX = center.x + recoilOffsetX;
+                const pivotY = center.y + barrelHeight + 4 + recoilOffsetY;
 
-            // Barrel outer shadow
-            graphics.lineStyle(barrelWidth + 3, 0x1a1a1a, alpha);
-            graphics.lineBetween(barrelBaseX, barrelBaseY + 2, tipX, tipY + 2);
-
-            // Barrel main body - dark steel with blue tint
-            graphics.lineStyle(barrelWidth, 0x2a2a3a, alpha);
-            graphics.lineBetween(barrelBaseX, barrelBaseY, tipX, tipY);
-
-            // Barrel highlight strip
-            graphics.lineStyle(barrelWidth - 3, 0x3a3a4a, alpha);
-            graphics.lineBetween(barrelBaseX, barrelBaseY - 1, tipX, tipY - 1);
-
-            // Bright highlight
-            graphics.lineStyle(2, 0x5a5a6a, alpha * 0.9);
-            graphics.lineBetween(barrelBaseX, barrelBaseY - 2, tipX, tipY - 2);
-
-            // === GOLD DECORATIVE BANDS ===
-            const bands = [0.2, 0.5, 0.8];
-            for (const t of bands) {
-                const bandX = barrelBaseX + cos * barrelLength * t;
-                const bandY = barrelBaseY + sin * 0.5 * barrelLength * t;
-
-                // Gold bands with subtle depth
+                // Larger reinforced pivot
+                graphics.fillStyle(0x2a2a2a, alpha);
+                graphics.fillCircle(pivotX, pivotY, 10);
+                graphics.fillStyle(0x3a3a4a, alpha);
+                graphics.fillCircle(pivotX, pivotY, 8);
+                // Gold center accent
                 graphics.fillStyle(0xb8860b, alpha);
-                graphics.fillEllipse(bandX, bandY, 6, 3.5);
-                graphics.fillStyle(0xb8860b, alpha * 0.7);
-                graphics.fillCircle(bandX - 1, bandY - 1, 1.5);
-                graphics.lineStyle(1, 0x8b6914, alpha);
-                graphics.strokeEllipse(bandX, bandY, 6, 3.5);
-            }
-        };
+                graphics.fillCircle(pivotX, pivotY, 5);
+                graphics.fillStyle(0xffd700, alpha * 0.8);
+                graphics.fillCircle(pivotX - 1, pivotY - 1, 3);
+                // Glowing core
+                graphics.fillStyle(0xff6600, alpha * 0.5);
+                graphics.fillCircle(pivotX, pivotY, 2);
+            };
 
-        // Draw both barrels
-        drawBarrel(barrelTip1X, barrelTip1Y, perpX, perpY);
-        drawBarrel(barrelTip2X, barrelTip2Y, -perpX, -perpY);
+            if (sin >= 0) drawPivot();
 
-        // === CONNECTING BRACE BETWEEN BARRELS ===
-        const braceT = 0.35;
-        const brace1X = center.x + cos * barrelLength * braceT + recoilOffsetX + perpX;
-        const brace1Y = center.y + barrelHeight + sin * 0.5 * barrelLength * braceT + recoilOffsetY + perpY;
-        const brace2X = center.x + cos * barrelLength * braceT + recoilOffsetX - perpX;
-        const brace2Y = center.y + barrelHeight + sin * 0.5 * barrelLength * braceT + recoilOffsetY - perpY;
+            // === BARREL BASE JOINT (REINFORCED) ===
+            const baseJointX = center.x + cos * 4 + recoilOffsetX;
+            const baseJointY = center.y + barrelHeight + sin * 2 + recoilOffsetY;
+            graphics.fillStyle(0x4a4a5a, alpha);
+            graphics.fillEllipse(baseJointX, baseJointY, 16, 10);
+            graphics.fillStyle(0xb8860b, alpha * 0.8);
+            graphics.fillEllipse(baseJointX, baseJointY, 12, 7);
+            graphics.fillStyle(0x3a3a4a, alpha);
+            graphics.fillEllipse(baseJointX, baseJointY, 8, 5);
 
-        graphics.lineStyle(3, 0x3a3a4a, alpha);
-        graphics.lineBetween(brace1X, brace1Y, brace2X, brace2Y);
-        graphics.lineStyle(1, 0xb8860b, alpha * 0.8);
-        graphics.lineBetween(brace1X, brace1Y, brace2X, brace2Y);
+            // === DUAL BARRELS ===
+            const drawBarrel = (tipX: number, tipY: number, offsetX: number, offsetY: number) => {
+                const barrelBaseX = center.x + recoilOffsetX + offsetX;
+                const barrelBaseY = center.y + barrelHeight + recoilOffsetY + offsetY;
 
-        if (sin < 0) drawPivot();
+                // Barrel outer shadow
+                graphics.lineStyle(barrelWidth + 3, 0x1a1a1a, alpha);
+                graphics.lineBetween(barrelBaseX, barrelBaseY + 2, tipX, tipY + 2);
+
+                // Barrel main body - dark steel with blue tint
+                graphics.lineStyle(barrelWidth, 0x2a2a3a, alpha);
+                graphics.lineBetween(barrelBaseX, barrelBaseY, tipX, tipY);
+
+                // Barrel highlight strip
+                graphics.lineStyle(barrelWidth - 3, 0x3a3a4a, alpha);
+                graphics.lineBetween(barrelBaseX, barrelBaseY - 1, tipX, tipY - 1);
+
+                // Bright highlight
+                graphics.lineStyle(2, 0x5a5a6a, alpha * 0.9);
+                graphics.lineBetween(barrelBaseX, barrelBaseY - 2, tipX, tipY - 2);
+
+                // === GOLD DECORATIVE BANDS ===
+                const bands = [0.2, 0.5, 0.8];
+                for (const t of bands) {
+                    const bandX = barrelBaseX + cos * barrelLength * t;
+                    const bandY = barrelBaseY + sin * 0.5 * barrelLength * t;
+
+                    // Gold bands with subtle depth
+                    graphics.fillStyle(0xb8860b, alpha);
+                    graphics.fillEllipse(bandX, bandY, 6, 3.5);
+                    graphics.fillStyle(0xb8860b, alpha * 0.7);
+                    graphics.fillCircle(bandX - 1, bandY - 1, 1.5);
+                    graphics.lineStyle(1, 0x8b6914, alpha);
+                    graphics.strokeEllipse(bandX, bandY, 6, 3.5);
+                }
+            };
+
+            // Draw both barrels
+            drawBarrel(barrelTip1X, barrelTip1Y, perpX, perpY);
+            drawBarrel(barrelTip2X, barrelTip2Y, -perpX, -perpY);
+
+            // === CONNECTING BRACE BETWEEN BARRELS ===
+            const braceT = 0.35;
+            const brace1X = center.x + cos * barrelLength * braceT + recoilOffsetX + perpX;
+            const brace1Y = center.y + barrelHeight + sin * 0.5 * barrelLength * braceT + recoilOffsetY + perpY;
+            const brace2X = center.x + cos * barrelLength * braceT + recoilOffsetX - perpX;
+            const brace2Y = center.y + barrelHeight + sin * 0.5 * barrelLength * braceT + recoilOffsetY - perpY;
+
+            graphics.lineStyle(3, 0x3a3a4a, alpha);
+            graphics.lineBetween(brace1X, brace1Y, brace2X, brace2Y);
+            graphics.lineStyle(1, 0xb8860b, alpha * 0.8);
+            graphics.lineBetween(brace1X, brace1Y, brace2X, brace2Y);
+
+            if (sin < 0) drawPivot();
+        }
     }
 
-    static drawGoldMine(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, time: number = 0) {
+    static drawGoldMine(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, time: number = 0, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
         const level = building?.level ?? 1;
         const isLevel2 = level >= 2;
         const isLevel3 = level >= 3;
         const isLevel4 = level >= 4;
         const isLevel5 = level >= 5;
+        const g = baseGraphics || graphics;
 
-        // === ROCKY GROUND BASE ===
-        const baseColor = isLevel5 ? 0x5a5a5a : (isLevel4 ? 0x8a7a6a : (isLevel3 ? 0x7d6d5d : (isLevel2 ? 0x7a6a5a : 0x6b5a4a)));
-        graphics.fillStyle(tint ?? baseColor, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
-        const borderColor = isLevel5 ? 0x777777 : (isLevel3 ? 0x9b8365 : (isLevel2 ? 0x8b7355 : 0x4a3a2a));
-        graphics.lineStyle(isLevel5 ? 3 : (isLevel3 ? 2 : (isLevel2 ? 2 : 1)), borderColor, 0.6 * alpha);
-        graphics.strokePoints([c1, c2, c3, c4], true, true);
+        if (!skipBase) {
+            // === ROCKY GROUND BASE ===
+            const baseColor = isLevel5 ? 0x5a5a5a : (isLevel4 ? 0x8a7a6a : (isLevel3 ? 0x7d6d5d : (isLevel2 ? 0x7a6a5a : 0x6b5a4a)));
+            g.fillStyle(tint ?? baseColor, alpha);
+            g.fillPoints([c1, c2, c3, c4], true);
+            const borderColor = isLevel5 ? 0x777777 : (isLevel3 ? 0x9b8365 : (isLevel2 ? 0x8b7355 : 0x4a3a2a));
+            g.lineStyle(isLevel5 ? 3 : (isLevel3 ? 2 : (isLevel2 ? 2 : 1)), borderColor, 0.6 * alpha);
+            g.strokePoints([c1, c2, c3, c4], true, true);
 
-        // Level 2+: Gold-trimmed corners (L5 uses metal)
-        if (isLevel2) {
-            const cornerColor = isLevel5 ? 0x888888 : (isLevel4 ? 0xeecc00 : (isLevel3 ? 0xe0b000 : 0xdaa520));
-            graphics.fillStyle(cornerColor, alpha * 0.8);
-            graphics.fillCircle(c1.x, c1.y, isLevel5 ? 5 : (isLevel4 ? 4 : 3));
-            graphics.fillCircle(c2.x, c2.y, isLevel5 ? 4 : (isLevel3 ? 3 : 2));
-            graphics.fillCircle(c3.x, c3.y, isLevel5 ? 4 : (isLevel3 ? 3 : 2));
-            graphics.fillCircle(c4.x, c4.y, isLevel5 ? 5 : (isLevel4 ? 4 : 2));
-            // L5: Metal bolt highlights
-            if (isLevel5) {
-                graphics.fillStyle(0xaaaaaa, alpha * 0.6);
-                graphics.fillCircle(c1.x, c1.y - 1, 2);
-                graphics.fillCircle(c3.x, c3.y - 1, 2);
+            // Level 2+: Gold-trimmed corners (L5 uses metal)
+            if (isLevel2) {
+                const cornerColor = isLevel5 ? 0x888888 : (isLevel4 ? 0xeecc00 : (isLevel3 ? 0xe0b000 : 0xdaa520));
+                g.fillStyle(cornerColor, alpha * 0.8);
+                g.fillCircle(c1.x, c1.y, isLevel5 ? 5 : (isLevel4 ? 4 : 3));
+                g.fillCircle(c2.x, c2.y, isLevel5 ? 4 : (isLevel3 ? 3 : 2));
+                g.fillCircle(c3.x, c3.y, isLevel5 ? 4 : (isLevel3 ? 3 : 2));
+                g.fillCircle(c4.x, c4.y, isLevel5 ? 5 : (isLevel4 ? 4 : 2));
+                // L5: Metal bolt highlights
+                if (isLevel5) {
+                    g.fillStyle(0xaaaaaa, alpha * 0.6);
+                    g.fillCircle(c1.x, c1.y - 1, 2);
+                    g.fillCircle(c3.x, c3.y - 1, 2);
+                }
+            }
+
+            // L4+: Rim highlights (L5 uses steel)
+            if (isLevel4) {
+                g.lineStyle(1, isLevel5 ? 0x999999 : 0xcccccc, alpha * 0.5);
+                g.lineBetween(c1.x, c1.y, c2.x, c2.y);
+                g.lineBetween(c1.x, c1.y, c4.x, c4.y);
+            }
+
+            // Scattered rocks/dirt texture (reduced for L5 industrial)
+            if (!isLevel5) {
+                g.fillStyle(0x5a4a3a, alpha * 0.6);
+                g.fillCircle(center.x - 15, center.y + 6, 5);
+                g.fillCircle(center.x + 12, center.y + 4, 4);
+                g.fillCircle(center.x - 8, center.y + 10, 3);
+                g.fillStyle(0x7a6a5a, alpha * 0.4);
+                g.fillCircle(center.x + 5, center.y + 8, 3);
+            } else {
+                // L5: Metal floor plates
+                g.fillStyle(0x666666, alpha * 0.5);
+                g.fillRect(center.x - 18, center.y + 3, 10, 6);
+                g.fillRect(center.x + 8, center.y + 5, 10, 5);
             }
         }
 
-        // L4+: Rim highlights (L5 uses steel)
-        if (isLevel4) {
-            graphics.lineStyle(1, isLevel5 ? 0x999999 : 0xcccccc, alpha * 0.5);
-            graphics.lineBetween(c1.x, c1.y, c2.x, c2.y);
-            graphics.lineBetween(c1.x, c1.y, c4.x, c4.y);
-        }
+        if (!onlyBase) {
+            // === MINE SHAFT ENTRANCE (dark tunnel) ===
+            // Entrance frame - wooden supports
+            graphics.fillStyle(0x3a2a1a, alpha);
+            graphics.fillRect(center.x - 12, center.y - 8, 4, 16);
+            graphics.fillRect(center.x + 8, center.y - 8, 4, 16);
 
-        // Scattered rocks/dirt texture (reduced for L5 industrial)
-        if (!isLevel5) {
-            graphics.fillStyle(0x5a4a3a, alpha * 0.6);
-            graphics.fillCircle(center.x - 15, center.y + 6, 5);
-            graphics.fillCircle(center.x + 12, center.y + 4, 4);
-            graphics.fillCircle(center.x - 8, center.y + 10, 3);
-            graphics.fillStyle(0x7a6a5a, alpha * 0.4);
-            graphics.fillCircle(center.x + 5, center.y + 8, 3);
-        } else {
-            // L5: Metal floor plates
-            graphics.fillStyle(0x666666, alpha * 0.5);
-            graphics.fillRect(center.x - 18, center.y + 3, 10, 6);
-            graphics.fillRect(center.x + 8, center.y + 5, 10, 5);
-        }
+            // Entrance top beam
+            graphics.fillStyle(0x4a3a2a, alpha);
+            graphics.fillRect(center.x - 14, center.y - 12, 28, 5);
+            graphics.fillStyle(0x5a4a3a, alpha);
+            graphics.fillRect(center.x - 13, center.y - 11, 26, 2);
 
-        // === MINE SHAFT ENTRANCE (dark tunnel) ===
-        // Entrance frame - wooden supports
-        graphics.fillStyle(0x3a2a1a, alpha);
-        graphics.fillRect(center.x - 12, center.y - 8, 4, 16);
-        graphics.fillRect(center.x + 8, center.y - 8, 4, 16);
+            // Dark tunnel interior
+            graphics.fillStyle(0x1a1a1a, alpha);
+            graphics.fillRect(center.x - 8, center.y - 6, 16, 14);
+            graphics.fillStyle(0x0a0a0a, alpha);
+            graphics.fillRect(center.x - 6, center.y - 4, 12, 10);
 
-        // Entrance top beam
-        graphics.fillStyle(0x4a3a2a, alpha);
-        graphics.fillRect(center.x - 14, center.y - 12, 28, 5);
-        graphics.fillStyle(0x5a4a3a, alpha);
-        graphics.fillRect(center.x - 13, center.y - 11, 26, 2);
+            // === MINE CART TRACKS ===
+            g.lineStyle(2, 0x555555, alpha);
+            g.lineBetween(center.x - 6, center.y + 8, center.x + 20, center.y + 2);
+            g.lineBetween(center.x - 2, center.y + 10, center.x + 24, center.y + 4);
 
-        // Dark tunnel interior
-        graphics.fillStyle(0x1a1a1a, alpha);
-        graphics.fillRect(center.x - 8, center.y - 6, 16, 14);
-        graphics.fillStyle(0x0a0a0a, alpha);
-        graphics.fillRect(center.x - 6, center.y - 4, 12, 10);
-
-        // === MINE CART TRACKS ===
-        graphics.lineStyle(2, 0x555555, alpha);
-        graphics.lineBetween(center.x - 6, center.y + 8, center.x + 20, center.y + 2);
-        graphics.lineBetween(center.x - 2, center.y + 10, center.x + 24, center.y + 4);
-
-        // Track ties
-        graphics.fillStyle(0x3a2a1a, alpha);
-        for (let i = 0; i < 4; i++) {
-            const tx = center.x - 4 + i * 7;
-            const ty = center.y + 9 - i * 1.5;
-            graphics.fillRect(tx, ty, 6, 2);
-        }
-
-        // === ANIMATED MINE CART ===
-        const cartCycle = (time / 2000) % 1;
-        const cartInTunnel = cartCycle < 0.3 || cartCycle > 0.8;
-
-        if (!cartInTunnel) {
-            const cartProgress = (cartCycle - 0.3) / 0.5; // 0 to 1 while visible
-            const cartX = center.x - 4 + cartProgress * 16;
-            const cartY = center.y + 6 - cartProgress * 3;
-
-            // Cart body
-            graphics.fillStyle(0x5a5a5a, alpha);
-            graphics.fillRect(cartX - 6, cartY - 8, 12, 8);
-            graphics.fillStyle(0x4a4a4a, alpha);
-            graphics.fillRect(cartX - 5, cartY - 7, 10, 6);
-
-            // Gold ore in cart
-            graphics.fillStyle(0xffd700, alpha);
-            graphics.fillCircle(cartX - 2, cartY - 6, 3);
-            graphics.fillCircle(cartX + 2, cartY - 5, 2);
-            graphics.fillCircle(cartX, cartY - 8, 2);
-
-            // Cart wheels
-            graphics.fillStyle(0x333333, alpha);
-            graphics.fillCircle(cartX - 4, cartY, 2);
-            graphics.fillCircle(cartX + 4, cartY, 2);
-        }
-
-        // === HEADFRAME TOWER ===
-        // L5: Metal industrial tower, otherwise wooden
-        const beamColor = isLevel5 ? 0x555555 : 0x4a3a2a;
-        const beamColorLight = isLevel5 ? 0x666666 : 0x5a4a3a;
-        const beamColorDark = isLevel5 ? 0x444444 : 0x4a3a2a;
-
-        // Main support beams (A-frame)
-        graphics.fillStyle(beamColor, alpha);
-        graphics.fillRect(center.x - 20, center.y - 35, isLevel5 ? 5 : 4, 40);
-        graphics.fillRect(center.x - 6, center.y - 35, isLevel5 ? 5 : 4, 40);
-
-        // L5: Metal beam highlights
-        if (isLevel5) {
-            graphics.fillStyle(0x777777, alpha * 0.6);
-            graphics.fillRect(center.x - 19, center.y - 35, 1, 40);
-            graphics.fillRect(center.x - 5, center.y - 35, 1, 40);
-        }
-
-        // Cross beams
-        graphics.fillStyle(beamColorLight, alpha);
-        graphics.fillRect(center.x - 21, center.y - 30, 20, isLevel5 ? 4 : 3);
-        graphics.fillRect(center.x - 21, center.y - 18, 20, isLevel5 ? 4 : 3);
-
-        // Diagonal bracing
-        graphics.lineStyle(isLevel5 ? 3 : 2, beamColorDark, alpha);
-        graphics.lineBetween(center.x - 19, center.y - 28, center.x - 5, center.y - 16);
-        graphics.lineBetween(center.x - 19, center.y - 16, center.x - 5, center.y - 28);
-
-        // Pulley wheel at top (larger for L5)
-        const pulleySize = isLevel5 ? 7 : 5;
-        graphics.fillStyle(isLevel5 ? 0x666666 : 0x555555, alpha);
-        graphics.fillCircle(center.x - 13, center.y - 38, pulleySize);
-        graphics.fillStyle(isLevel5 ? 0x888888 : 0x666666, alpha);
-        graphics.fillCircle(center.x - 13, center.y - 38, pulleySize - 2);
-
-        // Animated wheel rotation
-        const wheelAngle = time / (isLevel5 ? 300 : 400);  // Faster for L5
-        graphics.lineStyle(isLevel5 ? 2 : 1, isLevel5 ? 0x555555 : 0x444444, alpha);
-        for (let i = 0; i < 4; i++) {
-            const a = wheelAngle + (i / 4) * Math.PI * 2;
-            graphics.lineBetween(
-                center.x - 13 + Math.cos(a) * (pulleySize - 1),
-                center.y - 38 + Math.sin(a) * (pulleySize - 1),
-                center.x - 13 - Math.cos(a) * (pulleySize - 1),
-                center.y - 38 - Math.sin(a) * (pulleySize - 1)
-            );
-        }
-
-        // L5: Secondary gear
-        if (isLevel5) {
-            graphics.fillStyle(0x666666, alpha);
-            graphics.fillCircle(center.x - 5, center.y - 42, 4);
-            graphics.fillStyle(0x888888, alpha * 0.7);
-            graphics.fillCircle(center.x - 5, center.y - 42, 2);
-            // Gear teeth hint
-            graphics.lineStyle(1, 0x555555, alpha);
+            // Track ties
+            g.fillStyle(0x3a2a1a, alpha);
             for (let i = 0; i < 4; i++) {
-                const a = -wheelAngle * 1.5 + (i / 4) * Math.PI * 2;
+                const tx = center.x - 4 + i * 7;
+                const ty = center.y + 9 - i * 1.5;
+                g.fillRect(tx, ty, 6, 2);
+            }
+
+            // === ANIMATED MINE CART ===
+            const cartCycle = (time / 2000) % 1;
+            const cartInTunnel = cartCycle < 0.3 || cartCycle > 0.8;
+
+            if (!cartInTunnel) {
+                const cartProgress = (cartCycle - 0.3) / 0.5; // 0 to 1 while visible
+                const cartX = center.x - 4 + cartProgress * 16;
+                const cartY = center.y + 6 - cartProgress * 3;
+
+                // Cart body
+                graphics.fillStyle(0x5a5a5a, alpha);
+                graphics.fillRect(cartX - 6, cartY - 8, 12, 8);
+                graphics.fillStyle(0x4a4a4a, alpha);
+                graphics.fillRect(cartX - 5, cartY - 7, 10, 6);
+
+                // Gold ore in cart
+                graphics.fillStyle(0xffd700, alpha);
+                graphics.fillCircle(cartX - 2, cartY - 6, 3);
+                graphics.fillCircle(cartX + 2, cartY - 5, 2);
+                graphics.fillCircle(cartX, cartY - 8, 2);
+
+                // Cart wheels
+                graphics.fillStyle(0x333333, alpha);
+                graphics.fillCircle(cartX - 4, cartY, 2);
+                graphics.fillCircle(cartX + 4, cartY, 2);
+            }
+
+            // === HEADFRAME TOWER ===
+            // L5: Metal industrial tower, otherwise wooden
+            const beamColor = isLevel5 ? 0x555555 : 0x4a3a2a;
+            const beamColorLight = isLevel5 ? 0x666666 : 0x5a4a3a;
+            const beamColorDark = isLevel5 ? 0x444444 : 0x4a3a2a;
+
+            // Main support beams (A-frame)
+            graphics.fillStyle(beamColor, alpha);
+            graphics.fillRect(center.x - 20, center.y - 35, isLevel5 ? 5 : 4, 40);
+            graphics.fillRect(center.x - 6, center.y - 35, isLevel5 ? 5 : 4, 40);
+
+            // L5: Metal beam highlights
+            if (isLevel5) {
+                graphics.fillStyle(0x777777, alpha * 0.6);
+                graphics.fillRect(center.x - 19, center.y - 35, 1, 40);
+                graphics.fillRect(center.x - 5, center.y - 35, 1, 40);
+            }
+
+            // Cross beams
+            graphics.fillStyle(beamColorLight, alpha);
+            graphics.fillRect(center.x - 21, center.y - 30, 20, isLevel5 ? 4 : 3);
+            graphics.fillRect(center.x - 21, center.y - 18, 20, isLevel5 ? 4 : 3);
+
+            // Diagonal bracing
+            graphics.lineStyle(isLevel5 ? 3 : 2, beamColorDark, alpha);
+            graphics.lineBetween(center.x - 19, center.y - 28, center.x - 5, center.y - 16);
+            graphics.lineBetween(center.x - 19, center.y - 16, center.x - 5, center.y - 28);
+
+            // Pulley wheel at top (larger for L5)
+            const pulleySize = isLevel5 ? 7 : 5;
+            graphics.fillStyle(isLevel5 ? 0x666666 : 0x555555, alpha);
+            graphics.fillCircle(center.x - 13, center.y - 38, pulleySize);
+            graphics.fillStyle(isLevel5 ? 0x888888 : 0x666666, alpha);
+            graphics.fillCircle(center.x - 13, center.y - 38, pulleySize - 2);
+
+            // Animated wheel rotation
+            const wheelAngle = time / (isLevel5 ? 300 : 400);  // Faster for L5
+            graphics.lineStyle(isLevel5 ? 2 : 1, isLevel5 ? 0x555555 : 0x444444, alpha);
+            for (let i = 0; i < 4; i++) {
+                const a = wheelAngle + (i / 4) * Math.PI * 2;
                 graphics.lineBetween(
-                    center.x - 5 + Math.cos(a) * 3,
-                    center.y - 42 + Math.sin(a) * 3,
-                    center.x - 5 - Math.cos(a) * 3,
-                    center.y - 42 - Math.sin(a) * 3
+                    center.x - 13 + Math.cos(a) * (pulleySize - 1),
+                    center.y - 38 + Math.sin(a) * (pulleySize - 1),
+                    center.x - 13 - Math.cos(a) * (pulleySize - 1),
+                    center.y - 38 - Math.sin(a) * (pulleySize - 1)
                 );
             }
-        }
 
-        // Rope/chain from pulley
-        graphics.lineStyle(isLevel5 ? 2 : 1, isLevel5 ? 0x555555 : 0x8b7355, alpha);
-        graphics.lineBetween(center.x - 13, center.y - 33, center.x - 13, center.y - 5);
+            // L5: Secondary gear
+            if (isLevel5) {
+                graphics.fillStyle(0x666666, alpha);
+                graphics.fillCircle(center.x - 5, center.y - 42, 4);
+                graphics.fillStyle(0x888888, alpha * 0.7);
+                graphics.fillCircle(center.x - 5, center.y - 42, 2);
+                // Gear teeth hint
+                graphics.lineStyle(1, 0x555555, alpha);
+                for (let i = 0; i < 4; i++) {
+                    const a = -wheelAngle * 1.5 + (i / 4) * Math.PI * 2;
+                    graphics.lineBetween(
+                        center.x - 5 + Math.cos(a) * 3,
+                        center.y - 42 + Math.sin(a) * 3,
+                        center.x - 5 - Math.cos(a) * 3,
+                        center.y - 42 - Math.sin(a) * 3
+                    );
+                }
+            }
 
-        // === GOLD ORE PILES ===
-        const pileScale = isLevel5 ? 1.5 : (isLevel4 ? 1.3 : (isLevel3 ? 1.15 : (isLevel2 ? 1.0 : 0.85)));
-        // Large pile
-        graphics.fillStyle(isLevel5 ? 0xab9375 : (isLevel4 ? 0x9b8365 : 0x8b7355), alpha);
-        graphics.fillCircle(center.x + 18, center.y - 2, 8 * pileScale);
-        graphics.fillCircle(center.x + 22, center.y + 2, 6 * pileScale);
+            // Rope/chain from pulley
+            graphics.lineStyle(isLevel5 ? 2 : 1, isLevel5 ? 0x555555 : 0x8b7355, alpha);
+            graphics.lineBetween(center.x - 13, center.y - 33, center.x - 13, center.y - 5);
 
-        // Level 2+: Extra gold pile
-        if (isLevel2) {
-            graphics.fillStyle(isLevel5 ? 0xbb9a85 : (isLevel3 ? 0xab9375 : 0x9b8365), alpha);
-            graphics.fillCircle(center.x + 26, center.y - 1, 5 * pileScale);
-        }
+            // === GOLD ORE PILES ===
+            const pileScale = isLevel5 ? 1.5 : (isLevel4 ? 1.3 : (isLevel3 ? 1.15 : (isLevel2 ? 1.0 : 0.85)));
+            // Large pile
+            graphics.fillStyle(isLevel5 ? 0xab9375 : (isLevel4 ? 0x9b8365 : 0x8b7355), alpha);
+            graphics.fillCircle(center.x + 18, center.y - 2, 8 * pileScale);
+            graphics.fillCircle(center.x + 22, center.y + 2, 6 * pileScale);
 
-        // L3+: Third pile
-        if (isLevel3) {
-            graphics.fillStyle(0x9b8365, alpha);
-            graphics.fillCircle(center.x + 14, center.y + 3, 4 * pileScale);
-        }
+            // Level 2+: Extra gold pile
+            if (isLevel2) {
+                graphics.fillStyle(isLevel5 ? 0xbb9a85 : (isLevel3 ? 0xab9375 : 0x9b8365), alpha);
+                graphics.fillCircle(center.x + 26, center.y - 1, 5 * pileScale);
+            }
 
-        // Gold chunks in pile
-        graphics.fillStyle(isLevel5 ? 0xffee00 : (isLevel4 ? 0xffe000 : 0xffd700), alpha);
-        graphics.fillCircle(center.x + 16, center.y - 4, 3 * pileScale);
-        graphics.fillCircle(center.x + 20, center.y - 1, 4 * pileScale);
-        graphics.fillCircle(center.x + 24, center.y + 1, 2.5 * pileScale);
-        graphics.fillCircle(center.x + 18, center.y, 2.5 * pileScale);
+            // L3+: Third pile
+            if (isLevel3) {
+                graphics.fillStyle(0x9b8365, alpha);
+                graphics.fillCircle(center.x + 14, center.y + 3, 4 * pileScale);
+            }
 
-        // Level 2+: Extra gold chunks
-        if (isLevel2) {
-            graphics.fillCircle(center.x + 26, center.y - 2, 3);
-            graphics.fillCircle(center.x + 14, center.y - 2, 2);
-            graphics.fillCircle(center.x + 22, center.y - 3, 2);
-        }
+            // Gold chunks in pile
+            graphics.fillStyle(isLevel5 ? 0xffee00 : (isLevel4 ? 0xffe000 : 0xffd700), alpha);
+            graphics.fillCircle(center.x + 16, center.y - 4, 3 * pileScale);
+            graphics.fillCircle(center.x + 20, center.y - 1, 4 * pileScale);
+            graphics.fillCircle(center.x + 24, center.y + 1, 2.5 * pileScale);
+            graphics.fillCircle(center.x + 18, center.y, 2.5 * pileScale);
 
-        // L4+: Refined gold bars (stacked) - more for L5
-        if (isLevel4) {
+            // Level 2+: Extra gold chunks
+            if (isLevel2) {
+                graphics.fillCircle(center.x + 26, center.y - 2, 3);
+                graphics.fillCircle(center.x + 14, center.y - 2, 2);
+                graphics.fillCircle(center.x + 22, center.y - 3, 2);
+            }
+
+            // L4+: Refined gold bars (stacked) - more for L5
+            if (isLevel4) {
+                graphics.fillStyle(0xffd700, alpha);
+                graphics.fillRect(center.x + 10, center.y + 4, isLevel5 ? 10 : 8, 3);
+                graphics.fillStyle(0xffe855, alpha);
+                graphics.fillRect(center.x + 11, center.y + 4, isLevel5 ? 8 : 6, 1);
+                graphics.fillStyle(0xeec000, alpha);
+                graphics.fillRect(center.x + 11, center.y + 2, 7, 2);
+            }
+
+            // Sparkling gold highlights (animated)
+            const sparkle1 = 0.5 + Math.sin(time / 150) * 0.5;
+            const sparkle2 = 0.5 + Math.sin(time / 180 + 1) * 0.5;
+            const sparkle3 = 0.5 + Math.sin(time / 200 + 2) * 0.5;
+
+            graphics.fillStyle(isLevel4 ? 0xffffaa : 0xffff88, alpha * sparkle1);
+            graphics.fillCircle(center.x + 17, center.y - 5, 1.5 * pileScale);
+            graphics.fillStyle(isLevel4 ? 0xffffaa : 0xffff88, alpha * sparkle2);
+            graphics.fillCircle(center.x + 21, center.y - 2, 1.5 * pileScale);
+            graphics.fillStyle(0xffffaa, alpha * sparkle3);
+            graphics.fillCircle(center.x + 19, center.y - 3, 1 * pileScale);
+
+            // Level 2+: Extra sparkles
+            if (isLevel2) {
+                const sparkle4 = 0.5 + Math.sin(time / 120 + 3) * 0.5;
+                const sparkle5 = 0.5 + Math.sin(time / 160 + 4) * 0.5;
+                graphics.fillStyle(0xffff66, alpha * sparkle4);
+                graphics.fillCircle(center.x + 25, center.y - 1, 1.5);
+                graphics.fillStyle(0xffffcc, alpha * sparkle5);
+                graphics.fillCircle(center.x + 15, center.y - 3, 1);
+            }
+
+            // L3+: More sparkles
+            if (isLevel3) {
+                const sparkle6 = 0.5 + Math.sin(time / 100 + 5) * 0.5;
+                graphics.fillStyle(0xffffdd, alpha * sparkle6);
+                graphics.fillCircle(center.x + 13, center.y + 2, 1.2);
+            }
+
+            // === LANTERNS ===
+            // Left lantern on post
+            graphics.fillStyle(0x4a3a2a, alpha);
+            graphics.fillRect(center.x - 24, center.y - 5, 2, 12);
+
+            // Lantern glow (animated flicker)
+            const flicker = 0.7 + Math.sin(time / 80) * 0.3;
+            graphics.fillStyle(0xff8800, alpha * flicker);
+            graphics.fillCircle(center.x - 23, center.y - 8, isLevel3 ? 4 : 3);
+            graphics.fillStyle(0xffcc44, alpha * flicker * 0.8);
+            graphics.fillCircle(center.x - 23, center.y - 9, isLevel3 ? 2.5 : 2);
+
+            // Small gold coin/nugget detail near entrance
             graphics.fillStyle(0xffd700, alpha);
-            graphics.fillRect(center.x + 10, center.y + 4, isLevel5 ? 10 : 8, 3);
-            graphics.fillStyle(0xffe855, alpha);
-            graphics.fillRect(center.x + 11, center.y + 4, isLevel5 ? 8 : 6, 1);
-            graphics.fillStyle(0xeec000, alpha);
-            graphics.fillRect(center.x + 11, center.y + 2, 7, 2);
+            graphics.fillCircle(center.x + 6, center.y + 5, isLevel3 ? 2.5 : 2);
+            graphics.fillCircle(center.x + 3, center.y + 7, isLevel3 ? 2 : 1.5);
         }
-
-        // Sparkling gold highlights (animated)
-        const sparkle1 = 0.5 + Math.sin(time / 150) * 0.5;
-        const sparkle2 = 0.5 + Math.sin(time / 180 + 1) * 0.5;
-        const sparkle3 = 0.5 + Math.sin(time / 200 + 2) * 0.5;
-
-        graphics.fillStyle(isLevel4 ? 0xffffaa : 0xffff88, alpha * sparkle1);
-        graphics.fillCircle(center.x + 17, center.y - 5, 1.5 * pileScale);
-        graphics.fillStyle(isLevel4 ? 0xffffaa : 0xffff88, alpha * sparkle2);
-        graphics.fillCircle(center.x + 21, center.y - 2, 1.5 * pileScale);
-        graphics.fillStyle(0xffffaa, alpha * sparkle3);
-        graphics.fillCircle(center.x + 19, center.y - 3, 1 * pileScale);
-
-        // Level 2+: Extra sparkles
-        if (isLevel2) {
-            const sparkle4 = 0.5 + Math.sin(time / 120 + 3) * 0.5;
-            const sparkle5 = 0.5 + Math.sin(time / 160 + 4) * 0.5;
-            graphics.fillStyle(0xffff66, alpha * sparkle4);
-            graphics.fillCircle(center.x + 25, center.y - 1, 1.5);
-            graphics.fillStyle(0xffffcc, alpha * sparkle5);
-            graphics.fillCircle(center.x + 15, center.y - 3, 1);
-        }
-
-        // L3+: More sparkles
-        if (isLevel3) {
-            const sparkle6 = 0.5 + Math.sin(time / 100 + 5) * 0.5;
-            graphics.fillStyle(0xffffdd, alpha * sparkle6);
-            graphics.fillCircle(center.x + 13, center.y + 2, 1.2);
-        }
-
-        // === LANTERNS ===
-        // Left lantern on post
-        graphics.fillStyle(0x4a3a2a, alpha);
-        graphics.fillRect(center.x - 24, center.y - 5, 2, 12);
-
-        // Lantern glow (animated flicker)
-        const flicker = 0.7 + Math.sin(time / 80) * 0.3;
-        graphics.fillStyle(0xff8800, alpha * flicker);
-        graphics.fillCircle(center.x - 23, center.y - 8, isLevel3 ? 4 : 3);
-        graphics.fillStyle(0xffcc44, alpha * flicker * 0.8);
-        graphics.fillCircle(center.x - 23, center.y - 9, isLevel3 ? 2.5 : 2);
-
-        // Small gold coin/nugget detail near entrance
-        graphics.fillStyle(0xffd700, alpha);
-        graphics.fillCircle(center.x + 6, center.y + 5, isLevel3 ? 2.5 : 2);
-        graphics.fillCircle(center.x + 3, center.y + 7, isLevel3 ? 2 : 1.5);
     }
 
-    static drawElixirCollector(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, time: number = 0) {
+    static drawElixirCollector(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, time: number = 0, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
         // Purple/pink theme for elixir
         const level = building?.level ?? 1;
         const isLevel2 = level >= 2;
         const isLevel3 = level >= 3;
         const isLevel4 = level >= 4;
         const isLevel5 = level >= 5;
+        const g = baseGraphics || graphics;
 
         const purpleDark = tint ?? (isLevel5 ? 0x9c64b3 : (isLevel4 ? 0x8c54a3 : (isLevel3 ? 0x7c4493 : (isLevel2 ? 0x7c4493 : 0x6c3483))));
         const purpleMid = tint ?? (isLevel5 ? 0xbe74dd : (isLevel4 ? 0xae64cd : (isLevel3 ? 0x9e54bd : (isLevel2 ? 0x9e54bd : 0x8e44ad))));
         const purpleLight = tint ?? (isLevel5 ? 0xd599ed : (isLevel4 ? 0xc589dd : (isLevel3 ? 0xb579cd : (isLevel2 ? 0xb579cd : 0xa569bd))));
 
         // Stone base (enhanced for higher levels)
-        const baseColor = isLevel4 ? 0x7a7a7a : (isLevel3 ? 0x6f6f6f : (isLevel2 ? 0x6a6a6a : 0x5a5a5a));
-        graphics.fillStyle(baseColor, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
-        graphics.lineStyle(isLevel3 ? 2 : (isLevel2 ? 2 : 1), isLevel3 ? 0xbb8fce : (isLevel2 ? 0x9b59b6 : 0x3a3a3a), 0.5 * alpha);
-        graphics.strokePoints([c1, c2, c3, c4], true, true);
+        if (!skipBase) {
+            const baseColor = isLevel4 ? 0x7a7a7a : (isLevel3 ? 0x6f6f6f : (isLevel2 ? 0x6a6a6a : 0x5a5a5a));
+            g.fillStyle(baseColor, alpha);
+            g.fillPoints([c1, c2, c3, c4], true);
+            g.lineStyle(isLevel3 ? 2 : (isLevel2 ? 2 : 1), isLevel3 ? 0xbb8fce : (isLevel2 ? 0x9b59b6 : 0x3a3a3a), 0.5 * alpha);
+            g.strokePoints([c1, c2, c3, c4], true, true);
 
-        // Level 2+: Purple-trimmed corners
-        if (isLevel2) {
-            const cornerColor = isLevel4 ? 0xd7bde2 : (isLevel3 ? 0xc9a8d8 : 0xbb8fce);
-            graphics.fillStyle(cornerColor, alpha * 0.8);
-            graphics.fillCircle(c1.x, c1.y, isLevel4 ? 4 : 3);
-            graphics.fillCircle(c2.x, c2.y, isLevel3 ? 3 : 2);
-            graphics.fillCircle(c3.x, c3.y, isLevel3 ? 3 : 2);
-            graphics.fillCircle(c4.x, c4.y, isLevel4 ? 4 : 2);
+            // Level 2+: Purple-trimmed corners
+            if (isLevel2) {
+                const cornerColor = isLevel4 ? 0xd7bde2 : (isLevel3 ? 0xc9a8d8 : 0xbb8fce);
+                g.fillStyle(cornerColor, alpha * 0.8);
+                g.fillCircle(c1.x, c1.y, isLevel4 ? 4 : 3);
+                g.fillCircle(c2.x, c2.y, isLevel3 ? 3 : 2);
+                g.fillCircle(c3.x, c3.y, isLevel3 ? 3 : 2);
+                g.fillCircle(c4.x, c4.y, isLevel4 ? 4 : 2);
+            }
+
+            // L4: Crystal purple rim highlights
+            if (isLevel4) {
+                g.lineStyle(1, 0xe8daef, alpha * 0.5);
+                g.lineBetween(c1.x, c1.y, c2.x, c2.y);
+                g.lineBetween(c1.x, c1.y, c4.x, c4.y);
+            }
+
         }
 
-        // L4: Crystal purple rim highlights
-        if (isLevel4) {
-            graphics.lineStyle(1, 0xe8daef, alpha * 0.5);
-            graphics.lineBetween(c1.x, c1.y, c2.x, c2.y);
-            graphics.lineBetween(c1.x, c1.y, c4.x, c4.y);
-        }
+        if (!onlyBase) {
+            // Elixir tank (glass container) - larger for higher levels
+            const tankScale = isLevel4 ? 1.2 : (isLevel3 ? 1.1 : 1.0);
+            const tankHeight = (isLevel2 ? 34 : 30) * tankScale;
+            const tankWidth = (isLevel2 ? 20 : 18) * tankScale;
 
-        // Elixir tank (glass container) - larger for higher levels
-        const tankScale = isLevel4 ? 1.2 : (isLevel3 ? 1.1 : 1.0);
-        const tankHeight = (isLevel2 ? 34 : 30) * tankScale;
-        const tankWidth = (isLevel2 ? 20 : 18) * tankScale;
+            // Tank back (darker)
+            graphics.fillStyle(purpleDark, alpha * 0.8);
+            graphics.fillEllipse(center.x, center.y - 5, tankWidth, tankWidth * 0.5);
 
-        // Tank back (darker)
-        graphics.fillStyle(purpleDark, alpha * 0.8);
-        graphics.fillEllipse(center.x, center.y - 5, tankWidth, tankWidth * 0.5);
+            // Tank body (glass effect)
+            graphics.fillStyle(purpleMid, alpha * 0.7);
+            graphics.fillRect(center.x - tankWidth / 2, center.y - 5 - tankHeight, tankWidth, tankHeight);
 
-        // Tank body (glass effect)
-        graphics.fillStyle(purpleMid, alpha * 0.7);
-        graphics.fillRect(center.x - tankWidth / 2, center.y - 5 - tankHeight, tankWidth, tankHeight);
+            // Tank shine (glass reflection)
+            const shineAlpha = isLevel4 ? 0.3 : (isLevel3 ? 0.28 : (isLevel2 ? 0.25 : 0.2));
+            graphics.fillStyle(0xffffff, shineAlpha * alpha);
+            graphics.fillRect(center.x - tankWidth / 2 + 3, center.y - 5 - tankHeight + 3, isLevel3 ? 6 : (isLevel2 ? 5 : 4), tankHeight - 6);
 
-        // Tank shine (glass reflection)
-        const shineAlpha = isLevel4 ? 0.3 : (isLevel3 ? 0.28 : (isLevel2 ? 0.25 : 0.2));
-        graphics.fillStyle(0xffffff, shineAlpha * alpha);
-        graphics.fillRect(center.x - tankWidth / 2 + 3, center.y - 5 - tankHeight + 3, isLevel3 ? 6 : (isLevel2 ? 5 : 4), tankHeight - 6);
+            // Level 2+: Secondary shine
+            if (isLevel2) {
+                graphics.fillStyle(0xffffff, (isLevel3 ? 0.18 : 0.15) * alpha);
+                graphics.fillRect(center.x + tankWidth / 2 - 6, center.y - 5 - tankHeight + 5, isLevel3 ? 3 : 2, tankHeight - 10);
+            }
 
-        // Level 2+: Secondary shine
-        if (isLevel2) {
-            graphics.fillStyle(0xffffff, (isLevel3 ? 0.18 : 0.15) * alpha);
-            graphics.fillRect(center.x + tankWidth / 2 - 6, center.y - 5 - tankHeight + 5, isLevel3 ? 3 : 2, tankHeight - 10);
-        }
+            // Tank top cap
+            graphics.fillStyle(purpleLight, alpha);
+            graphics.fillEllipse(center.x, center.y - 5 - tankHeight, tankWidth, tankWidth * 0.5);
 
-        // Tank top cap
-        graphics.fillStyle(purpleLight, alpha);
-        graphics.fillEllipse(center.x, center.y - 5 - tankHeight, tankWidth, tankWidth * 0.5);
+            // Level 2+: Glowing rim
+            if (isLevel2) {
+                graphics.lineStyle(isLevel4 ? 3 : 2, isLevel4 ? 0xe8daef : 0xd7bde2, alpha * (isLevel3 ? 0.7 : 0.6));
+                graphics.strokeEllipse(center.x, center.y - 5 - tankHeight, tankWidth - 2, (tankWidth - 2) * 0.5);
+            }
 
-        // Level 2+: Glowing rim
-        if (isLevel2) {
-            graphics.lineStyle(isLevel4 ? 3 : 2, isLevel4 ? 0xe8daef : 0xd7bde2, alpha * (isLevel3 ? 0.7 : 0.6));
-            graphics.strokeEllipse(center.x, center.y - 5 - tankHeight, tankWidth - 2, (tankWidth - 2) * 0.5);
-        }
+            // Pump mechanism on top
+            const pumpOffset = Math.sin(time / 300) * (isLevel3 ? 5 : (isLevel2 ? 4 : 3));
 
-        // Pump mechanism on top
-        const pumpOffset = Math.sin(time / 300) * (isLevel3 ? 5 : (isLevel2 ? 4 : 3));
+            // Pump base (reinforced for higher levels)
+            graphics.fillStyle(isLevel3 ? 0x6a6a6a : (isLevel2 ? 0x5a5a5a : 0x4a4a4a), alpha);
+            graphics.fillRect(center.x - 4, center.y - tankHeight - 20, 8, 10);
 
-        // Pump base (reinforced for higher levels)
-        graphics.fillStyle(isLevel3 ? 0x6a6a6a : (isLevel2 ? 0x5a5a5a : 0x4a4a4a), alpha);
-        graphics.fillRect(center.x - 4, center.y - tankHeight - 20, 8, 10);
+            // L2+: Metal bands on pump
+            if (isLevel2 && !isLevel5) {
+                graphics.fillStyle(isLevel4 ? 0xbb8fce : 0x9b59b6, alpha * 0.7);
+                graphics.fillRect(center.x - 5, center.y - tankHeight - 20, 10, 2);
+                graphics.fillRect(center.x - 5, center.y - tankHeight - 12, 10, 2);
+            }
 
-        // L2+: Metal bands on pump
-        if (isLevel2 && !isLevel5) {
-            graphics.fillStyle(isLevel4 ? 0xbb8fce : 0x9b59b6, alpha * 0.7);
-            graphics.fillRect(center.x - 5, center.y - tankHeight - 20, 10, 2);
-            graphics.fillRect(center.x - 5, center.y - tankHeight - 12, 10, 2);
-        }
+            // Pump piston (animated up/down) - L1-L4 only
+            if (!isLevel5) {
+                graphics.fillStyle(isLevel3 ? 0x888888 : (isLevel2 ? 0x777777 : 0x666666), alpha);
+                graphics.fillRect(center.x - 2, center.y - tankHeight - 25 + pumpOffset, 4, 8);
 
-        // Pump piston (animated up/down) - L1-L4 only
-        if (!isLevel5) {
-            graphics.fillStyle(isLevel3 ? 0x888888 : (isLevel2 ? 0x777777 : 0x666666), alpha);
-            graphics.fillRect(center.x - 2, center.y - tankHeight - 25 + pumpOffset, 4, 8);
+                // Pump handle
+                graphics.lineStyle(2, isLevel3 ? 0x777777 : (isLevel2 ? 0x666666 : 0x555555), alpha);
+                graphics.lineBetween(center.x, center.y - tankHeight - 25 + pumpOffset, center.x + 10, center.y - tankHeight - 20 + pumpOffset * 0.5);
+            } else {
+                // === L5: INDUSTRIAL DEEP EXTRACTION ===
+                // One big central pipe going into the ground with pump on top
 
-            // Pump handle
-            graphics.lineStyle(2, isLevel3 ? 0x777777 : (isLevel2 ? 0x666666 : 0x555555), alpha);
-            graphics.lineBetween(center.x, center.y - tankHeight - 25 + pumpOffset, center.x + 10, center.y - tankHeight - 20 + pumpOffset * 0.5);
-        } else {
-            // === L5: INDUSTRIAL DEEP EXTRACTION ===
-            // One big central pipe going into the ground with pump on top
+                // Big extraction pipe (main feature)
+                const pipeWidth = 14;
 
-            // Big extraction pipe (main feature)
-            const pipeWidth = 14;
+                // Pipe shadow/depth
+                graphics.fillStyle(0x444444, alpha);
+                graphics.fillRect(center.x - pipeWidth / 2 - 1, center.y - 5, pipeWidth + 2, 18);
 
-            // Pipe shadow/depth
-            graphics.fillStyle(0x444444, alpha);
-            graphics.fillRect(center.x - pipeWidth / 2 - 1, center.y - 5, pipeWidth + 2, 18);
+                // Main pipe body
+                graphics.fillStyle(0x666666, alpha);
+                graphics.fillRect(center.x - pipeWidth / 2, center.y - 5, pipeWidth, 15);
 
-            // Main pipe body
-            graphics.fillStyle(0x666666, alpha);
-            graphics.fillRect(center.x - pipeWidth / 2, center.y - 5, pipeWidth, 15);
+                // Pipe highlight (left edge)
+                graphics.fillStyle(0x888888, alpha * 0.7);
+                graphics.fillRect(center.x - pipeWidth / 2 + 1, center.y - 4, 2, 13);
 
-            // Pipe highlight (left edge)
-            graphics.fillStyle(0x888888, alpha * 0.7);
-            graphics.fillRect(center.x - pipeWidth / 2 + 1, center.y - 4, 2, 13);
+                // Pipe opening (dark hole going down)
+                graphics.fillStyle(0x222222, alpha);
+                graphics.fillEllipse(center.x, center.y + 8, pipeWidth - 2, 5);
 
-            // Pipe opening (dark hole going down)
-            graphics.fillStyle(0x222222, alpha);
-            graphics.fillEllipse(center.x, center.y + 8, pipeWidth - 2, 5);
+                // Pipe rim (top edge)
+                graphics.fillStyle(0x777777, alpha);
+                graphics.fillEllipse(center.x, center.y - 5, pipeWidth, 5);
+                graphics.fillStyle(0x555555, alpha);
+                graphics.fillEllipse(center.x, center.y - 5, pipeWidth - 4, 3);
 
-            // Pipe rim (top edge)
-            graphics.fillStyle(0x777777, alpha);
-            graphics.fillEllipse(center.x, center.y - 5, pipeWidth, 5);
-            graphics.fillStyle(0x555555, alpha);
-            graphics.fillEllipse(center.x, center.y - 5, pipeWidth - 4, 3);
+                // Connection pipe from tank to main pipe
+                graphics.fillStyle(0x666666, alpha);
+                graphics.fillRect(center.x - 3, center.y - tankHeight - 5, 6, tankHeight);
+                graphics.fillStyle(0x888888, alpha * 0.5);
+                graphics.fillRect(center.x - 2, center.y - tankHeight - 5, 1, tankHeight);
 
-            // Connection pipe from tank to main pipe
-            graphics.fillStyle(0x666666, alpha);
-            graphics.fillRect(center.x - 3, center.y - tankHeight - 5, 6, tankHeight);
-            graphics.fillStyle(0x888888, alpha * 0.5);
-            graphics.fillRect(center.x - 2, center.y - tankHeight - 5, 1, tankHeight);
+                // Elixir flow inside connection pipe (animated) - only render within pipe bounds
+                const flowOffset = (time / 200) % 1;
+                const pipeTop = center.y - tankHeight - 5;
+                const pipeBottom = center.y - 5;
+                for (let i = 0; i < 3; i++) {
+                    const flowY = pipeTop + ((flowOffset + i * 0.33) % 1) * tankHeight;
+                    // Only draw if within pipe bounds
+                    if (flowY >= pipeTop && flowY <= pipeBottom - 8) {
+                        graphics.fillStyle(purpleMid, alpha * 0.8);
+                        graphics.fillRect(center.x - 1, flowY, 2, 8);
+                    }
+                }
 
-            // Elixir flow inside connection pipe (animated) - only render within pipe bounds
-            const flowOffset = (time / 200) % 1;
-            const pipeTop = center.y - tankHeight - 5;
-            const pipeBottom = center.y - 5;
-            for (let i = 0; i < 3; i++) {
-                const flowY = pipeTop + ((flowOffset + i * 0.33) % 1) * tankHeight;
-                // Only draw if within pipe bounds
-                if (flowY >= pipeTop && flowY <= pipeBottom - 8) {
-                    graphics.fillStyle(purpleMid, alpha * 0.8);
-                    graphics.fillRect(center.x - 1, flowY, 2, 8);
+                // Industrial pump mechanism on top of tank
+                // Pump housing
+                graphics.fillStyle(0x555555, alpha);
+                graphics.fillRect(center.x - 8, center.y - tankHeight - 18, 16, 14);
+                graphics.fillStyle(0x666666, alpha);
+                graphics.fillRect(center.x - 7, center.y - tankHeight - 17, 14, 12);
+
+                // Pump highlight
+                graphics.fillStyle(0x777777, alpha * 0.6);
+                graphics.fillRect(center.x - 6, center.y - tankHeight - 16, 2, 10);
+
+                // Animated pump piston
+                graphics.fillStyle(0x888888, alpha);
+                graphics.fillRect(center.x - 2, center.y - tankHeight - 25 + pumpOffset, 4, 10);
+
+                // Pump top cap
+                graphics.fillStyle(0x666666, alpha);
+                graphics.fillEllipse(center.x, center.y - tankHeight - 25 + pumpOffset, 6, 2);
+
+                // Purple glow from pipe (elixir being extracted)
+                const glowPulse = 0.4 + Math.sin(time * 3) * 0.2;
+                graphics.fillStyle(purpleLight, alpha * glowPulse);
+                graphics.fillEllipse(center.x, center.y + 6, pipeWidth + 4, 8);
+            }
+
+            // Elixir bubbles (animated)
+            const bubbleTime = time / 200;
+            const bubbleCount = isLevel4 ? 7 : (isLevel3 ? 6 : (isLevel2 ? 5 : 3));
+            for (let i = 0; i < bubbleCount; i++) {
+                const bubbleY = ((bubbleTime + i * (isLevel3 ? 0.25 : (isLevel2 ? 0.35 : 0.5))) % 1) * tankHeight;
+                const bubbleX = Math.sin(bubbleTime * 2 + i) * (isLevel3 ? 6 : (isLevel2 ? 5 : 4));
+                graphics.fillStyle(isLevel4 ? 0xe8daef : 0xd7bde2, (isLevel3 ? 0.8 : (isLevel2 ? 0.7 : 0.6)) * alpha);
+                graphics.fillCircle(center.x + bubbleX, center.y - 5 - bubbleY, isLevel3 ? 3 : (isLevel2 ? 2.5 : 2));
+            }
+
+            // Level 2+: Glowing elixir particles
+            if (isLevel2) {
+                const glowTime = time / 150;
+                const particleCount = isLevel4 ? 5 : (isLevel3 ? 4 : 3);
+                for (let i = 0; i < particleCount; i++) {
+                    const glow = 0.3 + Math.sin(glowTime + i * 2) * 0.3;
+                    const px = center.x + Math.sin(glowTime * 0.5 + i * 2.5) * 6;
+                    const py = center.y - 5 - tankHeight * 0.5 + Math.cos(glowTime * 0.3 + i) * 8;
+                    graphics.fillStyle(isLevel4 ? 0xf0e8f5 : 0xe8daef, alpha * glow);
+                    graphics.fillCircle(px, py, isLevel4 ? 2 : 1.5);
                 }
             }
 
-            // Industrial pump mechanism on top of tank
-            // Pump housing
-            graphics.fillStyle(0x555555, alpha);
-            graphics.fillRect(center.x - 8, center.y - tankHeight - 18, 16, 14);
-            graphics.fillStyle(0x666666, alpha);
-            graphics.fillRect(center.x - 7, center.y - tankHeight - 17, 14, 12);
-
-            // Pump highlight
-            graphics.fillStyle(0x777777, alpha * 0.6);
-            graphics.fillRect(center.x - 6, center.y - tankHeight - 16, 2, 10);
-
-            // Animated pump piston
-            graphics.fillStyle(0x888888, alpha);
-            graphics.fillRect(center.x - 2, center.y - tankHeight - 25 + pumpOffset, 4, 10);
-
-            // Pump top cap
-            graphics.fillStyle(0x666666, alpha);
-            graphics.fillEllipse(center.x, center.y - tankHeight - 25 + pumpOffset, 6, 2);
-
-            // Purple glow from pipe (elixir being extracted)
-            const glowPulse = 0.4 + Math.sin(time * 3) * 0.2;
-            graphics.fillStyle(purpleLight, alpha * glowPulse);
-            graphics.fillEllipse(center.x, center.y + 6, pipeWidth + 4, 8);
-        }
-
-        // Elixir bubbles (animated)
-        const bubbleTime = time / 200;
-        const bubbleCount = isLevel4 ? 7 : (isLevel3 ? 6 : (isLevel2 ? 5 : 3));
-        for (let i = 0; i < bubbleCount; i++) {
-            const bubbleY = ((bubbleTime + i * (isLevel3 ? 0.25 : (isLevel2 ? 0.35 : 0.5))) % 1) * tankHeight;
-            const bubbleX = Math.sin(bubbleTime * 2 + i) * (isLevel3 ? 6 : (isLevel2 ? 5 : 4));
-            graphics.fillStyle(isLevel4 ? 0xe8daef : 0xd7bde2, (isLevel3 ? 0.8 : (isLevel2 ? 0.7 : 0.6)) * alpha);
-            graphics.fillCircle(center.x + bubbleX, center.y - 5 - bubbleY, isLevel3 ? 3 : (isLevel2 ? 2.5 : 2));
-        }
-
-        // Level 2+: Glowing elixir particles
-        if (isLevel2) {
-            const glowTime = time / 150;
-            const particleCount = isLevel4 ? 5 : (isLevel3 ? 4 : 3);
-            for (let i = 0; i < particleCount; i++) {
-                const glow = 0.3 + Math.sin(glowTime + i * 2) * 0.3;
-                const px = center.x + Math.sin(glowTime * 0.5 + i * 2.5) * 6;
-                const py = center.y - 5 - tankHeight * 0.5 + Math.cos(glowTime * 0.3 + i) * 8;
-                graphics.fillStyle(isLevel4 ? 0xf0e8f5 : 0xe8daef, alpha * glow);
-                graphics.fillCircle(px, py, isLevel4 ? 2 : 1.5);
+            // L4: Magical sparkle effect near top
+            if (isLevel4) {
+                const sparkleTime = time / 100;
+                for (let i = 0; i < 3; i++) {
+                    const sparkle = 0.4 + Math.sin(sparkleTime + i * 1.5) * 0.4;
+                    const sx = center.x + Math.cos(sparkleTime * 0.8 + i * 2) * 8;
+                    const sy = center.y - 5 - tankHeight + 5 + Math.sin(sparkleTime * 0.5 + i) * 5;
+                    graphics.fillStyle(0xffffff, alpha * sparkle * 0.6);
+                    graphics.fillCircle(sx, sy, 1);
+                }
             }
-        }
 
-        // L4: Magical sparkle effect near top
-        if (isLevel4) {
-            const sparkleTime = time / 100;
-            for (let i = 0; i < 3; i++) {
-                const sparkle = 0.4 + Math.sin(sparkleTime + i * 1.5) * 0.4;
-                const sx = center.x + Math.cos(sparkleTime * 0.8 + i * 2) * 8;
-                const sy = center.y - 5 - tankHeight + 5 + Math.sin(sparkleTime * 0.5 + i) * 5;
-                graphics.fillStyle(0xffffff, alpha * sparkle * 0.6);
-                graphics.fillCircle(sx, sy, 1);
+            // Wooden supports (reinforced for higher levels)
+            graphics.fillStyle(isLevel3 ? 0x7d6e57 : (isLevel2 ? 0x6d5e47 : 0x5d4e37), alpha);
+            graphics.fillRect(center.x - tankWidth / 2 - 3, center.y - 5, isLevel3 ? 5 : (isLevel2 ? 4 : 3), 8);
+            graphics.fillRect(center.x + tankWidth / 2 - (isLevel3 ? 2 : (isLevel2 ? 1 : 0)), center.y - 5, isLevel3 ? 5 : (isLevel2 ? 4 : 3), 8);
+
+            // Level 2+: Metal reinforcement bands on supports
+            if (isLevel2) {
+                graphics.fillStyle(isLevel4 ? 0xbb8fce : 0x9b59b6, alpha * (isLevel3 ? 0.7 : 0.6));
+                graphics.fillRect(center.x - tankWidth / 2 - 3, center.y - 3, isLevel3 ? 5 : 4, 2);
+                graphics.fillRect(center.x + tankWidth / 2 - (isLevel3 ? 2 : 1), center.y - 3, isLevel3 ? 5 : 4, 2);
             }
-        }
 
-        // Wooden supports (reinforced for higher levels)
-        graphics.fillStyle(isLevel3 ? 0x7d6e57 : (isLevel2 ? 0x6d5e47 : 0x5d4e37), alpha);
-        graphics.fillRect(center.x - tankWidth / 2 - 3, center.y - 5, isLevel3 ? 5 : (isLevel2 ? 4 : 3), 8);
-        graphics.fillRect(center.x + tankWidth / 2 - (isLevel3 ? 2 : (isLevel2 ? 1 : 0)), center.y - 5, isLevel3 ? 5 : (isLevel2 ? 4 : 3), 8);
-
-        // Level 2+: Metal reinforcement bands on supports
-        if (isLevel2) {
-            graphics.fillStyle(isLevel4 ? 0xbb8fce : 0x9b59b6, alpha * (isLevel3 ? 0.7 : 0.6));
-            graphics.fillRect(center.x - tankWidth / 2 - 3, center.y - 3, isLevel3 ? 5 : 4, 2);
-            graphics.fillRect(center.x + tankWidth / 2 - (isLevel3 ? 2 : 1), center.y - 3, isLevel3 ? 5 : 4, 2);
-        }
-
-        // L4: Extra elixir pipe on side
-        if (isLevel4) {
-            graphics.fillStyle(0x9b59b6, alpha * 0.8);
-            graphics.fillRect(center.x + tankWidth / 2 + 2, center.y - tankHeight * 0.6, 3, 15);
-            graphics.fillStyle(0xbb8fce, alpha * 0.5);
-            graphics.fillRect(center.x + tankWidth / 2 + 3, center.y - tankHeight * 0.6 + 2, 1, 11);
+            // L4: Extra elixir pipe on side
+            if (isLevel4) {
+                graphics.fillStyle(0x9b59b6, alpha * 0.8);
+                graphics.fillRect(center.x + tankWidth / 2 + 2, center.y - tankHeight * 0.6, 3, 15);
+                graphics.fillStyle(0xbb8fce, alpha * 0.5);
+                graphics.fillRect(center.x + tankWidth / 2 + 3, center.y - tankHeight * 0.6 + 2, 1, 11);
+            }
         }
     }
 
-    static drawBallista(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any) {
+    static drawBallista(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
         // Get ballista state from building if provided
         const angle = building?.ballistaAngle ?? 0; // Default facing right
         const stringTension = building?.ballistaStringTension ?? 0; // 0 = relaxed, 1 = fully drawn
         const boltLoaded = building?.ballistaBoltLoaded ?? true;
+        const g = baseGraphics || graphics;
 
-        // === STONE FOUNDATION PLATFORM ===
-        // Raised stone base with depth
-        const baseHeight = 6;
+        if (!skipBase) {
+            // === STONE FOUNDATION PLATFORM ===
+            // Raised stone base with depth
+            const baseHeight = 6;
 
-        // Side faces of the platform (isometric 3D effect)
-        graphics.fillStyle(0x4a4a4a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(c2.x, c2.y);
-        graphics.lineTo(c3.x, c3.y);
-        graphics.lineTo(c3.x, c3.y + baseHeight);
-        graphics.lineTo(c2.x, c2.y + baseHeight);
-        graphics.closePath();
-        graphics.fillPath();
+            // Side faces of the platform (isometric 3D effect)
+            graphics.fillStyle(0x4a4a4a, alpha);
+            graphics.beginPath();
+            graphics.moveTo(c2.x, c2.y);
+            graphics.lineTo(c3.x, c3.y);
+            graphics.lineTo(c3.x, c3.y + baseHeight);
+            graphics.lineTo(c2.x, c2.y + baseHeight);
+            graphics.closePath();
+            graphics.fillPath();
 
-        graphics.fillStyle(0x3a3a3a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(c3.x, c3.y);
-        graphics.lineTo(c4.x, c4.y);
-        graphics.lineTo(c4.x, c4.y + baseHeight);
-        graphics.lineTo(c3.x, c3.y + baseHeight);
-        graphics.closePath();
-        graphics.fillPath();
+            graphics.fillStyle(0x3a3a3a, alpha);
+            graphics.beginPath();
+            graphics.moveTo(c3.x, c3.y);
+            graphics.lineTo(c4.x, c4.y);
+            graphics.lineTo(c4.x, c4.y + baseHeight);
+            graphics.lineTo(c3.x, c3.y + baseHeight);
+            graphics.closePath();
+            graphics.fillPath();
 
-        // Top face
-        graphics.fillStyle(tint ?? 0x5a5a5a, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
+            // Top face
+            g.fillStyle(tint ?? 0x5a5a5a, alpha);
+            g.fillPoints([c1, c2, c3, c4], true);
 
-        // Stone block lines
-        graphics.lineStyle(1, 0x4a4a4a, alpha * 0.5);
-        graphics.lineBetween(c1.x, c1.y, c3.x, c3.y);
-        graphics.lineBetween(c2.x, c2.y, c4.x, c4.y);
+            // Stone block lines
+            g.lineStyle(1, 0x4a4a4a, alpha * 0.5);
+            g.lineBetween(c1.x, c1.y, c3.x, c3.y);
+            g.lineBetween(c2.x, c2.y, c4.x, c4.y);
 
-        // Border
-        graphics.lineStyle(2, 0x3a3a3a, 0.6 * alpha);
-        graphics.strokePoints([c1, c2, c3, c4], true, true);
+            // Border
+            g.lineStyle(2, 0x3a3a3a, 0.6 * alpha);
+            g.strokePoints([c1, c2, c3, c4], true, true);
 
-        // === WOODEN ROTATING PLATFORM ===
-        const baseRadiusX = 22;
-        const baseRadiusY = 13;
-        const baseY = center.y - 4;
-
-        // Shadow under platform
-        graphics.fillStyle(0x1a1a1a, alpha * 0.4);
-        graphics.fillEllipse(center.x + 2, baseY + 4, baseRadiusX, baseRadiusY);
-
-        // Main wooden platform
-        graphics.fillStyle(0x5a4030, alpha);
-        graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-
-        // Wood plank lines (radial pattern)
-        graphics.lineStyle(1, 0x3a2515, alpha * 0.5);
-        for (let i = 0; i < 6; i++) {
-            const ang = (i / 6) * Math.PI;
-            const x1 = center.x + Math.cos(ang) * (baseRadiusX - 2);
-            const y1 = baseY + Math.sin(ang) * (baseRadiusY - 1);
-            const x2 = center.x - Math.cos(ang) * (baseRadiusX - 2);
-            const y2 = baseY - Math.sin(ang) * (baseRadiusY - 1);
-            graphics.lineBetween(x1, y1, x2, y2);
         }
 
-        // Iron outer ring
-        graphics.lineStyle(3, 0x4a4a4a, alpha);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-        graphics.lineStyle(1, 0x606060, alpha * 0.6);
-        graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
+        if (!onlyBase) {
+            // === WOODEN ROTATING PLATFORM ===
+            const baseRadiusX = 22;
+            const baseRadiusY = 13;
+            const baseY = center.y - 4;
 
-        // Iron rivets around edge
-        graphics.fillStyle(0x555555, alpha);
-        for (let i = 0; i < 8; i++) {
-            const ang = (i / 8) * Math.PI * 2;
-            const rx = center.x + Math.cos(ang) * (baseRadiusX - 3);
-            const ry = baseY + Math.sin(ang) * (baseRadiusY - 2);
-            graphics.fillCircle(rx, ry, 2);
-        }
+            // Shadow under platform
+            g.fillStyle(0x1a1a1a, alpha * 0.4);
+            g.fillEllipse(center.x + 2, baseY + 4, baseRadiusX, baseRadiusY);
 
-        // Calculate rotation for the crossbow mechanism
-        const cos = Math.cos(angle);
-        const sin = Math.sin(angle);
+            // Main wooden platform
+            graphics.fillStyle(0x5a4030, alpha);
+            graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
 
-        // === CENTRAL PIVOT MECHANISM ===
-        // Heavy dark grey pivot hub on the wooden platform
-        graphics.fillStyle(0x2a2a2a, alpha);
-        graphics.fillCircle(center.x, baseY, 8);
-        graphics.fillStyle(0x3a3a3a, alpha);
-        graphics.fillCircle(center.x, baseY - 1, 6);
-        graphics.fillStyle(0x444444, alpha);
-        graphics.fillCircle(center.x, baseY - 2, 4);
-        // Highlight
-        graphics.fillStyle(0x606060, alpha * 0.6);
-        graphics.fillCircle(center.x - 1, baseY - 3, 2);
+            // Wood plank lines (radial pattern)
+            graphics.lineStyle(1, 0x3a2515, alpha * 0.5);
+            for (let i = 0; i < 6; i++) {
+                const ang = (i / 6) * Math.PI;
+                const x1 = center.x + Math.cos(ang) * (baseRadiusX - 2);
+                const y1 = baseY + Math.sin(ang) * (baseRadiusY - 1);
+                const x2 = center.x - Math.cos(ang) * (baseRadiusX - 2);
+                const y2 = baseY - Math.sin(ang) * (baseRadiusY - 1);
+                graphics.lineBetween(x1, y1, x2, y2);
+            }
 
-        // === MASSIVE CROSSBOW ARMS ===
-        const armLength = 28; // Much bigger arms
-        const armWidth = 5;   // Thicker arms
-        const bowHeight = -16; // Higher mounting point
+            // Iron outer ring
+            graphics.lineStyle(3, 0x4a4a4a, alpha);
+            graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+            graphics.lineStyle(1, 0x606060, alpha * 0.6);
+            graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
 
-        // Arm tip positions (perpendicular to firing direction)
-        const leftArmX = center.x + (-sin) * armLength;
-        const leftArmY = center.y + bowHeight + (cos * 0.5) * armLength;
-        const rightArmX = center.x + (sin) * armLength;
-        const rightArmY = center.y + bowHeight + (-cos * 0.5) * armLength;
-
-        // Draw curved bow arms with multiple layers for depth
-        // Outer shadow
-        graphics.lineStyle(armWidth + 3, 0x2a1a10, alpha);
-        graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
-        graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
-
-        // Main wooden arm
-        graphics.lineStyle(armWidth + 1, 0x5a3520, alpha);
-        graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
-        graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
-
-        // Wood highlight
-        graphics.lineStyle(armWidth - 1, 0x7a5540, alpha);
-        graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
-        graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
-
-        // Center wood grain
-        graphics.lineStyle(2, 0x6a4530, alpha);
-        graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
-        graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
-
-        // Metal reinforcement bands on arms
-        const bandDist1 = 0.3;
-        const bandDist2 = 0.6;
-        const bandDist3 = 0.85;
-
-        for (const dist of [bandDist1, bandDist2, bandDist3]) {
-            const leftBandX = center.x + (-sin) * armLength * dist;
-            const leftBandY = center.y + bowHeight + (cos * 0.5) * armLength * dist;
-            const rightBandX = center.x + (sin) * armLength * dist;
-            const rightBandY = center.y + bowHeight + (-cos * 0.5) * armLength * dist;
-
+            // Iron rivets around edge
             graphics.fillStyle(0x555555, alpha);
-            graphics.fillCircle(leftBandX, leftBandY, 3);
-            graphics.fillCircle(rightBandX, rightBandY, 3);
-            graphics.fillStyle(0x777777, alpha * 0.5);
-            graphics.fillCircle(leftBandX - 0.5, leftBandY - 0.5, 1.5);
-            graphics.fillCircle(rightBandX - 0.5, rightBandY - 0.5, 1.5);
-        }
+            for (let i = 0; i < 8; i++) {
+                const ang = (i / 8) * Math.PI * 2;
+                const rx = center.x + Math.cos(ang) * (baseRadiusX - 3);
+                const ry = baseY + Math.sin(ang) * (baseRadiusY - 2);
+                graphics.fillCircle(rx, ry, 2);
+            }
 
-        // Large metal arm tips with hooks for string
-        graphics.fillStyle(0x3a3a3a, alpha);
-        graphics.fillCircle(leftArmX, leftArmY, 5);
-        graphics.fillCircle(rightArmX, rightArmY, 5);
-        graphics.fillStyle(0x555555, alpha);
-        graphics.fillCircle(leftArmX, leftArmY, 3);
-        graphics.fillCircle(rightArmX, rightArmY, 3);
-        graphics.fillStyle(0x888888, alpha * 0.5);
-        graphics.fillCircle(leftArmX - 1, leftArmY - 1, 1.5);
-        graphics.fillCircle(rightArmX - 1, rightArmY - 1, 1.5);
+            // Calculate rotation for the crossbow mechanism
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
 
-        // Calculate bowstring position (needed for bolt placement)
-        const stringPullback = stringTension * 16;
-        const stringCenterX = center.x + cos * (-stringPullback);
-        const stringCenterY = center.y + bowHeight + sin * 0.5 * (-stringPullback);
-
-        // === MAIN RAIL/STOCK ===
-        const railLength = 28;
-        const railEndX = center.x + cos * railLength;
-        const railEndY = center.y + bowHeight + sin * 0.5 * railLength;
-        const railBackX = center.x + cos * (-12);
-        const railBackY = center.y + bowHeight + sin * 0.5 * (-12);
-
-        // Draw thick wooden rail
-        graphics.lineStyle(10, 0x2a1a10, alpha);
-        graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
-        graphics.lineStyle(8, 0x3a2515, alpha);
-        graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
-        graphics.lineStyle(5, 0x4a3520, alpha);
-        graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
-
-        // Rail groove for bolt
-        graphics.lineStyle(2, 0x2a1a10, alpha * 0.7);
-        graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
-
-        // Metal reinforcement plates on rail
-        const plateDist = 0.4;
-        const plateX = center.x + cos * railLength * plateDist;
-        const plateY = center.y + bowHeight + sin * 0.5 * railLength * plateDist;
-        graphics.fillStyle(0x444444, alpha);
-        graphics.fillRect(plateX - 4, plateY - 2, 8, 4);
-        graphics.fillStyle(0x666666, alpha * 0.5);
-        graphics.fillRect(plateX - 3, plateY - 1, 6, 2);
-
-        // === BOLT ===
-        if (boltLoaded) {
-            const boltLength = 24;
-            const boltStartX = stringCenterX;
-            const boltStartY = stringCenterY;
-            const boltEndX = boltStartX + cos * boltLength;
-            const boltEndY = boltStartY + sin * 0.5 * boltLength;
-
-            // Narrower bolt shaft
-            graphics.lineStyle(3, 0x4a3a25, alpha);
-            graphics.lineBetween(boltStartX, boltStartY, boltEndX, boltEndY);
-            graphics.lineStyle(2, 0x5d4e37, alpha);
-            graphics.lineBetween(boltStartX, boltStartY, boltEndX, boltEndY);
-            graphics.lineStyle(1, 0x7d6e57, alpha);
-            graphics.lineBetween(boltStartX, boltStartY, boltEndX, boltEndY);
-
-            // Arrowhead (smaller)
-            const headLength = 8;
-            const headWidth = 4;
-            const headTipX = boltEndX + cos * headLength;
-            const headTipY = boltEndY + sin * 0.5 * headLength;
-
+            // === CENTRAL PIVOT MECHANISM ===
+            // Heavy dark grey pivot hub on the wooden platform
             graphics.fillStyle(0x2a2a2a, alpha);
-            graphics.beginPath();
-            graphics.moveTo(headTipX, headTipY);
-            graphics.lineTo(boltEndX + (-sin) * headWidth, boltEndY + (cos * 0.5) * headWidth);
-            graphics.lineTo(boltEndX + (sin) * headWidth, boltEndY + (-cos * 0.5) * headWidth);
-            graphics.closePath();
-            graphics.fillPath();
+            graphics.fillCircle(center.x, baseY, 8);
+            graphics.fillStyle(0x3a3a3a, alpha);
+            graphics.fillCircle(center.x, baseY - 1, 6);
+            graphics.fillStyle(0x444444, alpha);
+            graphics.fillCircle(center.x, baseY - 2, 4);
+            // Highlight
+            graphics.fillStyle(0x606060, alpha * 0.6);
+            graphics.fillCircle(center.x - 1, baseY - 3, 2);
 
-            // Metal shine on head
-            graphics.fillStyle(0x555555, alpha * 0.6);
-            graphics.beginPath();
-            graphics.moveTo(headTipX, headTipY);
-            graphics.lineTo(boltEndX + (-sin) * headWidth * 0.5, boltEndY + (cos * 0.5) * headWidth * 0.5);
-            graphics.lineTo(boltEndX, boltEndY);
-            graphics.closePath();
-            graphics.fillPath();
+            // === MASSIVE CROSSBOW ARMS ===
+            const armLength = 28; // Much bigger arms
+            const armWidth = 5;   // Thicker arms
+            const bowHeight = -16; // Higher mounting point
 
-            // Smaller fletching
-            const fletchX = boltStartX + cos * 3;
-            const fletchY = boltStartY + sin * 0.5 * 3;
-            graphics.fillStyle(0xcc2222, alpha);
-            graphics.beginPath();
-            graphics.moveTo(fletchX, fletchY);
-            graphics.lineTo(fletchX + (-sin) * 5, fletchY + (cos * 0.5) * 5 - 3);
-            graphics.lineTo(boltStartX + cos * 8, boltStartY + sin * 0.5 * 8);
-            graphics.closePath();
-            graphics.fillPath();
-            graphics.beginPath();
-            graphics.moveTo(fletchX, fletchY);
-            graphics.lineTo(fletchX + (sin) * 5, fletchY + (-cos * 0.5) * 5 - 3);
-            graphics.lineTo(boltStartX + cos * 8, boltStartY + sin * 0.5 * 8);
-            graphics.closePath();
-            graphics.fillPath();
-        }
+            // Arm tip positions (perpendicular to firing direction)
+            const leftArmX = center.x + (-sin) * armLength;
+            const leftArmY = center.y + bowHeight + (cos * 0.5) * armLength;
+            const rightArmX = center.x + (sin) * armLength;
+            const rightArmY = center.y + bowHeight + (-cos * 0.5) * armLength;
 
-        // === BOWSTRING (rendered on top of bolt) ===
-        graphics.lineStyle(3, 0x888888, alpha);
-        graphics.lineBetween(leftArmX, leftArmY, stringCenterX, stringCenterY);
-        graphics.lineBetween(rightArmX, rightArmY, stringCenterX, stringCenterY);
-        graphics.lineStyle(2, 0xaaaaaa, alpha);
-        graphics.lineBetween(leftArmX, leftArmY, stringCenterX, stringCenterY);
-        graphics.lineBetween(rightArmX, rightArmY, stringCenterX, stringCenterY);
+            // Draw curved bow arms with multiple layers for depth
+            // Outer shadow
+            graphics.lineStyle(armWidth + 3, 0x2a1a10, alpha);
+            graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
+            graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
 
-        // String tension glow when drawn
-        if (stringTension > 0.3) {
-            graphics.lineStyle(4, 0xffffff, alpha * 0.15 * stringTension);
+            // Main wooden arm
+            graphics.lineStyle(armWidth + 1, 0x5a3520, alpha);
+            graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
+            graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
+
+            // Wood highlight
+            graphics.lineStyle(armWidth - 1, 0x7a5540, alpha);
+            graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
+            graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
+
+            // Center wood grain
+            graphics.lineStyle(2, 0x6a4530, alpha);
+            graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
+            graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
+
+            // Metal reinforcement bands on arms
+            const bandDist1 = 0.3;
+            const bandDist2 = 0.6;
+            const bandDist3 = 0.85;
+
+            for (const dist of [bandDist1, bandDist2, bandDist3]) {
+                const leftBandX = center.x + (-sin) * armLength * dist;
+                const leftBandY = center.y + bowHeight + (cos * 0.5) * armLength * dist;
+                const rightBandX = center.x + (sin) * armLength * dist;
+                const rightBandY = center.y + bowHeight + (-cos * 0.5) * armLength * dist;
+
+                graphics.fillStyle(0x555555, alpha);
+                graphics.fillCircle(leftBandX, leftBandY, 3);
+                graphics.fillCircle(rightBandX, rightBandY, 3);
+                graphics.fillStyle(0x777777, alpha * 0.5);
+                graphics.fillCircle(leftBandX - 0.5, leftBandY - 0.5, 1.5);
+                graphics.fillCircle(rightBandX - 0.5, rightBandY - 0.5, 1.5);
+            }
+
+            // Large metal arm tips with hooks for string
+            graphics.fillStyle(0x3a3a3a, alpha);
+            graphics.fillCircle(leftArmX, leftArmY, 5);
+            graphics.fillCircle(rightArmX, rightArmY, 5);
+            graphics.fillStyle(0x555555, alpha);
+            graphics.fillCircle(leftArmX, leftArmY, 3);
+            graphics.fillCircle(rightArmX, rightArmY, 3);
+            graphics.fillStyle(0x888888, alpha * 0.5);
+            graphics.fillCircle(leftArmX - 1, leftArmY - 1, 1.5);
+            graphics.fillCircle(rightArmX - 1, rightArmY - 1, 1.5);
+
+            // Calculate bowstring position (needed for bolt placement)
+            const stringPullback = stringTension * 16;
+            const stringCenterX = center.x + cos * (-stringPullback);
+            const stringCenterY = center.y + bowHeight + sin * 0.5 * (-stringPullback);
+
+            // === MAIN RAIL/STOCK ===
+            const railLength = 28;
+            const railEndX = center.x + cos * railLength;
+            const railEndY = center.y + bowHeight + sin * 0.5 * railLength;
+            const railBackX = center.x + cos * (-12);
+            const railBackY = center.y + bowHeight + sin * 0.5 * (-12);
+
+            // Draw thick wooden rail
+            graphics.lineStyle(10, 0x2a1a10, alpha);
+            graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
+            graphics.lineStyle(8, 0x3a2515, alpha);
+            graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
+            graphics.lineStyle(5, 0x4a3520, alpha);
+            graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
+
+            // Rail groove for bolt
+            graphics.lineStyle(2, 0x2a1a10, alpha * 0.7);
+            graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
+
+            // Metal reinforcement plates on rail
+            const plateDist = 0.4;
+            const plateX = center.x + cos * railLength * plateDist;
+            const plateY = center.y + bowHeight + sin * 0.5 * railLength * plateDist;
+            graphics.fillStyle(0x444444, alpha);
+            graphics.fillRect(plateX - 4, plateY - 2, 8, 4);
+            graphics.fillStyle(0x666666, alpha * 0.5);
+            graphics.fillRect(plateX - 3, plateY - 1, 6, 2);
+
+            // === BOLT ===
+            if (boltLoaded) {
+                const boltLength = 24;
+                const boltStartX = stringCenterX;
+                const boltStartY = stringCenterY;
+                const boltEndX = boltStartX + cos * boltLength;
+                const boltEndY = boltStartY + sin * 0.5 * boltLength;
+
+                // Narrower bolt shaft
+                graphics.lineStyle(3, 0x4a3a25, alpha);
+                graphics.lineBetween(boltStartX, boltStartY, boltEndX, boltEndY);
+                graphics.lineStyle(2, 0x5d4e37, alpha);
+                graphics.lineBetween(boltStartX, boltStartY, boltEndX, boltEndY);
+                graphics.lineStyle(1, 0x7d6e57, alpha);
+                graphics.lineBetween(boltStartX, boltStartY, boltEndX, boltEndY);
+
+                // Arrowhead (smaller)
+                const headLength = 8;
+                const headWidth = 4;
+                const headTipX = boltEndX + cos * headLength;
+                const headTipY = boltEndY + sin * 0.5 * headLength;
+
+                graphics.fillStyle(0x2a2a2a, alpha);
+                graphics.beginPath();
+                graphics.moveTo(headTipX, headTipY);
+                graphics.lineTo(boltEndX + (-sin) * headWidth, boltEndY + (cos * 0.5) * headWidth);
+                graphics.lineTo(boltEndX + (sin) * headWidth, boltEndY + (-cos * 0.5) * headWidth);
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Metal shine on head
+                graphics.fillStyle(0x555555, alpha * 0.6);
+                graphics.beginPath();
+                graphics.moveTo(headTipX, headTipY);
+                graphics.lineTo(boltEndX + (-sin) * headWidth * 0.5, boltEndY + (cos * 0.5) * headWidth * 0.5);
+                graphics.lineTo(boltEndX, boltEndY);
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Smaller fletching
+                const fletchX = boltStartX + cos * 3;
+                const fletchY = boltStartY + sin * 0.5 * 3;
+                graphics.fillStyle(0xcc2222, alpha);
+                graphics.beginPath();
+                graphics.moveTo(fletchX, fletchY);
+                graphics.lineTo(fletchX + (-sin) * 5, fletchY + (cos * 0.5) * 5 - 3);
+                graphics.lineTo(boltStartX + cos * 8, boltStartY + sin * 0.5 * 8);
+                graphics.closePath();
+                graphics.fillPath();
+                graphics.beginPath();
+                graphics.moveTo(fletchX, fletchY);
+                graphics.lineTo(fletchX + (sin) * 5, fletchY + (-cos * 0.5) * 5 - 3);
+                graphics.lineTo(boltStartX + cos * 8, boltStartY + sin * 0.5 * 8);
+                graphics.closePath();
+                graphics.fillPath();
+            }
+
+            // === BOWSTRING (rendered on top of bolt) ===
+            graphics.lineStyle(3, 0x888888, alpha);
             graphics.lineBetween(leftArmX, leftArmY, stringCenterX, stringCenterY);
             graphics.lineBetween(rightArmX, rightArmY, stringCenterX, stringCenterY);
-        }
+            graphics.lineStyle(2, 0xaaaaaa, alpha);
+            graphics.lineBetween(leftArmX, leftArmY, stringCenterX, stringCenterY);
+            graphics.lineBetween(rightArmX, rightArmY, stringCenterX, stringCenterY);
 
+            // String tension glow when drawn
+            if (stringTension > 0.3) {
+                graphics.lineStyle(4, 0xffffff, alpha * 0.15 * stringTension);
+                graphics.lineBetween(leftArmX, leftArmY, stringCenterX, stringCenterY);
+                graphics.lineBetween(rightArmX, rightArmY, stringCenterX, stringCenterY);
+            }
+
+        }
     }
 
-    static drawBallistaLevel2(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any) {
+    static drawBallistaLevel2(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
         // LEVEL 2 BALLISTA: Reinforced with bronze accents and improved mechanism
         const angle = building?.ballistaAngle ?? 0;
         const stringTension = building?.ballistaStringTension ?? 0;
         const boltLoaded = building?.ballistaBoltLoaded ?? true;
+        const g = baseGraphics || graphics;
 
-        // === REINFORCED STONE FOUNDATION ===
-        const baseHeight = 8; // Taller base
+        if (!skipBase) {
+            // === REINFORCED STONE FOUNDATION ===
+            const baseHeight = 8; // Taller base
 
-        // Side faces with stone texture
-        graphics.fillStyle(0x4a4a4a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(c2.x, c2.y);
-        graphics.lineTo(c3.x, c3.y);
-        graphics.lineTo(c3.x, c3.y + baseHeight);
-        graphics.lineTo(c2.x, c2.y + baseHeight);
-        graphics.closePath();
-        graphics.fillPath();
+            // Side faces with stone texture
+            graphics.fillStyle(0x4a4a4a, alpha);
+            graphics.beginPath();
+            graphics.moveTo(c2.x, c2.y);
+            graphics.lineTo(c3.x, c3.y);
+            graphics.lineTo(c3.x, c3.y + baseHeight);
+            graphics.lineTo(c2.x, c2.y + baseHeight);
+            graphics.closePath();
+            graphics.fillPath();
 
-        graphics.fillStyle(0x3a3a3a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(c3.x, c3.y);
-        graphics.lineTo(c4.x, c4.y);
-        graphics.lineTo(c4.x, c4.y + baseHeight);
-        graphics.lineTo(c3.x, c3.y + baseHeight);
-        graphics.closePath();
-        graphics.fillPath();
+            graphics.fillStyle(0x3a3a3a, alpha);
+            graphics.beginPath();
+            graphics.moveTo(c3.x, c3.y);
+            graphics.lineTo(c4.x, c4.y);
+            graphics.lineTo(c4.x, c4.y + baseHeight);
+            graphics.lineTo(c3.x, c3.y + baseHeight);
+            graphics.closePath();
+            graphics.fillPath();
 
-        // Top face with improved stone
-        graphics.fillStyle(tint ?? 0x606060, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
+            // Top face with improved stone
+            g.fillStyle(tint ?? 0x606060, alpha);
+            g.fillPoints([c1, c2, c3, c4], true);
 
-        // Stone block pattern
-        graphics.lineStyle(1, 0x4a4a4a, alpha * 0.6);
-        graphics.lineBetween(c1.x, c1.y, c3.x, c3.y);
-        graphics.lineBetween(c2.x, c2.y, c4.x, c4.y);
-        // Additional cross pattern
-        const mid12 = { x: (c1.x + c2.x) / 2, y: (c1.y + c2.y) / 2 };
-        const mid34 = { x: (c3.x + c4.x) / 2, y: (c3.y + c4.y) / 2 };
-        graphics.lineBetween(mid12.x, mid12.y, mid34.x, mid34.y);
+            // Stone block pattern
+            g.lineStyle(1, 0x4a4a4a, alpha * 0.6);
+            g.lineBetween(c1.x, c1.y, c3.x, c3.y);
+            g.lineBetween(c2.x, c2.y, c4.x, c4.y);
+            // Additional cross pattern
+            const mid12 = { x: (c1.x + c2.x) / 2, y: (c1.y + c2.y) / 2 };
+            const mid34 = { x: (c3.x + c4.x) / 2, y: (c3.y + c4.y) / 2 };
+            g.lineBetween(mid12.x, mid12.y, mid34.x, mid34.y);
 
-        // Dark grey corner accents
-        graphics.fillStyle(0x444444, alpha * 0.8);
-        graphics.fillCircle(c1.x, c1.y, 3);
-        graphics.fillCircle(c2.x, c2.y, 2.5);
-        graphics.fillCircle(c3.x, c3.y, 2.5);
-        graphics.fillCircle(c4.x, c4.y, 2.5);
+            // Dark grey corner accents
+            g.fillStyle(0x444444, alpha * 0.8);
+            g.fillCircle(c1.x, c1.y, 3);
+            g.fillCircle(c2.x, c2.y, 2.5);
+            g.fillCircle(c3.x, c3.y, 2.5);
+            g.fillCircle(c4.x, c4.y, 2.5);
 
-        // Border
-        graphics.lineStyle(2, 0x3a3a3a, 0.7 * alpha);
-        graphics.strokePoints([c1, c2, c3, c4], true, true);
+            // Border
+            g.lineStyle(2, 0x3a3a3a, 0.7 * alpha);
+            g.strokePoints([c1, c2, c3, c4], true, true);
 
-        // === REINFORCED WOODEN PLATFORM ===
-        const baseRadiusX = 24;
-        const baseRadiusY = 14;
-        const baseY = center.y - 5;
-
-        // Shadow
-        graphics.fillStyle(0x1a1a1a, alpha * 0.4);
-        graphics.fillEllipse(center.x + 2, baseY + 5, baseRadiusX, baseRadiusY);
-
-        // Main platform - darker wood
-        graphics.fillStyle(0x4a3525, alpha);
-        graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-
-        // Wood planks
-        graphics.lineStyle(1, 0x2a1a10, alpha * 0.5);
-        for (let i = 0; i < 6; i++) {
-            const ang = (i / 6) * Math.PI;
-            const x1 = center.x + Math.cos(ang) * (baseRadiusX - 2);
-            const y1 = baseY + Math.sin(ang) * (baseRadiusY - 1);
-            const x2 = center.x - Math.cos(ang) * (baseRadiusX - 2);
-            const y2 = baseY - Math.sin(ang) * (baseRadiusY - 1);
-            graphics.lineBetween(x1, y1, x2, y2);
         }
 
-        // Dark grey outer ring
-        graphics.lineStyle(4, 0x3a3a3a, alpha);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-        graphics.lineStyle(2, 0x555555, alpha * 0.5);
-        graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
+        if (!onlyBase) {
+            // === REINFORCED WOODEN PLATFORM ===
+            const baseRadiusX = 24;
+            const baseRadiusY = 14;
+            const baseY = center.y - 5;
 
-        // Dark grey rivets
-        graphics.fillStyle(0x444444, alpha);
-        for (let i = 0; i < 10; i++) {
-            const ang = (i / 10) * Math.PI * 2;
-            const rx = center.x + Math.cos(ang) * (baseRadiusX - 3);
-            const ry = baseY + Math.sin(ang) * (baseRadiusY - 2);
-            graphics.fillCircle(rx, ry, 2.5);
-            graphics.fillStyle(0x666666, alpha * 0.5);
-            graphics.fillCircle(rx - 0.5, ry - 0.5, 1);
+            // Shadow
+            g.fillStyle(0x1a1a1a, alpha * 0.4);
+            g.fillEllipse(center.x + 2, baseY + 5, baseRadiusX, baseRadiusY);
+
+            // Main platform - darker wood
+            graphics.fillStyle(0x4a3525, alpha);
+            graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+
+            // Wood planks
+            graphics.lineStyle(1, 0x2a1a10, alpha * 0.5);
+            for (let i = 0; i < 6; i++) {
+                const ang = (i / 6) * Math.PI;
+                const x1 = center.x + Math.cos(ang) * (baseRadiusX - 2);
+                const y1 = baseY + Math.sin(ang) * (baseRadiusY - 1);
+                const x2 = center.x - Math.cos(ang) * (baseRadiusX - 2);
+                const y2 = baseY - Math.sin(ang) * (baseRadiusY - 1);
+                graphics.lineBetween(x1, y1, x2, y2);
+            }
+
+            // Dark grey outer ring
+            graphics.lineStyle(4, 0x3a3a3a, alpha);
+            graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+            graphics.lineStyle(2, 0x555555, alpha * 0.5);
+            graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
+
+            // Dark grey rivets
             graphics.fillStyle(0x444444, alpha);
-        }
+            for (let i = 0; i < 10; i++) {
+                const ang = (i / 10) * Math.PI * 2;
+                const rx = center.x + Math.cos(ang) * (baseRadiusX - 3);
+                const ry = baseY + Math.sin(ang) * (baseRadiusY - 2);
+                graphics.fillCircle(rx, ry, 2.5);
+                graphics.fillStyle(0x666666, alpha * 0.5);
+                graphics.fillCircle(rx - 0.5, ry - 0.5, 1);
+                graphics.fillStyle(0x444444, alpha);
+            }
 
-        const cos = Math.cos(angle);
-        const sin = Math.sin(angle);
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
 
-        // === DARK GREY PIVOT MECHANISM ===
-        graphics.fillStyle(0x2a2a2a, alpha);
-        graphics.fillCircle(center.x, baseY, 10);
-        graphics.fillStyle(0x3a3a3a, alpha);
-        graphics.fillCircle(center.x, baseY - 1, 7);
-        graphics.fillStyle(0x444444, alpha);
-        graphics.fillCircle(center.x, baseY - 2, 4);
-        graphics.fillStyle(0x666666, alpha * 0.5);
-        graphics.fillCircle(center.x - 1, baseY - 3, 2);
-
-        // === REINFORCED CROSSBOW ARMS ===
-        const armLength = 30;
-        const armWidth = 6;
-        const bowHeight = -18;
-
-        const leftArmX = center.x + (-sin) * armLength;
-        const leftArmY = center.y + bowHeight + (cos * 0.5) * armLength;
-        const rightArmX = center.x + (sin) * armLength;
-        const rightArmY = center.y + bowHeight + (-cos * 0.5) * armLength;
-
-        // Outer shadow
-        graphics.lineStyle(armWidth + 4, 0x1a0a05, alpha);
-        graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
-        graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
-
-        // Dark wood arm
-        graphics.lineStyle(armWidth + 2, 0x3a2515, alpha);
-        graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
-        graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
-
-        // Wood core
-        graphics.lineStyle(armWidth, 0x5a3520, alpha);
-        graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
-        graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
-
-        // Wood highlight
-        graphics.lineStyle(3, 0x6a4530, alpha);
-        graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
-        graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
-
-        // Dark grey reinforcement bands
-        const bandDist1 = 0.25;
-        const bandDist2 = 0.5;
-        const bandDist3 = 0.75;
-
-        for (const dist of [bandDist1, bandDist2, bandDist3]) {
-            const leftBandX = center.x + (-sin) * armLength * dist;
-            const leftBandY = center.y + bowHeight + (cos * 0.5) * armLength * dist;
-            const rightBandX = center.x + (sin) * armLength * dist;
-            const rightBandY = center.y + bowHeight + (-cos * 0.5) * armLength * dist;
-
-            graphics.fillStyle(0x333333, alpha);
-            graphics.fillCircle(leftBandX, leftBandY, 4);
-            graphics.fillCircle(rightBandX, rightBandY, 4);
-            graphics.fillStyle(0x555555, alpha * 0.6);
-            graphics.fillCircle(leftBandX - 0.5, leftBandY - 0.5, 2);
-            graphics.fillCircle(rightBandX - 0.5, rightBandY - 0.5, 2);
-        }
-
-        // Dark grey arm tips
-        graphics.fillStyle(0x2a2a2a, alpha);
-        graphics.fillCircle(leftArmX, leftArmY, 6);
-        graphics.fillCircle(rightArmX, rightArmY, 6);
-        graphics.fillStyle(0x444444, alpha);
-        graphics.fillCircle(leftArmX, leftArmY, 4);
-        graphics.fillCircle(rightArmX, rightArmY, 4);
-        graphics.fillStyle(0x666666, alpha * 0.6);
-        graphics.fillCircle(leftArmX - 1, leftArmY - 1, 2);
-        graphics.fillCircle(rightArmX - 1, rightArmY - 1, 2);
-
-        // String position
-        const stringPullback = stringTension * 18;
-        const stringCenterX = center.x + cos * (-stringPullback);
-        const stringCenterY = center.y + bowHeight + sin * 0.5 * (-stringPullback);
-
-        // === REINFORCED RAIL ===
-        const railLength = 30;
-        const railEndX = center.x + cos * railLength;
-        const railEndY = center.y + bowHeight + sin * 0.5 * railLength;
-        const railBackX = center.x + cos * (-14);
-        const railBackY = center.y + bowHeight + sin * 0.5 * (-14);
-
-        graphics.lineStyle(12, 0x1a0a05, alpha);
-        graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
-        graphics.lineStyle(10, 0x2a1510, alpha);
-        graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
-        graphics.lineStyle(6, 0x3a2515, alpha);
-        graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
-        graphics.lineStyle(2, 0x1a0a05, alpha * 0.7);
-        graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
-
-        // Dark grey rail plates
-        for (const t of [0.3, 0.6]) {
-            const plateX = center.x + cos * railLength * t;
-            const plateY = center.y + bowHeight + sin * 0.5 * railLength * t;
-            graphics.fillStyle(0x444444, alpha);
-            graphics.fillEllipse(plateX, plateY, 5, 3);
-            graphics.fillStyle(0x666666, alpha * 0.5);
-            graphics.fillCircle(plateX - 1, plateY - 1, 1.5);
-        }
-
-        // === BOLT ===
-        if (boltLoaded) {
-            const boltLength = 26;
-            const boltStartX = stringCenterX;
-            const boltStartY = stringCenterY;
-            const boltEndX = boltStartX + cos * boltLength;
-            const boltEndY = boltStartY + sin * 0.5 * boltLength;
-
-            graphics.lineStyle(4, 0x3a2a15, alpha);
-            graphics.lineBetween(boltStartX, boltStartY, boltEndX, boltEndY);
-            graphics.lineStyle(2, 0x5d4e37, alpha);
-            graphics.lineBetween(boltStartX, boltStartY, boltEndX, boltEndY);
-
-            // Arrowhead
-            const headLength = 10;
-            const headWidth = 5;
-            const headTipX = boltEndX + cos * headLength;
-            const headTipY = boltEndY + sin * 0.5 * headLength;
-
+            // === DARK GREY PIVOT MECHANISM ===
             graphics.fillStyle(0x2a2a2a, alpha);
-            graphics.beginPath();
-            graphics.moveTo(headTipX, headTipY);
-            graphics.lineTo(boltEndX + (-sin) * headWidth, boltEndY + (cos * 0.5) * headWidth);
-            graphics.lineTo(boltEndX + (sin) * headWidth, boltEndY + (-cos * 0.5) * headWidth);
-            graphics.closePath();
-            graphics.fillPath();
-
-            graphics.fillStyle(0x555555, alpha * 0.6);
-            graphics.beginPath();
-            graphics.moveTo(headTipX, headTipY);
-            graphics.lineTo(boltEndX + (-sin) * headWidth * 0.4, boltEndY + (cos * 0.5) * headWidth * 0.4);
-            graphics.lineTo(boltEndX, boltEndY);
-            graphics.closePath();
-            graphics.fillPath();
-
-            // Dark grey fletching
-            const fletchX = boltStartX + cos * 3;
-            const fletchY = boltStartY + sin * 0.5 * 3;
+            graphics.fillCircle(center.x, baseY, 10);
+            graphics.fillStyle(0x3a3a3a, alpha);
+            graphics.fillCircle(center.x, baseY - 1, 7);
             graphics.fillStyle(0x444444, alpha);
-            graphics.beginPath();
-            graphics.moveTo(fletchX, fletchY);
-            graphics.lineTo(fletchX + (-sin) * 6, fletchY + (cos * 0.5) * 6 - 3);
-            graphics.lineTo(boltStartX + cos * 9, boltStartY + sin * 0.5 * 9);
-            graphics.closePath();
-            graphics.fillPath();
-            graphics.beginPath();
-            graphics.moveTo(fletchX, fletchY);
-            graphics.lineTo(fletchX + (sin) * 6, fletchY + (-cos * 0.5) * 6 - 3);
-            graphics.lineTo(boltStartX + cos * 9, boltStartY + sin * 0.5 * 9);
-            graphics.closePath();
-            graphics.fillPath();
-        }
+            graphics.fillCircle(center.x, baseY - 2, 4);
+            graphics.fillStyle(0x666666, alpha * 0.5);
+            graphics.fillCircle(center.x - 1, baseY - 3, 2);
 
-        // === BOWSTRING ===
-        graphics.lineStyle(3, 0x888888, alpha);
-        graphics.lineBetween(leftArmX, leftArmY, stringCenterX, stringCenterY);
-        graphics.lineBetween(rightArmX, rightArmY, stringCenterX, stringCenterY);
-        graphics.lineStyle(2, 0xbbbbbb, alpha);
-        graphics.lineBetween(leftArmX, leftArmY, stringCenterX, stringCenterY);
-        graphics.lineBetween(rightArmX, rightArmY, stringCenterX, stringCenterY);
+            // === REINFORCED CROSSBOW ARMS ===
+            const armLength = 30;
+            const armWidth = 6;
+            const bowHeight = -18;
 
-        if (stringTension > 0.3) {
-            graphics.lineStyle(5, 0xffffff, alpha * 0.2 * stringTension);
+            const leftArmX = center.x + (-sin) * armLength;
+            const leftArmY = center.y + bowHeight + (cos * 0.5) * armLength;
+            const rightArmX = center.x + (sin) * armLength;
+            const rightArmY = center.y + bowHeight + (-cos * 0.5) * armLength;
+
+            // Outer shadow
+            graphics.lineStyle(armWidth + 4, 0x1a0a05, alpha);
+            graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
+            graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
+
+            // Dark wood arm
+            graphics.lineStyle(armWidth + 2, 0x3a2515, alpha);
+            graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
+            graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
+
+            // Wood core
+            graphics.lineStyle(armWidth, 0x5a3520, alpha);
+            graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
+            graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
+
+            // Wood highlight
+            graphics.lineStyle(3, 0x6a4530, alpha);
+            graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
+            graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
+
+            // Dark grey reinforcement bands
+            const bandDist1 = 0.25;
+            const bandDist2 = 0.5;
+            const bandDist3 = 0.75;
+
+            for (const dist of [bandDist1, bandDist2, bandDist3]) {
+                const leftBandX = center.x + (-sin) * armLength * dist;
+                const leftBandY = center.y + bowHeight + (cos * 0.5) * armLength * dist;
+                const rightBandX = center.x + (sin) * armLength * dist;
+                const rightBandY = center.y + bowHeight + (-cos * 0.5) * armLength * dist;
+
+                graphics.fillStyle(0x333333, alpha);
+                graphics.fillCircle(leftBandX, leftBandY, 4);
+                graphics.fillCircle(rightBandX, rightBandY, 4);
+                graphics.fillStyle(0x555555, alpha * 0.6);
+                graphics.fillCircle(leftBandX - 0.5, leftBandY - 0.5, 2);
+                graphics.fillCircle(rightBandX - 0.5, rightBandY - 0.5, 2);
+            }
+
+            // Dark grey arm tips
+            graphics.fillStyle(0x2a2a2a, alpha);
+            graphics.fillCircle(leftArmX, leftArmY, 6);
+            graphics.fillCircle(rightArmX, rightArmY, 6);
+            graphics.fillStyle(0x444444, alpha);
+            graphics.fillCircle(leftArmX, leftArmY, 4);
+            graphics.fillCircle(rightArmX, rightArmY, 4);
+            graphics.fillStyle(0x666666, alpha * 0.6);
+            graphics.fillCircle(leftArmX - 1, leftArmY - 1, 2);
+            graphics.fillCircle(rightArmX - 1, rightArmY - 1, 2);
+
+            // String position
+            const stringPullback = stringTension * 18;
+            const stringCenterX = center.x + cos * (-stringPullback);
+            const stringCenterY = center.y + bowHeight + sin * 0.5 * (-stringPullback);
+
+            // === REINFORCED RAIL ===
+            const railLength = 30;
+            const railEndX = center.x + cos * railLength;
+            const railEndY = center.y + bowHeight + sin * 0.5 * railLength;
+            const railBackX = center.x + cos * (-14);
+            const railBackY = center.y + bowHeight + sin * 0.5 * (-14);
+
+            graphics.lineStyle(12, 0x1a0a05, alpha);
+            graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
+            graphics.lineStyle(10, 0x2a1510, alpha);
+            graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
+            graphics.lineStyle(6, 0x3a2515, alpha);
+            graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
+            graphics.lineStyle(2, 0x1a0a05, alpha * 0.7);
+            graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
+
+            // Dark grey rail plates
+            for (const t of [0.3, 0.6]) {
+                const plateX = center.x + cos * railLength * t;
+                const plateY = center.y + bowHeight + sin * 0.5 * railLength * t;
+                graphics.fillStyle(0x444444, alpha);
+                graphics.fillEllipse(plateX, plateY, 5, 3);
+                graphics.fillStyle(0x666666, alpha * 0.5);
+                graphics.fillCircle(plateX - 1, plateY - 1, 1.5);
+            }
+
+            // === BOLT ===
+            if (boltLoaded) {
+                const boltLength = 26;
+                const boltStartX = stringCenterX;
+                const boltStartY = stringCenterY;
+                const boltEndX = boltStartX + cos * boltLength;
+                const boltEndY = boltStartY + sin * 0.5 * boltLength;
+
+                graphics.lineStyle(4, 0x3a2a15, alpha);
+                graphics.lineBetween(boltStartX, boltStartY, boltEndX, boltEndY);
+                graphics.lineStyle(2, 0x5d4e37, alpha);
+                graphics.lineBetween(boltStartX, boltStartY, boltEndX, boltEndY);
+
+                // Arrowhead
+                const headLength = 10;
+                const headWidth = 5;
+                const headTipX = boltEndX + cos * headLength;
+                const headTipY = boltEndY + sin * 0.5 * headLength;
+
+                graphics.fillStyle(0x2a2a2a, alpha);
+                graphics.beginPath();
+                graphics.moveTo(headTipX, headTipY);
+                graphics.lineTo(boltEndX + (-sin) * headWidth, boltEndY + (cos * 0.5) * headWidth);
+                graphics.lineTo(boltEndX + (sin) * headWidth, boltEndY + (-cos * 0.5) * headWidth);
+                graphics.closePath();
+                graphics.fillPath();
+
+                graphics.fillStyle(0x555555, alpha * 0.6);
+                graphics.beginPath();
+                graphics.moveTo(headTipX, headTipY);
+                graphics.lineTo(boltEndX + (-sin) * headWidth * 0.4, boltEndY + (cos * 0.5) * headWidth * 0.4);
+                graphics.lineTo(boltEndX, boltEndY);
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Dark grey fletching
+                const fletchX = boltStartX + cos * 3;
+                const fletchY = boltStartY + sin * 0.5 * 3;
+                graphics.fillStyle(0x444444, alpha);
+                graphics.beginPath();
+                graphics.moveTo(fletchX, fletchY);
+                graphics.lineTo(fletchX + (-sin) * 6, fletchY + (cos * 0.5) * 6 - 3);
+                graphics.lineTo(boltStartX + cos * 9, boltStartY + sin * 0.5 * 9);
+                graphics.closePath();
+                graphics.fillPath();
+                graphics.beginPath();
+                graphics.moveTo(fletchX, fletchY);
+                graphics.lineTo(fletchX + (sin) * 6, fletchY + (-cos * 0.5) * 6 - 3);
+                graphics.lineTo(boltStartX + cos * 9, boltStartY + sin * 0.5 * 9);
+                graphics.closePath();
+                graphics.fillPath();
+            }
+
+            // === BOWSTRING ===
+            graphics.lineStyle(3, 0x888888, alpha);
             graphics.lineBetween(leftArmX, leftArmY, stringCenterX, stringCenterY);
             graphics.lineBetween(rightArmX, rightArmY, stringCenterX, stringCenterY);
-        }
+            graphics.lineStyle(2, 0xbbbbbb, alpha);
+            graphics.lineBetween(leftArmX, leftArmY, stringCenterX, stringCenterY);
+            graphics.lineBetween(rightArmX, rightArmY, stringCenterX, stringCenterY);
 
+            if (stringTension > 0.3) {
+                graphics.lineStyle(5, 0xffffff, alpha * 0.2 * stringTension);
+                graphics.lineBetween(leftArmX, leftArmY, stringCenterX, stringCenterY);
+                graphics.lineBetween(rightArmX, rightArmY, stringCenterX, stringCenterY);
+            }
+
+        }
     }
 
-    static drawXBow(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, time: number = 0) {
+    static drawXBow(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, time: number = 0, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
         // X-Bow state
         const angle = building?.ballistaAngle ?? 0;
         const stringTension = building?.ballistaStringTension ?? 0;
@@ -2061,156 +2119,162 @@ export class BuildingRenderer {
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
         const heightOffset = -18; // Height above ground
+        const g = baseGraphics || graphics;
 
-        // === HEAVY FORTIFIED STONE BASE ===
-        const baseHeight = 8;
+        if (!skipBase) {
+            // === HEAVY FORTIFIED STONE BASE ===
+            const baseHeight = 8;
 
-        // Side faces (isometric depth)
-        graphics.fillStyle(0x5a5a5a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(c2.x, c2.y);
-        graphics.lineTo(c3.x, c3.y);
-        graphics.lineTo(c3.x, c3.y + baseHeight);
-        graphics.lineTo(c2.x, c2.y + baseHeight);
-        graphics.closePath();
-        graphics.fillPath();
+            // Side faces (isometric depth)
+            graphics.fillStyle(0x5a5a5a, alpha);
+            graphics.beginPath();
+            graphics.moveTo(c2.x, c2.y);
+            graphics.lineTo(c3.x, c3.y);
+            graphics.lineTo(c3.x, c3.y + baseHeight);
+            graphics.lineTo(c2.x, c2.y + baseHeight);
+            graphics.closePath();
+            graphics.fillPath();
 
-        graphics.fillStyle(0x4a4a4a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(c3.x, c3.y);
-        graphics.lineTo(c4.x, c4.y);
-        graphics.lineTo(c4.x, c4.y + baseHeight);
-        graphics.lineTo(c3.x, c3.y + baseHeight);
-        graphics.closePath();
-        graphics.fillPath();
+            graphics.fillStyle(0x4a4a4a, alpha);
+            graphics.beginPath();
+            graphics.moveTo(c3.x, c3.y);
+            graphics.lineTo(c4.x, c4.y);
+            graphics.lineTo(c4.x, c4.y + baseHeight);
+            graphics.lineTo(c3.x, c3.y + baseHeight);
+            graphics.closePath();
+            graphics.fillPath();
 
-        // Top face
-        graphics.fillStyle(tint ?? 0x6a6a6a, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
+            // Top face
+            g.fillStyle(tint ?? 0x6a6a6a, alpha);
+            g.fillPoints([c1, c2, c3, c4], true);
 
-        // Stone block pattern
-        graphics.lineStyle(1, 0x5a5a5a, alpha * 0.5);
-        graphics.lineBetween(c1.x, c1.y, c3.x, c3.y);
-        graphics.lineBetween(c2.x, c2.y, c4.x, c4.y);
+            // Stone block pattern
+            g.lineStyle(1, 0x5a5a5a, alpha * 0.5);
+            g.lineBetween(c1.x, c1.y, c3.x, c3.y);
+            g.lineBetween(c2.x, c2.y, c4.x, c4.y);
 
-        // Border
-        graphics.lineStyle(2, 0x4a4a4a, 0.7 * alpha);
-        graphics.strokePoints([c1, c2, c3, c4], true, true);
+            // Border
+            g.lineStyle(2, 0x4a4a4a, 0.7 * alpha);
+            g.strokePoints([c1, c2, c3, c4], true, true);
 
-        // === METAL ROTATING PLATFORM ===
-        const baseRadiusX = 24;
-        const baseRadiusY = 14;
-        const baseY = center.y - 4;
-
-        // Shadow
-        graphics.fillStyle(0x1a1a1a, alpha * 0.4);
-        graphics.fillEllipse(center.x + 2, baseY + 4, baseRadiusX, baseRadiusY);
-
-        // Dark metal platform
-        graphics.fillStyle(0x3a3a4a, alpha);
-        graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-
-        // Metal segment lines
-        graphics.lineStyle(1, 0x2a2a3a, alpha * 0.6);
-        for (let i = 0; i < 8; i++) {
-            const ang = (i / 8) * Math.PI * 2;
-            const x1 = center.x + Math.cos(ang) * (baseRadiusX - 2);
-            const y1 = baseY + Math.sin(ang) * (baseRadiusY - 1);
-            graphics.lineBetween(center.x, baseY, x1, y1);
         }
 
-        // Outer ring
-        graphics.lineStyle(3, 0x4a4a5a, alpha);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-        graphics.lineStyle(1, 0x5a5a6a, alpha * 0.6);
-        graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
+        if (!onlyBase) {
+            // === METAL ROTATING PLATFORM ===
+            const baseRadiusX = 24;
+            const baseRadiusY = 14;
+            const baseY = center.y - 4;
 
-        // Bolts
-        graphics.fillStyle(0x555560, alpha);
-        for (let i = 0; i < 8; i++) {
-            const ang = (i / 8) * Math.PI * 2;
-            const rx = center.x + Math.cos(ang) * (baseRadiusX - 3);
-            const ry = baseY + Math.sin(ang) * (baseRadiusY - 2);
-            graphics.fillCircle(rx, ry, 2);
+            // Shadow
+            g.fillStyle(0x1a1a1a, alpha * 0.4);
+            g.fillEllipse(center.x + 2, baseY + 4, baseRadiusX, baseRadiusY);
+
+            // Dark metal platform
+            graphics.fillStyle(0x3a3a4a, alpha);
+            graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+
+            // Metal segment lines
+            graphics.lineStyle(1, 0x2a2a3a, alpha * 0.6);
+            for (let i = 0; i < 8; i++) {
+                const ang = (i / 8) * Math.PI * 2;
+                const x1 = center.x + Math.cos(ang) * (baseRadiusX - 2);
+                const y1 = baseY + Math.sin(ang) * (baseRadiusY - 1);
+                graphics.lineBetween(center.x, baseY, x1, y1);
+            }
+
+            // Outer ring
+            graphics.lineStyle(3, 0x4a4a5a, alpha);
+            graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+            graphics.lineStyle(1, 0x5a5a6a, alpha * 0.6);
+            graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
+
+            // Bolts
+            graphics.fillStyle(0x555560, alpha);
+            for (let i = 0; i < 8; i++) {
+                const ang = (i / 8) * Math.PI * 2;
+                const rx = center.x + Math.cos(ang) * (baseRadiusX - 3);
+                const ry = baseY + Math.sin(ang) * (baseRadiusY - 2);
+                graphics.fillCircle(rx, ry, 2);
+            }
+
+            // === CENTRAL PIVOT MECHANISM ===
+            graphics.fillStyle(0x2a2a3a, alpha);
+            graphics.fillCircle(center.x, baseY, 8);
+            graphics.fillStyle(0x3a3a4a, alpha);
+            graphics.fillCircle(center.x, baseY - 1, 6);
+            graphics.fillStyle(0x4a4a5a, alpha);
+            graphics.fillCircle(center.x, baseY - 2, 4);
+            graphics.fillStyle(0x5a5a6a, alpha * 0.6);
+            graphics.fillCircle(center.x - 1, baseY - 3, 2);
+
+            // === CROSSBOW BODY ===
+            // Define Front (Tip) and Back (Stock) relative to center using angle
+            // Front is +d along angle
+            const frontX = center.x + cos * 20;
+            const frontY = center.y + heightOffset + sin * 0.5 * 20;
+            const backX = center.x + cos * -20;
+            const backY = center.y + heightOffset + sin * 0.5 * -20;
+
+            // Draw Stock/Rail
+            graphics.lineStyle(10, 0x3a2515, alpha);
+            graphics.lineBetween(backX, backY, frontX, frontY);
+            // Highlight
+            graphics.lineStyle(6, 0x5a3520, alpha);
+            graphics.lineBetween(backX, backY, frontX, frontY);
+
+            // === ARMS (Mounted at Front) ===
+            // Arms extend perpendicular to aim
+            const armSpan = 30;
+            const armX = -sin * armSpan;
+            const armY = cos * 0.5 * armSpan;
+
+            // Mount point slightly behind tip
+            const mountX = center.x + cos * 15;
+            const mountY = center.y + heightOffset + sin * 0.5 * 15;
+
+            const lArmX = mountX + armX;
+            const lArmY = mountY + armY;
+            const rArmX = mountX - armX;
+            const rArmY = mountY - armY;
+
+            graphics.lineStyle(5, 0x4a2a10, alpha);
+            graphics.lineBetween(mountX, mountY, lArmX, lArmY);
+            graphics.lineBetween(mountX, mountY, rArmX, rArmY);
+
+            // Tips
+            graphics.fillStyle(0x888888, alpha);
+            graphics.fillCircle(lArmX, lArmY, 3);
+            graphics.fillCircle(rArmX, rArmY, 3);
+
+            // === STRING (Single) ===
+            // Connects tips to Nock. Nock moves with tension.
+            const pull = stringTension * 12; // 0 to 12px back
+            // Resting nock position (mid-rail) -> Pulled back (near stock)
+            // Resting: -5. Pulled: -17.
+            const nockOffset = -5 - pull;
+            const nockX = center.x + cos * nockOffset;
+            const nockY = center.y + heightOffset + sin * 0.5 * nockOffset;
+
+            graphics.lineStyle(1.5, 0xdddddd, alpha); // Thin string
+            graphics.lineBetween(lArmX, lArmY, nockX, nockY);
+            graphics.lineBetween(rArmX, rArmY, nockX, nockY);
+
+            // === BOLT (If loaded) ===
+            if (stringTension > 0.1) {
+                const boltTipX = frontX;
+                const boltTipY = frontY;
+                graphics.lineStyle(2, 0xffff00, alpha);
+                graphics.lineBetween(nockX, nockY, boltTipX, boltTipY);
+            }
+
+            // Firing Glow
+            const firingGlow = 0.3 + Math.sin(time / 50) * 0.2;
+            graphics.fillStyle(0xff8844, alpha * firingGlow);
+            graphics.fillCircle(frontX, frontY, 4);
         }
-
-        // === CENTRAL PIVOT MECHANISM ===
-        graphics.fillStyle(0x2a2a3a, alpha);
-        graphics.fillCircle(center.x, baseY, 8);
-        graphics.fillStyle(0x3a3a4a, alpha);
-        graphics.fillCircle(center.x, baseY - 1, 6);
-        graphics.fillStyle(0x4a4a5a, alpha);
-        graphics.fillCircle(center.x, baseY - 2, 4);
-        graphics.fillStyle(0x5a5a6a, alpha * 0.6);
-        graphics.fillCircle(center.x - 1, baseY - 3, 2);
-
-        // === CROSSBOW BODY ===
-        // Define Front (Tip) and Back (Stock) relative to center using angle
-        // Front is +d along angle
-        const frontX = center.x + cos * 20;
-        const frontY = center.y + heightOffset + sin * 0.5 * 20;
-        const backX = center.x + cos * -20;
-        const backY = center.y + heightOffset + sin * 0.5 * -20;
-
-        // Draw Stock/Rail
-        graphics.lineStyle(10, 0x3a2515, alpha);
-        graphics.lineBetween(backX, backY, frontX, frontY);
-        // Highlight
-        graphics.lineStyle(6, 0x5a3520, alpha);
-        graphics.lineBetween(backX, backY, frontX, frontY);
-
-        // === ARMS (Mounted at Front) ===
-        // Arms extend perpendicular to aim
-        const armSpan = 30;
-        const armX = -sin * armSpan;
-        const armY = cos * 0.5 * armSpan;
-
-        // Mount point slightly behind tip
-        const mountX = center.x + cos * 15;
-        const mountY = center.y + heightOffset + sin * 0.5 * 15;
-
-        const lArmX = mountX + armX;
-        const lArmY = mountY + armY;
-        const rArmX = mountX - armX;
-        const rArmY = mountY - armY;
-
-        graphics.lineStyle(5, 0x4a2a10, alpha);
-        graphics.lineBetween(mountX, mountY, lArmX, lArmY);
-        graphics.lineBetween(mountX, mountY, rArmX, rArmY);
-
-        // Tips
-        graphics.fillStyle(0x888888, alpha);
-        graphics.fillCircle(lArmX, lArmY, 3);
-        graphics.fillCircle(rArmX, rArmY, 3);
-
-        // === STRING (Single) ===
-        // Connects tips to Nock. Nock moves with tension.
-        const pull = stringTension * 12; // 0 to 12px back
-        // Resting nock position (mid-rail) -> Pulled back (near stock)
-        // Resting: -5. Pulled: -17.
-        const nockOffset = -5 - pull;
-        const nockX = center.x + cos * nockOffset;
-        const nockY = center.y + heightOffset + sin * 0.5 * nockOffset;
-
-        graphics.lineStyle(1.5, 0xdddddd, alpha); // Thin string
-        graphics.lineBetween(lArmX, lArmY, nockX, nockY);
-        graphics.lineBetween(rArmX, rArmY, nockX, nockY);
-
-        // === BOLT (If loaded) ===
-        if (stringTension > 0.1) {
-            const boltTipX = frontX;
-            const boltTipY = frontY;
-            graphics.lineStyle(2, 0xffff00, alpha);
-            graphics.lineBetween(nockX, nockY, boltTipX, boltTipY);
-        }
-
-        // Firing Glow
-        const firingGlow = 0.3 + Math.sin(time / 50) * 0.2;
-        graphics.fillStyle(0xff8844, alpha * firingGlow);
-        graphics.fillCircle(frontX, frontY, 4);
     }
 
-    static drawXBowLevel2(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, time: number = 0) {
+    static drawXBowLevel2(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, time: number = 0, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
         // LEVEL 2 X-BOW: Enhanced with purple/magenta accents and energy effects
         const angle = building?.ballistaAngle ?? 0;
         const stringTension = building?.ballistaStringTension ?? 0;
@@ -2218,196 +2282,203 @@ export class BuildingRenderer {
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
         const heightOffset = -20; // Slightly higher
+        const g = baseGraphics || graphics;
 
-        // === ENHANCED FORTIFIED BASE ===
-        const baseHeight = 10;
+        if (!skipBase) {
+            // === ENHANCED FORTIFIED BASE ===
+            const baseHeight = 10;
 
-        // Side faces with purple tint
-        graphics.fillStyle(0x5a5a6a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(c2.x, c2.y);
-        graphics.lineTo(c3.x, c3.y);
-        graphics.lineTo(c3.x, c3.y + baseHeight);
-        graphics.lineTo(c2.x, c2.y + baseHeight);
-        graphics.closePath();
-        graphics.fillPath();
+            // Side faces with purple tint
+            graphics.fillStyle(0x5a5a6a, alpha);
+            graphics.beginPath();
+            graphics.moveTo(c2.x, c2.y);
+            graphics.lineTo(c3.x, c3.y);
+            graphics.lineTo(c3.x, c3.y + baseHeight);
+            graphics.lineTo(c2.x, c2.y + baseHeight);
+            graphics.closePath();
+            graphics.fillPath();
 
-        graphics.fillStyle(0x4a4a5a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(c3.x, c3.y);
-        graphics.lineTo(c4.x, c4.y);
-        graphics.lineTo(c4.x, c4.y + baseHeight);
-        graphics.lineTo(c3.x, c3.y + baseHeight);
-        graphics.closePath();
-        graphics.fillPath();
+            graphics.fillStyle(0x4a4a5a, alpha);
+            graphics.beginPath();
+            graphics.moveTo(c3.x, c3.y);
+            graphics.lineTo(c4.x, c4.y);
+            graphics.lineTo(c4.x, c4.y + baseHeight);
+            graphics.lineTo(c3.x, c3.y + baseHeight);
+            graphics.closePath();
+            graphics.fillPath();
 
-        // Top face
-        graphics.fillStyle(tint ?? 0x6a6a7a, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
+            // Top face
+            g.fillStyle(tint ?? 0x6a6a7a, alpha);
+            g.fillPoints([c1, c2, c3, c4], true);
 
-        // Stone pattern
-        graphics.lineStyle(1, 0x5a5a6a, alpha * 0.5);
-        graphics.lineBetween(c1.x, c1.y, c3.x, c3.y);
-        graphics.lineBetween(c2.x, c2.y, c4.x, c4.y);
-        const mid12 = { x: (c1.x + c2.x) / 2, y: (c1.y + c2.y) / 2 };
-        const mid34 = { x: (c3.x + c4.x) / 2, y: (c3.y + c4.y) / 2 };
-        graphics.lineBetween(mid12.x, mid12.y, mid34.x, mid34.y);
+            // Stone pattern
+            g.lineStyle(1, 0x5a5a6a, alpha * 0.5);
+            g.lineBetween(c1.x, c1.y, c3.x, c3.y);
+            g.lineBetween(c2.x, c2.y, c4.x, c4.y);
+            const mid12 = { x: (c1.x + c2.x) / 2, y: (c1.y + c2.y) / 2 };
+            const mid34 = { x: (c3.x + c4.x) / 2, y: (c3.y + c4.y) / 2 };
+            g.lineBetween(mid12.x, mid12.y, mid34.x, mid34.y);
 
-        // Dark grey corner accents
-        graphics.fillStyle(0x444444, alpha * 0.9);
-        graphics.fillCircle(c1.x, c1.y, 4);
-        graphics.fillCircle(c2.x, c2.y, 3);
-        graphics.fillCircle(c3.x, c3.y, 3);
-        graphics.fillCircle(c4.x, c4.y, 3);
-        // Subtle grey glow
-        graphics.fillStyle(0x666666, alpha * 0.4);
-        graphics.fillCircle(c1.x, c1.y, 6);
+            // Dark grey corner accents
+            g.fillStyle(0x444444, alpha * 0.9);
+            g.fillCircle(c1.x, c1.y, 4);
+            g.fillCircle(c2.x, c2.y, 3);
+            g.fillCircle(c3.x, c3.y, 3);
+            g.fillCircle(c4.x, c4.y, 3);
+            // Subtle grey glow
+            g.fillStyle(0x666666, alpha * 0.4);
+            g.fillCircle(c1.x, c1.y, 6);
 
-        graphics.lineStyle(2, 0x4a4a5a, 0.7 * alpha);
-        graphics.strokePoints([c1, c2, c3, c4], true, true);
+            g.lineStyle(2, 0x4a4a5a, 0.7 * alpha);
+            g.strokePoints([c1, c2, c3, c4], true, true);
 
-        // === ENHANCED METAL PLATFORM ===
-        const baseRadiusX = 26;
-        const baseRadiusY = 15;
-        const baseY = center.y - 5;
-
-        // Shadow
-        graphics.fillStyle(0x1a1a2a, alpha * 0.4);
-        graphics.fillEllipse(center.x + 2, baseY + 5, baseRadiusX, baseRadiusY);
-
-        // Dark grey metal platform
-        graphics.fillStyle(0x333333, alpha);
-        graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-
-        // Geometric pattern
-        graphics.lineStyle(1, 0x444444, alpha * 0.4);
-        for (let i = 0; i < 8; i++) {
-            const ang = (i / 8) * Math.PI * 2 + time / 2000;
-            const x1 = center.x + Math.cos(ang) * (baseRadiusX - 2);
-            const y1 = baseY + Math.sin(ang) * (baseRadiusY - 1);
-            graphics.lineBetween(center.x, baseY, x1, y1);
         }
 
-        // Dark grey outer ring
-        graphics.lineStyle(4, 0x3a3a3a, alpha);
-        graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-        graphics.lineStyle(2, 0x555555, alpha * 0.5);
-        graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
+        if (!onlyBase) {
+            // === ENHANCED METAL PLATFORM ===
+            const baseRadiusX = 26;
+            const baseRadiusY = 15;
+            const baseY = center.y - 5;
 
-        // Dark grey rivets
-        graphics.fillStyle(0x444444, alpha);
-        for (let i = 0; i < 10; i++) {
-            const ang = (i / 10) * Math.PI * 2;
-            const rx = center.x + Math.cos(ang) * (baseRadiusX - 3);
-            const ry = baseY + Math.sin(ang) * (baseRadiusY - 2);
-            graphics.fillCircle(rx, ry, 2.5);
-            graphics.fillStyle(0x666666, alpha * 0.5);
-            graphics.fillCircle(rx - 0.5, ry - 0.5, 1);
+            // Shadow
+            g.fillStyle(0x1a1a2a, alpha * 0.4);
+            g.fillEllipse(center.x + 2, baseY + 5, baseRadiusX, baseRadiusY);
+
+            // Dark grey metal platform
+            graphics.fillStyle(0x333333, alpha);
+            graphics.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+
+            // Geometric pattern
+            graphics.lineStyle(1, 0x444444, alpha * 0.4);
+            for (let i = 0; i < 8; i++) {
+                const ang = (i / 8) * Math.PI * 2 + time / 2000;
+                const x1 = center.x + Math.cos(ang) * (baseRadiusX - 2);
+                const y1 = baseY + Math.sin(ang) * (baseRadiusY - 1);
+                graphics.lineBetween(center.x, baseY, x1, y1);
+            }
+
+            // Dark grey outer ring
+            graphics.lineStyle(4, 0x3a3a3a, alpha);
+            graphics.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
+            graphics.lineStyle(2, 0x555555, alpha * 0.5);
+            graphics.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
+
+            // Dark grey rivets
             graphics.fillStyle(0x444444, alpha);
-        }
+            for (let i = 0; i < 10; i++) {
+                const ang = (i / 10) * Math.PI * 2;
+                const rx = center.x + Math.cos(ang) * (baseRadiusX - 3);
+                const ry = baseY + Math.sin(ang) * (baseRadiusY - 2);
+                graphics.fillCircle(rx, ry, 2.5);
+                graphics.fillStyle(0x666666, alpha * 0.5);
+                graphics.fillCircle(rx - 0.5, ry - 0.5, 1);
+                graphics.fillStyle(0x444444, alpha);
+            }
 
-        // === ENHANCED DARK GREY PIVOT ===
-        graphics.fillStyle(0x2a2a2a, alpha);
-        graphics.fillCircle(center.x, baseY, 10);
-        graphics.fillStyle(0x3a3a3a, alpha);
-        graphics.fillCircle(center.x, baseY - 1, 7);
-        graphics.fillStyle(0x444444, alpha);
-        graphics.fillCircle(center.x, baseY - 2, 4);
-        // Core highlight
-        graphics.fillStyle(0x666666, alpha * 0.6);
-        graphics.fillCircle(center.x, baseY - 2, 2);
+            // === ENHANCED DARK GREY PIVOT ===
+            graphics.fillStyle(0x2a2a2a, alpha);
+            graphics.fillCircle(center.x, baseY, 10);
+            graphics.fillStyle(0x3a3a3a, alpha);
+            graphics.fillCircle(center.x, baseY - 1, 7);
+            graphics.fillStyle(0x444444, alpha);
+            graphics.fillCircle(center.x, baseY - 2, 4);
+            // Core highlight
+            graphics.fillStyle(0x666666, alpha * 0.6);
+            graphics.fillCircle(center.x, baseY - 2, 2);
 
-        // === ENHANCED CROSSBOW BODY ===
-        const frontX = center.x + cos * 22;
-        const frontY = center.y + heightOffset + sin * 0.5 * 22;
-        const backX = center.x + cos * -22;
-        const backY = center.y + heightOffset + sin * 0.5 * -22;
+            // === ENHANCED CROSSBOW BODY ===
+            const frontX = center.x + cos * 22;
+            const frontY = center.y + heightOffset + sin * 0.5 * 22;
+            const backX = center.x + cos * -22;
+            const backY = center.y + heightOffset + sin * 0.5 * -22;
 
-        // Enhanced rail
-        graphics.lineStyle(12, 0x2a2a3a, alpha);
-        graphics.lineBetween(backX, backY, frontX, frontY);
-        graphics.lineStyle(8, 0x333333, alpha);
-        graphics.lineBetween(backX, backY, frontX, frontY);
-        graphics.lineStyle(4, 0x444444, alpha);
-        graphics.lineBetween(backX, backY, frontX, frontY);
+            // Enhanced rail
+            graphics.lineStyle(12, 0x2a2a3a, alpha);
+            graphics.lineBetween(backX, backY, frontX, frontY);
+            graphics.lineStyle(8, 0x333333, alpha);
+            graphics.lineBetween(backX, backY, frontX, frontY);
+            graphics.lineStyle(4, 0x444444, alpha);
+            graphics.lineBetween(backX, backY, frontX, frontY);
 
-        // Dark grey line along rail
-        graphics.lineStyle(2, 0x444444, alpha * 0.7);
-        graphics.lineBetween(backX, backY, frontX, frontY);
+            // Dark grey line along rail
+            graphics.lineStyle(2, 0x444444, alpha * 0.7);
+            graphics.lineBetween(backX, backY, frontX, frontY);
 
-        // === ENHANCED ARMS ===
-        const armSpan = 34;
-        const armX = -sin * armSpan;
-        const armY = cos * 0.5 * armSpan;
+            // === ENHANCED ARMS ===
+            const armSpan = 34;
+            const armX = -sin * armSpan;
+            const armY = cos * 0.5 * armSpan;
 
-        const mountX = center.x + cos * 17;
-        const mountY = center.y + heightOffset + sin * 0.5 * 17;
+            const mountX = center.x + cos * 17;
+            const mountY = center.y + heightOffset + sin * 0.5 * 17;
 
-        const lArmX = mountX + armX;
-        const lArmY = mountY + armY;
-        const rArmX = mountX - armX;
-        const rArmY = mountY - armY;
+            const lArmX = mountX + armX;
+            const lArmY = mountY + armY;
+            const rArmX = mountX - armX;
+            const rArmY = mountY - armY;
 
-        // Shadow
-        graphics.lineStyle(7, 0x1a1a2a, alpha);
-        graphics.lineBetween(mountX, mountY, lArmX, lArmY);
-        graphics.lineBetween(mountX, mountY, rArmX, rArmY);
+            // Shadow
+            graphics.lineStyle(7, 0x1a1a2a, alpha);
+            graphics.lineBetween(mountX, mountY, lArmX, lArmY);
+            graphics.lineBetween(mountX, mountY, rArmX, rArmY);
 
-        // Dark arms
-        graphics.lineStyle(5, 0x333333, alpha);
-        graphics.lineBetween(mountX, mountY, lArmX, lArmY);
-        graphics.lineBetween(mountX, mountY, rArmX, rArmY);
+            // Dark arms
+            graphics.lineStyle(5, 0x333333, alpha);
+            graphics.lineBetween(mountX, mountY, lArmX, lArmY);
+            graphics.lineBetween(mountX, mountY, rArmX, rArmY);
 
-        // Arm highlights
-        graphics.lineStyle(3, 0x444444, alpha);
-        graphics.lineBetween(mountX, mountY, lArmX, lArmY);
-        graphics.lineBetween(mountX, mountY, rArmX, rArmY);
+            // Arm highlights
+            graphics.lineStyle(3, 0x444444, alpha);
+            graphics.lineBetween(mountX, mountY, lArmX, lArmY);
+            graphics.lineBetween(mountX, mountY, rArmX, rArmY);
 
-        // Dark grey tips
-        graphics.fillStyle(0x2a2a2a, alpha);
-        graphics.fillCircle(lArmX, lArmY, 5);
-        graphics.fillCircle(rArmX, rArmY, 5);
-        graphics.fillStyle(0x444444, alpha);
-        graphics.fillCircle(lArmX, lArmY, 3);
-        graphics.fillCircle(rArmX, rArmY, 3);
-        graphics.fillStyle(0x666666, alpha * 0.6);
-        graphics.fillCircle(lArmX - 0.5, lArmY - 0.5, 1.5);
-        graphics.fillCircle(rArmX - 0.5, rArmY - 0.5, 1.5);
+            // Dark grey tips
+            graphics.fillStyle(0x2a2a2a, alpha);
+            graphics.fillCircle(lArmX, lArmY, 5);
+            graphics.fillCircle(rArmX, rArmY, 5);
+            graphics.fillStyle(0x444444, alpha);
+            graphics.fillCircle(lArmX, lArmY, 3);
+            graphics.fillCircle(rArmX, rArmY, 3);
+            graphics.fillStyle(0x666666, alpha * 0.6);
+            graphics.fillCircle(lArmX - 0.5, lArmY - 0.5, 1.5);
+            graphics.fillCircle(rArmX - 0.5, rArmY - 0.5, 1.5);
 
-        // === ENERGY STRING ===
-        const pull = stringTension * 14;
-        const nockOffset = -6 - pull;
-        const nockX = center.x + cos * nockOffset;
-        const nockY = center.y + heightOffset + sin * 0.5 * nockOffset;
+            // === ENERGY STRING ===
+            const pull = stringTension * 14;
+            const nockOffset = -6 - pull;
+            const nockX = center.x + cos * nockOffset;
+            const nockY = center.y + heightOffset + sin * 0.5 * nockOffset;
 
-        // Reinforced string effect
-        graphics.lineStyle(2, 0x555555, alpha);
-        graphics.lineBetween(lArmX, lArmY, nockX, nockY);
-        graphics.lineBetween(rArmX, rArmY, nockX, nockY);
-        graphics.lineStyle(1, 0x777777, alpha * 0.7);
-        graphics.lineBetween(lArmX, lArmY, nockX, nockY);
-        graphics.lineBetween(rArmX, rArmY, nockX, nockY);
-
-        // Reinforced bolt
-        if (stringTension > 0.1) {
-            const boltTipX = frontX;
-            const boltTipY = frontY;
-            graphics.lineStyle(4, 0x333333, alpha * 0.5);
-            graphics.lineBetween(nockX, nockY, boltTipX, boltTipY);
+            // Reinforced string effect
             graphics.lineStyle(2, 0x555555, alpha);
-            graphics.lineBetween(nockX, nockY, boltTipX, boltTipY);
-            graphics.lineStyle(1, 0x777777, alpha * 0.8);
-            graphics.lineBetween(nockX, nockY, boltTipX, boltTipY);
-        }
+            graphics.lineBetween(lArmX, lArmY, nockX, nockY);
+            graphics.lineBetween(rArmX, rArmY, nockX, nockY);
+            graphics.lineStyle(1, 0x777777, alpha * 0.7);
+            graphics.lineBetween(lArmX, lArmY, nockX, nockY);
+            graphics.lineBetween(rArmX, rArmY, nockX, nockY);
 
-        graphics.fillCircle(frontX, frontY, 5);
+            // Reinforced bolt
+            if (stringTension > 0.1) {
+                const boltTipX = frontX;
+                const boltTipY = frontY;
+                graphics.lineStyle(4, 0x333333, alpha * 0.5);
+                graphics.lineBetween(nockX, nockY, boltTipX, boltTipY);
+                graphics.lineStyle(2, 0x555555, alpha);
+                graphics.lineBetween(nockX, nockY, boltTipX, boltTipY);
+                graphics.lineStyle(1, 0x777777, alpha * 0.8);
+                graphics.lineBetween(nockX, nockY, boltTipX, boltTipY);
+            }
+
+            graphics.fillCircle(frontX, frontY, 5);
+        }
     }
 
-    static drawMortar(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building: any, time: number) {
+    static drawMortar(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building: any, time: number, baseGraphics?: Phaser.GameObjects.Graphics) {
         const level = building?.level ?? 1;
         const isLevel2 = level >= 2;
         const isLevel3 = level >= 3;
         const size = isLevel3 ? 1.2 : (isLevel2 ? 1.12 : 1.0);
+        const g = baseGraphics || graphics;
 
         // Recoil animation - reduced movement + scale shrink for perspective effect
         const timeSinceFire = building?.lastFireTime ? (time - building.lastFireTime) : 10000;
@@ -2474,41 +2545,41 @@ export class BuildingRenderer {
         }
 
         // Main platform top
-        graphics.fillStyle(stoneBase, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
+        g.fillStyle(stoneBase, alpha);
+        g.fillPoints([c1, c2, c3, c4], true);
 
         // Edge highlights
-        graphics.lineStyle(2, stoneLight, alpha * 0.6);
-        graphics.lineBetween(c1.x, c1.y, c2.x, c2.y);
-        graphics.lineBetween(c1.x, c1.y, c4.x, c4.y);
-        graphics.lineStyle(2, stoneDark, alpha * 0.6);
-        graphics.lineBetween(c2.x, c2.y, c3.x, c3.y);
-        graphics.lineBetween(c3.x, c3.y, c4.x, c4.y);
+        g.lineStyle(2, stoneLight, alpha * 0.6);
+        g.lineBetween(c1.x, c1.y, c2.x, c2.y);
+        g.lineBetween(c1.x, c1.y, c4.x, c4.y);
+        g.lineStyle(2, stoneDark, alpha * 0.6);
+        g.lineBetween(c2.x, c2.y, c3.x, c3.y);
+        g.lineBetween(c3.x, c3.y, c4.x, c4.y);
 
         // L3: Stone rim around edge + decorative garnishes
         if (isLevel3) {
-            graphics.lineStyle(3, 0x6a6a6a, alpha * 0.8);
-            graphics.strokePoints([c1, c2, c3, c4], true, true);
+            g.lineStyle(3, 0x6a6a6a, alpha * 0.8);
+            g.strokePoints([c1, c2, c3, c4], true, true);
 
             // Corner rivets/stones
-            graphics.fillStyle(0x7a7a7a, alpha);
-            graphics.fillCircle(c1.x, c1.y, 3);
-            graphics.fillCircle(c2.x, c2.y, 3);
-            graphics.fillCircle(c3.x, c3.y, 3);
-            graphics.fillCircle(c4.x, c4.y, 3);
+            g.fillStyle(0x7a7a7a, alpha);
+            g.fillCircle(c1.x, c1.y, 3);
+            g.fillCircle(c2.x, c2.y, 3);
+            g.fillCircle(c3.x, c3.y, 3);
+            g.fillCircle(c4.x, c4.y, 3);
             // Inner highlight on rivets
-            graphics.fillStyle(0x9a9a9a, alpha * 0.8);
-            graphics.fillCircle(c1.x - 1, c1.y - 1, 1.5);
-            graphics.fillCircle(c2.x - 1, c2.y - 1, 1.5);
-            graphics.fillCircle(c3.x - 1, c3.y - 1, 1.5);
-            graphics.fillCircle(c4.x - 1, c4.y - 1, 1.5);
+            g.fillStyle(0x9a9a9a, alpha * 0.8);
+            g.fillCircle(c1.x - 1, c1.y - 1, 1.5);
+            g.fillCircle(c2.x - 1, c2.y - 1, 1.5);
+            g.fillCircle(c3.x - 1, c3.y - 1, 1.5);
+            g.fillCircle(c4.x - 1, c4.y - 1, 1.5);
 
             // Small decorative stones near emplacement
-            graphics.fillStyle(0x5a5a5a, alpha * 0.7);
-            graphics.fillCircle(center.x - 22, center.y - 8, 2.5);
-            graphics.fillCircle(center.x + 20, center.y - 6, 2);
-            graphics.fillCircle(center.x - 18, center.y + 10, 2);
-            graphics.fillCircle(center.x + 22, center.y + 8, 2.5);
+            g.fillStyle(0x5a5a5a, alpha * 0.7);
+            g.fillCircle(center.x - 22, center.y - 8, 2.5);
+            g.fillCircle(center.x + 20, center.y - 6, 2);
+            g.fillCircle(center.x - 18, center.y + 10, 2);
+            g.fillCircle(center.x + 22, center.y + 8, 2.5);
         }
 
         // ============================================
@@ -2623,20 +2694,21 @@ export class BuildingRenderer {
         }
     }
 
-    static drawTeslaCoil(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building: any, time: number) {
+    static drawTeslaCoil(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building: any, time: number, baseGraphics?: Phaser.GameObjects.Graphics) {
         const level = building?.level ?? 1;
         const isLevel2 = level >= 2;
+        const g = baseGraphics || graphics;
 
         // Stone base platform (thicker for L2)
-        graphics.fillStyle(isLevel2 ? 0x6a6a6a : 0x5a5a5a, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
-        graphics.lineStyle(isLevel2 ? 2 : 1, isLevel2 ? 0x4a4a4a : 0x3a3a3a, 0.5 * alpha);
-        graphics.strokePoints([c1, c2, c3, c4], true, true);
+        g.fillStyle(isLevel2 ? 0x6a6a6a : 0x5a5a5a, alpha);
+        g.fillPoints([c1, c2, c3, c4], true);
+        g.lineStyle(isLevel2 ? 2 : 1, isLevel2 ? 0x4a4a4a : 0x3a3a3a, 0.5 * alpha);
+        g.strokePoints([c1, c2, c3, c4], true, true);
 
         // L2: Raised platform edge
         if (isLevel2) {
-            graphics.fillStyle(0x555555, alpha * 0.8);
-            graphics.fillRect(center.x - 16, center.y + 2, 32, 4);
+            g.fillStyle(0x555555, alpha * 0.8);
+            g.fillRect(center.x - 16, center.y + 2, 32, 4);
         }
 
         // Wooden support post (thicker for L2)
@@ -2761,20 +2833,21 @@ export class BuildingRenderer {
             graphics.fillCircle(sparkX, sparkY, 1.5);
         }
     }
-    static drawPrismTower(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, _building?: any) {
+    static drawPrismTower(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, _building?: any, baseGraphics?: Phaser.GameObjects.Graphics) {
         const time = Date.now(); // Use Date.now() instead of this.time.now since static
+        const g = baseGraphics || graphics;
 
         // Isometric stone base platform
-        graphics.fillStyle(tint ?? 0x4a4a5a, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
+        g.fillStyle(tint ?? 0x4a4a5a, alpha);
+        g.fillPoints([c1, c2, c3, c4], true);
 
         // Base edge highlights (isometric)
-        graphics.lineStyle(1, 0x6a6a7a, alpha * 0.8);
-        graphics.lineBetween(c1.x, c1.y, c2.x, c2.y);
-        graphics.lineBetween(c1.x, c1.y, c4.x, c4.y);
-        graphics.lineStyle(1, 0x2a2a3a, alpha * 0.8);
-        graphics.lineBetween(c2.x, c2.y, c3.x, c3.y);
-        graphics.lineBetween(c3.x, c3.y, c4.x, c4.y);
+        g.lineStyle(1, 0x6a6a7a, alpha * 0.8);
+        g.lineBetween(c1.x, c1.y, c2.x, c2.y);
+        g.lineBetween(c1.x, c1.y, c4.x, c4.y);
+        g.lineStyle(1, 0x2a2a3a, alpha * 0.8);
+        g.lineBetween(c2.x, c2.y, c3.x, c3.y);
+        g.lineBetween(c3.x, c3.y, c4.x, c4.y);
 
         // Crystal pillar base (isometric hexagonal)
         const baseHeight = 15;
@@ -3233,223 +3306,235 @@ export class BuildingRenderer {
         }
     }
 
-    static drawArmyCamp(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, baseGraphics?: Phaser.GameObjects.Graphics, _building?: any) {
+    static drawArmyCamp(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, baseGraphics?: Phaser.GameObjects.Graphics, building?: any, skipBase: boolean = false, onlyBase: boolean = false) {
         const time = Date.now();
-        const g = baseGraphics || graphics;
+        const g = baseGraphics || graphics; // Ground-plane elements render here.
+        const level = building?.level ?? 1;
+        const showWeaponRack = level >= 2;
+        const showDummy = level >= 3;
 
         // === TRAINING GROUND BASE ===
-        // Packed dirt/sand arena floor
-        g.fillStyle(tint ?? 0xb8a080, alpha);
-        g.fillPoints([c1, c2, c3, c4], true);
+        if (!skipBase) {
+            // Packed dirt/sand arena floor
+            g.fillStyle(tint ?? 0xb8a080, alpha);
+            g.fillPoints([c1, c2, c3, c4], true);
 
-        // Inner training circle (worn area)
-        g.lineStyle(2, 0xa89070, 0.5 * alpha);
-        // Note: Using a fixed radius scale for the classic look
-        g.strokeEllipse(center.x, center.y, 45, 22.5);
-        g.fillStyle(0xa89070, 0.3 * alpha);
-        g.fillEllipse(center.x, center.y, 45, 22.5);
+            // Inner training circle (worn area)
+            g.lineStyle(2, 0xa89070, 0.5 * alpha);
+            // Note: Using a fixed radius scale for the classic look
+            g.strokeEllipse(center.x, center.y, 45, 22.5);
+            g.fillStyle(0xa89070, 0.3 * alpha);
+            g.fillEllipse(center.x, center.y, 45, 22.5);
 
-        // Ground texture - packed earth patterns
-        g.fillStyle(0x9a8060, alpha * 0.5);
-        for (let i = 0; i < 12; i++) {
-            const angle = (i / 12) * Math.PI * 2;
-            const dist = 20 + (i % 3) * 12;
-            const ox = Math.cos(angle) * dist * 0.8;
-            const oy = Math.sin(angle) * dist * 0.4;
-            g.fillCircle(center.x + ox, center.y + 5 + oy, 2 + (i % 2));
+            // Ground texture - packed earth patterns
+            g.fillStyle(0x9a8060, alpha * 0.5);
+            for (let i = 0; i < 12; i++) {
+                const angle = (i / 12) * Math.PI * 2;
+                const dist = 20 + (i % 3) * 12;
+                const ox = Math.cos(angle) * dist * 0.8;
+                const oy = Math.sin(angle) * dist * 0.4;
+                g.fillCircle(center.x + ox, center.y + 5 + oy, 2 + (i % 2));
+            }
+
+            // Decorative border - rope boundary (ground plane)
+            g.lineStyle(2, 0x8b7355, alpha * 0.7);
+            g.strokePoints([c1, c2, c3, c4], true, true);
+
+
+
         }
 
-        // Decorative border - rope boundary
-        graphics.lineStyle(2, 0x8b7355, alpha * 0.7);
-        graphics.strokePoints([c1, c2, c3, c4], true, true);
+        if (!onlyBase) {
+            // === CENTRAL CAMPFIRE ===
+            const fireX = center.x;
+            const fireY = center.y + 8;
 
+            // Fire pit stones (ring)
+            graphics.fillStyle(0x555555, alpha);
+            for (let i = 0; i < 8; i++) {
+                const angle = (i / 8) * Math.PI * 2;
+                const stoneX = fireX + Math.cos(angle) * 12;
+                const stoneY = fireY + Math.sin(angle) * 6;
+                graphics.fillEllipse(stoneX, stoneY, 5, 3);
+            }
 
+            // Fire pit inner (ash/coals)
+            graphics.fillStyle(0x2a2020, alpha);
+            graphics.fillEllipse(fireX, fireY, 10, 5);
 
-        // === CENTRAL CAMPFIRE ===
-        const fireX = center.x;
-        const fireY = center.y + 8;
+            // Glowing coals
+            const coalGlow = 0.5 + Math.sin(time / 200) * 0.2;
+            graphics.fillStyle(0x881100, alpha * coalGlow);
+            graphics.fillEllipse(fireX, fireY, 8, 4);
+            graphics.fillStyle(0xcc3300, alpha * coalGlow * 0.7);
+            graphics.fillEllipse(fireX - 2, fireY, 4, 2);
+            graphics.fillEllipse(fireX + 3, fireY + 1, 3, 1.5);
 
-        // Fire pit stones (ring)
-        graphics.fillStyle(0x555555, alpha);
-        for (let i = 0; i < 8; i++) {
-            const angle = (i / 8) * Math.PI * 2;
-            const stoneX = fireX + Math.cos(angle) * 12;
-            const stoneY = fireY + Math.sin(angle) * 6;
-            graphics.fillEllipse(stoneX, stoneY, 5, 3);
-        }
+            // Main flame animation
+            const flame1 = Math.sin(time / 60) * 0.3 + 0.7;
+            const flame2 = Math.sin(time / 45 + 1) * 0.25 + 0.75;
+            const flame3 = Math.sin(time / 80 + 2) * 0.35 + 0.65;
 
-        // Fire pit inner (ash/coals)
-        graphics.fillStyle(0x2a2020, alpha);
-        graphics.fillEllipse(fireX, fireY, 10, 5);
+            // Flame glow on ground
+            g.fillStyle(0xff4400, alpha * 0.15 * flame1);
+            g.fillEllipse(fireX, fireY, 25, 12);
 
-        // Glowing coals
-        const coalGlow = 0.5 + Math.sin(time / 200) * 0.2;
-        graphics.fillStyle(0x881100, alpha * coalGlow);
-        graphics.fillEllipse(fireX, fireY, 8, 4);
-        graphics.fillStyle(0xcc3300, alpha * coalGlow * 0.7);
-        graphics.fillEllipse(fireX - 2, fireY, 4, 2);
-        graphics.fillEllipse(fireX + 3, fireY + 1, 3, 1.5);
+            // Flames (multi-layer)
+            graphics.fillStyle(0xdd4400, alpha * flame3);
+            graphics.beginPath();
+            graphics.moveTo(fireX - 6, fireY);
+            graphics.lineTo(fireX - 8, fireY - 12 - flame3 * 5);
+            graphics.lineTo(fireX - 3, fireY - 8);
+            graphics.lineTo(fireX - 5, fireY - 18 - flame2 * 6);
+            graphics.lineTo(fireX, fireY - 10);
+            graphics.lineTo(fireX + 2, fireY - 16 - flame1 * 5);
+            graphics.lineTo(fireX + 5, fireY - 6);
+            graphics.lineTo(fireX + 7, fireY - 14 - flame3 * 4);
+            graphics.lineTo(fireX + 6, fireY);
+            graphics.closePath();
+            graphics.fillPath();
 
-        // Main flame animation
-        const flame1 = Math.sin(time / 60) * 0.3 + 0.7;
-        const flame2 = Math.sin(time / 45 + 1) * 0.25 + 0.75;
-        const flame3 = Math.sin(time / 80 + 2) * 0.35 + 0.65;
+            graphics.fillStyle(0xff6600, alpha * flame1);
+            graphics.beginPath();
+            graphics.moveTo(fireX - 5, fireY);
+            graphics.lineTo(fireX - 6, fireY - 10 - flame2 * 4);
+            graphics.lineTo(fireX - 2, fireY - 7);
+            graphics.lineTo(fireX - 3, fireY - 15 - flame1 * 5);
+            graphics.lineTo(fireX + 1, fireY - 9);
+            graphics.lineTo(fireX + 3, fireY - 13 - flame3 * 4);
+            graphics.lineTo(fireX + 5, fireY - 5);
+            graphics.lineTo(fireX + 5, fireY);
+            graphics.closePath();
+            graphics.fillPath();
 
-        // Flame glow on ground
-        graphics.fillStyle(0xff4400, alpha * 0.15 * flame1);
-        graphics.fillEllipse(fireX, fireY, 25, 12);
+            graphics.fillStyle(0xffaa00, alpha * flame2);
+            graphics.beginPath();
+            graphics.moveTo(fireX - 3, fireY);
+            graphics.lineTo(fireX - 4, fireY - 7 - flame1 * 3);
+            graphics.lineTo(fireX - 1, fireY - 5);
+            graphics.lineTo(fireX, fireY - 11 - flame2 * 4);
+            graphics.lineTo(fireX + 2, fireY - 6);
+            graphics.lineTo(fireX + 3, fireY - 8 - flame3 * 3);
+            graphics.lineTo(fireX + 3, fireY);
+            graphics.closePath();
+            graphics.fillPath();
 
-        // Flames (multi-layer)
-        graphics.fillStyle(0xdd4400, alpha * flame3);
-        graphics.beginPath();
-        graphics.moveTo(fireX - 6, fireY);
-        graphics.lineTo(fireX - 8, fireY - 12 - flame3 * 5);
-        graphics.lineTo(fireX - 3, fireY - 8);
-        graphics.lineTo(fireX - 5, fireY - 18 - flame2 * 6);
-        graphics.lineTo(fireX, fireY - 10);
-        graphics.lineTo(fireX + 2, fireY - 16 - flame1 * 5);
-        graphics.lineTo(fireX + 5, fireY - 6);
-        graphics.lineTo(fireX + 7, fireY - 14 - flame3 * 4);
-        graphics.lineTo(fireX + 6, fireY);
-        graphics.closePath();
-        graphics.fillPath();
+            graphics.fillStyle(0xffdd44, alpha * flame3);
+            graphics.beginPath();
+            graphics.moveTo(fireX - 2, fireY);
+            graphics.lineTo(fireX - 2, fireY - 5 - flame2 * 2);
+            graphics.lineTo(fireX, fireY - 8 - flame1 * 3);
+            graphics.lineTo(fireX + 2, fireY - 4 - flame3 * 2);
+            graphics.lineTo(fireX + 2, fireY);
+            graphics.closePath();
+            graphics.fillPath();
 
-        graphics.fillStyle(0xff6600, alpha * flame1);
-        graphics.beginPath();
-        graphics.moveTo(fireX - 5, fireY);
-        graphics.lineTo(fireX - 6, fireY - 10 - flame2 * 4);
-        graphics.lineTo(fireX - 2, fireY - 7);
-        graphics.lineTo(fireX - 3, fireY - 15 - flame1 * 5);
-        graphics.lineTo(fireX + 1, fireY - 9);
-        graphics.lineTo(fireX + 3, fireY - 13 - flame3 * 4);
-        graphics.lineTo(fireX + 5, fireY - 5);
-        graphics.lineTo(fireX + 5, fireY);
-        graphics.closePath();
-        graphics.fillPath();
+            // Fire sparks rising
+            for (let i = 0; i < 5; i++) {
+                const sparkPhase = (time / 80 + i * 40) % 40;
+                if (sparkPhase < 35) {
+                    const sparkRise = sparkPhase * 0.7;
+                    const sparkDrift = Math.sin(sparkPhase * 0.3 + i) * 4;
+                    const sparkAlpha = 1 - sparkPhase / 35;
+                    graphics.fillStyle(0xffaa44, alpha * sparkAlpha * 0.8);
+                    graphics.fillCircle(fireX + sparkDrift + (i - 2) * 2, fireY - 15 - sparkRise, 1.2);
+                }
+            }
 
-        graphics.fillStyle(0xffaa00, alpha * flame2);
-        graphics.beginPath();
-        graphics.moveTo(fireX - 3, fireY);
-        graphics.lineTo(fireX - 4, fireY - 7 - flame1 * 3);
-        graphics.lineTo(fireX - 1, fireY - 5);
-        graphics.lineTo(fireX, fireY - 11 - flame2 * 4);
-        graphics.lineTo(fireX + 2, fireY - 6);
-        graphics.lineTo(fireX + 3, fireY - 8 - flame3 * 3);
-        graphics.lineTo(fireX + 3, fireY);
-        graphics.closePath();
-        graphics.fillPath();
+            if (showDummy) {
+                // === TRAINING DUMMY ===
+                const dummyX = center.x - 35;
+                const dummyY = center.y - 5;
 
-        graphics.fillStyle(0xffdd44, alpha * flame3);
-        graphics.beginPath();
-        graphics.moveTo(fireX - 2, fireY);
-        graphics.lineTo(fireX - 2, fireY - 5 - flame2 * 2);
-        graphics.lineTo(fireX, fireY - 8 - flame1 * 3);
-        graphics.lineTo(fireX + 2, fireY - 4 - flame3 * 2);
-        graphics.lineTo(fireX + 2, fireY);
-        graphics.closePath();
-        graphics.fillPath();
+                // Dummy post
+                graphics.fillStyle(0x5d4e37, alpha);
+                graphics.fillRect(dummyX - 2, dummyY - 25, 4, 30);
+                graphics.fillStyle(0x3d2e17, alpha);
+                graphics.fillRect(dummyX + 1, dummyY - 25, 1, 30);
 
-        // Fire sparks rising
-        for (let i = 0; i < 5; i++) {
-            const sparkPhase = (time / 80 + i * 40) % 40;
-            if (sparkPhase < 35) {
-                const sparkRise = sparkPhase * 0.7;
-                const sparkDrift = Math.sin(sparkPhase * 0.3 + i) * 4;
-                const sparkAlpha = 1 - sparkPhase / 35;
-                graphics.fillStyle(0xffaa44, alpha * sparkAlpha * 0.8);
-                graphics.fillCircle(fireX + sparkDrift + (i - 2) * 2, fireY - 15 - sparkRise, 1.2);
+                // Dummy body (straw-stuffed sack)
+                graphics.fillStyle(0xc4a060, alpha);
+                graphics.fillEllipse(dummyX, dummyY - 18, 8, 12);
+                graphics.fillStyle(0xa48040, alpha * 0.6);
+                graphics.fillEllipse(dummyX + 2, dummyY - 18, 5, 10);
+
+                // Dummy head
+                graphics.fillStyle(0xc4a060, alpha);
+                graphics.fillCircle(dummyX, dummyY - 32, 6);
+                graphics.fillStyle(0xa48040, alpha * 0.5);
+                graphics.fillCircle(dummyX + 1, dummyY - 32, 4);
+
+                // Dummy arms (wooden crossbar)
+                graphics.fillStyle(0x5d4e37, alpha);
+                graphics.fillRect(dummyX - 10, dummyY - 22, 20, 3);
+
+                // Straw detail
+                graphics.lineStyle(1, 0x8a7030, alpha * 0.6);
+                graphics.lineBetween(dummyX - 4, dummyY - 10, dummyX - 6, dummyY - 5);
+                graphics.lineBetween(dummyX + 3, dummyY - 10, dummyX + 5, dummyY - 6);
+                graphics.lineBetween(dummyX, dummyY - 10, dummyX, dummyY - 4);
+            }
+
+            if (showWeaponRack) {
+                // === WEAPON RACK (right side) ===
+                const rackX = center.x + 35;
+                const rackY = center.y;
+
+                // Rack frame (A-frame)
+                graphics.fillStyle(0x5d4e37, alpha);
+                // Left leg
+                graphics.beginPath();
+                graphics.moveTo(rackX - 10, rackY + 5);
+                graphics.lineTo(rackX - 8, rackY - 20);
+                graphics.lineTo(rackX - 5, rackY - 20);
+                graphics.lineTo(rackX - 7, rackY + 5);
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Right leg
+                graphics.beginPath();
+                graphics.moveTo(rackX + 10, rackY + 5);
+                graphics.lineTo(rackX + 8, rackY - 20);
+                graphics.lineTo(rackX + 5, rackY - 20);
+                graphics.lineTo(rackX + 7, rackY + 5);
+                graphics.closePath();
+                graphics.fillPath();
+
+                // Cross bar
+                graphics.fillRect(rackX - 9, rackY - 18, 18, 3);
+                graphics.fillStyle(0x3d2e17, alpha);
+                graphics.fillRect(rackX - 9, rackY - 16, 18, 1);
+
+                // Weapons on rack
+                // Sword 1
+                graphics.fillStyle(0x888888, alpha);
+                graphics.fillRect(rackX - 7, rackY - 30, 2, 14);
+                graphics.fillStyle(0x5d4e37, alpha);
+                graphics.fillRect(rackX - 8, rackY - 17, 4, 3);
+                graphics.fillStyle(0xccaa00, alpha);
+                graphics.fillRect(rackX - 7, rackY - 17, 2, 1);
+
+                // Sword 2
+                graphics.fillStyle(0x777777, alpha);
+                graphics.fillRect(rackX + 1, rackY - 28, 2, 12);
+                graphics.fillStyle(0x5d4e37, alpha);
+                graphics.fillRect(rackX, rackY - 17, 4, 3);
+                graphics.fillStyle(0xccaa00, alpha);
+                graphics.fillRect(rackX + 1, rackY - 17, 2, 1);
+
+                // Axe
+                graphics.fillStyle(0x5d4e37, alpha);
+                graphics.fillRect(rackX + 6, rackY - 32, 2, 16);
+                graphics.fillStyle(0x666666, alpha);
+                graphics.beginPath();
+                graphics.moveTo(rackX + 5, rackY - 32);
+                graphics.lineTo(rackX + 11, rackY - 30);
+                graphics.lineTo(rackX + 11, rackY - 26);
+                graphics.lineTo(rackX + 5, rackY - 24);
+                graphics.closePath();
+                graphics.fillPath();
             }
         }
-
-        // === TRAINING DUMMY AND WEAPON RACK ===
-        const dummyX = center.x - 35;
-        const dummyY = center.y - 5;
-
-        // Dummy post
-        graphics.fillStyle(0x5d4e37, alpha);
-        graphics.fillRect(dummyX - 2, dummyY - 25, 4, 30);
-        graphics.fillStyle(0x3d2e17, alpha);
-        graphics.fillRect(dummyX + 1, dummyY - 25, 1, 30);
-
-        // Dummy body (straw-stuffed sack)
-        graphics.fillStyle(0xc4a060, alpha);
-        graphics.fillEllipse(dummyX, dummyY - 18, 8, 12);
-        graphics.fillStyle(0xa48040, alpha * 0.6);
-        graphics.fillEllipse(dummyX + 2, dummyY - 18, 5, 10);
-
-        // Dummy head
-        graphics.fillStyle(0xc4a060, alpha);
-        graphics.fillCircle(dummyX, dummyY - 32, 6);
-        graphics.fillStyle(0xa48040, alpha * 0.5);
-        graphics.fillCircle(dummyX + 1, dummyY - 32, 4);
-
-        // Dummy arms (wooden crossbar)
-        graphics.fillStyle(0x5d4e37, alpha);
-        graphics.fillRect(dummyX - 10, dummyY - 22, 20, 3);
-
-        // Straw detail
-        graphics.lineStyle(1, 0x8a7030, alpha * 0.6);
-        graphics.lineBetween(dummyX - 4, dummyY - 10, dummyX - 6, dummyY - 5);
-        graphics.lineBetween(dummyX + 3, dummyY - 10, dummyX + 5, dummyY - 6);
-        graphics.lineBetween(dummyX, dummyY - 10, dummyX, dummyY - 4);
-
-        // === WEAPON RACK (right side) ===
-        const rackX = center.x + 35;
-        const rackY = center.y;
-
-        // Rack frame (A-frame)
-        graphics.fillStyle(0x5d4e37, alpha);
-        // Left leg
-        graphics.beginPath();
-        graphics.moveTo(rackX - 10, rackY + 5);
-        graphics.lineTo(rackX - 8, rackY - 20);
-        graphics.lineTo(rackX - 5, rackY - 20);
-        graphics.lineTo(rackX - 7, rackY + 5);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Right leg
-        graphics.beginPath();
-        graphics.moveTo(rackX + 10, rackY + 5);
-        graphics.lineTo(rackX + 8, rackY - 20);
-        graphics.lineTo(rackX + 5, rackY - 20);
-        graphics.lineTo(rackX + 7, rackY + 5);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Cross bar
-        graphics.fillRect(rackX - 9, rackY - 18, 18, 3);
-        graphics.fillStyle(0x3d2e17, alpha);
-        graphics.fillRect(rackX - 9, rackY - 16, 18, 1);
-
-        // Weapons on rack
-        // Sword 1
-        graphics.fillStyle(0x888888, alpha);
-        graphics.fillRect(rackX - 7, rackY - 30, 2, 14);
-        graphics.fillStyle(0x5d4e37, alpha);
-        graphics.fillRect(rackX - 8, rackY - 17, 4, 3);
-        graphics.fillStyle(0xccaa00, alpha);
-        graphics.fillRect(rackX - 7, rackY - 17, 2, 1);
-
-        // Sword 2
-        graphics.fillStyle(0x777777, alpha);
-        graphics.fillRect(rackX + 1, rackY - 28, 2, 12);
-        graphics.fillStyle(0x5d4e37, alpha);
-        graphics.fillRect(rackX, rackY - 17, 4, 3);
-        graphics.fillStyle(0xccaa00, alpha);
-        graphics.fillRect(rackX + 1, rackY - 17, 2, 1);
-
-        // Axe
-        graphics.fillStyle(0x5d4e37, alpha);
-        graphics.fillRect(rackX + 6, rackY - 32, 2, 16);
-        graphics.fillStyle(0x666666, alpha);
-        graphics.beginPath();
-        graphics.moveTo(rackX + 5, rackY - 32);
-        graphics.lineTo(rackX + 11, rackY - 30);
-        graphics.lineTo(rackX + 11, rackY - 26);
-        graphics.lineTo(rackX + 5, rackY - 24);
-        graphics.closePath();
-        graphics.fillPath();
     }
 
     static drawWall(graphics: Phaser.GameObjects.Graphics, _center: Phaser.Math.Vector2, gridX: number, gridY: number, alpha: number, tint: number | null, building: any, neighbors: { nN: boolean, nS: boolean, nE: boolean, nW: boolean, owner: string }) {
@@ -3762,7 +3847,7 @@ export class BuildingRenderer {
 
 
     // === DRAGON'S BREATH - Subtle Asian-Themed Firecracker Battery ===
-    static drawDragonsBreath(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, baseGraphics?: Phaser.GameObjects.Graphics, gridX: number = 0, gridY: number = 0, time: number = 0) {
+    static drawDragonsBreath(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, baseGraphics?: Phaser.GameObjects.Graphics, gridX: number = 0, gridY: number = 0, time: number = 0, _skipBase: boolean = false, onlyBase: boolean = false) {
         const g = baseGraphics || graphics;
 
         // Firing state - extended salvo time for 16 pods
@@ -3804,6 +3889,9 @@ export class BuildingRenderer {
         g.lineBetween(c1.x, c1.y, c2.x, c2.y);
         g.lineBetween(c4.x, c4.y, c3.x, c3.y);
 
+        // If only drawing base (for baking to ground texture), stop here
+        if (onlyBase) return;
+
         // === 16 SILO HOLES (4x4 Grid - evenly spread) ===
 
         for (let row = 0; row < 4; row++) {
@@ -3816,12 +3904,12 @@ export class BuildingRenderer {
                 const podIndex = row * 4 + col;
 
                 // Silo hole (dark pit)
-                graphics.fillStyle(0x1a0a0a, alpha);
-                graphics.fillEllipse(tileCenter.x, tileCenter.y + 2, 14, 7);
+                g.fillStyle(0x1a0a0a, alpha);
+                g.fillEllipse(tileCenter.x, tileCenter.y + 2, 14, 7);
 
                 // Silo rim (brass ring)
-                graphics.lineStyle(2, 0x6a4a2a, alpha);
-                graphics.strokeEllipse(tileCenter.x, tileCenter.y + 2, 14, 7);
+                g.lineStyle(2, 0x6a4a2a, alpha);
+                g.strokeEllipse(tileCenter.x, tileCenter.y + 2, 14, 7);
 
                 // === FIRECRACKER POD STATE ===
                 // Staggered firing: each pod fires 40ms apart
@@ -3992,7 +4080,7 @@ export class BuildingRenderer {
         }
     }
 
-    static drawGenericBuilding(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, _center: Phaser.Math.Vector2, info: any, alpha: number, tint: number | null) {
+    static drawGenericBuilding(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, _center: Phaser.Math.Vector2, info: any, alpha: number, tint: number | null, baseGraphics?: Phaser.GameObjects.Graphics) {
         const color = tint ?? info.color;
         const height = 30 * Math.max(info.width, info.height);
         const t1 = new Phaser.Math.Vector2(c1.x, c1.y - height);
@@ -4000,8 +4088,9 @@ export class BuildingRenderer {
         const t3 = new Phaser.Math.Vector2(c3.x, c3.y - height);
         const t4 = new Phaser.Math.Vector2(c4.x, c4.y - height);
 
-        graphics.fillStyle(color, alpha);
-        graphics.fillPoints([c1, c2, c3, c4], true);
+        const g = baseGraphics || graphics;
+        g.fillStyle(color, alpha);
+        g.fillPoints([c1, c2, c3, c4], true);
 
         const darkColor = Phaser.Display.Color.IntegerToColor(color).darken(20).color;
         const lightColor = Phaser.Display.Color.IntegerToColor(color).brighten(10).color;
@@ -4021,5 +4110,438 @@ export class BuildingRenderer {
         graphics.lineStyle(2, 0xffffff, 0.15 * alpha);
         graphics.lineBetween(t1.x, t1.y, t2.x, t2.y);
         graphics.lineBetween(t1.x, t1.y, t4.x, t4.y);
+    }
+
+    // ===== SPIKE LAUNCHER (TREBUCHET) =====
+    static drawSpikeLauncher(
+        graphics: Phaser.GameObjects.Graphics,
+        c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2,
+        c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2,
+        center: Phaser.Math.Vector2, alpha: number, tint: number | null,
+        building?: any, time: number = 0,
+        baseGraphics?: Phaser.GameObjects.Graphics,
+        skipBase: boolean = false, onlyBase: boolean = false
+    ) {
+        const g = baseGraphics || graphics;
+
+        // BOUNCY reload with LOADER PERSON
+        // Loader stays visible - sits at lever when ready, pulls lever to fire, loads ball after
+        const timeSinceFire = building?.lastFireTime ? (time - building.lastFireTime) : 10000;
+        const fireAnimDuration = 3000;
+
+        // Get facing direction early for loader positioning
+        const aimAngle = building?.ballistaAngle ?? 0;
+        const facingLeft = Math.cos(aimAngle) < 0;
+        const dirX = facingLeft ? -1 : 1; // Direction multiplier
+
+        let armAngle = -1.4;
+        let showProjectile = true;
+        let loaderX = 0; // Default: sitting in CENTER
+        let loaderY = 10;
+        let showLoader = true;
+        let loaderCarrying = false;
+        let loaderPulling = false;
+        let loaderSitting = true;
+        let showFlyingBall = false; // Ball flying from loader to sling
+        let flyingBallX = 0;
+        let flyingBallY = 0;
+
+        if (timeSinceFire < fireAnimDuration) {
+            const t = timeSinceFire / fireAnimDuration;
+
+            if (t < 0.05) {
+                // PULL LEVER: Loader pulls lever to fire
+                armAngle = -1.4;
+                showProjectile = true;
+                loaderPulling = true;
+                loaderSitting = false;
+                loaderX = 0; // Stay in center
+                loaderY = 6;
+            } else if (t < 0.15) {
+                // RELEASE: Fast swing, loader watches
+                const releaseT = (t - 0.05) / 0.10;
+                armAngle = -1.4 + (1 - Math.pow(1 - releaseT, 2)) * 2.9;
+                showProjectile = false;
+                loaderSitting = false;
+                loaderX = 0;
+                loaderY = 8;
+            } else if (t < 0.25) {
+                // BOUNCE: Damped oscillation
+                const bounceT = (t - 0.15) / 0.10;
+                const decay = Math.exp(-bounceT * 5);
+                armAngle = 1.5 + Math.sin(bounceT * Math.PI * 4) * decay * 0.35;
+                showProjectile = false;
+                loaderSitting = false;
+                loaderX = 0;
+                loaderY = 8;
+            } else if (t < 0.48) {
+                // LOADER WALKS TO ARM TIP (arm tip is in dirX direction when arm is down)
+                const walkT = (t - 0.25) / 0.23;
+                armAngle = 1.5;
+                showProjectile = false;
+                loaderCarrying = true;
+                loaderSitting = false;
+                // Walk from center toward arm tip
+                loaderX = walkT * (18 * dirX);
+                loaderY = 8 - walkT * 3;
+            } else if (t < 0.58) {
+                // THROW: Loader throws ball UP into sling
+                const throwT = (t - 0.48) / 0.10;
+                armAngle = 1.5;
+                showProjectile = false;
+                loaderSitting = false;
+                loaderCarrying = false;
+                loaderX = 18 * dirX;
+                loaderY = 5;
+
+                // Calculate actual arm tip position when arm is down (armAngle = 1.5)
+                // armTipX = pivotX + cos(armAngle - PI/2) * armLength * mirrorX
+                // At armAngle=1.5: cos(1.5 - 1.57) = cos(-0.07) ≈ 1, sin(-0.07) ≈ -0.07
+                // So arm tip is nearly directly to the side (in dirX direction)
+                const frameHeight = 35;
+                const armLength = 40;
+                const slingDrop = 8;
+                const ballOffset = 5;
+
+                // Arm tip is at: center + armLength * dirX horizontally, frameHeight - 2 down from center
+                const armTipRelX = Math.cos(1.5 - Math.PI / 2) * armLength * dirX;
+                const armTipRelY = -frameHeight + 2 + Math.sin(1.5 - Math.PI / 2) * armLength + slingDrop + ballOffset;
+
+                // Ball starts above loader's head, ends at sling position
+                const startBallX = 18 * dirX;
+                const startBallY = 5 - 12; // Above loader's head
+                const endBallX = armTipRelX;
+                const endBallY = armTipRelY;
+
+                showFlyingBall = true;
+                // Arc: goes up then curves to sling
+                flyingBallX = startBallX + (endBallX - startBallX) * throwT;
+                flyingBallY = startBallY + (endBallY - startBallY) * throwT - Math.sin(throwT * Math.PI) * 20;
+            } else if (t < 0.62) {
+                // CATCH: Ball lands in sling
+                armAngle = 1.5;
+                showProjectile = true; // Ball now in sling!
+                loaderSitting = false;
+                loaderCarrying = false;
+                loaderX = 18 * dirX;
+                loaderY = 5;
+            } else if (t < 0.92) {
+                // WINCH: Loader walks back to center and operates winch
+                const winchT = (t - 0.58) / 0.34;
+                armAngle = 1.5 - (1 - Math.pow(1 - winchT, 3)) * 2.9;
+                showProjectile = true;
+                loaderSitting = false;
+                if (winchT < 0.3) {
+                    // Walking back to center
+                    loaderX = (20 * dirX) * (1 - winchT / 0.3);
+                    loaderY = 5 + (winchT / 0.3) * 3;
+                } else {
+                    // Operating winch at center
+                    loaderX = Math.sin((winchT - 0.3) * Math.PI * 8) * 2;
+                    loaderY = 8;
+                }
+            } else {
+                // SETTLE & SIT: Loader sits at center
+                const settleT = (t - 0.92) / 0.08;
+                armAngle = -1.4 + Math.sin(settleT * Math.PI * 2) * 0.12 * (1 - settleT);
+                showProjectile = true;
+                loaderSitting = true;
+                loaderX = 0;
+                loaderY = 10;
+            }
+        } else {
+            // IDLE: Loader sitting at center
+            loaderSitting = true;
+            loaderX = 0;
+            loaderY = 10;
+        }
+
+        // Facing variables for arm rendering
+        const mirrorX = dirX;
+        const facingOffset = Math.cos(aimAngle) * 0.15;
+
+        // ===== COLORS =====
+        const woodDark = tint ?? 0x5d4037;
+        const woodMid = 0x795548;
+        const woodLight = 0x8d6e63;
+        const metalDark = 0x424242;
+        const metalMid = 0x616161;
+        const ropeTan = 0xb8a07a;
+        const stoneGray = 0x757575;
+        const stoneDark = 0x5a5a5a;
+
+        // ===== BASE PLATFORM (ground layer) =====
+        if (!skipBase) {
+            // Stone foundation
+            g.fillStyle(stoneDark, alpha);
+            g.fillPoints([c1, c2, c3, c4], true);
+
+            // Stone edges
+            g.lineStyle(2, stoneGray, alpha * 0.8);
+            g.lineBetween(c1.x, c1.y, c2.x, c2.y);
+            g.lineBetween(c1.x, c1.y, c4.x, c4.y);
+            g.lineStyle(2, 0x4a4a4a, alpha * 0.8);
+            g.lineBetween(c2.x, c2.y, c3.x, c3.y);
+            g.lineBetween(c3.x, c3.y, c4.x, c4.y);
+
+            // Wood plank flooring
+            g.fillStyle(woodDark, alpha * 0.7);
+            const inset = 6;
+            const m1 = new Phaser.Math.Vector2(c1.x, c1.y + inset);
+            const m2 = new Phaser.Math.Vector2(c2.x + inset * 1.5, c2.y);
+            const m3 = new Phaser.Math.Vector2(c3.x, c3.y - inset);
+            const m4 = new Phaser.Math.Vector2(c4.x - inset * 1.5, c4.y);
+            g.fillPoints([m1, m2, m3, m4], true);
+
+            // Plank lines
+            g.lineStyle(1, 0x4a3020, alpha * 0.5);
+            for (let i = 1; i < 4; i++) {
+                const t = i / 4;
+                const startX = m1.x + (m2.x - m1.x) * t;
+                const startY = m1.y + (m2.y - m1.y) * t;
+                const endX = m4.x + (m3.x - m4.x) * t;
+                const endY = m4.y + (m3.y - m4.y) * t;
+                g.lineBetween(startX, startY, endX, endY);
+            }
+
+            // Corner bolts
+            g.fillStyle(metalDark, alpha);
+            g.fillCircle(c1.x, c1.y, 3);
+            g.fillCircle(c2.x, c2.y, 3);
+            g.fillCircle(c3.x, c3.y, 3);
+            g.fillCircle(c4.x, c4.y, 3);
+        }
+
+        if (onlyBase) return;
+
+        // ===== FRAME (A-Frame supports) =====
+        const frameHeight = 35;
+        const frameWidth = 18;
+
+        // Left support leg
+        graphics.fillStyle(woodDark, alpha);
+        graphics.beginPath();
+        graphics.moveTo(center.x - frameWidth, center.y + 8);
+        graphics.lineTo(center.x - 6, center.y - frameHeight);
+        graphics.lineTo(center.x - 3, center.y - frameHeight);
+        graphics.lineTo(center.x - frameWidth + 4, center.y + 8);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Right support leg
+        graphics.beginPath();
+        graphics.moveTo(center.x + frameWidth, center.y + 8);
+        graphics.lineTo(center.x + 6, center.y - frameHeight);
+        graphics.lineTo(center.x + 3, center.y - frameHeight);
+        graphics.lineTo(center.x + frameWidth - 4, center.y + 8);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Cross beam
+        graphics.fillStyle(woodMid, alpha);
+        graphics.fillRect(center.x - 8, center.y - frameHeight - 2, 16, 5);
+
+        // Pivot point (metal hub)
+        graphics.fillStyle(metalMid, alpha);
+        graphics.fillCircle(center.x, center.y - frameHeight + 2, 5);
+        graphics.fillStyle(metalDark, alpha);
+        graphics.fillCircle(center.x, center.y - frameHeight + 2, 3);
+
+        // ===== THROWING ARM =====
+        const armLength = 40;
+        // Apply facing offset so trebuchet leans toward target
+        const armPivotX = center.x + facingOffset * 30;
+        const armPivotY = center.y - frameHeight + 2;
+
+        // Calculate arm endpoints based on angle (mirrorX flips arm direction)
+        const armTipX = armPivotX + Math.cos(armAngle - Math.PI / 2) * armLength * mirrorX;
+        const armTipY = armPivotY + Math.sin(armAngle - Math.PI / 2) * armLength;
+        const counterweightX = armPivotX - Math.cos(armAngle - Math.PI / 2) * (armLength * 0.4) * mirrorX;
+        const counterweightY = armPivotY - Math.sin(armAngle - Math.PI / 2) * (armLength * 0.4);
+
+        // Arm beam
+        graphics.lineStyle(5, woodMid, alpha);
+        graphics.lineBetween(counterweightX, counterweightY, armTipX, armTipY);
+
+        // Arm wood grain highlight
+        graphics.lineStyle(2, woodLight, alpha * 0.5);
+        graphics.lineBetween(counterweightX, counterweightY - 1, armTipX, armTipY - 1);
+
+        // Counterweight
+        graphics.fillStyle(stoneGray, alpha);
+        graphics.fillRect(counterweightX - 8, counterweightY - 5, 16, 12);
+        graphics.fillStyle(stoneDark, alpha);
+        graphics.fillRect(counterweightX - 6, counterweightY - 3, 12, 8);
+
+        // Sling/rope at arm tip
+        graphics.lineStyle(2, ropeTan, alpha);
+        const slingDrop = 8;
+        graphics.lineBetween(armTipX - 3, armTipY, armTipX, armTipY + slingDrop);
+        graphics.lineBetween(armTipX + 3, armTipY, armTipX, armTipY + slingDrop);
+
+        // SPIKY PROJECTILE in sling (only visible when loaded)
+        if (showProjectile) {
+            const spX = armTipX;
+            const spY = armTipY + slingDrop + 5;
+
+            // Metal core
+            graphics.fillStyle(0x555555, alpha);
+            graphics.fillCircle(spX, spY, 4);
+
+            // Prominent spikes radiating out (matching launched projectile)
+            graphics.fillStyle(0xaaaaaa, alpha);
+            // Top
+            graphics.fillTriangle(spX, spY - 4, spX - 2, spY - 10, spX + 2, spY - 10);
+            // Bottom
+            graphics.fillTriangle(spX, spY + 4, spX - 2, spY + 10, spX + 2, spY + 10);
+            // Left
+            graphics.fillTriangle(spX - 4, spY, spX - 10, spY - 2, spX - 10, spY + 2);
+            // Right
+            graphics.fillTriangle(spX + 4, spY, spX + 10, spY - 2, spX + 10, spY + 2);
+            // Diagonals
+            graphics.fillTriangle(spX - 3, spY - 3, spX - 7, spY - 7, spX - 5, spY - 5);
+            graphics.fillTriangle(spX + 3, spY - 3, spX + 7, spY - 7, spX + 5, spY - 5);
+            graphics.fillTriangle(spX - 3, spY + 3, spX - 7, spY + 7, spX - 5, spY + 5);
+            graphics.fillTriangle(spX + 3, spY + 3, spX + 7, spY + 7, spX + 5, spY + 5);
+
+            // Spike highlights
+            graphics.fillStyle(0xcccccc, alpha * 0.8);
+            graphics.fillTriangle(spX - 1, spY - 5, spX, spY - 9, spX + 1, spY - 9);
+            graphics.fillTriangle(spX - 5, spY - 1, spX - 9, spY, spX - 9, spY + 1);
+        }
+
+        // ===== ROPE WINCH (decoration) =====
+        graphics.fillStyle(woodDark, alpha);
+        graphics.fillRect(center.x + 12, center.y - 5, 8, 10);
+        graphics.lineStyle(1, ropeTan, alpha * 0.8);
+        for (let i = 0; i < 4; i++) {
+            graphics.strokeCircle(center.x + 16, center.y - 2 + i * 2, 3);
+        }
+
+        // ===== SPIKE RACK (on right side) =====
+        // Wooden rack holding ready-to-load spike clusters
+        graphics.fillStyle(woodDark, alpha);
+        graphics.fillRect(center.x + 18, center.y - 2, 4, 14);
+        // Spikes on rack (upright)
+        graphics.fillStyle(0xaaaaaa, alpha);
+        graphics.fillTriangle(center.x + 20, center.y - 6, center.x + 18, center.y + 2, center.x + 22, center.y + 2);
+        graphics.fillTriangle(center.x + 20, center.y - 3, center.x + 17, center.y + 5, center.x + 23, center.y + 5);
+        graphics.fillTriangle(center.x + 20, center.y, center.x + 16, center.y + 8, center.x + 24, center.y + 8);
+        // Spike highlights
+        graphics.fillStyle(0xcccccc, alpha * 0.7);
+        graphics.fillTriangle(center.x + 19, center.y - 5, center.x + 19, center.y - 1, center.x + 21, center.y - 1);
+
+        // ===== SPIKE AMMO PILE (left side - bigger and spikier) =====
+        // Metal core balls with spikes
+        graphics.fillStyle(0x666666, alpha);
+        graphics.fillCircle(center.x - 14, center.y + 6, 5);
+        graphics.fillCircle(center.x - 20, center.y + 8, 4);
+        graphics.fillCircle(center.x - 10, center.y + 9, 4);
+        graphics.fillCircle(center.x - 16, center.y + 10, 3);
+
+        // LOTS of spikes sticking out of pile
+        graphics.fillStyle(0xaaaaaa, alpha);
+        // From first ball
+        graphics.fillTriangle(center.x - 14, center.y + 1, center.x - 16, center.y + 5, center.x - 12, center.y + 5);
+        graphics.fillTriangle(center.x - 10, center.y + 4, center.x - 13, center.y + 7, center.x - 11, center.y + 8);
+        graphics.fillTriangle(center.x - 18, center.y + 4, center.x - 15, center.y + 7, center.x - 17, center.y + 8);
+        // From second ball
+        graphics.fillTriangle(center.x - 20, center.y + 3, center.x - 22, center.y + 7, center.x - 18, center.y + 7);
+        graphics.fillTriangle(center.x - 24, center.y + 6, center.x - 21, center.y + 9, center.x - 23, center.y + 10);
+        // From third ball
+        graphics.fillTriangle(center.x - 6, center.y + 7, center.x - 9, center.y + 10, center.x - 7, center.y + 11);
+        graphics.fillTriangle(center.x - 10, center.y + 5, center.x - 12, center.y + 9, center.x - 8, center.y + 9);
+        // Highlights
+        graphics.fillStyle(0xcccccc, alpha * 0.6);
+        graphics.fillTriangle(center.x - 13, center.y + 2, center.x - 15, center.y + 4, center.x - 12, center.y + 4);
+
+        // ===== SCATTERED SPIKES ON GROUND =====
+        graphics.fillStyle(0x888888, alpha * 0.8);
+        // Small spikes scattered around base
+        graphics.fillTriangle(center.x + 8, center.y + 10, center.x + 6, center.y + 14, center.x + 10, center.y + 14);
+        graphics.fillTriangle(center.x - 4, center.y + 12, center.x - 6, center.y + 16, center.x - 2, center.y + 16);
+        graphics.fillTriangle(center.x + 3, center.y + 14, center.x + 1, center.y + 18, center.x + 5, center.y + 18);
+
+        // ===== LOADER PERSON (always visible) =====
+        if (showLoader) {
+            const lx = center.x + loaderX;
+            const ly = center.y + loaderY;
+
+            if (loaderSitting) {
+                // SITTING pose (shorter, legs bent)
+                graphics.fillStyle(0x8b6914, alpha);
+                graphics.fillRect(lx - 3, ly - 2, 6, 5);
+                graphics.fillStyle(0xdeb887, alpha);
+                graphics.fillCircle(lx, ly - 5, 3);
+                graphics.fillStyle(0x654321, alpha);
+                graphics.fillRect(lx - 4, ly + 3, 3, 3);
+                graphics.fillRect(lx + 1, ly + 3, 3, 3);
+                graphics.fillStyle(0xdeb887, alpha);
+                graphics.fillRect(lx - 5, ly - 1, 2, 3);
+                graphics.fillRect(lx + 3, ly - 1, 2, 3);
+            } else if (loaderPulling) {
+                // PULLING LEVER pose
+                graphics.fillStyle(0x8b6914, alpha);
+                graphics.fillRect(lx - 3, ly - 4, 6, 8);
+                graphics.fillStyle(0xdeb887, alpha);
+                graphics.fillCircle(lx, ly - 7, 3);
+                graphics.fillStyle(0x654321, alpha);
+                graphics.fillRect(lx - 3, ly + 4, 2, 5);
+                graphics.fillRect(lx + 1, ly + 4, 2, 5);
+                graphics.fillStyle(0xdeb887, alpha);
+                graphics.fillRect(lx - 6, ly - 5, 3, 2);
+                graphics.fillRect(lx + 3, ly - 5, 3, 2);
+                graphics.fillStyle(0x5d4037, alpha);
+                graphics.fillRect(lx - 8, ly - 6, 2, 8);
+            } else if (loaderCarrying) {
+                // CARRYING spike ball
+                graphics.fillStyle(0x8b6914, alpha);
+                graphics.fillRect(lx - 3, ly - 4, 6, 8);
+                graphics.fillStyle(0xdeb887, alpha);
+                graphics.fillCircle(lx, ly - 7, 3);
+                graphics.fillStyle(0x654321, alpha);
+                graphics.fillRect(lx - 3, ly + 4, 2, 5);
+                graphics.fillRect(lx + 1, ly + 4, 2, 5);
+                graphics.fillStyle(0xdeb887, alpha);
+                graphics.fillRect(lx - 5, ly - 6, 2, 4);
+                graphics.fillRect(lx + 3, ly - 6, 2, 4);
+                graphics.fillStyle(0x555555, alpha);
+                graphics.fillCircle(lx, ly - 12, 3);
+                graphics.fillStyle(0xaaaaaa, alpha);
+                graphics.fillTriangle(lx, ly - 15, lx - 1, ly - 18, lx + 1, ly - 18);
+                graphics.fillTriangle(lx - 3, ly - 12, lx - 6, ly - 13, lx - 6, ly - 11);
+                graphics.fillTriangle(lx + 3, ly - 12, lx + 6, ly - 13, lx + 6, ly - 11);
+                graphics.fillTriangle(lx, ly - 9, lx - 1, ly - 6, lx + 1, ly - 6);
+            } else {
+                // STANDING/OPERATING WINCH
+                graphics.fillStyle(0x8b6914, alpha);
+                graphics.fillRect(lx - 3, ly - 4, 6, 8);
+                graphics.fillStyle(0xdeb887, alpha);
+                graphics.fillCircle(lx, ly - 7, 3);
+                graphics.fillStyle(0x654321, alpha);
+                graphics.fillRect(lx - 3, ly + 4, 2, 5);
+                graphics.fillRect(lx + 1, ly + 4, 2, 5);
+                graphics.fillStyle(0xdeb887, alpha);
+                graphics.fillRect(lx - 5, ly - 2, 2, 4);
+                graphics.fillRect(lx + 3, ly - 2, 2, 4);
+            }
+        }
+
+        // ===== FLYING BALL (during throw animation) =====
+        if (showFlyingBall) {
+            const bx = center.x + flyingBallX;
+            const by = center.y + flyingBallY;
+
+            // Metal core
+            graphics.fillStyle(0x555555, alpha);
+            graphics.fillCircle(bx, by, 3);
+
+            // Spikes
+            graphics.fillStyle(0xaaaaaa, alpha);
+            graphics.fillTriangle(bx, by - 3, bx - 1, by - 7, bx + 1, by - 7);
+            graphics.fillTriangle(bx, by + 3, bx - 1, by + 7, bx + 1, by + 7);
+            graphics.fillTriangle(bx - 3, by, bx - 7, by - 1, bx - 7, by + 1);
+            graphics.fillTriangle(bx + 3, by, bx + 7, by - 1, bx + 7, by + 1);
+        }
     }
 }

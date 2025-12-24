@@ -1,6 +1,4 @@
 
-const API_BASE = '/api';
-
 export interface UserProfile {
     id: string;
     username: string;
@@ -30,64 +28,40 @@ export class AuthService {
         }
     }
 
-    public async login(username: string, password: string): Promise<UserProfile> {
-        const res = await fetch(`${API_BASE}/auth`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'login', username, password }) // Password sent to API over HTTPS
-        });
-
-        if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.error || 'Login failed');
-        }
-
-        const user: UserProfile = await res.json();
-
-        // Update local state
-        this.currentUser = user;
-        localStorage.setItem(this.SESSION_KEY, JSON.stringify(user));
-        return user;
-    }
-
-    public async register(username: string, password: string): Promise<UserProfile> {
-        const res = await fetch(`${API_BASE}/auth`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'register', username, password })
-        });
-
-        if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.error || 'Registration failed');
-        }
-
-        const user: UserProfile = await res.json();
-
-        this.currentUser = user;
-        localStorage.setItem(this.SESSION_KEY, JSON.stringify(user));
-        return user;
-    }
-
-    public async deleteAccount(userId: string): Promise<void> {
-        // For now, just logout locally. In a real app, delete from DB.
-        // Or implement the API if critical.
-        if (userId === this.currentUser?.id) {
-            this.logout();
-        }
-    }
-
-    public logout() {
-        this.currentUser = null;
-        localStorage.removeItem(this.SESSION_KEY);
-    }
-
     public getCurrentUser(): UserProfile | null {
         return this.currentUser;
     }
 
-    public isLoggedIn(): boolean {
-        return !!this.currentUser;
+    // Auto-create default user for offline mode
+    public static getOrCreateDefaultUser(): UserProfile {
+        try {
+            // Ensure instance exists
+            const auth = AuthService.instance || new AuthService();
+            const existing = auth.getCurrentUser();
+            if (existing) {
+                return existing;
+            }
+
+            // Create default user
+            const defaultUser: UserProfile = {
+                id: 'default_player',
+                username: 'Player',
+                lastLogin: Date.now()
+            };
+
+            auth.currentUser = defaultUser;
+            localStorage.setItem(auth.SESSION_KEY, JSON.stringify(defaultUser));
+
+            return defaultUser;
+        } catch (error) {
+            console.error('Error creating default user:', error);
+            // Return a minimal user object even if localStorage fails
+            return {
+                id: 'default_player',
+                username: 'Player',
+                lastLogin: Date.now()
+            };
+        }
     }
 }
 

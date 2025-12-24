@@ -1,0 +1,46 @@
+/* UI action icons (used by InfoPanel and other UI controls). */
+.move-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #fff;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        0 -5px #fff, 0 5px #fff,
+        -5px 0 #fff, 5px 0 #fff,
+        -3px -3px #ddd, 3px -3px #ddd,
+        -3px 3px #ddd, 3px 3px #ddd;
+}
+
+.delete-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #fff;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        -5px -5px #fff, -3px -3px #fff, 3px 3px #fff, 5px 5px #fff,
+        5px -5px #fff, 3px -3px #fff, -3px 3px #fff, -5px 5px #fff;
+}
+
+.upgrade-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #fff;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        0 -6px #fff, 0 -4px #fff, 0 -2px #fff,
+        -4px -2px #fff, 4px -2px #fff,
+        -2px 0 #ddd, 2px 0 #ddd,
+        0 2px #ddd, 0 4px #ddd;
+}

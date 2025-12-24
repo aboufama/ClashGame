@@ -11,8 +11,13 @@ import { ObstacleRenderer } from '../renderers/ObstacleRenderer';
 import { RubbleRenderer } from '../renderers/RubbleRenderer';
 import { PathfindingSystem } from '../systems/PathfindingSystem';
 import { TargetingSystem } from '../systems/TargetingSystem';
+import { depthForBuilding, depthForGroundPlane, depthForObstacle, depthForRubble, depthForTroop } from '../systems/DepthSystem';
 import { IsoUtils } from '../utils/IsoUtils';
 import { Auth } from '../backend/AuthService';
+import { gameManager } from '../GameManager';
+import { particleManager } from '../systems/ParticleManager';
+import type { GameMode } from '../types/GameMode';
+import { SceneInputController } from './controllers/SceneInputController';
 
 const BUILDINGS = BUILDING_DEFINITIONS as any;
 const OBSTACLES = OBSTACLE_DEFINITIONS as any;
@@ -26,8 +31,6 @@ const OBSTACLES = OBSTACLE_DEFINITIONS as any;
 
 
 
-
-export type GameMode = 'HOME' | 'ATTACK';
 
 const fragShader = `
 precision mediump float;
@@ -94,60 +97,72 @@ class PixelatePipeline extends Phaser.Renderer.WebGL.Pipelines.PostFXPipeline {
 
 
 export class MainScene extends Phaser.Scene {
-    private tileWidth = 64;
-    private tileHeight = 32;
-    private mapSize = 25;
-    private buildings: PlacedBuilding[] = [];
-    private rubble: { gridX: number; gridY: number; width: number; height: number; graphics: Phaser.GameObjects.Graphics; createdAt: number }[] = [];
-    private obstacles: PlacedObstacle[] = [];
-    private troops: Troop[] = [];
-    private ghostBuilding!: Phaser.GameObjects.Graphics;
-    private deploymentGraphics!: Phaser.GameObjects.Graphics;
-    private forbiddenGraphics!: Phaser.GameObjects.Graphics;
-    private cursorKeys!: Phaser.Types.Input.Keyboard.CursorKeys;
+    public tileWidth = 64;
+    private groundRenderTexture!: Phaser.GameObjects.RenderTexture;
+    private tempGraphics!: Phaser.GameObjects.Graphics;
+    private readonly RT_OFFSET_X = 1000;
+    private readonly RT_OFFSET_Y = 500;
+    public tileHeight = 32;
+    public mapSize = 25;
+    public buildings: PlacedBuilding[] = [];
+    public rubble: { gridX: number; gridY: number; width: number; height: number; graphics: Phaser.GameObjects.Graphics; createdAt: number }[] = [];
+    public obstacles: PlacedObstacle[] = [];
+    public troops: Troop[] = [];
+    public ghostBuilding!: Phaser.GameObjects.Graphics;
+    public deploymentGraphics!: Phaser.GameObjects.Graphics;
+    public forbiddenGraphics!: Phaser.GameObjects.Graphics;
+    public cursorKeys!: Phaser.Types.Input.Keyboard.CursorKeys;
+    public inputController!: SceneInputController;
 
-    private selectedBuildingType: string | null = null;
-    private selectedInWorld: PlacedBuilding | null = null;
-    private isMoving = false;
-    private isDragging = false;
-    private dragOrigin: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
-    private dragStartCam: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
-    private dragStartScreen: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
-    private hoverGrid: Phaser.Math.Vector2 = new Phaser.Math.Vector2(-100, -100);
+    public selectedBuildingType: string | null = null;
+    public selectedInWorld: PlacedBuilding | null = null;
+    public isMoving = false;
+    public isDragging = false;
+    public dragOrigin: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
+    public dragStartCam: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
+    public dragStartScreen: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
+    public hoverGrid: Phaser.Math.Vector2 = new Phaser.Math.Vector2(-100, -100);
 
-    private mode: GameMode = 'HOME';
+    public mode: GameMode = 'HOME';
 
     // Combat stuff
-    private resourceInterval = 2000;
-    private lastResourceUpdate = 0;
+    public resourceInterval = 2000;
+    public lastResourceUpdate = 0;
 
     // Battle stats tracking
-    private initialEnemyBuildings = 0;
-    private lastDeployTime = 0;
-    private deployStartTime = 0;
-    private lastForbiddenInteractionTime = 0;
-    private lastGrassGrowTime = 0;
+    public initialEnemyBuildings = 0;
+    public lastDeployTime = 0;
+    public deployStartTime = 0;
+    public lastForbiddenInteractionTime = 0;
+    public lastGrassGrowTime = 0;
 
-    private destroyedBuildings = 0;
-    private goldLooted = 0;
-    private elixirLooted = 0;
-    private hasDeployed = false;
-    private raidEndScheduled = false; // Prevent multiple end calls
-    private pendingSpawnCount = 0; // Prevent battle end during troop splits (phalanx/recursion)
+    public destroyedBuildings = 0;
+    public goldLooted = 0;
+    public elixirLooted = 0;
+    public hasDeployed = false;
+    public raidEndScheduled = false; // Prevent multiple end calls
+    public pendingSpawnCount = 0; // Prevent battle end during troop splits (phalanx/recursion)
 
-    private villageNameLabel!: Phaser.GameObjects.Text;
-    private attackModeSelectedBuilding: PlacedBuilding | null = null;
+    public villageNameLabel!: Phaser.GameObjects.Text;
+    public attackModeSelectedBuilding: PlacedBuilding | null = null;
+    private manualFireDummyTarget: Troop | null = null;
 
-    private get userId(): string {
-        return Auth.getCurrentUser()?.id || 'player_home';
+    public get userId(): string {
+        try {
+            const user = Auth.getCurrentUser();
+            return user?.id || 'default_player';
+        } catch (error) {
+            console.error('Error getting user ID:', error);
+            return 'default_player';
+        }
     }
 
     // Manual firing interactions
-    private isManualFiring = false;
-    private isLockingDragForTroops = false;
-    private selectionGraphics!: Phaser.GameObjects.Graphics;
+    public isManualFiring = false;
+    public isLockingDragForTroops = false;
+    public selectionGraphics!: Phaser.GameObjects.Graphics;
 
-    private cameraSensitivity = 1.0;
+    public cameraSensitivity = 1.0;
 
 
     constructor() {
@@ -169,26 +184,36 @@ export class MainScene extends Phaser.Scene {
             this.cameras.main.setPostPipeline('Pixelate');
         }
 
-        (window as any).setPixelation = (size: number) => {
-            PixelatePipeline.size = size;
-        };
-
-        (window as any).setSensitivity = (val: number) => {
-            this.cameraSensitivity = val;
-        };
+        gameManager.registerScene({
+            setPixelation: (size: number) => {
+                PixelatePipeline.size = size;
+            },
+            setSensitivity: (val: number) => {
+                this.cameraSensitivity = val;
+            }
+        });
 
         // Initialize at 1.5
         PixelatePipeline.size = 1.5;
 
-        this.input.on('pointerdown', this.onPointerDown, this);
-        this.input.on('pointermove', this.onPointerMove, this);
-        this.input.on('pointerup', this.onPointerUp, this);
+        this.inputController = new SceneInputController(this);
+        this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => this.inputController.onPointerDown(pointer));
+        this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => this.inputController.onPointerMove(pointer));
+        this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => this.inputController.onPointerUp(pointer));
 
         this.input.on('wheel', (_pointer: any, _gameObjects: any, _deltaX: number, deltaY: number, _deltaZ: number) => {
             const newZoom = this.cameras.main.zoom - deltaY * 0.002;
             this.cameras.main.setZoom(Phaser.Math.Clamp(newZoom, 0.3, 3));
         });
 
+        this.events.once('shutdown', () => {
+            gameManager.clearScene();
+            particleManager.clearAll();
+        });
+
+        particleManager.init(this);
+
+        this.tempGraphics = this.add.graphics().setVisible(false);
         this.createIsoGrid();
         this.createUI();
 
@@ -210,9 +235,10 @@ export class MainScene extends Phaser.Scene {
             });
             this.input.keyboard.on('keydown-M', () => {
                 if (this.selectedInWorld) {
+                    this.unbakeBuildingFromGround(this.selectedInWorld);
                     this.isMoving = true;
                     this.selectedBuildingType = null;
-                    this.onPointerMove(this.input.activePointer);
+                    this.inputController.onPointerMove(this.input.activePointer);
                 }
             });
         }
@@ -247,14 +273,17 @@ export class MainScene extends Phaser.Scene {
         this.cameras.main.centerOn(pos.x, pos.y);
     }
 
-    private cancelPlacement() {
+    public cancelPlacement() {
+        if (this.isMoving && this.selectedInWorld) {
+            this.bakeBuildingToGround(this.selectedInWorld);
+        }
         this.selectedBuildingType = null;
         this.isMoving = false;
         this.ghostBuilding.clear();
         this.ghostBuilding.setVisible(false);
         this.selectedInWorld = null;
         this.clearBuildingRangeIndicator();
-        (window as any).onPlacementCancelled?.();
+        gameManager.onPlacementCancelled();
     }
 
     update(time: number, delta: number) {
@@ -265,6 +294,7 @@ export class MainScene extends Phaser.Scene {
 
         this.handleCameraMovement(delta);
         this.updateCombat(time);
+        this.updateSpikeZones();
         this.updateTroops(delta);
         this.updateResources(time);
         this.updateSelectionHighlight();
@@ -273,7 +303,6 @@ export class MainScene extends Phaser.Scene {
         this.updateObstacleAnimations(time);
         this.growGrass(time);
         this.updateRubbleAnimations(time);
-        this.updateTooltip();
 
         // Manual firing loop for HOME mode interactions
         if (this.mode === 'HOME' && this.isManualFiring && this.selectedInWorld) {
@@ -286,7 +315,7 @@ export class MainScene extends Phaser.Scene {
         if (this.mode !== 'ATTACK' || !this.hasDeployed || this.raidEndScheduled) return;
 
         // 1. Check Army Remaining (troops not yet converted to entities)
-        const army = (window as any).getArmy?.() || {};
+        const army = gameManager.getArmy();
         const armyRemaining = Object.values(army).reduce((total: number, count: any) => total + (typeof count === 'number' ? count : 0), 0) as number;
 
         // 2. Check Active Troops (entities on the field)
@@ -307,14 +336,17 @@ export class MainScene extends Phaser.Scene {
         if ((armyRemaining <= 0 && activeTroops === 0 && this.pendingSpawnCount === 0) || percent >= 100) {
             this.raidEndScheduled = true;
 
+            // Trigger resource animation immediately
+            if (this.goldLooted > 0 || this.elixirLooted > 0) {
+                this.playResourceGainAnimation(this.goldLooted, this.elixirLooted);
+            }
+
             // 2-second delay to let final animations play / player realize what happened
             this.time.delayedCall(2000, () => {
-                // Trigger the end sequence via the window callback, but pass a flag or handle it there
+                // Trigger the end sequence via the game manager callback, but pass a flag or handle it there
                 // The user wants the SAME pathway as "Return Home"
-                if ((window as any).onRaidEnded) {
-                    (window as any).onRaidEnded(this.goldLooted, this.elixirLooted);
-                } else {
-                    // Fallback: Trigger cloud transition manually if no UI callback
+                const handled = gameManager.onRaidEnded(this.goldLooted, this.elixirLooted);
+                if (!handled) {
                     this.showCloudTransition(() => {
                         this.goHome();
                         // We also need to tell React to switch view if possible, but goHome handles internal state
@@ -324,51 +356,343 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
-    private updateManualFire(time: number) {
-        const def = this.selectedInWorld;
-        if (!def || !BUILDINGS[def.type] || BUILDINGS[def.type].category !== 'defense') return;
+    private playResourceGainAnimation(gold: number, elixir: number) {
+        const cx = this.cameras.main.width / 2;
+        const cy = this.cameras.main.height / 2;
 
-        const stats = BUILDINGS[def.type];
-        const interval = stats.fireRate || 2000;
+        // HUD Positions (Estimated Top-Right)
+        const targetGoldX = this.cameras.main.width - 250;
+        const targetElixirX = this.cameras.main.width - 80;
+        const targetY = 40;
 
-        // Initial delay setup if not set (first shot is instant-ish)
-        if (def.lastFireTime === undefined) {
-            def.lastFireTime = -99999; // Ensure ready immediately
+        if (gold > 0) {
+            const gText = this.add.text(cx, cy, `+${gold}`, {
+                fontFamily: 'Outfit, sans-serif',
+                fontSize: '48px',
+                fontStyle: 'bold',
+                color: '#FFD700',
+                stroke: '#000000',
+                strokeThickness: 6
+            }).setOrigin(0.5).setDepth(20000).setScrollFactor(0);
+
+            const gIcon = this.add.circle(cx - 60, cy, 15, 0xFFD700)
+                .setDepth(20000).setScrollFactor(0);
+
+            // Pop in
+            this.tweens.add({
+                targets: [gText, gIcon],
+                scale: { from: 0, to: 1.2 },
+                duration: 400,
+                ease: 'Back.out',
+                onComplete: () => {
+                    // Fly to HUD
+                    this.tweens.add({
+                        targets: [gText, gIcon],
+                        x: targetGoldX,
+                        y: targetY,
+                        scale: 0.5,
+                        alpha: 0,
+                        duration: 1000,
+                        delay: 300,
+                        ease: 'Power2',
+                        onComplete: () => {
+                            gText.destroy();
+                            gIcon.destroy();
+                        }
+                    });
+                }
+            });
         }
 
-        if (Date.now() < (def as any).lastFireTime + interval) return;
+        if (elixir > 0) {
+            const eText = this.add.text(cx, cy + 60, `+${elixir}`, {
+                fontFamily: 'Outfit, sans-serif',
+                fontSize: '48px',
+                fontStyle: 'bold',
+                color: '#FF00FF',
+                stroke: '#000000',
+                strokeThickness: 6
+            }).setOrigin(0.5).setDepth(20000).setScrollFactor(0);
 
-        // Note: lastFireTime is set in each shoot function using Date.now()
+            const eIcon = this.add.circle(cx - 60, cy + 60, 15, 0xFF00FF)
+                .setDepth(20000).setScrollFactor(0);
+
+            // Pop in
+            this.tweens.add({
+                targets: [eText, eIcon],
+                scale: { from: 0, to: 1.2 },
+                duration: 400,
+                delay: 100, // Slight offset from gold
+                ease: 'Back.out',
+                onComplete: () => {
+                    // Fly to HUD
+                    this.tweens.add({
+                        targets: [eText, eIcon],
+                        x: targetElixirX,
+                        y: targetY,
+                        scale: 0.5,
+                        alpha: 0,
+                        duration: 1000,
+                        delay: 300,
+                        ease: 'Power2',
+                        onComplete: () => {
+                            eText.destroy();
+                            eIcon.destroy();
+                        }
+                    });
+                }
+            });
+        }
+
+    }
+
+    public updateManualFire(time: number) {
+        const def = this.selectedInWorld;
+        if (!this.isFireableDefense(def)) return;
 
         // Get target position
         const pointer = this.input.activePointer;
         const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-        const cardPos = IsoUtils.isoToCart(worldPoint.x, worldPoint.y);
+        const cartPos = IsoUtils.isoToCart(worldPoint.x, worldPoint.y);
 
-        // CREATE DUMMY TARGET
-        const dummyTarget = {
-            gridX: cardPos.x,
-            gridY: cardPos.y,
-            id: 'dummy_target',
-            type: 'warrior',
-            health: 100,
-            owner: 'ENEMY'
-        } as Troop;
+        // Safety: stop firing if cursor leaves range (and clean up prism beam).
+        if (!this.isWithinDefenseRange(def, cartPos.x, cartPos.y)) {
+            if (def.type === 'prism') this.cleanupPrismLaser(def);
+            return;
+        }
 
-        // Trigger shot
-        if (def.type === 'cannon') this.shootAt(def, dummyTarget);
-        else if (def.type === 'ballista') this.shootBallistaAt(def, dummyTarget);
-        else if (def.type === 'xbow') this.shootXBowAt(def, dummyTarget);
-        else if (def.type === 'mortar') this.shootMortarAt(def, dummyTarget);
-        else if (def.type === 'tesla') this.shootTeslaAt(def, dummyTarget);
-        else if (def.type === 'magmavent') this.shootMagmaEruption(def);
-        else if (def.type === 'prism') this.shootPrismContinuousLaser(def, dummyTarget, time);
+        this.tryFireDefenseAtGrid(def, cartPos.x, cartPos.y, time);
+    }
+
+    private isFireableDefense(def: PlacedBuilding | null | undefined): def is PlacedBuilding {
+        if (!def) return false;
+        const info = BUILDINGS[def.type];
+        if (!info) return false;
+        if (info.category !== 'defense') return false;
+        if (def.type === 'wall') return false;
+        if (def.health <= 0) return false;
+        return true;
+    }
+
+    private getDefenseStats(def: PlacedBuilding) {
+        return getBuildingStats(def.type as BuildingType, def.level || 1);
+    }
+
+    private getDefenseCenterGrid(def: PlacedBuilding) {
+        const stats = this.getDefenseStats(def);
+        return { x: def.gridX + stats.width / 2, y: def.gridY + stats.height / 2 };
+    }
+
+    private isWithinDefenseRange(def: PlacedBuilding, targetGridX: number, targetGridY: number) {
+        const stats = this.getDefenseStats(def);
+        const center = this.getDefenseCenterGrid(def);
+        const range = stats.range ?? 10;
+        const minRange = stats.minRange ?? 0;
+        const dist = Phaser.Math.Distance.Between(targetGridX, targetGridY, center.x, center.y);
+        return dist <= range && dist >= minRange;
+    }
+
+    public isManualFireableAt(targetGridX: number, targetGridY: number) {
+        if (this.mode !== 'HOME') return false;
+        const def = this.selectedInWorld;
+        if (!this.isFireableDefense(def)) return false;
+        return this.isWithinDefenseRange(def, targetGridX, targetGridY);
+    }
+
+    // Returns true if the click should be "consumed" by the manual fire feature (keeps the building selected).
+    public consumeManualFireClick(targetGridX: number, targetGridY: number, time: number) {
+        if (this.mode !== 'HOME') return false;
+        const def = this.selectedInWorld;
+        if (!this.isFireableDefense(def)) return false;
+        if (!this.isWithinDefenseRange(def, targetGridX, targetGridY)) return false;
+
+        // Attempt a shot if off cooldown (and always update prism visuals while held/clicked).
+        this.tryFireDefenseAtGrid(def, targetGridX, targetGridY, time);
+        return true;
+    }
+
+    private getOrCreateManualFireDummyTarget(owner: 'PLAYER' | 'ENEMY') {
+        if (!this.manualFireDummyTarget) {
+            this.manualFireDummyTarget = {
+                id: 'manual_fire_dummy',
+                type: 'warrior',
+                gameObject: this.add.graphics().setVisible(false),
+                healthBar: undefined as any,
+                gridX: 0,
+                gridY: 0,
+                health: 1_000_000_000,
+                maxHealth: 1_000_000_000,
+                owner,
+                lastAttackTime: 0,
+                attackDelay: 999999,
+                speedMult: 0,
+                hasTakenDamage: false,
+                facingAngle: 0,
+                target: null
+            };
+        }
+        this.manualFireDummyTarget.owner = owner;
+        this.manualFireDummyTarget.health = this.manualFireDummyTarget.maxHealth;
+        this.manualFireDummyTarget.hasTakenDamage = false;
+        return this.manualFireDummyTarget;
+    }
+
+    private fireDefenseAtTarget(defense: PlacedBuilding, target: Troop, time: number) {
+        switch (defense.type) {
+            case 'cannon':
+                this.shootAt(defense, target);
+                break;
+            case 'ballista':
+                this.shootBallistaAt(defense, target);
+                break;
+            case 'xbow':
+                this.shootXBowAt(defense, target);
+                break;
+            case 'mortar':
+                this.shootMortarAt(defense, target);
+                break;
+            case 'tesla':
+                this.shootTeslaAt(defense, target);
+                break;
+            case 'magmavent':
+                this.shootMagmaEruption(defense);
+                break;
+            case 'prism':
+                this.shootPrismContinuousLaser(defense, target, time);
+                break;
+            case 'dragons_breath':
+                this.shootDragonsBreathAt(defense, target);
+                break;
+            case 'spike_launcher':
+                this.shootSpikeLauncherAt(defense, target);
+                break;
+            default:
+                this.shootGenericDefenseAt(defense, target);
+        }
+    }
+
+    private tryFireDefenseAtGrid(defense: PlacedBuilding, targetGridX: number, targetGridY: number, time: number) {
+        const stats = this.getDefenseStats(defense);
+        const interval = stats.fireRate ?? 2000;
+
+        // Prism is a continuous visual; keep it updating smoothly while held, but only advance cooldown in ticks.
+        const continuous = defense.type === 'prism';
+        const last = defense.lastFireTime ?? (time - interval);
+        // Always update turret direction for renderers that use angles (even if on cooldown).
+        const center = this.getDefenseCenterGrid(defense);
+        const angle = Math.atan2(targetGridY - center.y, targetGridX - center.x);
+        defense.ballistaTargetAngle = angle;
+        if (defense.ballistaAngle === undefined) defense.ballistaAngle = angle;
+
+        if (!continuous && time < last + interval) return false;
+
+        if (!continuous || time >= last + interval) {
+            defense.lastFireTime = time;
+        }
+
+        const targetOwner: 'PLAYER' | 'ENEMY' = defense.owner === 'PLAYER' ? 'ENEMY' : 'PLAYER';
+        const dummy = this.getOrCreateManualFireDummyTarget(targetOwner);
+        dummy.gridX = targetGridX;
+        dummy.gridY = targetGridY;
+
+        this.fireDefenseAtTarget(defense, dummy, time);
+        return true;
+    }
+
+    private shootGenericDefenseAt(defense: PlacedBuilding, target: Troop) {
+        let stats: any;
+        try {
+            stats = this.getDefenseStats(defense);
+        } catch {
+            stats = BUILDINGS[defense.type] ?? { width: 1, height: 1, damage: 0, color: 0xffffff };
+        }
+
+        const startCenter = IsoUtils.cartToIso(defense.gridX + (stats.width ?? 1) / 2, defense.gridY + (stats.height ?? 1) / 2);
+        const end = IsoUtils.cartToIso(target.gridX, target.gridY);
+
+        const angle = Math.atan2(end.y - startCenter.y, end.x - startCenter.x);
+        defense.ballistaTargetAngle = angle;
+        if (defense.ballistaAngle === undefined) defense.ballistaAngle = angle;
+
+        const start = { x: startCenter.x, y: startCenter.y - 30 };
+
+        const projectile = this.add.graphics();
+        const color = stats.color ?? 0xffffff;
+        projectile.fillStyle(color, 1);
+        projectile.fillRect(-4, -4, 8, 8);
+        projectile.setPosition(start.x, start.y);
+        projectile.setDepth((defense.graphics?.depth ?? 5000) + 50);
+
+        const dist = Phaser.Math.Distance.Between(start.x, start.y, end.x, end.y);
+        const duration = Math.max(120, dist / 1.2);
+
+        this.tweens.add({
+            targets: projectile,
+            x: end.x,
+            y: end.y,
+            duration,
+            ease: 'Linear',
+            onComplete: () => {
+                projectile.destroy();
+
+                const impact = this.add.graphics();
+                impact.fillStyle(0xffffff, 0.45);
+                impact.fillRect(-6, -6, 12, 12);
+                impact.setPosition(end.x, end.y);
+                impact.setDepth((defense.graphics?.depth ?? 5000) + 49);
+                this.tweens.add({
+                    targets: impact,
+                    alpha: 0,
+                    scale: 2,
+                    duration: 200,
+                    onComplete: () => impact.destroy()
+                });
+
+                // Only apply damage to real troops that exist in the active troop list.
+                if (!this.troops.includes(target)) return;
+                if (target.owner === defense.owner || target.health <= 0) return;
+
+                const damage = typeof stats.damage === 'number' ? stats.damage : 0;
+                if (damage <= 0) return;
+
+                target.health -= damage;
+                target.hasTakenDamage = true;
+                this.updateHealthBar(target);
+                if (target.health <= 0) this.destroyTroop(target);
+            }
+        });
+    }
+
+    private isOffScreen(gridX: number, gridY: number, _size: number = 1): boolean {
+        const iso = IsoUtils.cartToIso(gridX, gridY);
+        // Add significant padding for effects/UI
+        const padding = 200;
+        const cam = this.cameras.main;
+
+        // Simple screen bounds check
+        // Note: iso coordinates are world space, camera scroll is top-left
+        // But we need to account for zoom. WorldView is easiest.
+        const view = cam.worldView;
+
+        return (iso.x < view.x - padding ||
+            iso.x > view.x + view.width + padding ||
+            iso.y < view.y - padding ||
+            iso.y > view.y + view.height + padding);
     }
 
     private updateBuildingAnimations(_time: number) {
         // Redraw all buildings for idle animations
         this.buildings.forEach(b => {
             if (b.owner === 'PLAYER' || this.mode === 'ATTACK') {
+                if (this.isOffScreen(b.gridX, b.gridY, (BUILDINGS[b.type]?.width || 1))) return;
+
+                // Hide original building if being moved (ghost is shown instead)
+                if (this.isMoving && this.selectedInWorld === b) {
+                    b.graphics.clear();
+                    b.baseGraphics?.clear();
+                    return;
+                }
+
                 // Smoothly interpolate ballista, xbow, and cannon angle towards target
                 // OR towards mouse if selected in HOME mode
                 let targetAngle = b.ballistaTargetAngle;
@@ -446,7 +770,8 @@ export class MainScene extends Phaser.Scene {
                 // All buildings now have animations for a lively feel
                 b.graphics.clear();
                 b.baseGraphics?.clear();
-                this.drawBuildingVisuals(b.graphics, b.gridX, b.gridY, b.type, alpha, null, b, b.baseGraphics);
+                // If baseGraphics is missing (baked), skipBase=true. If present (moving), skipBase=false.
+                this.drawBuildingVisuals(b.graphics, b.gridX, b.gridY, b.type, alpha, null, b, b.baseGraphics, !b.baseGraphics);
 
                 // MAGMA VENT: Constant thin black smoke trail
                 if (b.type === 'magmavent') {
@@ -461,22 +786,23 @@ export class MainScene extends Phaser.Scene {
 
     private createSmokeTrailEffect(gridX: number, gridY: number) {
         const pos = IsoUtils.cartToIso(gridX, gridY);
-        const smoke = this.add.graphics();
-        smoke.fillStyle(0x111111, 0.5); // Darker, slightly transparent black
-        const size = 3 + Math.random() * 2;
-        smoke.fillRect(-size / 2, -size / 2, size, size);
-        smoke.setPosition(pos.x, pos.y - 25);
-        smoke.setDepth(29999);
-
-        this.tweens.add({
-            targets: smoke,
-            x: pos.x + (Math.random() - 0.5) * 5,
-            y: pos.y - 120 - Math.random() * 50,
-            alpha: 0,
-            angle: Math.random() * 360,
-            scale: 2.5,
+        particleManager.spawn({
+            x: pos.x,
+            y: pos.y - 25,
+            depth: 29999,
             duration: 2000 + Math.random() * 1000,
-            onComplete: () => smoke.destroy()
+            onDraw: (g) => {
+                g.fillStyle(0x111111, 0.5); // Darker, slightly transparent black
+                const size = 3 + Math.random() * 2;
+                g.fillRect(-size / 2, -size / 2, size, size);
+            },
+            move: {
+                x: pos.x + (Math.random() - 0.5) * 5,
+                y: pos.y - 120 - Math.random() * 50
+            },
+            alpha: 0,
+            rotation: Math.random() * 360,
+            scale: 2.5
         });
     }
 
@@ -512,19 +838,24 @@ export class MainScene extends Phaser.Scene {
         }
 
         const campLevels = this.buildings.filter(b => b.type === 'army_camp').map(b => b.level ?? 1);
-        (window as any).refreshCampCapacity?.(campLevels);
+        gameManager.refreshCampCapacity(campLevels);
         return true;
     }
 
 
     private createIsoGrid() {
-        const graphics = this.add.graphics();
-        graphics.setDepth(-1000); // Floor even lower to support deep margin deployment
+        // Initialize Ground Render Texture
+        // 2000x1200 covers the map range (-800 to 800 X, 0 to 800 Y) with padding
+        this.groundRenderTexture = this.add.renderTexture(-this.RT_OFFSET_X, -this.RT_OFFSET_Y, 2000, 1500);
+        this.groundRenderTexture.setDepth(depthForGroundPlane());
+        this.groundRenderTexture.setOrigin(0, 0);
 
-        // Draw all tiles with lush grass variation
+        // Draw all tiles with lush grass variation to the texture
         for (let x = 0; x < this.mapSize; x++) {
             for (let y = 0; y < this.mapSize; y++) {
-                this.drawIsoTile(graphics, x, y);
+                this.tempGraphics.clear();
+                this.drawIsoTile(this.tempGraphics, x, y);
+                this.groundRenderTexture.draw(this.tempGraphics, this.RT_OFFSET_X, this.RT_OFFSET_Y);
             }
         }
 
@@ -623,8 +954,7 @@ export class MainScene extends Phaser.Scene {
         const stats = getBuildingStats(type as BuildingType, level);
 
         const graphics = this.add.graphics();
-        const baseGraphics = this.add.graphics();
-        baseGraphics.setDepth(1); // Ensure base is ALWAYS at the bottom
+        const baseGraphics = undefined; // Optimization: Bake to Ground Texture instead of per-building graphics
         const building: PlacedBuilding = {
             id, type, gridX, gridY, level, graphics, baseGraphics,
             healthBar: this.add.graphics(),
@@ -633,11 +963,15 @@ export class MainScene extends Phaser.Scene {
             owner
         };
 
-        this.drawBuildingVisuals(graphics, gridX, gridY, type, 1, null, building, baseGraphics);
+        // Bake the base to the ground texture
+        this.bakeBuildingToGround(building);
 
-        // Building depth: use the bottom-most grid coordinate (gridX+width + gridY+height)
-        const depth = (gridX + info.width) + (gridY + info.height);
-        graphics.setDepth(depth * 10);
+        // Draw dynamic visuals (skipBase=true implied by bake, but drawBuildingVisuals handles default)
+        // We pass skipBase=true to ensure only dynamic parts are drawn to 'graphics'
+        this.drawBuildingVisuals(graphics, gridX, gridY, type, 1, null, building, baseGraphics, true);
+
+        const depth = depthForBuilding(gridX, gridY, type as BuildingType);
+        graphics.setDepth(depth);
 
         // Initialize cannon angle
         if (type === 'cannon') {
@@ -649,13 +983,13 @@ export class MainScene extends Phaser.Scene {
 
         if (type === 'army_camp') {
             const campLevels = this.buildings.filter(b => b.type === 'army_camp').map(b => b.level ?? 1);
-            (window as any).refreshCampCapacity?.(campLevels);
+            gameManager.refreshCampCapacity(campLevels);
         }
 
         return building;
     }
 
-    private async placeBuilding(gridX: number, gridY: number, type: string, owner: 'PLAYER' | 'ENEMY' = 'PLAYER', isFree: boolean = false): Promise<boolean> {
+    public async placeBuilding(gridX: number, gridY: number, type: string, owner: 'PLAYER' | 'ENEMY' = 'PLAYER', isFree: boolean = false): Promise<boolean> {
         // Remove any obstacles that overlap with this building
         const info = BUILDINGS[type];
         if (info) {
@@ -667,7 +1001,7 @@ export class MainScene extends Phaser.Scene {
             const data = await Backend.placeBuilding(this.userId, type as BuildingType, gridX, gridY);
             if (data) {
                 this.instantiateBuilding(data, 'PLAYER');
-                (window as any).onBuildingPlaced?.(type, isFree);
+                gameManager.onBuildingPlaced(type, isFree);
                 return true;
             }
             return false;
@@ -685,7 +1019,7 @@ export class MainScene extends Phaser.Scene {
         return false;
     }
 
-    private removeOverlappingObstacles(gridX: number, gridY: number, width: number, height: number) {
+    public removeOverlappingObstacles(gridX: number, gridY: number, width: number, height: number) {
         const toRemove: string[] = [];
 
         for (const o of this.obstacles) {
@@ -706,7 +1040,7 @@ export class MainScene extends Phaser.Scene {
 
 
 
-    private isPositionValid(gridX: number, gridY: number, type: string, buildingToIgnore: string | null = null): boolean {
+    public isPositionValid(gridX: number, gridY: number, type: string, buildingToIgnore: string | null = null): boolean {
         const info = BUILDINGS[type];
         if (gridX < 0 || gridY < 0 || gridX + info.width > this.mapSize || gridY + info.height > this.mapSize) {
             return false;
@@ -721,7 +1055,35 @@ export class MainScene extends Phaser.Scene {
         return true;
     }
 
-    private drawBuildingVisuals(graphics: Phaser.GameObjects.Graphics, gridX: number, gridY: number, type: string, alpha: number = 1, tint: number | null = null, building?: PlacedBuilding, baseGraphics?: Phaser.GameObjects.Graphics) {
+    private bakeBuildingToGround(b: PlacedBuilding) {
+        if (!this.groundRenderTexture || !this.tempGraphics) return;
+        this.tempGraphics.clear();
+        // Draw ONLY the base to temporary graphics
+        this.drawBuildingVisuals(this.tempGraphics, b.gridX, b.gridY, b.type, 1, null, b, undefined, false, true);
+        // Stamp to texture (additive)
+        this.groundRenderTexture.draw(this.tempGraphics, this.RT_OFFSET_X, this.RT_OFFSET_Y);
+    }
+
+    // Call this before moving/deleting to restore grass
+    private unbakeBuildingFromGround(b: PlacedBuilding) {
+        if (!this.groundRenderTexture || !this.tempGraphics) return;
+
+        const info = BUILDINGS[b.type];
+        // Redraw grass over the building's footprint PLUS 1 tile margin for border cleanup
+        const margin = 1;
+        for (let x = b.gridX - margin; x < b.gridX + info.width + margin; x++) {
+            for (let y = b.gridY - margin; y < b.gridY + info.height + margin; y++) {
+                // Only draw if within map bounds
+                if (x >= 0 && x < this.mapSize && y >= 0 && y < this.mapSize) {
+                    this.tempGraphics.clear();
+                    this.drawIsoTile(this.tempGraphics, x, y);
+                    this.groundRenderTexture.draw(this.tempGraphics, this.RT_OFFSET_X, this.RT_OFFSET_Y);
+                }
+            }
+        }
+    }
+
+    public drawBuildingVisuals(graphics: Phaser.GameObjects.Graphics, gridX: number, gridY: number, type: string, alpha: number = 1, tint: number | null = null, building?: PlacedBuilding, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
         const info = BUILDINGS[type];
         const c1 = IsoUtils.cartToIso(gridX, gridY);
         const c2 = IsoUtils.cartToIso(gridX + info.width, gridY);
@@ -732,41 +1094,41 @@ export class MainScene extends Phaser.Scene {
         // Building-specific premium visuals
         switch (type) {
             case 'town_hall':
-                BuildingRenderer.drawTownHall(graphics, gridX, gridY, this.time.now, alpha, tint, baseGraphics);
+                BuildingRenderer.drawTownHall(graphics, gridX, gridY, this.time.now, alpha, tint, baseGraphics, skipBase, onlyBase);
                 break;
             case 'barracks':
-                BuildingRenderer.drawBarracks(graphics, c1, c2, c3, c4, center, alpha, tint);
+                BuildingRenderer.drawBarracks(graphics, c1, c2, c3, c4, center, alpha, tint, baseGraphics, skipBase, onlyBase);
                 break;
             case 'cannon':
                 // Use level-based rendering for cannon
                 if (building && building.level >= 4) {
-                    BuildingRenderer.drawCannonLevel4(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                    BuildingRenderer.drawCannonLevel4(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, skipBase, onlyBase);
                 } else if (building && building.level === 3) {
-                    BuildingRenderer.drawCannonLevel3(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                    BuildingRenderer.drawCannonLevel3(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, skipBase, onlyBase);
                 } else if (building && building.level === 2) {
-                    BuildingRenderer.drawCannonLevel2(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                    BuildingRenderer.drawCannonLevel2(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, skipBase, onlyBase);
                 } else {
-                    BuildingRenderer.drawCannon(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                    BuildingRenderer.drawCannon(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, skipBase, onlyBase);
                 }
                 break;
             case 'ballista':
                 if (building && building.level >= 2) {
-                    BuildingRenderer.drawBallistaLevel2(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                    BuildingRenderer.drawBallistaLevel2(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, skipBase, onlyBase);
                 } else {
-                    BuildingRenderer.drawBallista(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                    BuildingRenderer.drawBallista(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, skipBase, onlyBase);
                 }
                 break;
             case 'mine':
-                BuildingRenderer.drawGoldMine(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now);
+                BuildingRenderer.drawGoldMine(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now, baseGraphics, skipBase, onlyBase);
                 break;
             case 'elixir_collector':
-                BuildingRenderer.drawElixirCollector(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now);
+                BuildingRenderer.drawElixirCollector(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now, baseGraphics, skipBase, onlyBase);
                 break;
             case 'mortar':
-                BuildingRenderer.drawMortar(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now);
+                BuildingRenderer.drawMortar(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now, baseGraphics);
                 break;
             case 'tesla':
-                BuildingRenderer.drawTeslaCoil(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now);
+                BuildingRenderer.drawTeslaCoil(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now, baseGraphics);
                 break;
             case 'wall': {
                 const owner = building?.owner ?? 'PLAYER';
@@ -785,27 +1147,30 @@ export class MainScene extends Phaser.Scene {
                 break;
             }
             case 'army_camp':
-                BuildingRenderer.drawArmyCamp(graphics, c1, c2, c3, c4, center, alpha, tint, baseGraphics, building);
+                BuildingRenderer.drawArmyCamp(graphics, c1, c2, c3, c4, center, alpha, tint, baseGraphics, building, skipBase, onlyBase);
                 break;
             case 'xbow':
                 if (building && building.level >= 2) {
-                    BuildingRenderer.drawXBowLevel2(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now);
+                    BuildingRenderer.drawXBowLevel2(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now, baseGraphics, skipBase, onlyBase);
                 } else {
-                    BuildingRenderer.drawXBow(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now);
+                    BuildingRenderer.drawXBow(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now, baseGraphics, skipBase, onlyBase);
                 }
                 break;
             case 'prism':
-                BuildingRenderer.drawPrismTower(graphics, c1, c2, c3, c4, center, alpha, tint, building);
+                BuildingRenderer.drawPrismTower(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics);
                 break;
             case 'magmavent':
                 BuildingRenderer.drawMagmaVent(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, this.time.now);
                 break;
             case 'dragons_breath':
-                BuildingRenderer.drawDragonsBreath(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, gridX, gridY, this.time.now);
+                BuildingRenderer.drawDragonsBreath(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, gridX, gridY, this.time.now, skipBase, onlyBase);
+                break;
+            case 'spike_launcher':
+                BuildingRenderer.drawSpikeLauncher(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now, baseGraphics, skipBase, onlyBase);
                 break;
 
             default:
-                BuildingRenderer.drawGenericBuilding(graphics, c1, c2, c3, c4, center, info, alpha, tint);
+                BuildingRenderer.drawGenericBuilding(graphics, c1, c2, c3, c4, center, info, alpha, tint, baseGraphics);
         }
     }
 
@@ -826,8 +1191,7 @@ export class MainScene extends Phaser.Scene {
         const graphics = this.add.graphics();
         RubbleRenderer.drawRubble(graphics, gridX, gridY, width, height);
 
-        // Very low depth so rubble renders UNDER troops and other elements
-        graphics.setDepth(5);
+        graphics.setDepth(depthForRubble(gridX, gridY, width, height));
 
         this.rubble.push({ gridX, gridY, width, height, graphics, createdAt: Date.now() });
     }
@@ -916,8 +1280,7 @@ export class MainScene extends Phaser.Scene {
 
         this.drawObstacle(obstacle);
 
-        const depth = (gridX + info.width) + (gridY + info.height);
-        graphics.setDepth(depth * 10);
+        graphics.setDepth(depthForObstacle(gridX, gridY, info.width, info.height));
 
         this.obstacles.push(obstacle);
 
@@ -1025,7 +1388,7 @@ export class MainScene extends Phaser.Scene {
 
 
 
-    private updateHealthBar(item: PlacedBuilding | Troop) {
+    public updateHealthBar(item: PlacedBuilding | Troop) {
         if (!item.healthBar) return; // Safely ignore dummy targets without health bars
         const bar = item.healthBar;
         bar.clear();
@@ -1148,17 +1511,13 @@ export class MainScene extends Phaser.Scene {
     }
 
     private updateCombat(time: number) {
-        // Include all defense types
-        const defenses = this.buildings.filter(b => (
-            b.type === 'cannon' ||
-            b.type === 'mortar' ||
-            b.type === 'tesla' ||
-            b.type === 'ballista' ||
-            b.type === 'xbow' ||
-            b.type === 'prism' ||
-            b.type === 'magmavent' ||
-            b.type === 'dragons_breath'
-        ) && b.health > 0);
+        if (this.mode !== 'ATTACK') return;
+
+        // Include any fireable defense (no per-type hardcoding).
+        const defenses = this.buildings.filter(b => {
+            const info = BUILDINGS[b.type];
+            return info && info.category === 'defense' && b.type !== 'wall' && b.health > 0;
+        });
         defenses.forEach(defense => {
             let nearestTroop: Troop | null = null;
             const stats = getBuildingStats(defense.type as BuildingType, defense.level || 1);
@@ -1167,7 +1526,7 @@ export class MainScene extends Phaser.Scene {
 
             // Initial delay for non-continuous defenses (not prism laser)
             const needsInitialDelay = defense.type !== 'prism' && defense.type !== 'magmavent';
-            if (!defense.lastFireTime) {
+            if (defense.lastFireTime === undefined) {
                 // Set initial fire time - continuous defenses fire immediately, others have 1.5s delay
                 defense.lastFireTime = needsInitialDelay ? time : (time - interval);
             }
@@ -1192,14 +1551,7 @@ export class MainScene extends Phaser.Scene {
 
             if (nearestTroop) {
                 defense.lastFireTime = time;
-                if (defense.type === 'mortar') this.shootMortarAt(defense, nearestTroop);
-                else if (defense.type === 'tesla') this.shootTeslaAt(defense, nearestTroop);
-                else if (defense.type === 'ballista') this.shootBallistaAt(defense, nearestTroop);
-                else if (defense.type === 'xbow') this.shootXBowAt(defense, nearestTroop);
-                else if (defense.type === 'prism') this.shootPrismContinuousLaser(defense, nearestTroop, time);
-                else if (defense.type === 'magmavent') this.shootMagmaEruption(defense);
-                else if (defense.type === 'dragons_breath') this.shootDragonsBreathAt(defense, nearestTroop);
-                else this.shootAt(defense, nearestTroop);
+                this.fireDefenseAtTarget(defense, nearestTroop, time);
             } else {
                 // No target - clean up prism laser if it exists
                 if (defense.type === 'prism') {
@@ -1461,18 +1813,21 @@ export class MainScene extends Phaser.Scene {
                                 ball.setDepth(ballDepth);
 
                                 // Smoke puff at muzzle - smaller
-                                const smoke = this.add.graphics();
-                                smoke.fillStyle(0x555555, 0.5);
-                                smoke.fillCircle(0, 0, 4);
-                                smoke.setPosition(muzzleX, muzzleY);
-                                smoke.setDepth(ballDepth - 1);
-                                this.tweens.add({
-                                    targets: smoke,
-                                    scale: 2.5, alpha: 0,
-                                    x: muzzleX + (Math.random() - 0.5) * 15,
-                                    y: muzzleY - 15,
+                                particleManager.spawn({
+                                    x: muzzleX,
+                                    y: muzzleY,
+                                    depth: ballDepth - 1,
                                     duration: 600,
-                                    onComplete: () => smoke.destroy()
+                                    onDraw: (g) => {
+                                        g.fillStyle(0x555555, 0.5);
+                                        g.fillCircle(0, 0, 4);
+                                    },
+                                    move: {
+                                        x: muzzleX + (Math.random() - 0.5) * 15,
+                                        y: muzzleY - 15
+                                    },
+                                    alpha: 0,
+                                    scale: 2.5
                                 });
 
                                 // Light screen shake on fire
@@ -2256,7 +2611,7 @@ export class MainScene extends Phaser.Scene {
     }
 
     // Clean up prism laser graphics when no target
-    private cleanupPrismLaser(prism: PlacedBuilding) {
+    public cleanupPrismLaser(prism: PlacedBuilding) {
         if (prism.prismLaserGraphics) {
             prism.prismLaserGraphics.destroy();
             prism.prismLaserGraphics = undefined;
@@ -2424,7 +2779,7 @@ export class MainScene extends Phaser.Scene {
                 t.hasTakenDamage = true;
 
                 // Hit flash on troop
-                const hitFlash = this.add.graphics();
+                const hitFlash = particleManager.getPooledGraphic();
                 hitFlash.fillStyle(0xff4400, 0.8);
                 const troopPos = IsoUtils.cartToIso(t.gridX, t.gridY);
                 hitFlash.fillCircle(troopPos.x, troopPos.y, 15);
@@ -2434,7 +2789,7 @@ export class MainScene extends Phaser.Scene {
                     alpha: 0,
                     scale: 2,
                     duration: 150,
-                    onComplete: () => hitFlash.destroy()
+                    onComplete: () => particleManager.returnToPool(hitFlash)
                 });
 
                 this.updateHealthBar(t);
@@ -2466,7 +2821,7 @@ export class MainScene extends Phaser.Scene {
 
 
         // Arrow with proper orientation
-        const arrow = this.add.graphics();
+        const arrow = particleManager.getPooledGraphic();
         arrow.fillStyle(0x8b4513, 1);
         arrow.fillRect(-8, -1, 16, 2);
         arrow.fillStyle(0x888888, 1);
@@ -2591,7 +2946,7 @@ export class MainScene extends Phaser.Scene {
 
     private launchSharpshooterArrow(_troop: Troop, start: Phaser.Math.Vector2, end: Phaser.Math.Vector2, angle: number, targetBuilding: PlacedBuilding, damage: number) {
         // Large arrow with proper design
-        const arrow = this.add.graphics();
+        const arrow = particleManager.getPooledGraphic();
         // Arrow shaft
         arrow.fillStyle(0x5d4037, 1);
         arrow.fillRect(-16, -2, 32, 4);
@@ -2609,9 +2964,19 @@ export class MainScene extends Phaser.Scene {
         arrow.setPosition(start.x, start.y - 12);
         arrow.setRotation(angle);
         arrow.setDepth(10000);
+        arrow.setAlpha(0); // Start invisible
+
+        // Delay arrow visibility so it doesn't overlap with bow-held arrow
+        this.tweens.add({
+            targets: arrow,
+            alpha: 1,
+            delay: 50,
+            duration: 30,
+            ease: 'Linear'
+        });
 
         // Trail effect
-        const trail = this.add.graphics();
+        const trail = particleManager.getPooledGraphic();
         trail.lineStyle(2, 0x88ff88, 0.5);
         trail.lineBetween(start.x, start.y - 12, start.x, start.y - 12);
         trail.setDepth(9999);
@@ -2633,8 +2998,8 @@ export class MainScene extends Phaser.Scene {
                 trail.lineBetween(start.x, start.y - 12, arrow.x, arrow.y);
             },
             onComplete: () => {
-                arrow.destroy();
-                trail.destroy();
+                particleManager.returnToPool(arrow);
+                particleManager.returnToPool(trail);
 
                 if (targetBuilding && targetBuilding.health > 0) {
                     targetBuilding.health -= damage;
@@ -2694,7 +3059,7 @@ export class MainScene extends Phaser.Scene {
         });
 
         // Mortar shell - spawns from the mortar position
-        const shell = this.add.graphics();
+        const shell = particleManager.getPooledGraphic();
         shell.fillStyle(0x3a3a3a, 1);
         shell.fillCircle(0, 0, 5);
         shell.fillStyle(0x555555, 1);
@@ -2703,7 +3068,7 @@ export class MainScene extends Phaser.Scene {
         shell.setDepth(10000);
 
         // Muzzle flash at mortar position
-        const flash = this.add.graphics();
+        const flash = particleManager.getPooledGraphic();
         flash.fillStyle(0xff6600, 0.9);
         flash.fillCircle(0, 0, 10);
         flash.fillStyle(0xffaa00, 0.7);
@@ -2717,12 +3082,12 @@ export class MainScene extends Phaser.Scene {
             alpha: 0,
             scale: 1.8,
             duration: 100,
-            onComplete: () => flash.destroy()
+            onComplete: () => particleManager.returnToPool(flash)
         });
 
         // THIN BLACK SMOKE - rising slowly from mortar muzzle
         for (let i = 0; i < 6; i++) {
-            const smoke = this.add.graphics();
+            const smoke = particleManager.getPooledGraphic();
             // Thin wispy smoke
             smoke.fillStyle(0x222222, 0.4 + Math.random() * 0.2);
             smoke.fillRect(-1, -3 - Math.random() * 4, 2 + Math.random() * 2, 6 + Math.random() * 4);
@@ -2739,7 +3104,7 @@ export class MainScene extends Phaser.Scene {
                 duration: 1200 + Math.random() * 600, // Much slower
                 delay: i * 80,
                 ease: 'Linear',
-                onComplete: () => smoke.destroy()
+                onComplete: () => particleManager.returnToPool(smoke)
             });
         }
 
@@ -2757,12 +3122,12 @@ export class MainScene extends Phaser.Scene {
                     x: { value: end.x, duration: 300, ease: 'Linear' },
                     y: { value: endY, duration: 300, ease: 'Quad.easeIn' },
                     onComplete: () => {
-                        shell.destroy();
+                        particleManager.returnToPool(shell);
 
                         // Explosion effect
                         this.cameras.main.shake(50, 0.002);
 
-                        const explosion = this.add.graphics();
+                        const explosion = particleManager.getPooledGraphic();
                         explosion.fillStyle(0xff4400, 0.8);
                         explosion.fillCircle(0, 0, 20);
                         explosion.fillStyle(0xff8800, 0.6);
@@ -2776,7 +3141,7 @@ export class MainScene extends Phaser.Scene {
                             alpha: 0,
                             scale: 2,
                             duration: 200,
-                            onComplete: () => explosion.destroy()
+                            onComplete: () => particleManager.returnToPool(explosion)
                         });
 
                         // Splash damage to all buildings in radius
@@ -2809,7 +3174,7 @@ export class MainScene extends Phaser.Scene {
 
                         // Debris
                         for (let i = 0; i < 6; i++) {
-                            const debris = this.add.graphics();
+                            const debris = particleManager.getPooledGraphic();
                             debris.fillStyle(0x555555, 0.8);
                             debris.fillCircle(0, 0, 2 + Math.random() * 2);
                             debris.setPosition(end.x, endY);
@@ -2823,7 +3188,7 @@ export class MainScene extends Phaser.Scene {
                                 alpha: 0,
                                 duration: 300,
                                 ease: 'Quad.easeOut',
-                                onComplete: () => debris.destroy()
+                                onComplete: () => particleManager.returnToPool(debris)
                             });
                         }
                     }
@@ -3515,8 +3880,7 @@ export class MainScene extends Phaser.Scene {
                         const pos = IsoUtils.cartToIso(troop.gridX, troop.gridY);
                         troop.gameObject.setPosition(pos.x, pos.y);
                         this.updateHealthBar(troop);
-                        // Consistent depth: add 1000 to ensure it's ALWAYS above the -1000 floor even with negative coords
-                        troop.gameObject.setDepth(1000 + (troop.gridX + troop.gridY + (troop.type === 'golem' ? 2 : 0)) * 10);
+                        troop.gameObject.setDepth(depthForTroop(troop.gridX, troop.gridY, troop.type));
 
                         // Update facing angle for troops that need it (facing movement direction)
                         if (troop.type === 'archer' || troop.type === 'ram' || troop.type === 'golem' || troop.type === 'sharpshooter' || troop.type === 'mobilemortar' || troop.type === 'phalanx' || troop.type === 'romanwarrior') {
@@ -3725,7 +4089,6 @@ export class MainScene extends Phaser.Scene {
             }
         }
 
-        b.graphics.destroy();
         if (b.barrelGraphics) b.barrelGraphics.destroy();
         b.healthBar.destroy();
         this.buildings.splice(index, 1);
@@ -3752,21 +4115,20 @@ export class MainScene extends Phaser.Scene {
                 }
 
                 this.updateBattleStats();
-
-                this.updateBattleStats();
             }
 
             const enemies = this.buildings.filter(eb => eb.owner === 'ENEMY' && eb.type !== 'wall');
-            if (enemies.length === 0) {
+            if (enemies.length === 0 && !this.raidEndScheduled) {
+                this.raidEndScheduled = true;
                 const gold = this.goldLooted;
                 const elixir = this.elixirLooted;
-                this.time.delayedCall(2000, () => { (window as any).onRaidEnded?.(gold, elixir); });
+                this.time.delayedCall(2000, () => { gameManager.onRaidEnded(gold, elixir); });
             }
 
         } else {
             if (b.type === 'army_camp') {
                 const campLevels = this.buildings.filter(bc => bc.type === 'army_camp').map(bc => bc.level ?? 1);
-                (window as any).refreshCampCapacity?.(campLevels);
+                gameManager.refreshCampCapacity(campLevels);
             }
             // Remove from backend when player building is deleted
             if (b.owner === 'PLAYER') {
@@ -3780,7 +4142,7 @@ export class MainScene extends Phaser.Scene {
         const destruction = this.initialEnemyBuildings > 0
             ? Math.round((this.destroyedBuildings / this.initialEnemyBuildings) * 100)
             : 0;
-        (window as any).updateBattleStats?.(destruction, this.goldLooted, this.elixirLooted);
+        gameManager.updateBattleStats(destruction, this.goldLooted, this.elixirLooted);
     }
 
 
@@ -4083,7 +4445,7 @@ export class MainScene extends Phaser.Scene {
             this.time.delayedCall(100, () => {
                 const husk = this.add.graphics();
                 husk.setPosition(pos.x, pos.y);
-                husk.setDepth(5); // Ground level, like golem debris
+                husk.setDepth(depthForTroop(t.gridX, t.gridY, t.type));
 
                 // Draw the deactivated tank
                 TroopRenderer.drawDaVinciTank(husk, isPlayer, false, true, t.facingAngle || 0);
@@ -4235,17 +4597,28 @@ export class MainScene extends Phaser.Scene {
         if (time < this.lastResourceUpdate + this.resourceInterval) return;
         this.lastResourceUpdate = time;
 
-        // Gold from mines
-        const playerMines = this.buildings.filter(b => b.type === 'mine' && b.owner === 'PLAYER');
-        if (playerMines.length > 0) (window as any).addGold(playerMines.length * 5);
+        const intervalSeconds = this.resourceInterval / 1000;
+        let goldPerSecond = 0;
+        let elixirPerSecond = 0;
 
-        // Elixir from collectors
-        const playerCollectors = this.buildings.filter(b => b.type === 'elixir_collector' && b.owner === 'PLAYER');
-        if (playerCollectors.length > 0) (window as any).addElixir(playerCollectors.length * 5);
+        this.buildings.forEach(b => {
+            if (b.owner !== 'PLAYER') return;
+            if (b.type !== 'mine' && b.type !== 'elixir_collector') return;
+            const stats = getBuildingStats(b.type as BuildingType, b.level || 1);
+            const rate = stats.productionRate || 0;
+            if (b.type === 'mine') goldPerSecond += rate;
+            if (b.type === 'elixir_collector') elixirPerSecond += rate;
+        });
+
+        const goldToAdd = Math.floor(goldPerSecond * intervalSeconds);
+        const elixirToAdd = Math.floor(elixirPerSecond * intervalSeconds);
+
+        if (goldToAdd > 0) gameManager.addGold(goldToAdd);
+        if (elixirToAdd > 0) gameManager.addElixir(elixirToAdd);
     }
 
 
-    private spawnTroop(gx: number, gy: number, type: 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'ram' | 'stormmage' | 'golem' | 'sharpshooter' | 'mobilemortar' | 'davincitank' | 'phalanx' | 'romanwarrior' = 'warrior', owner: 'PLAYER' | 'ENEMY' = 'PLAYER', recursionGen: number = 0) {
+    public spawnTroop(gx: number, gy: number, type: 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'ram' | 'stormmage' | 'golem' | 'sharpshooter' | 'mobilemortar' | 'davincitank' | 'phalanx' | 'romanwarrior' = 'warrior', owner: 'PLAYER' | 'ENEMY' = 'PLAYER', recursionGen: number = 0) {
         // Bounds check - Relaxed for deployment margin
         const margin = 2;
         if (gx < -margin || gy < -margin || gx >= this.mapSize + margin || gy >= this.mapSize + margin) {
@@ -4261,7 +4634,7 @@ export class MainScene extends Phaser.Scene {
         const troopGraphic = this.add.graphics();
         TroopRenderer.drawTroopVisual(troopGraphic, type, owner);
         troopGraphic.setPosition(pos.x, pos.y);
-        troopGraphic.setDepth(1000 + (gx + gy) * 10);
+        troopGraphic.setDepth(depthForTroop(gx, gy, type));
 
         // Spawn dust effect
         for (let i = 0; i < 5; i++) {
@@ -4327,7 +4700,7 @@ export class MainScene extends Phaser.Scene {
 
 
 
-    private getBuildingsBounds(owner: 'PLAYER' | 'ENEMY') {
+    public getBuildingsBounds(owner: 'PLAYER' | 'ENEMY') {
         const ownerBuildings = this.buildings.filter(b => b.owner === owner);
         if (ownerBuildings.length === 0) return null;
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -4524,363 +4897,8 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
-    private onPointerDown(pointer: Phaser.Input.Pointer) {
-        if (pointer.button === 0) {
-            this.isManualFiring = false; // Reset firing on interaction start
-
-            // If a building is selected, we can start manual firing immediately on press
-            if (this.selectedInWorld && !this.selectedBuildingType && !this.isMoving) {
-                const info = BUILDINGS[this.selectedInWorld.type];
-                if (info && info.category === 'defense') {
-                    const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-                    const gridPosFloat = IsoUtils.isoToCart(worldPoint.x, worldPoint.y);
-                    const centerX = this.selectedInWorld.gridX + info.width / 2;
-                    const centerY = this.selectedInWorld.gridY + info.height / 2;
-                    const dist = Phaser.Math.Distance.Between(gridPosFloat.x, gridPosFloat.y, centerX, centerY);
-
-                    if (dist <= (info.range || 10)) {
-                        this.isManualFiring = true;
-                    }
-                }
-            }
-
-            // Just set up for potential drag
-            this.isDragging = false;
-            this.dragOrigin.set(pointer.x, pointer.y);
-
-            // Anchor for robust panning
-            this.dragStartCam.set(this.cameras.main.scrollX, this.cameras.main.scrollY);
-            this.dragStartScreen.set(pointer.position.x, pointer.position.y);
-
-            // Start deployment timer and spawn first troop immediately for responsiveness
-            if (this.mode === 'ATTACK') {
-                this.deployStartTime = this.time.now;
-                const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-                const gridPosFloat = IsoUtils.isoToCart(worldPoint.x, worldPoint.y);
-                const bounds = this.getBuildingsBounds('ENEMY');
-                const margin = 2;
-                const isInsideMap = gridPosFloat.x >= -margin && gridPosFloat.x < this.mapSize + margin &&
-                    gridPosFloat.y >= -margin && gridPosFloat.y < this.mapSize + margin;
-                const isForbidden = bounds && gridPosFloat.x >= bounds.minX && gridPosFloat.x <= bounds.maxX &&
-                    gridPosFloat.y >= bounds.minY && gridPosFloat.y <= bounds.maxY;
-
-                if (isInsideMap && !isForbidden) {
-                    const army = (window as any).getArmy();
-                    const selectedType = (window as any).getSelectedTroopType();
-                    this.isLockingDragForTroops = true; // Lock camera panning for this drag
-                    if (selectedType && army[selectedType] > 0) {
-                        this.spawnTroop(gridPosFloat.x, gridPosFloat.y, selectedType, 'PLAYER');
-                        (window as any).deployTroop(selectedType);
-                        this.lastDeployTime = this.time.now;
-                    }
-                }
-            }
-        }
-    }
-
-    private async onPointerUp(pointer: Phaser.Input.Pointer) {
-        // Calculate drag distance
-        const dist = Phaser.Math.Distance.Between(pointer.downX, pointer.downY, pointer.upX, pointer.upY);
-
-        // If moved significantly, treat as drag and do nothing else
-        if (dist > 10) {
-            this.isDragging = false;
-            return;
-        }
-
-        // --- CLICK HANDLING (Previously in onPointerDown) ---
-        if (pointer.button === 0) {
-            const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-            const gridPosFloat = IsoUtils.isoToCart(worldPoint.x, worldPoint.y);
-            const gridPosSnap = new Phaser.Math.Vector2(Math.floor(gridPosFloat.x), Math.floor(gridPosFloat.y));
-
-            if (this.mode === 'ATTACK') {
-                // Check if clicking on an enemy building to show its range
-                const clickedBuilding = this.buildings.find(b => {
-                    if (b.owner !== 'ENEMY' || b.health <= 0) return false;
-                    const info = BUILDINGS[b.type];
-                    return gridPosSnap.x >= b.gridX && gridPosSnap.x < b.gridX + info.width &&
-                        gridPosSnap.y >= b.gridY && gridPosSnap.y < b.gridY + info.height;
-                });
-
-                if (clickedBuilding) {
-                    // Toggle range indicator: If already active, clear it. Else show it.
-                    if (clickedBuilding.rangeIndicator) {
-                        this.clearBuildingRangeIndicator();
-                    } else {
-                        this.showBuildingRangeIndicator(clickedBuilding);
-                    }
-                    this.lastForbiddenInteractionTime = this.time.now;
-                    return;
-                }
-
-                // Clear any existing range indicator when clicking elsewhere
-                this.clearBuildingRangeIndicator();
-                return;
-            }
-
-            if (this.isMoving && this.selectedInWorld) {
-                if (this.isPositionValid(gridPosSnap.x, gridPosSnap.y, this.selectedInWorld.type, this.selectedInWorld.id)) {
-                    // Clear any obstacles at the new position
-                    const info = BUILDINGS[this.selectedInWorld.type];
-                    this.removeOverlappingObstacles(gridPosSnap.x, gridPosSnap.y, info.width, info.height);
-
-                    this.selectedInWorld.gridX = gridPosSnap.x;
-                    this.selectedInWorld.gridY = gridPosSnap.y;
-                    this.selectedInWorld.graphics.clear();
-                    this.drawBuildingVisuals(this.selectedInWorld.graphics, gridPosSnap.x, gridPosSnap.y, this.selectedInWorld.type, 1, null, this.selectedInWorld);
-                    const depth = (gridPosSnap.x + BUILDINGS[this.selectedInWorld.type].width) + (gridPosSnap.y + BUILDINGS[this.selectedInWorld.type].height);
-                    this.selectedInWorld.graphics.setDepth(depth * 10);
-                    if (this.selectedInWorld.barrelGraphics) {
-                        this.selectedInWorld.barrelGraphics.setDepth(this.selectedInWorld.graphics.depth + 1);
-                    }
-                    this.updateHealthBar(this.selectedInWorld);
-                    if (this.selectedInWorld.rangeIndicator) {
-                        this.showBuildingRangeIndicator(this.selectedInWorld);
-                    }
-                    this.isMoving = false;
-                    this.ghostBuilding.setVisible(false);
-                    if (this.selectedInWorld.owner === 'PLAYER') {
-                        await Backend.moveBuilding(this.userId, this.selectedInWorld.id, gridPosSnap.x, gridPosSnap.y);
-                    }
-                }
-                return;
-            }
-
-            if (pointer.rightButtonDown()) {
-                this.cancelPlacement();
-                return;
-            }
-
-            if (this.selectedBuildingType) {
-                if (this.isPositionValid(gridPosSnap.x, gridPosSnap.y, this.selectedBuildingType)) {
-                    const type = this.selectedBuildingType;
-                    const success = await this.placeBuilding(gridPosSnap.x, gridPosSnap.y, type, 'PLAYER');
-
-                    if (success) {
-                        const info = BUILDINGS[type];
-                        const pos = IsoUtils.cartToIso(gridPosSnap.x + info.width / 2, gridPosSnap.y + info.height / 2);
-                        this.createSmokeEffect(pos.x, pos.y, 8);
-
-                        if (type !== 'wall') {
-                            this.selectedBuildingType = null;
-                            this.ghostBuilding.setVisible(false);
-                            (window as any).onPlacementCancelled?.();
-                        }
-                    } else {
-                        this.tweens.add({
-                            targets: this.ghostBuilding,
-                            x: this.ghostBuilding.x + 5,
-                            duration: 50,
-                            yoyo: true,
-                            repeat: 3
-                        });
-                    }
-                }
-                return;
-            }
-
-            const clicked = this.buildings.find(b => {
-                const info = BUILDINGS[b.type];
-                return gridPosSnap.x >= b.gridX && gridPosSnap.x < b.gridX + info.width &&
-                    gridPosSnap.y >= b.gridY && gridPosSnap.y < b.gridY + info.height && b.owner === 'PLAYER';
-            });
-            if (clicked) {
-                if (this.selectedInWorld === clicked) {
-                    this.selectedInWorld = null;
-                    (window as any).onBuildingSelected?.(null);
-                    this.clearBuildingRangeIndicator();
-                    if (clicked.type === 'prism') {
-                        this.cleanupPrismLaser(clicked);
-                    }
-                } else {
-                    if (this.selectedInWorld !== clicked) {
-                        this.clearBuildingRangeIndicator();
-                    }
-                    this.selectedInWorld = clicked;
-                    (window as any).onBuildingSelected?.({ id: clicked.id, type: clicked.type, level: clicked.level || 1 });
-                    this.showBuildingRangeIndicator(clicked);
-                }
-                this.isManualFiring = false;
-                return;
-            } else {
-                if (this.selectedInWorld &&
-                    ['cannon', 'ballista', 'xbow', 'mortar', 'tesla', 'magmavent', 'prism'].includes(this.selectedInWorld.type)) {
-
-                    const info = BUILDINGS[this.selectedInWorld.type];
-                    const centerX = this.selectedInWorld.gridX + info.width / 2;
-                    const centerY = this.selectedInWorld.gridY + info.height / 2;
-                    const dist = Phaser.Math.Distance.Between(gridPosFloat.x, gridPosFloat.y, centerX, centerY);
-
-                    if (dist <= (info.range || 10)) {
-                        this.updateManualFire(this.time.now);
-                        this.isManualFiring = false;
-                        return;
-                    }
-                }
-
-                if (this.selectedInWorld && this.selectedInWorld.type === 'prism') {
-                    this.cleanupPrismLaser(this.selectedInWorld);
-                }
-                this.selectedInWorld = null;
-                (window as any).onBuildingSelected?.(null);
-                this.clearBuildingRangeIndicator();
-                this.isManualFiring = false;
-            }
-        }
-
-        // Final cleanup for interactions that rely on holding mouse down (like prism)
-        this.isDragging = false;
-        this.isManualFiring = false;
-        this.isLockingDragForTroops = false;
-        if (this.selectedInWorld && (this.selectedInWorld as any).type === 'prism') {
-            this.cleanupPrismLaser(this.selectedInWorld);
-        }
-    }
-
-    private onPointerMove(pointer: Phaser.Input.Pointer) {
-        // 1. Calculate common coordinate data immediately to avoid redundancy and shadowing
-        const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-        const cartFloat = IsoUtils.isoToCart(worldPoint.x, worldPoint.y);
-        const gridPosSnap = new Phaser.Math.Vector2(Math.floor(cartFloat.x), Math.floor(cartFloat.y));
-        const gridPosFloat = cartFloat;
-
-        this.hoverGrid.set(gridPosSnap.x, gridPosSnap.y);
-
-        // Drag detection threshold
-        if (pointer.isDown) {
-            if (!this.isDragging) {
-                // Check if moved enough to start drag
-                const dist = Phaser.Math.Distance.Between(pointer.downX, pointer.downY, pointer.x, pointer.y);
-                if (dist > 10) {
-                    this.isDragging = true;
-                    // Optional: Reset anchor here to avoid 'jump', but keeping it means we SNAP to the cursor, which feels tighter.
-                    // To avoid snap, we would do:
-                    // this.dragStartCam.set(this.cameras.main.scrollX, this.cameras.main.scrollY);
-                    // this.dragStartScreen.set(pointer.position.x, pointer.position.y);
-                    // Reset the anchor to prevent the "jump" artifact when drag starts
-                    this.dragStartCam.set(this.cameras.main.scrollX, this.cameras.main.scrollY);
-                    this.dragStartScreen.set(pointer.position.x, pointer.position.y);
-                }
-            }
-
-            if (this.isDragging) {
-                // Camera Drag Logic - Anchor Based for 1:1 movement
-                // Fix: explicit exception for walls to prevent panning while painting walls
-                const isWallPlacement = this.selectedBuildingType === 'wall';
-
-                // Fix: explicit exception for troops to prevent panning while deploying army
-                // BUT: if dragging on red area (forbidden), we SHOULD pan
-
-
-                // Determine if we are hovering a valid deployment zone
-                // We reuse the pre-calculated coordinates
-                const bounds = this.getBuildingsBounds('ENEMY');
-                const isForbidden = bounds && cartFloat.x >= bounds.minX && cartFloat.x <= bounds.maxX &&
-                    cartFloat.y >= bounds.minY && cartFloat.y <= bounds.maxY;
-
-                // Is strictly placing troops (Attack mode, troop selected, AND in valid spot OR already locked)
-                const isTroopPlacement = this.mode === 'ATTACK' && this.isLockingDragForTroops && !isForbidden;
-
-                if (!isWallPlacement && !isTroopPlacement && (this.mode === 'ATTACK' || (!this.selectedBuildingType && !this.selectedInWorld) || (this.selectedInWorld && !this.isMoving))) {
-                    // formula: currentScroll = startScroll + (startScreen - currentScreen) / zoom
-                    const diffX = this.dragStartScreen.x - pointer.position.x;
-                    const diffY = this.dragStartScreen.y - pointer.position.y;
-
-                    this.cameras.main.scrollX = this.dragStartCam.x + diffX / this.cameras.main.zoom;
-                    this.cameras.main.scrollY = this.dragStartCam.y + diffY / this.cameras.main.zoom;
-                }
-            }
-
-            // Update manual firing state during movement (allows following cursor with laser/gun)
-            if (this.mode === 'HOME' && this.selectedInWorld && !this.selectedBuildingType && !this.isMoving && !this.isDragging) {
-                const info = BUILDINGS[this.selectedInWorld.type];
-                if (info && info.category === 'defense') {
-                    const centerX = this.selectedInWorld.gridX + info.width / 2;
-                    const centerY = this.selectedInWorld.gridY + info.height / 2;
-                    const dist = Phaser.Math.Distance.Between(gridPosFloat.x, gridPosFloat.y, centerX, centerY);
-                    this.isManualFiring = dist <= (info.range || 10);
-                }
-            }
-        }
-
-        // Drag to build walls
-        if (pointer.isDown && this.selectedBuildingType === 'wall') {
-            if (this.isPositionValid(gridPosSnap.x, gridPosSnap.y, this.selectedBuildingType)) {
-                this.placeBuilding(gridPosSnap.x, gridPosSnap.y, this.selectedBuildingType, 'PLAYER');
-            }
-        }
-
-        if (this.mode === 'ATTACK' && pointer.isDown) {
-            const now = this.time.now;
-            const holdDuration = now - this.deployStartTime;
-
-            // Ramping fire rate: Start slow (500ms), speed up (250ms), then turbo (100ms)
-            let interval = 500;
-            if (holdDuration > 1000) interval = 100;
-            else if (holdDuration > 500) interval = 250;
-
-            if (now - this.lastDeployTime > interval) {
-                const bounds = this.getBuildingsBounds('ENEMY');
-                const margin = 2;
-                const isInsideMap = gridPosFloat.x >= -margin && gridPosFloat.x < this.mapSize + margin &&
-                    gridPosFloat.y >= -margin && gridPosFloat.y < this.mapSize + margin;
-                const isForbidden = bounds && gridPosFloat.x >= bounds.minX && gridPosFloat.x <= bounds.maxX &&
-                    gridPosFloat.y >= bounds.minY && gridPosFloat.y <= bounds.maxY;
-
-                if (isForbidden) {
-                    this.lastForbiddenInteractionTime = now;
-                }
-
-                if (isInsideMap && !isForbidden) {
-                    const army = (window as any).getArmy();
-                    const selectedType = (window as any).getSelectedTroopType();
-                    if (selectedType && army[selectedType] > 0) {
-                        this.spawnTroop(gridPosFloat.x, gridPosFloat.y, selectedType, 'PLAYER');
-                        (window as any).deployTroop(selectedType);
-                        this.lastDeployTime = now;
-                        return;
-                    }
-                }
-            }
-        }
-
-
-        this.ghostBuilding.clear();
-        if (this.selectedBuildingType || (this.isMoving && this.selectedInWorld)) {
-            const type = this.selectedBuildingType || this.selectedInWorld?.type;
-            if (type && gridPosSnap.x >= 0 && gridPosSnap.x < this.mapSize && gridPosSnap.y >= 0 && gridPosSnap.y < this.mapSize) {
-                this.ghostBuilding.setVisible(true);
-
-                // Determine Ghost Level for accurate preview
-                let level = 1;
-                if (this.selectedInWorld) {
-                    level = this.selectedInWorld.level || 1;
-                } else if (type === 'wall') {
-                    const walls = this.buildings.filter(b => b.type === 'wall');
-                    if (walls.length > 0) level = Math.max(...walls.map(w => w.level || 1));
-                }
-
-                const ghostObj = { type: type as BuildingType, level: level, gridX: gridPosSnap.x, gridY: gridPosSnap.y };
-                this.drawBuildingVisuals(this.ghostBuilding, gridPosSnap.x, gridPosSnap.y, type, 0.5, null, ghostObj as any);
-
-                // Ghost depth should be on top of everything for visibility
-                this.ghostBuilding.setDepth(200000);
-            } else { this.ghostBuilding.setVisible(false); }
-        }
-    }
-
-
-
-    private updateTooltip() {
-        // Disabled: User requested legacy tooltip removal. UI now handles info via selection panel.
-        (window as any).updateGameTooltip?.(null);
-    }
-
-
-
     // === BUILDING RANGE INDICATOR ===
-    private showBuildingRangeIndicator(building: PlacedBuilding) {
+    public showBuildingRangeIndicator(building: PlacedBuilding) {
         // Only show range for defensive buildings
         const info = BUILDINGS[building.type];
         if (info.category !== 'defense' || building.type === 'wall') return;
@@ -4900,7 +4918,7 @@ export class MainScene extends Phaser.Scene {
 
         // Create range indicator graphics
         const rangeGraphics = this.add.graphics();
-        rangeGraphics.setDepth(5);
+        rangeGraphics.setDepth(building.graphics.depth + 2);
 
         // Calculate isometric ellipse size (range in pixels)
         // Note: We need Math.SQRT2 factor because isometric projection of a grid-circle
@@ -4985,7 +5003,7 @@ export class MainScene extends Phaser.Scene {
         });
     }
 
-    private clearBuildingRangeIndicator() {
+    public clearBuildingRangeIndicator() {
         if (this.attackModeSelectedBuilding?.rangeIndicator) {
             this.attackModeSelectedBuilding.rangeIndicator.destroy();
             this.attackModeSelectedBuilding.rangeIndicator = undefined;
@@ -5037,7 +5055,7 @@ export class MainScene extends Phaser.Scene {
 
     private showCloudTransition(onMidpoint: () => void) {
         // Show React overlay to cover UI - CSS animation handles timing
-        (window as any).showCloudOverlay?.();
+        gameManager.showCloudOverlay();
 
         const cloudSprites: Phaser.GameObjects.Arc[] = [];
 
@@ -5070,7 +5088,7 @@ export class MainScene extends Phaser.Scene {
             // Hold for a moment to ensure state swap happens behind cover
             this.time.delayedCall(1700, () => {
                 if (cloudSprites.length === 0) {
-                    (window as any).hideCloudOverlay?.();
+                    gameManager.hideCloudOverlay();
                 } else {
                     cloudSprites.forEach((c, idx) => {
                         this.tweens.add({
@@ -5082,7 +5100,7 @@ export class MainScene extends Phaser.Scene {
                             onComplete: () => {
                                 c.destroy();
                                 if (idx === cloudSprites.length - 1) {
-                                    (window as any).hideCloudOverlay?.();
+                                    gameManager.hideCloudOverlay();
                                 }
                             }
                         });
@@ -5095,161 +5113,142 @@ export class MainScene extends Phaser.Scene {
 
 
     private createUI() {
-        (window as any).selectBuilding = (type: string | null) => {
-            this.selectedBuildingType = type;
-            this.isMoving = false;
-            if (!this.selectedBuildingType) this.ghostBuilding.setVisible(false);
-        };
-        (window as any).startAttack = () => {
-            this.showCloudTransition(async () => {
-                // Set UI immediately
-                (window as any).setGameMode?.('ATTACK');
-                this.mode = 'ATTACK';
-
-                this.clearScene();
-                await this.generateEnemyVillage();
-                this.centerCamera();
-                // Initialize battle stats
-                this.initialEnemyBuildings = this.buildings.filter(b => b.owner === 'ENEMY' && b.type !== 'wall').length;
-                this.destroyedBuildings = 0;
-                this.goldLooted = 0;
-                this.elixirLooted = 0;
-                this.raidEndScheduled = false; // Reset for new raid
-                this.updateBattleStats();
-            });
-        };
-
-        (window as any).startPracticeAttack = () => {
-            this.showCloudTransition(async () => {
-                // Set UI immediately
-                (window as any).setGameMode?.('ATTACK');
-                this.mode = 'ATTACK';
-
-                this.clearScene();
-                // Load player's own base as the enemy
-                const playerWorld = await Backend.getWorld(this.userId);
-                if (playerWorld && playerWorld.buildings.length > 0) {
-                    // Distribute loot
-                    const lootMap = LootSystem.calculateLootDistribution(playerWorld.buildings, playerWorld.resources.gold, playerWorld.resources.elixir);
-                    playerWorld.buildings.forEach((b: any) => {
-                        const inst = this.instantiateBuilding(b, 'ENEMY'); // Load as enemy so defenses work
-                        if (inst) inst.loot = lootMap.get(b.id);
-                    });
+        gameManager.registerScene({
+            selectBuilding: (type: string | null) => {
+                this.selectedBuildingType = type;
+                this.isMoving = false;
+                if (!this.selectedBuildingType) {
+                    this.ghostBuilding.setVisible(false);
                 } else {
-                    // Fallback to default village if no saved base
-                    await this.placeDefaultVillage();
-                    // Convert all to enemy
-                    this.buildings.forEach(b => b.owner = 'ENEMY');
+                    // Immediately show ghost building by triggering onPointerMove
+                    if (this.input.activePointer) {
+                        this.inputController.onPointerMove(this.input.activePointer);
+                    }
                 }
-                this.centerCamera();
-                // Initialize battle stats
-                this.initialEnemyBuildings = this.buildings.filter(b => b.owner === 'ENEMY' && b.type !== 'wall').length;
-                this.destroyedBuildings = 0;
-                this.goldLooted = 0;
-                this.elixirLooted = 0;
-                this.raidEndScheduled = false;
-                this.updateBattleStats();
-            });
-        };
+            },
+            startAttack: () => {
+                this.showCloudTransition(async () => {
+                    // Set UI immediately
+                    gameManager.setGameMode('ATTACK');
+                    this.mode = 'ATTACK';
 
-        // Find new map (skip current enemy base)
-        (window as any).findNewMap = () => {
-            // Only allow if no troops have been deployed yet
-            const deployedTroops = this.troops.filter(t => t.owner === 'PLAYER').length;
-            if (deployedTroops > 0) {
-                // Could show feedback here, but for now just don't do anything
-                return;
+                    this.clearScene();
+                    await this.generateEnemyVillage();
+                    this.centerCamera();
+                    // Initialize battle stats
+                    this.initialEnemyBuildings = this.buildings.filter(b => b.owner === 'ENEMY' && b.type !== 'wall').length;
+                    this.destroyedBuildings = 0;
+                    this.goldLooted = 0;
+                    this.elixirLooted = 0;
+                    this.raidEndScheduled = false; // Reset for new raid
+                    this.updateBattleStats();
+                });
+            },
+            startPracticeAttack: () => {
+                this.showCloudTransition(async () => {
+                    // Set UI immediately
+                    gameManager.setGameMode('ATTACK');
+                    this.mode = 'ATTACK';
+
+                    this.clearScene();
+                    // Load player's own base as the enemy
+                    const playerWorld = await Backend.getWorld(this.userId);
+                    if (playerWorld && playerWorld.buildings.length > 0) {
+                        // Distribute loot
+                        const lootMap = LootSystem.calculateLootDistribution(playerWorld.buildings, playerWorld.resources.gold, playerWorld.resources.elixir);
+                        playerWorld.buildings.forEach((b: any) => {
+                            const inst = this.instantiateBuilding(b, 'ENEMY'); // Load as enemy so defenses work
+                            if (inst) inst.loot = lootMap.get(b.id);
+                        });
+                    } else {
+                        // Fallback to default village if no saved base
+                        await this.placeDefaultVillage();
+                        // Convert all to enemy
+                        this.buildings.forEach(b => b.owner = 'ENEMY');
+                    }
+                    this.centerCamera();
+                    // Initialize battle stats
+                    this.initialEnemyBuildings = this.buildings.filter(b => b.owner === 'ENEMY' && b.type !== 'wall').length;
+                    this.destroyedBuildings = 0;
+                    this.goldLooted = 0;
+                    this.elixirLooted = 0;
+                    this.raidEndScheduled = false;
+                    this.updateBattleStats();
+                });
+            },
+            findNewMap: () => {
+                // Only allow if no troops have been deployed yet
+                const deployedTroops = this.troops.filter(t => t.owner === 'PLAYER').length;
+                if (deployedTroops > 0) {
+                    // Could show feedback here, but for now just don't do anything
+                    return;
+                }
+
+                this.showCloudTransition(async () => {
+                    // Clear and regenerate enemy village
+                    this.clearScene();
+                    await this.generateEnemyVillage();
+                    this.centerCamera();
+                    // Reset battle stats for new village
+                    this.initialEnemyBuildings = this.buildings.filter(b => b.owner === 'ENEMY' && b.type !== 'wall').length;
+                    this.destroyedBuildings = 0;
+                    this.goldLooted = 0;
+                    this.elixirLooted = 0;
+                    this.updateBattleStats();
+                });
+            },
+            deleteSelectedBuilding: () => {
+                if (this.selectedInWorld) this.destroyBuilding(this.selectedInWorld);
+                this.selectedInWorld = null;
+            },
+            moveSelectedBuilding: () => {
+                this.isMoving = true;
+                this.selectedBuildingType = null;
+                // Immediate visual feedback
+                this.inputController.onPointerMove(this.input.activePointer);
+            },
+            upgradeSelectedBuilding: () => {
+                if (this.selectedInWorld) {
+                    const prevLevel = this.selectedInWorld.level || 1;
+                    this.selectedInWorld.level = prevLevel + 1;
+                    const stats = getBuildingStats(this.selectedInWorld.type as BuildingType, this.selectedInWorld.level);
+                    this.selectedInWorld.maxHealth = stats.maxHealth;
+                    this.selectedInWorld.health = stats.maxHealth;
+                    this.selectedInWorld.graphics.clear();
+                    if (this.selectedInWorld.baseGraphics) this.selectedInWorld.baseGraphics.clear();
+                    this.drawBuildingVisuals(this.selectedInWorld.graphics, this.selectedInWorld.gridX, this.selectedInWorld.gridY, this.selectedInWorld.type, 1, null, this.selectedInWorld, this.selectedInWorld.baseGraphics);
+                    this.updateHealthBar(this.selectedInWorld);
+
+                    // Play effect for the main building
+                    this.playUpgradeEffect(this.selectedInWorld);
+
+                    // COHERENT UPDATE: If Wall, upgrade ALL other walls of the previous level
+                    if (this.selectedInWorld.type === 'wall') {
+                        this.buildings.forEach(b => {
+                            if (b.type === 'wall' && b.id !== this.selectedInWorld!.id && (b.level || 1) === prevLevel) {
+                                b.level = this.selectedInWorld!.level;
+                                b.maxHealth = stats.maxHealth;
+                                b.health = b.maxHealth;
+                                b.graphics.clear();
+                                if (b.baseGraphics) b.baseGraphics.clear();
+                                this.drawBuildingVisuals(b.graphics, b.gridX, b.gridY, b.type, 1, null, b, b.baseGraphics);
+                                // Play effect for each wall
+                                this.playUpgradeEffect(b);
+                            }
+                        });
+                    }
+
+                    // Refresh camp capacity if an army camp was upgraded
+                    if (this.selectedInWorld.type === 'army_camp') {
+                        const campLevels = this.buildings.filter(b => b.type === 'army_camp').map(b => b.level ?? 1);
+                        gameManager.refreshCampCapacity(campLevels);
+                    }
+
+                    return this.selectedInWorld.level;
+                }
+                return null;
             }
-
-            this.showCloudTransition(async () => {
-                // Clear and regenerate enemy village
-                this.clearScene();
-                await this.generateEnemyVillage();
-                this.centerCamera();
-                // Reset battle stats for new village
-                this.initialEnemyBuildings = this.buildings.filter(b => b.owner === 'ENEMY' && b.type !== 'wall').length;
-                this.destroyedBuildings = 0;
-                this.goldLooted = 0;
-                this.elixirLooted = 0;
-                this.updateBattleStats();
-            });
-        };
-
-        (window as any).goHome = () => {
-            this.showCloudTransition(async () => {
-                await this.goHome();
-            });
-        };
-        (window as any).deleteSelectedBuilding = () => {
-            if (this.selectedInWorld) this.destroyBuilding(this.selectedInWorld);
-            this.selectedInWorld = null;
-        };
-        (window as any).moveSelectedBuilding = () => {
-            this.isMoving = true;
-            this.selectedBuildingType = null;
-            // Immediate visual feedback
-            this.onPointerMove(this.input.activePointer);
-        };
-
-        (window as any).upgradeSelectedBuilding = () => {
-            if (this.selectedInWorld) {
-                const prevLevel = this.selectedInWorld.level || 1;
-                this.selectedInWorld.level = prevLevel + 1;
-                const stats = getBuildingStats(this.selectedInWorld.type as BuildingType, this.selectedInWorld.level);
-                this.selectedInWorld.maxHealth = stats.maxHealth;
-                this.selectedInWorld.health = stats.maxHealth;
-                this.selectedInWorld.graphics.clear();
-                if (this.selectedInWorld.baseGraphics) this.selectedInWorld.baseGraphics.clear();
-                this.drawBuildingVisuals(this.selectedInWorld.graphics, this.selectedInWorld.gridX, this.selectedInWorld.gridY, this.selectedInWorld.type, 1, null, this.selectedInWorld, this.selectedInWorld.baseGraphics);
-                this.updateHealthBar(this.selectedInWorld);
-
-                // Play effect for the main building
-                this.playUpgradeEffect(this.selectedInWorld);
-
-                // COHERENT UPDATE: If Wall, upgrade ALL other walls of the previous level
-                if (this.selectedInWorld.type === 'wall') {
-                    this.buildings.forEach(b => {
-                        if (b.type === 'wall' && b.id !== this.selectedInWorld!.id && (b.level || 1) === prevLevel) {
-                            b.level = this.selectedInWorld!.level;
-                            b.maxHealth = stats.maxHealth;
-                            b.health = b.maxHealth;
-                            b.graphics.clear();
-                            if (b.baseGraphics) b.baseGraphics.clear();
-                            this.drawBuildingVisuals(b.graphics, b.gridX, b.gridY, b.type, 1, null, b, b.baseGraphics);
-                            // Play effect for each wall
-                            this.playUpgradeEffect(b);
-                        }
-                    });
-                }
-
-                // Refresh camp capacity if an army camp was upgraded
-                if (this.selectedInWorld.type === 'army_camp') {
-                    const campLevels = this.buildings.filter(b => b.type === 'army_camp').map(b => b.level ?? 1);
-                    (window as any).refreshCampCapacity?.(campLevels);
-                }
-
-                return this.selectedInWorld.level;
-            }
-            return null;
-        };
-        (window as any).deselectBuilding = () => {
-            this.selectedInWorld = null;
-            this.isMoving = false;
-        };
-
-        // Obstacle management
-        (window as any).getObstacles = () => {
-            return this.obstacles.map(o => ({
-                id: o.id,
-                type: o.type,
-                gridX: o.gridX,
-                gridY: o.gridY,
-                ...OBSTACLES[o.type]
-            }));
-        };
-        (window as any).clearObstacle = (obstacleId: string) => {
-            return this.removeObstacle(obstacleId);
-        };
+        });
     }
 
     public async goHome() {
@@ -5263,7 +5262,7 @@ export class MainScene extends Phaser.Scene {
         }
         this.centerCamera();
         const campLevels = this.buildings.filter(b => b.type === 'army_camp').map(b => b.level ?? 1);
-        (window as any).refreshCampCapacity?.(campLevels);
+        gameManager.refreshCampCapacity(campLevels);
     }
 
 
@@ -5305,26 +5304,6 @@ export class MainScene extends Phaser.Scene {
 
         // Spawn random wildlife/obstacles (Fewer for clean slate)
         this.spawnRandomObstacles(8);
-    }
-
-    public async resetVillage() {
-        this.buildings.forEach(b => {
-            b.graphics.destroy();
-            if (b.barrelGraphics) b.barrelGraphics.destroy();
-            b.healthBar.destroy();
-        });
-        // Clear all arrays
-        this.buildings = [];
-        this.selectedInWorld = null;
-        this.selectedBuildingType = null;
-
-        await Backend.resetWorld(this.userId);
-        await this.placeDefaultVillage();
-
-        // Refresh camp capacity state in React
-        const campLevels = this.buildings.filter(b => b.type === 'army_camp').map(b => b.level ?? 1);
-        (window as any).refreshBuildingCounts?.();
-        (window as any).refreshCampCapacity?.(campLevels);
     }
 
     private async generateEnemyVillage() {
@@ -5371,26 +5350,26 @@ export class MainScene extends Phaser.Scene {
         // 3. Enemy
         return TargetingSystem.findTarget(ward, this.buildings);
     }
-    private createSmokeEffect(x: number, y: number, count: number = 5, scale: number = 1, duration: number = 800) {
+    public createSmokeEffect(x: number, y: number, count: number = 5, scale: number = 1, duration: number = 800) {
         for (let i = 0; i < count; i++) {
             this.time.delayedCall(i * 40, () => {
-                const smoke = this.add.graphics();
-                const size = (4 + Math.random() * 6) * scale;
-                smoke.fillStyle(0x757575, 0.35);
-                smoke.fillRect(-size / 2, -size / 2, size, size);
-                smoke.setRotation(Math.random() * Math.PI);
-                smoke.setPosition(x + (Math.random() - 0.5) * 25, y + (Math.random() - 0.5) * 15);
-                smoke.setDepth(10005);
-
-                this.tweens.add({
-                    targets: smoke,
-                    y: y - (60 + Math.random() * 60) * scale,
-                    x: smoke.x + (Math.random() - 0.5) * 50 * scale,
-                    alpha: 0,
-                    scale: 2.2 * scale,
+                particleManager.spawn({
+                    x: x + (Math.random() - 0.5) * 25,
+                    y: y + (Math.random() - 0.5) * 15,
+                    depth: 10005,
                     duration: duration + Math.random() * (duration * 0.5),
-                    ease: 'Quad.easeOut',
-                    onComplete: () => smoke.destroy()
+                    rotation: Math.random() * Math.PI * 2,
+                    scale: 2.2 * scale,
+                    alpha: 0,
+                    move: {
+                        x: x + (Math.random() - 0.5) * 50 * scale, // note: original logic used smoke.x which was random, so passing approximated random here
+                        y: y - (60 + Math.random() * 60) * scale
+                    },
+                    onDraw: (g) => {
+                        const size = (4 + Math.random() * 6) * scale;
+                        g.fillStyle(0x757575, 0.35);
+                        g.fillRect(-size / 2, -size / 2, size, size);
+                    }
                 });
             });
         }
@@ -5597,5 +5576,280 @@ export class MainScene extends Phaser.Scene {
             }
         });
     }
-}
 
+    // ===== SPIKE LAUNCHER =====
+    public spikeZones: { x: number; y: number; gridX: number; gridY: number; radius: number; damage: number; owner: 'PLAYER' | 'ENEMY'; endTime: number; graphics: Phaser.GameObjects.Graphics; lastTickTime: number }[] = [];
+
+    private shootSpikeLauncherAt(launcher: PlacedBuilding, troop: Troop) {
+        const info = BUILDINGS['spike_launcher'];
+        const start = IsoUtils.cartToIso(launcher.gridX + info.width / 2, launcher.gridY + info.height / 2);
+        const end = IsoUtils.cartToIso(troop.gridX, troop.gridY);
+        const targetGridX = troop.gridX;
+        const targetGridY = troop.gridY;
+
+        // Calculate angle for trebuchet arm
+        const angle = Math.atan2(end.y - start.y, end.x - start.x);
+        launcher.ballistaAngle = angle;
+
+        // SPIKY projectile - prominent metal spikes cluster
+        const bag = this.add.graphics();
+        // Core/base
+        bag.fillStyle(0x555555, 1);
+        bag.fillCircle(0, 0, 6);
+        // LOTS of prominent spikes sticking out
+        bag.fillStyle(0xaaaaaa, 1);
+        // Top spikes
+        bag.fillTriangle(0, -6, -3, -14, 3, -14);
+        bag.fillTriangle(-4, -5, -8, -12, -2, -10);
+        bag.fillTriangle(4, -5, 8, -12, 2, -10);
+        // Bottom spikes
+        bag.fillTriangle(0, 6, -3, 14, 3, 14);
+        bag.fillTriangle(-4, 5, -8, 12, -2, 10);
+        bag.fillTriangle(4, 5, 8, 12, 2, 10);
+        // Side spikes
+        bag.fillTriangle(-6, 0, -14, -3, -14, 3);
+        bag.fillTriangle(6, 0, 14, -3, 14, 3);
+        bag.fillTriangle(-5, -4, -12, -8, -10, -2);
+        bag.fillTriangle(5, -4, 12, -8, 10, -2);
+        bag.fillTriangle(-5, 4, -12, 8, -10, 2);
+        bag.fillTriangle(5, 4, 12, 8, 10, 2);
+        // Spike highlights
+        bag.fillStyle(0xcccccc, 0.8);
+        bag.fillTriangle(0, -7, -1, -12, 1, -12);
+        bag.fillTriangle(-6, -1, -12, 0, -12, 2);
+        bag.fillTriangle(6, -1, 12, 0, 12, 2);
+
+        bag.setPosition(start.x, start.y - 40);
+        bag.setDepth(5000);
+        bag.setAlpha(0);
+
+        // Fade in AFTER ball is farther from trebuchet (looks natural when shooting down)
+        this.tweens.add({
+            targets: bag,
+            alpha: 1,
+            delay: 300, // Wait until ball is a bit away from trebuchet
+            duration: 80,
+            ease: 'Linear'
+        });
+
+        // SHALLOW arc trajectory
+        const arcHeight = 60;
+        const midY = (start.y + end.y) / 2 - arcHeight;
+        const dist = Phaser.Math.Distance.Between(start.x, start.y, end.x, end.y);
+
+        // Spike trail effect
+        let lastTrailTime = 0;
+
+        // Delay projectile movement to sync with trebuchet release animation
+        this.tweens.add({
+            targets: bag,
+            x: end.x,
+            delay: 150, // Wait for trebuchet to release
+            duration: dist / 0.45,
+            ease: 'Linear',
+            onUpdate: (tween) => {
+                const t = tween.progress;
+                // Shallow bezier arc
+                bag.y = (1 - t) * (1 - t) * (start.y - 40) + 2 * (1 - t) * t * midY + t * t * end.y;
+                // Spin rotation
+                bag.setRotation(t * Math.PI * 2.5);
+                // Scale
+                const scale = 0.7 + (1 - Math.abs(t - 0.5) * 2) * 0.4;
+                bag.setScale(scale);
+
+                // Drop spike trail every ~80ms
+                const now = this.time.now;
+                if (now - lastTrailTime > 80 && t > 0.1 && t < 0.9) {
+                    lastTrailTime = now;
+                    const trailSpike = this.add.graphics();
+                    trailSpike.fillStyle(0x888888, 0.7);
+                    // Small falling spike
+                    trailSpike.fillTriangle(0, -4, -2, 4, 2, 4);
+                    trailSpike.setPosition(bag.x + (Math.random() - 0.5) * 10, bag.y);
+                    trailSpike.setDepth(4999);
+                    trailSpike.setRotation(Math.random() * Math.PI);
+
+                    this.tweens.add({
+                        targets: trailSpike,
+                        y: trailSpike.y + 40 + Math.random() * 30,
+                        alpha: 0,
+                        rotation: trailSpike.rotation + Math.PI,
+                        duration: 400,
+                        onComplete: () => trailSpike.destroy()
+                    });
+                }
+            },
+            onComplete: () => {
+                bag.destroy();
+                this.createSpikeZone(end.x, end.y, targetGridX, targetGridY, launcher.owner, 30, 2, 4000);
+            }
+        });
+
+        // Launch smoke puff
+        this.createSmokeEffect(start.x, start.y - 35, 4, 0.5, 600);
+    }
+
+    private createSpikeZone(x: number, y: number, gridX: number, gridY: number, owner: 'PLAYER' | 'ENEMY', damage: number, radius: number, duration: number) {
+        // Camera shake on impact
+        this.cameras.main.shake(50, 0.0015);
+
+        // IMPACT SMOKE EFFECT (small puffs)
+        this.createSmokeEffect(x, y - 5, 5, 0.5, 600);
+
+        // IMPACT DAMAGE - immediate damage to troops in zone
+        const impactDamage = 50; // One-time hit
+        this.troops.forEach(t => {
+            if (t.owner !== owner && t.health > 0) {
+                const dist = Phaser.Math.Distance.Between(t.gridX, t.gridY, gridX, gridY);
+                if (dist <= radius + 0.5) { // Slightly larger radius for impact
+                    t.health -= impactDamage;
+                    t.hasTakenDamage = true;
+                    this.updateHealthBar(t);
+
+                    // Impact flash
+                    const pos = IsoUtils.cartToIso(t.gridX, t.gridY);
+                    const flash = this.add.circle(pos.x, pos.y - 15, 8, 0xffaa00, 0.8);
+                    flash.setDepth(t.gameObject.depth + 1);
+                    this.tweens.add({
+                        targets: flash,
+                        scale: 2,
+                        alpha: 0,
+                        duration: 200,
+                        onComplete: () => flash.destroy()
+                    });
+
+                    if (t.health <= 0) {
+                        this.destroyTroop(t);
+                    }
+                }
+            }
+        });
+
+        // Create persistent spike zone graphics
+        const zoneGraphics = this.add.graphics();
+        zoneGraphics.setDepth(2);
+
+        // Draw scattered spikes on ground
+        const drawSpikes = (alpha: number) => {
+            zoneGraphics.clear();
+
+            // Dark ground patch
+            zoneGraphics.fillStyle(0x3a3020, alpha * 0.5);
+            zoneGraphics.fillEllipse(x, y + 3, 55, 28);
+
+            // Scattered metal spikes (caltrops)
+            const spikePositions = [
+                { dx: 0, dy: 0 },
+                { dx: -15, dy: -5 },
+                { dx: 12, dy: -3 },
+                { dx: -8, dy: 8 },
+                { dx: 18, dy: 6 },
+                { dx: -20, dy: 2 },
+                { dx: 5, dy: -10 },
+                { dx: -12, dy: -8 },
+                { dx: 22, dy: -2 },
+                { dx: -5, dy: 10 },
+                { dx: 10, dy: 9 },
+                { dx: -18, dy: 7 }
+            ];
+
+            spikePositions.forEach((pos, i) => {
+                const sx = x + pos.dx;
+                const sy = y + pos.dy;
+
+                // Metal spikes (4-pointed caltrops)
+                zoneGraphics.fillStyle(0x666666, alpha);
+                // Upward spike
+                zoneGraphics.fillTriangle(sx, sy - 6, sx - 2, sy, sx + 2, sy);
+                // Side spikes
+                zoneGraphics.fillTriangle(sx - 5, sy + 2, sx, sy, sx, sy + 3);
+                zoneGraphics.fillTriangle(sx + 5, sy + 2, sx, sy, sx, sy + 3);
+                // Highlight
+                if (i % 3 === 0) {
+                    zoneGraphics.fillStyle(0x999999, alpha * 0.7);
+                    zoneGraphics.fillTriangle(sx - 1, sy - 5, sx, sy - 2, sx + 1, sy - 5);
+                }
+            });
+        };
+
+        drawSpikes(1);
+
+        const zone = {
+            x, y, gridX, gridY,
+            radius,
+            damage,
+            owner,
+            endTime: this.time.now + duration,
+            graphics: zoneGraphics,
+            lastTickTime: this.time.now
+        };
+
+        this.spikeZones.push(zone);
+    }
+
+    public updateSpikeZones() {
+        const now = this.time.now;
+        const toRemove: number[] = [];
+
+        this.spikeZones.forEach((zone, index) => {
+            // Check expiration
+            if (now >= zone.endTime) {
+                // Fade out
+                this.tweens.add({
+                    targets: zone.graphics,
+                    alpha: 0,
+                    duration: 500,
+                    onComplete: () => zone.graphics.destroy()
+                });
+                toRemove.push(index);
+                return;
+            }
+
+            // Damage tick (every 500ms)
+            const tickInterval = 500;
+            if (now >= zone.lastTickTime + tickInterval) {
+                zone.lastTickTime = now;
+
+                // Damage troops in zone
+                this.troops.forEach(t => {
+                    if (t.owner !== zone.owner && t.health > 0) {
+                        const dist = Phaser.Math.Distance.Between(t.gridX, t.gridY, zone.gridX, zone.gridY);
+                        if (dist <= zone.radius) {
+                            t.health -= zone.damage;
+                            t.hasTakenDamage = true;
+                            this.updateHealthBar(t);
+
+                            // Small blood/damage effect
+                            const pos = IsoUtils.cartToIso(t.gridX, t.gridY);
+                            const spark = this.add.circle(pos.x, pos.y - 10, 3, 0xff4444, 0.8);
+                            spark.setDepth(t.gameObject.depth + 1);
+                            this.tweens.add({
+                                targets: spark,
+                                y: pos.y - 20,
+                                alpha: 0,
+                                scale: 0.5,
+                                duration: 200,
+                                onComplete: () => spark.destroy()
+                            });
+
+                            if (t.health <= 0) {
+                                this.destroyTroop(t);
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Fade effect near end
+            const remaining = zone.endTime - now;
+            if (remaining < 1000) {
+                zone.graphics.setAlpha(remaining / 1000);
+            }
+        });
+
+        // Remove expired zones (reverse order to preserve indices)
+        for (let i = toRemove.length - 1; i >= 0; i--) {
+            this.spikeZones.splice(toRemove[i], 1);
+        }
+    }
+}

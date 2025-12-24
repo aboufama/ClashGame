@@ -1,9 +1,6 @@
 
 import type { SerializedWorld, SerializedBuilding, SerializedObstacle } from '../data/Models';
 import { BUILDING_DEFINITIONS, OBSTACLE_DEFINITIONS, type BuildingType, type ObstacleType, MAP_SIZE, getBuildingStats } from '../config/GameDefinitions';
-import { Auth } from './AuthService';
-
-const API_BASE = '/api';
 
 export class GameBackend {
     private worlds: Map<string, SerializedWorld> = new Map();
@@ -14,76 +11,25 @@ export class GameBackend {
         GameBackend.instance = this;
     }
 
-    /** Purges ALL village data for ALL users from localStorage */
-    public static purgeAllData() {
-        const keysToRemove: string[] = [];
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && key.startsWith('clashIso_world_')) {
-                keysToRemove.push(key);
-            }
-        }
-        keysToRemove.forEach(k => localStorage.removeItem(k));
-        if (GameBackend.instance) {
-            GameBackend.instance.worlds.clear();
-        }
-    }
-
-    public async resetWorld(worldId: string): Promise<void> {
-        const world = await this.getWorld(worldId);
-        if (world) {
-            world.buildings = [];
-            world.resources = { gold: 1000, elixir: 1000 };
-            await this.saveWorld(world);
-        }
-    }
-
     public async deleteWorld(worldId: string): Promise<void> {
         this.worlds.delete(worldId);
         localStorage.removeItem(`clashIso_world_${worldId}`);
     }
 
-    // --- API INTEGRATION ---
+    // --- LOCAL STORAGE ONLY ---
 
     public async saveWorld(world: SerializedWorld): Promise<void> {
         world.lastSaveTime = Date.now();
         this.worlds.set(world.id, world); // Update local cache
-
-        const user = Auth.getCurrentUser();
-        if (user && user.id === world.ownerId) {
-            // Sync to DB
-            fetch(`${API_BASE}/game`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: user.id, worldData: world })
-            }).catch(e => console.error("Cloud save failed", e));
-        } else {
-            // Fallback to local storage only if not logged in (or for enemy worlds)
-            localStorage.setItem(`clashIso_world_${world.id}`, JSON.stringify(world));
-        }
+        if (world.ownerId === 'ENEMY' || world.id.startsWith('enemy_')) return;
+        localStorage.setItem(`clashIso_world_${world.id}`, JSON.stringify(world));
     }
 
     public async getWorld(id: string): Promise<SerializedWorld | null> {
         // 1. Check Memory Cache
         if (this.worlds.has(id)) return this.worlds.get(id)!;
 
-        // 2. Check API (if it's a user ID format or we are logged in)
-        // If id matches current user, fetch from DB
-        const user = Auth.getCurrentUser();
-        if (user && id === user.id) {
-            try {
-                const res = await fetch(`${API_BASE}/game?action=load&userId=${id}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data && !data.error && !data.found === false) {
-                        this.worlds.set(id, data);
-                        return data;
-                    }
-                }
-            } catch (e) { console.warn("API load failed", e); }
-        }
-
-        // 3. Fallback / Enemy World logic (Local Storage)
+        // 2. Check Local Storage
         const saved = localStorage.getItem(`clashIso_world_${id}`);
         if (saved) {
             try {
@@ -94,19 +40,6 @@ export class GameBackend {
         }
 
         return null;
-    }
-
-    // Fetch all players for map (Replcement for chunk logic)
-    public async getAllPlayerWorlds(): Promise<any[]> {
-        try {
-            const res = await fetch(`${API_BASE}/game?action=map`);
-            if (res.ok) {
-                return await res.json();
-            }
-        } catch (e) {
-            console.error("Failed to load map", e);
-        }
-        return [];
     }
 
     public async getBuildingCounts(worldId: string): Promise<Record<string, number>> {
@@ -123,7 +56,7 @@ export class GameBackend {
         const w: SerializedWorld = {
             id,
             ownerId: owner,
-            username: Auth.getCurrentUser()?.username, // Store username for map display
+            username: 'Player',
             buildings: [],
             resources: { gold: 1000, elixir: 1000 },
             army: {},
@@ -133,7 +66,7 @@ export class GameBackend {
         return w;
     }
 
-    // --- GAME LOGIC (Unchanged) ---
+    // --- GAME LOGIC ---
 
     public async updateArmy(worldId: string, army: Record<string, number>): Promise<void> {
         const world = await this.getWorld(worldId);
@@ -284,11 +217,6 @@ export class GameBackend {
         return true;
     }
 
-    public async getObstacles(worldId: string): Promise<SerializedObstacle[]> {
-        const world = await this.getWorld(worldId);
-        return world?.obstacles || [];
-    }
-
     public async calculateOfflineProduction(worldId: string): Promise<{ gold: number, elixir: number }> {
         const world = await this.getWorld(worldId);
         if (!world || !world.lastSaveTime) return { gold: 0, elixir: 0 };
@@ -322,48 +250,12 @@ export class GameBackend {
     }
 
     public async generateEnemyWorld(): Promise<SerializedWorld> {
-        // Purely local generation for attacks - no cloud save needed until maybe replay implementation
+        // Purely local generation for attacks
         const id = `enemy_${Date.now()}`;
-
-        // Manual creation to avoid calling 'createWorld' which auto-saves
-        const world: SerializedWorld = {
-            id,
-            ownerId: 'ENEMY',
-            buildings: [],
-            resources: { gold: 1000, elixir: 1000 },
-            army: {},
-            lastSaveTime: Date.now()
-        };
-        this.worlds.set(id, world); // Just memory cache
-
-        const cx = Math.floor(MAP_SIZE / 2);
-        const cy = Math.floor(MAP_SIZE / 2);
-
-        // helper to place without saving
-        const place = (type: BuildingType, x: number, y: number) => {
-            // simplified placement logic for enemy gen
-            const b: SerializedBuilding = { id: crypto.randomUUID(), type, gridX: x, gridY: y, level: 1 };
-            world.buildings.push(b);
-            return b;
-        };
-
-        // 1. CORE: Town Hall
-        place('town_hall', cx, cy);
-
-        // ... Simplified procedural generation for brevity, can restore full logic if needed ...
-        // Re-using the full logic from before but adapting to not await saveWorld every step would be better
-        // For now, let's just use the standard methods but we know they trigger saveWorld.
-        // Since 'ENEMY' owner won't trigger API save (only local), it's fine.
-
         return await this.generateEnemyWorldFull(id);
     }
 
-    // Restored functionality wrapping the original generation logic
     private async generateEnemyWorldFull(id: string): Promise<SerializedWorld> {
-        // We reuse the existing public methods because they encapsulate all the logic for walls, levels etc.
-        // Since owner is ENEMY, saveWorld will fall back to localStorage, which is acceptable for a temp enemy.
-        // We can purge it later.
-
         const world = await this.createWorld(id, 'ENEMY');
         const cx = Math.floor(MAP_SIZE / 2);
         const cy = Math.floor(MAP_SIZE / 2);

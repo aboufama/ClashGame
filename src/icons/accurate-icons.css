@@ -1085,3 +1085,46 @@
         -6px -2px #505050, -4px -2px #606060, -2px -2px #707070, 0 -2px #808080, 2px -2px #707070, 4px -2px #606060, 6px -2px #505050,
         -4px 0 #404040, -2px 0 #505050, 0 0 #606060, 2px 0 #505050, 4px 0 #404040;
 }
+
+/* SPIKE LAUNCHER - Medieval trebuchet with spike bag ammunition */
+.spike_launcher-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #8B4513;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* A-Frame support structure */
+        -8px 6px #5D4037, -6px 4px #6D5047, -4px 2px #5D4037, -2px 0 #8B4513,
+        8px 6px #5D4037, 6px 4px #6D5047, 4px 2px #5D4037, 2px 0 #8B4513,
+        /* Cross beam at top */
+        -4px -2px #795548, -2px -2px #8D6E63, 0 -2px #A1887F, 2px -2px #8D6E63, 4px -2px #795548,
+        /* Pivot hub */
+        0 -4px #616161, -2px -4px #424242, 2px -4px #424242,
+        /* Throwing arm (at rest angle) */
+        -2px -6px #795548, 0 -6px #8D6E63, 2px -6px #795548,
+        -4px -8px #6D5047, -2px -8px #795548, 0 -8px #8D6E63, 2px -8px #795548,
+        -6px -10px #5D4037, -4px -10px #6D5047, -2px -10px #795548,
+        -8px -12px #5D4037, -6px -12px #6D5047, -4px -12px #795548,
+        /* Arm tip with sling */
+        -10px -14px #B8A07A, -8px -14px #A08060,
+        /* Spike bag in sling */
+        -12px -12px #6B5B45, -10px -12px #7A6B55, -12px -10px #5A4A35,
+        /* Spikes poking from bag */
+        -14px -14px #888888, -10px -16px #888888, -14px -10px #888888,
+        /* Counterweight */
+        4px -8px #757575, 6px -8px #616161, 8px -8px #757575,
+        4px -6px #5A5A5A, 6px -6px #4A4A4A, 8px -6px #5A5A5A,
+        /* Rope winch */
+        10px 0 #5D4037, 12px 0 #6D5047,
+        10px 2px #B8A07A, 12px 2px #A08060,
+        /* Spike bag pile */
+        -8px 6px #6B5B45, -6px 8px #7A6B55, -4px 6px #5A4A35,
+        -10px 8px #666666, -4px 8px #666666, -6px 4px #666666,
+        /* Stone base platform */
+        -12px 8px #5A5A5A, -10px 8px #6A6A6A, -8px 8px #7A7A7A, -6px 8px #6A6A6A, -4px 8px #7A7A7A, -2px 8px #6A6A6A, 0 8px #7A7A7A, 2px 8px #6A6A6A, 4px 8px #7A7A7A, 6px 8px #6A6A6A, 8px 8px #7A7A7A, 10px 8px #6A6A6A, 12px 8px #5A5A5A,
+        -10px 10px #4A4A4A, -8px 10px #5A5A5A, -6px 10px #4A4A4A, -4px 10px #5A5A5A, -2px 10px #4A4A4A, 0 10px #5A5A5A, 2px 10px #4A4A4A, 4px 10px #5A5A5A, 6px 10px #4A4A4A, 8px 10px #5A5A5A, 10px 10px #4A4A4A;
+}

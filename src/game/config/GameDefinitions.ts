@@ -4,7 +4,7 @@ export const MAP_SIZE = 25;
 export type BuildingType =
     | 'town_hall' | 'barracks' | 'cannon' | 'ballista' | 'xbow'
     | 'mine' | 'elixir_collector' | 'mortar' | 'tesla' | 'wall'
-    | 'army_camp' | 'prism' | 'magmavent' | 'dragons_breath';
+    | 'army_camp' | 'prism' | 'magmavent' | 'dragons_breath' | 'spike_launcher';
 
 export type TroopType =
     | 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion'
@@ -45,10 +45,6 @@ export interface BuildingDef {
     maxLevel?: number;
     levels?: BuildingLevelStats[]; // index 0 = Level 1, index 1 = Level 2, etc.
 }
-
-// ... (TroopDef, ObstacleDef omitted for brevity in prompt but implicitly kept if I target correctly)
-// Wait, I should target the interface definition block specifically or replacing the whole file part.
-// I'll target the interface first.
 
 export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
     town_hall: { id: 'town_hall', name: 'Town Hall', cost: 500, desc: 'The heart of your village.', width: 3, height: 3, maxHealth: 2000, category: 'other', maxCount: 1, color: 0x3366ff, maxLevel: 1, capacity: 10 },
@@ -228,11 +224,12 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         category: 'military',
         maxCount: 4,
         color: 0x884422,
-        maxLevel: 2,
+        maxLevel: 3,
         capacity: 20,
         levels: [
-            { hp: 1000, capacity: 20, cost: 300 },    // Level 1 - Basic (20 space, fire only)
-            { hp: 1200, capacity: 25, cost: 500 }     // Level 2 - Upgraded (25 space, with dummy & weapons)
+            { hp: 1000, capacity: 20, cost: 300 },    // Level 1 - Basic (20 space, no decor)
+            { hp: 1200, capacity: 25, cost: 500 },    // Level 2 - Weapons rack
+            { hp: 1400, capacity: 30, cost: 700 }     // Level 3 - Full decor
         ]
     },
     prism: { id: 'prism', name: 'Prism Tower', cost: 550, desc: 'Beam bounces between foes.', width: 1, height: 1, maxHealth: 1100, range: 8, category: 'defense', maxCount: 1, color: 0xff00ff, fireRate: 50, maxLevel: 1 },
@@ -273,6 +270,26 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         maxLevel: 1,
         levels: [
             { hp: 2500, damage: 25, fireRate: 3000, cost: 1500 }
+        ]
+    },
+    spike_launcher: {
+        id: 'spike_launcher',
+        name: 'Spike Launcher',
+        cost: 500,
+        desc: 'Trebuchet hurls spike bags that damage areas.',
+        width: 2,
+        height: 2,
+        maxHealth: 900,
+        range: 9,
+        minRange: 3,
+        category: 'defense',
+        maxCount: 2,
+        color: 0x8b6914,
+        fireRate: 4500,    // Slow fire rate
+        damage: 30,        // Damage per tick in zone
+        maxLevel: 1,
+        levels: [
+            { hp: 900, damage: 30, fireRate: 4500, cost: 500 }
         ]
     },
 };
@@ -356,5 +373,3 @@ export const OBSTACLE_DEFINITIONS: Record<ObstacleType, ObstacleDef> = {
     tree_pine: { id: 'tree_pine', name: 'Pine Tree', clearCost: 75, clearTime: 8, width: 1, height: 1, goldReward: 20 },
     grass_patch: { id: 'grass_patch', name: 'Tall Grass', clearCost: 25, clearTime: 3, width: 1, height: 1, goldReward: 5 },
 };
-
-
