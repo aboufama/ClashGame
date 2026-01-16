@@ -2833,21 +2833,26 @@ export class BuildingRenderer {
             graphics.fillCircle(sparkX, sparkY, 1.5);
         }
     }
-    static drawPrismTower(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, _building?: any, baseGraphics?: Phaser.GameObjects.Graphics) {
+    static drawPrismTower(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, _building?: any, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
         const time = Date.now(); // Use Date.now() instead of this.time.now since static
         const g = baseGraphics || graphics;
 
-        // Isometric stone base platform
-        g.fillStyle(tint ?? 0x4a4a5a, alpha);
-        g.fillPoints([c1, c2, c3, c4], true);
+        // === BASE LAYER ===
+        if (!skipBase) {
+            // Isometric stone base platform
+            g.fillStyle(tint ?? 0x4a4a5a, alpha);
+            g.fillPoints([c1, c2, c3, c4], true);
 
-        // Base edge highlights (isometric)
-        g.lineStyle(1, 0x6a6a7a, alpha * 0.8);
-        g.lineBetween(c1.x, c1.y, c2.x, c2.y);
-        g.lineBetween(c1.x, c1.y, c4.x, c4.y);
-        g.lineStyle(1, 0x2a2a3a, alpha * 0.8);
-        g.lineBetween(c2.x, c2.y, c3.x, c3.y);
-        g.lineBetween(c3.x, c3.y, c4.x, c4.y);
+            // Base edge highlights (isometric)
+            g.lineStyle(1, 0x6a6a7a, alpha * 0.8);
+            g.lineBetween(c1.x, c1.y, c2.x, c2.y);
+            g.lineBetween(c1.x, c1.y, c4.x, c4.y);
+            g.lineStyle(1, 0x2a2a3a, alpha * 0.8);
+            g.lineBetween(c2.x, c2.y, c3.x, c3.y);
+            g.lineBetween(c3.x, c3.y, c4.x, c4.y);
+        }
+
+        if (onlyBase) return;
 
         // Crystal pillar base (isometric hexagonal)
         const baseHeight = 15;
@@ -2937,7 +2942,7 @@ export class BuildingRenderer {
     }
 
     // === MAGMA VENT - VOLCANIC LAVA SPEWER WITH STEAMPUNK CONTROLS ===
-    static drawMagmaVent(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, baseGraphics?: Phaser.GameObjects.Graphics, time: number = 0) {
+    static drawMagmaVent(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, baseGraphics?: Phaser.GameObjects.Graphics, time: number = 0, skipBase: boolean = false, onlyBase: boolean = false) {
         const level = building?.level ?? 1;
         const g = baseGraphics || graphics;
 
@@ -2950,7 +2955,6 @@ export class BuildingRenderer {
         const isAttacking = timeSinceFire < attackDuration;
         const attackProgress = isAttacking ? timeSinceFire / attackDuration : 0;
         const attackPower = isAttacking ? Math.sin(attackProgress * Math.PI) : 0;
-        const idlePulse = 0.5 + Math.sin(time / 400) * 0.15;
 
         // === COLOR PALETTE ===
         const basaltDark = 0x1a1a1f;
@@ -2964,75 +2968,116 @@ export class BuildingRenderer {
         const brassLight = 0xdaa060;
         const brassDark = 0x8b6030;
 
-        // === SCORCHED GROUND BASE ===
-        g.fillStyle(0x1a1410, alpha);
-        g.fillPoints([c1, c2, c3, c4], true);
+        // Pool position constants (used in both base and dynamic rendering)
+        const poolY = center.y + 2;
+        const poolW = 36 * scale;
+        const poolH = 18 * scale;
 
-        // === LAVA CHANNEL GRID (drawn on base layer, under everything) ===
-        const channelAlpha = isAttacking ? (0.7 + attackPower * 0.3) : 0.2;
-        const channelColor = isAttacking ? lavaYellow : lavaOrange;
-        const channelWidth = isAttacking ? 5 + attackPower * 3 : 2.5;
+        // === BASE LAYER (baked to ground texture) ===
+        if (!skipBase) {
+            // === SCORCHED GROUND BASE ===
+            g.fillStyle(0x1a1410, alpha);
+            g.fillPoints([c1, c2, c3, c4], true);
 
-        g.lineStyle(channelWidth, channelColor, alpha * channelAlpha);
+            // === LAVA CHANNEL GRID (drawn on base layer, under everything) ===
+            // Static dim channels for base - attacking glow is dynamic
+            const channelAlpha = 0.2;
+            const channelColor = lavaOrange;
+            const channelWidth = 2.5;
 
-        // Main radial channels from center to corners
-        g.lineBetween(center.x, center.y, c1.x, c1.y);
-        g.lineBetween(center.x, center.y, c2.x, c2.y);
-        g.lineBetween(center.x, center.y, c3.x, c3.y);
-        g.lineBetween(center.x, center.y, c4.x, c4.y);
+            g.lineStyle(channelWidth, channelColor, alpha * channelAlpha);
 
-        // Secondary channels to edge midpoints
-        const midNE = { x: (c1.x + c2.x) / 2, y: (c1.y + c2.y) / 2 };
-        const midSE = { x: (c2.x + c3.x) / 2, y: (c2.y + c3.y) / 2 };
-        const midSW = { x: (c3.x + c4.x) / 2, y: (c3.y + c4.y) / 2 };
-        const midNW = { x: (c4.x + c1.x) / 2, y: (c4.y + c1.y) / 2 };
+            // Main radial channels from center to corners
+            g.lineBetween(center.x, center.y, c1.x, c1.y);
+            g.lineBetween(center.x, center.y, c2.x, c2.y);
+            g.lineBetween(center.x, center.y, c3.x, c3.y);
+            g.lineBetween(center.x, center.y, c4.x, c4.y);
 
-        g.lineBetween(center.x, center.y, midNE.x, midNE.y);
-        g.lineBetween(center.x, center.y, midSE.x, midSE.y);
-        g.lineBetween(center.x, center.y, midSW.x, midSW.y);
-        g.lineBetween(center.x, center.y, midNW.x, midNW.y);
+            // Secondary channels to edge midpoints
+            const midNE = { x: (c1.x + c2.x) / 2, y: (c1.y + c2.y) / 2 };
+            const midSE = { x: (c2.x + c3.x) / 2, y: (c2.y + c3.y) / 2 };
+            const midSW = { x: (c3.x + c4.x) / 2, y: (c3.y + c4.y) / 2 };
+            const midNW = { x: (c4.x + c1.x) / 2, y: (c4.y + c1.y) / 2 };
 
-        // White-hot inner glow when attacking
-        if (isAttacking) {
-            const hotLength = 0.3 + attackProgress * 0.4;
-            g.lineStyle(channelWidth * 0.4, lavaWhite, alpha * attackPower * 0.8);
-            g.lineBetween(center.x, center.y, center.x + (c1.x - center.x) * hotLength, center.y + (c1.y - center.y) * hotLength);
-            g.lineBetween(center.x, center.y, center.x + (c2.x - center.x) * hotLength, center.y + (c2.y - center.y) * hotLength);
-            g.lineBetween(center.x, center.y, center.x + (c3.x - center.x) * hotLength, center.y + (c3.y - center.y) * hotLength);
-            g.lineBetween(center.x, center.y, center.x + (c4.x - center.x) * hotLength, center.y + (c4.y - center.y) * hotLength);
+            g.lineBetween(center.x, center.y, midNE.x, midNE.y);
+            g.lineBetween(center.x, center.y, midSE.x, midSE.y);
+            g.lineBetween(center.x, center.y, midSW.x, midSW.y);
+            g.lineBetween(center.x, center.y, midNW.x, midNW.y);
 
-            // Central glow
-            g.fillStyle(lavaWhite, alpha * attackPower * 0.4);
-            g.fillCircle(center.x, center.y, 10 + attackPower * 12);
+            // === CENTRAL LAVA POOL (static base) ===
+            // Dark crater rim
+            g.fillStyle(basaltDark, alpha);
+            g.fillEllipse(center.x, poolY + 2, poolW + 8, poolH + 4);
+
+            // Static lava glow edge
+            g.fillStyle(lavaOrange, alpha * 0.35 * 0.6);
+            g.fillEllipse(center.x, poolY + 1, poolW + 5, poolH + 2);
+
+            // Main lava surface (idle state)
+            g.fillStyle(lavaOrange, alpha * 0.65);
+            g.fillEllipse(center.x, poolY, poolW, poolH);
+
+            // Hot center
+            g.fillStyle(lavaYellow, alpha * 0.65 * 0.95);
+            g.fillEllipse(center.x, poolY - 1, poolW * 0.55, poolH * 0.55);
+
+            // White-hot core
+            g.fillStyle(lavaWhite, alpha * 0.65 * 0.85);
+            g.fillEllipse(center.x, poolY - 2, poolW * 0.25, poolH * 0.25);
         }
 
-        // === CENTRAL LAVA POOL (1.3x bigger, centered over channels) ===
-        const poolY = center.y + 2;  // Moved up to cover channel center
-        const poolW = 36 * scale;    // 28 * 1.3 ≈ 36
-        const poolH = 18 * scale;    // 14 * 1.3 ≈ 18
+        // Return early if only drawing base
+        if (onlyBase) return;
 
-        // Dark crater rim
-        g.fillStyle(basaltDark, alpha);
-        g.fillEllipse(center.x, poolY + 2, poolW + 8, poolH + 4);
+        // === DYNAMIC LAYER (rendered each frame at building depth) ===
 
-        // Lava glow edge
-        const glowAmount = isAttacking ? 0.7 + attackPower * 0.3 : 0.35;
-        g.fillStyle(lavaOrange, alpha * glowAmount * 0.6);
-        g.fillEllipse(center.x, poolY + 1, poolW + 5, poolH + 2);
+        // Dynamic lava glow overlay when attacking
+        if (isAttacking) {
+            const channelAlpha = 0.7 + attackPower * 0.3;
+            const channelColor = lavaYellow;
+            const channelWidth = 5 + attackPower * 3;
 
-        // Main lava surface
-        const lavaAlpha = isAttacking ? 0.95 : (0.65 + idlePulse * 0.2);
-        g.fillStyle(lavaOrange, alpha * lavaAlpha);
-        g.fillEllipse(center.x, poolY, poolW, poolH);
+            graphics.lineStyle(channelWidth, channelColor, alpha * channelAlpha);
+            graphics.lineBetween(center.x, center.y, c1.x, c1.y);
+            graphics.lineBetween(center.x, center.y, c2.x, c2.y);
+            graphics.lineBetween(center.x, center.y, c3.x, c3.y);
+            graphics.lineBetween(center.x, center.y, c4.x, c4.y);
 
-        // Hot center
-        g.fillStyle(lavaYellow, alpha * lavaAlpha * 0.95);
-        g.fillEllipse(center.x, poolY - 1, poolW * 0.55, poolH * 0.55);
+            const midNE = { x: (c1.x + c2.x) / 2, y: (c1.y + c2.y) / 2 };
+            const midSE = { x: (c2.x + c3.x) / 2, y: (c2.y + c3.y) / 2 };
+            const midSW = { x: (c3.x + c4.x) / 2, y: (c3.y + c4.y) / 2 };
+            const midNW = { x: (c4.x + c1.x) / 2, y: (c4.y + c1.y) / 2 };
 
-        // White-hot core
-        const coreSize = isAttacking ? 0.4 + attackPower * 0.3 : 0.25;
-        g.fillStyle(lavaWhite, alpha * lavaAlpha * 0.85);
-        g.fillEllipse(center.x, poolY - 2, poolW * coreSize, poolH * coreSize);
+            graphics.lineBetween(center.x, center.y, midNE.x, midNE.y);
+            graphics.lineBetween(center.x, center.y, midSE.x, midSE.y);
+            graphics.lineBetween(center.x, center.y, midSW.x, midSW.y);
+            graphics.lineBetween(center.x, center.y, midNW.x, midNW.y);
+
+            // White-hot inner glow
+            const hotLength = 0.3 + attackProgress * 0.4;
+            graphics.lineStyle(channelWidth * 0.4, lavaWhite, alpha * attackPower * 0.8);
+            graphics.lineBetween(center.x, center.y, center.x + (c1.x - center.x) * hotLength, center.y + (c1.y - center.y) * hotLength);
+            graphics.lineBetween(center.x, center.y, center.x + (c2.x - center.x) * hotLength, center.y + (c2.y - center.y) * hotLength);
+            graphics.lineBetween(center.x, center.y, center.x + (c3.x - center.x) * hotLength, center.y + (c3.y - center.y) * hotLength);
+            graphics.lineBetween(center.x, center.y, center.x + (c4.x - center.x) * hotLength, center.y + (c4.y - center.y) * hotLength);
+
+            // Central glow
+            graphics.fillStyle(lavaWhite, alpha * attackPower * 0.4);
+            graphics.fillCircle(center.x, center.y, 10 + attackPower * 12);
+
+            // Dynamic lava surface overlay
+            const lavaAlpha = 0.95;
+            const glowAmount = 0.7 + attackPower * 0.3;
+            graphics.fillStyle(lavaOrange, alpha * glowAmount * 0.6);
+            graphics.fillEllipse(center.x, poolY + 1, poolW + 5, poolH + 2);
+            graphics.fillStyle(lavaOrange, alpha * lavaAlpha);
+            graphics.fillEllipse(center.x, poolY, poolW, poolH);
+            graphics.fillStyle(lavaYellow, alpha * lavaAlpha * 0.95);
+            graphics.fillEllipse(center.x, poolY - 1, poolW * 0.55, poolH * 0.55);
+            const coreSize = 0.4 + attackPower * 0.3;
+            graphics.fillStyle(lavaWhite, alpha * lavaAlpha * 0.85);
+            graphics.fillEllipse(center.x, poolY - 2, poolW * coreSize, poolH * coreSize);
+        }
 
         // === HUGE VOLCANIC ROCKS ===
         const rockScale = scale;

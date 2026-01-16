@@ -1162,10 +1162,10 @@ export class MainScene extends Phaser.Scene {
                 }
                 break;
             case 'prism':
-                BuildingRenderer.drawPrismTower(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics);
+                BuildingRenderer.drawPrismTower(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, skipBase, onlyBase);
                 break;
             case 'magmavent':
-                BuildingRenderer.drawMagmaVent(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, this.time.now);
+                BuildingRenderer.drawMagmaVent(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, this.time.now, skipBase, onlyBase);
                 break;
             case 'dragons_breath':
                 BuildingRenderer.drawDragonsBreath(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, gridX, gridY, this.time.now, skipBase, onlyBase);
