@@ -85,9 +85,16 @@ function App() {
           elixir: Math.max(0, world.resources.elixir)
         });
 
-        // Load Army from backend
+        // Load Army from storage and sync capacity
         if (world.army) {
           setArmy(prev => ({ ...prev, ...world.army }));
+
+          // Calculate capacity.current from loaded army
+          const totalSpace = Object.entries(world.army).reduce((sum, [type, count]) => {
+            const def = TROOP_DEFINITIONS[type as keyof typeof TROOP_DEFINITIONS];
+            return sum + (def ? def.space * (count as number) : 0);
+          }, 0);
+          setCapacity(prev => ({ ...prev, current: totalSpace }));
         }
 
         // Force scene to update username now that we have user and world

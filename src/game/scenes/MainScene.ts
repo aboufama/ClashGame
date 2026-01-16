@@ -986,6 +986,11 @@ export class MainScene extends Phaser.Scene {
             gameManager.refreshCampCapacity(campLevels);
         }
 
+        // Update neighbor wall connections when a new wall is placed
+        if (type === 'wall') {
+            this.refreshWallNeighbors(gridX, gridY, owner);
+        }
+
         return building;
     }
 
@@ -1174,7 +1179,39 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
+    /**
+     * Redraw walls adjacent to a given position to update their neighbor connections.
+     * Call this after moving/placing/removing a wall.
+     */
+    public refreshWallNeighbors(gridX: number, gridY: number, owner: 'PLAYER' | 'ENEMY') {
+        const offsets = [
+            { dx: 0, dy: -1 },  // North
+            { dx: 0, dy: 1 },   // South
+            { dx: 1, dy: 0 },   // East
+            { dx: -1, dy: 0 }   // West
+        ];
 
+        for (const { dx, dy } of offsets) {
+            const neighbor = this.buildings.find(b =>
+                b.type === 'wall' &&
+                b.gridX === gridX + dx &&
+                b.gridY === gridY + dy &&
+                b.owner === owner
+            );
+            if (neighbor) {
+                neighbor.graphics.clear();
+                this.drawBuildingVisuals(
+                    neighbor.graphics,
+                    neighbor.gridX,
+                    neighbor.gridY,
+                    'wall',
+                    1,
+                    null,
+                    neighbor
+                );
+            }
+        }
+    }
 
 
 
@@ -1490,9 +1527,10 @@ export class MainScene extends Phaser.Scene {
                     bar.lineBetween(segX, y + 1, segX, y + height - 1);
                 }
             }
-
-            bar.setDepth(30000);
         }
+
+        // Always set depth when bar is visible to ensure proper layering
+        bar.setDepth(30000);
     }
 
     private drawRoundedRect(graphics: Phaser.GameObjects.Graphics, x: number, y: number, width: number, height: number, radius: number) {
@@ -3945,6 +3983,9 @@ export class MainScene extends Phaser.Scene {
         const index = this.buildings.findIndex(x => x.id === b.id);
         if (index === -1) return;
 
+        // Remove any baked base from the ground layer so ruins can replace it.
+        this.unbakeBuildingFromGround(b);
+
         // Cleanup graphics
         b.graphics.destroy();
         if (b.baseGraphics) b.baseGraphics.destroy();
@@ -4101,6 +4142,8 @@ export class MainScene extends Phaser.Scene {
                 t.nextPathTime = 0;
                 if (t.target && t.target.type === 'wall') t.target = null;
             });
+            // Update neighbor walls to disconnect from destroyed wall
+            this.refreshWallNeighbors(b.gridX, b.gridY, b.owner);
         }
 
         if (this.mode === 'ATTACK') {
@@ -4636,7 +4679,8 @@ export class MainScene extends Phaser.Scene {
         troopGraphic.setPosition(pos.x, pos.y);
         troopGraphic.setDepth(depthForTroop(gx, gy, type));
 
-        // Spawn dust effect
+        // Spawn dust effect - depth just below troop for proper layering
+        const troopDepth = depthForTroop(gx, gy, type);
         for (let i = 0; i < 5; i++) {
             const dust = this.add.circle(
                 pos.x + (Math.random() - 0.5) * 15,
@@ -4645,7 +4689,7 @@ export class MainScene extends Phaser.Scene {
                 0x8b7355,
                 0.5
             );
-            dust.setDepth((gx + gy) * 10 - 1);
+            dust.setDepth(troopDepth - 1);
             this.tweens.add({
                 targets: dust,
                 x: dust.x + (Math.random() - 0.5) * 20,
@@ -5202,6 +5246,10 @@ export class MainScene extends Phaser.Scene {
                 this.selectedInWorld = null;
             },
             moveSelectedBuilding: () => {
+                if (this.selectedInWorld) {
+                    // Unbake the building from ground texture before moving to prevent artifacts
+                    this.unbakeBuildingFromGround(this.selectedInWorld);
+                }
                 this.isMoving = true;
                 this.selectedBuildingType = null;
                 // Immediate visual feedback
@@ -5253,6 +5301,7 @@ export class MainScene extends Phaser.Scene {
 
     public async goHome() {
         this.cancelPlacement();
+        gameManager.setGameMode('HOME');
         this.mode = 'HOME';
         this.hasDeployed = false;
         this.clearScene();
@@ -5267,6 +5316,7 @@ export class MainScene extends Phaser.Scene {
 
 
     private clearScene() {
+        // Clear all buildings and their associated graphics
         this.buildings.forEach(b => {
             b.graphics.destroy();
             if (b.baseGraphics) b.baseGraphics.destroy();
@@ -5276,12 +5326,60 @@ export class MainScene extends Phaser.Scene {
             if (b.rangeIndicator) b.rangeIndicator.destroy();
             b.healthBar.destroy();
         });
-        this.troops.forEach(t => { t.gameObject.destroy(); t.healthBar.destroy(); });
         this.buildings = [];
+
+        // Clear all troops
+        this.troops.forEach(t => { t.gameObject.destroy(); t.healthBar.destroy(); });
         this.troops = [];
-        this.attackModeSelectedBuilding = null;
+
+        // Clear spike zones
+        this.spikeZones.forEach(zone => zone.graphics.destroy());
+        this.spikeZones = [];
+
+        // Clear rubble and obstacles
         this.clearRubble();
         this.clearObstacles();
+
+        // Reset selection state
+        this.attackModeSelectedBuilding = null;
+        this.selectedInWorld = null;
+        this.selectedBuildingType = null;
+        this.isMoving = false;
+
+        // Clear all UI overlay graphics
+        this.ghostBuilding.clear();
+        this.ghostBuilding.setVisible(false);
+        this.selectionGraphics.clear();
+        this.deploymentGraphics.clear();
+        this.deploymentGraphics.setVisible(false);
+        this.forbiddenGraphics.clear();
+        this.forbiddenGraphics.setVisible(false);
+
+        // Reset ground render texture - clear all baked building bases and redraw grass
+        this.resetGroundTexture();
+
+        // Update village name for new scene
+        this.updateVillageName();
+    }
+
+    /**
+     * Reset the ground render texture by clearing it and redrawing all grass tiles.
+     * Call this when switching between villages to remove baked building bases.
+     */
+    private resetGroundTexture() {
+        if (!this.groundRenderTexture || !this.tempGraphics) return;
+
+        // Clear the entire texture
+        this.groundRenderTexture.clear();
+
+        // Redraw all grass tiles
+        for (let x = 0; x < this.mapSize; x++) {
+            for (let y = 0; y < this.mapSize; y++) {
+                this.tempGraphics.clear();
+                this.drawIsoTile(this.tempGraphics, x, y);
+                this.groundRenderTexture.draw(this.tempGraphics, this.RT_OFFSET_X, this.RT_OFFSET_Y);
+            }
+        }
     }
 
     private async placeDefaultVillage() {

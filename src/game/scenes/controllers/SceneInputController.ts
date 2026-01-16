@@ -114,6 +114,11 @@ export class SceneInputController {
                     const info = BUILDINGS[scene.selectedInWorld.type];
                     scene.removeOverlappingObstacles(gridPosSnap.x, gridPosSnap.y, info.width, info.height);
 
+                    // Store old position before updating (needed for wall neighbor refresh)
+                    const oldGridX = scene.selectedInWorld.gridX;
+                    const oldGridY = scene.selectedInWorld.gridY;
+                    const isWall = scene.selectedInWorld.type === 'wall';
+
                     scene.selectedInWorld.gridX = gridPosSnap.x;
                     scene.selectedInWorld.gridY = gridPosSnap.y;
                     scene.selectedInWorld.graphics.clear();
@@ -128,7 +133,8 @@ export class SceneInputController {
                         1,
                         null,
                         scene.selectedInWorld,
-                        scene.selectedInWorld.baseGraphics
+                        scene.selectedInWorld.baseGraphics,
+                        true  // skipBase=true since base is baked to ground texture
                     );
                     const depth = depthForBuilding(gridPosSnap.x, gridPosSnap.y, scene.selectedInWorld.type as BuildingType);
                     scene.selectedInWorld.graphics.setDepth(depth);
@@ -144,6 +150,13 @@ export class SceneInputController {
                     }
                     // Bake the building's base to the ground texture at new position
                     (scene as any).bakeBuildingToGround(scene.selectedInWorld);
+
+                    // Update wall neighbor connections at both old and new positions
+                    if (isWall) {
+                        scene.refreshWallNeighbors(oldGridX, oldGridY, scene.selectedInWorld.owner);
+                        scene.refreshWallNeighbors(gridPosSnap.x, gridPosSnap.y, scene.selectedInWorld.owner);
+                    }
+
                     scene.isMoving = false;
                     scene.ghostBuilding.setVisible(false);
                     if (scene.selectedInWorld.owner === 'PLAYER') {
