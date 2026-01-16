@@ -58,7 +58,7 @@ export class GameBackend {
             ownerId: owner,
             username: 'Player',
             buildings: [],
-            resources: { gold: 1000, elixir: 1000 },
+            resources: { gold: 100000, elixir: 100000 },
             army: {},
             lastSaveTime: Date.now()
         };
