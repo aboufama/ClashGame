@@ -14,7 +14,8 @@ const LAYER_OFFSETS = {
     obstacle: 2,
     rubble: 3,
     building: 6,
-    troop: 8
+    wall: 10,  // Walls slightly above buildings for tie-breaking
+    troop: 15  // Troops above walls
 };
 
 const baseDepth = (anchorX: number, anchorY: number) =>
@@ -22,6 +23,13 @@ const baseDepth = (anchorX: number, anchorY: number) =>
 
 const clampBias = (bias: number) => Math.max(-MAX_BIAS, Math.min(MAX_BIAS, bias));
 
+/**
+ * Calculate depth for a footprint.
+ * For proper isometric sorting, we use the BACK corner (top-left in grid coords)
+ * plus a small forward offset. This ensures:
+ * - Objects render behind things at their front edge
+ * - Walls at a building's front correctly render above the building
+ */
 export const depthForFootprint = (
     gridX: number,
     gridY: number,
@@ -30,8 +38,10 @@ export const depthForFootprint = (
     layerOffset: number,
     bias: number = 0
 ) => {
-    const anchorX = gridX + width - 1;
-    const anchorY = gridY + height - 1;
+    // Use back corner (gridX, gridY) plus half the footprint for center-ish anchor
+    // This prevents large buildings from "reaching forward" in depth
+    const anchorX = gridX + Math.floor((width - 1) / 2);
+    const anchorY = gridY + Math.floor((height - 1) / 2);
     return baseDepth(anchorX, anchorY) + layerOffset + clampBias(bias);
 };
 
@@ -39,6 +49,8 @@ export const depthForGroundPlane = () => GROUND_PLANE_DEPTH;
 
 const buildingBias = (type: BuildingType) => {
     const def = BUILDING_DEFINITIONS[type];
+    // Larger buildings get positive bias to push them slightly forward
+    // This helps their front edges not get clipped by things behind
     return clampBias(Math.max(def.width, def.height) * BUILDING_BIAS_SCALE);
 };
 
@@ -52,7 +64,8 @@ const obstacleBias = (width: number, height: number) =>
 
 export const depthForBuilding = (gridX: number, gridY: number, type: BuildingType) => {
     const def = BUILDING_DEFINITIONS[type];
-    return depthForFootprint(gridX, gridY, def.width, def.height, LAYER_OFFSETS.building, buildingBias(type));
+    const layerOffset = type === 'wall' ? LAYER_OFFSETS.wall : LAYER_OFFSETS.building;
+    return depthForFootprint(gridX, gridY, def.width, def.height, layerOffset, buildingBias(type));
 };
 
 export const depthForObstacle = (gridX: number, gridY: number, width: number, height: number) =>
