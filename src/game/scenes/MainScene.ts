@@ -336,11 +336,6 @@ export class MainScene extends Phaser.Scene {
         if ((armyRemaining <= 0 && activeTroops === 0 && this.pendingSpawnCount === 0) || percent >= 100) {
             this.raidEndScheduled = true;
 
-            // Trigger resource animation immediately
-            if (this.goldLooted > 0 || this.elixirLooted > 0) {
-                this.playResourceGainAnimation(this.goldLooted, this.elixirLooted);
-            }
-
             // 2-second delay to let final animations play / player realize what happened
             this.time.delayedCall(2000, () => {
                 // Trigger the end sequence via the game manager callback, but pass a flag or handle it there
@@ -354,96 +349,6 @@ export class MainScene extends Phaser.Scene {
                 }
             });
         }
-    }
-
-    private playResourceGainAnimation(gold: number, elixir: number) {
-        const cx = this.cameras.main.width / 2;
-        const cy = this.cameras.main.height / 2;
-
-        // HUD Positions (Estimated Top-Right)
-        const targetGoldX = this.cameras.main.width - 250;
-        const targetElixirX = this.cameras.main.width - 80;
-        const targetY = 40;
-
-        if (gold > 0) {
-            const gText = this.add.text(cx, cy, `+${gold}`, {
-                fontFamily: 'Outfit, sans-serif',
-                fontSize: '48px',
-                fontStyle: 'bold',
-                color: '#FFD700',
-                stroke: '#000000',
-                strokeThickness: 6
-            }).setOrigin(0.5).setDepth(20000).setScrollFactor(0);
-
-            const gIcon = this.add.circle(cx - 60, cy, 15, 0xFFD700)
-                .setDepth(20000).setScrollFactor(0);
-
-            // Pop in
-            this.tweens.add({
-                targets: [gText, gIcon],
-                scale: { from: 0, to: 1.2 },
-                duration: 400,
-                ease: 'Back.out',
-                onComplete: () => {
-                    // Fly to HUD
-                    this.tweens.add({
-                        targets: [gText, gIcon],
-                        x: targetGoldX,
-                        y: targetY,
-                        scale: 0.5,
-                        alpha: 0,
-                        duration: 1000,
-                        delay: 300,
-                        ease: 'Power2',
-                        onComplete: () => {
-                            gText.destroy();
-                            gIcon.destroy();
-                        }
-                    });
-                }
-            });
-        }
-
-        if (elixir > 0) {
-            const eText = this.add.text(cx, cy + 60, `+${elixir}`, {
-                fontFamily: 'Outfit, sans-serif',
-                fontSize: '48px',
-                fontStyle: 'bold',
-                color: '#FF00FF',
-                stroke: '#000000',
-                strokeThickness: 6
-            }).setOrigin(0.5).setDepth(20000).setScrollFactor(0);
-
-            const eIcon = this.add.circle(cx - 60, cy + 60, 15, 0xFF00FF)
-                .setDepth(20000).setScrollFactor(0);
-
-            // Pop in
-            this.tweens.add({
-                targets: [eText, eIcon],
-                scale: { from: 0, to: 1.2 },
-                duration: 400,
-                delay: 100, // Slight offset from gold
-                ease: 'Back.out',
-                onComplete: () => {
-                    // Fly to HUD
-                    this.tweens.add({
-                        targets: [eText, eIcon],
-                        x: targetElixirX,
-                        y: targetY,
-                        scale: 0.5,
-                        alpha: 0,
-                        duration: 1000,
-                        delay: 300,
-                        ease: 'Power2',
-                        onComplete: () => {
-                            eText.destroy();
-                            eIcon.destroy();
-                        }
-                    });
-                }
-            });
-        }
-
     }
 
     public updateManualFire(time: number) {
@@ -1755,7 +1660,7 @@ export class MainScene extends Phaser.Scene {
                                     },
                                     onComplete: () => {
                                         // Screen shake at impact
-                                        this.cameras.main.shake(100, 0.003);
+                                        this.cameras.main.shake(50, 0.0015);
 
                                         // Ground crack effect (moved higher to align with slam)
                                         this.showGolemCrackEffect(currentPos.x, currentPos.y + 15);
@@ -1869,7 +1774,7 @@ export class MainScene extends Phaser.Scene {
                                 });
 
                                 // Light screen shake on fire
-                                this.cameras.main.shake(50, 0.001);
+                                this.cameras.main.shake(25, 0.0005);
 
                                 // ROTATE AFTER SHOT - delayed until cannonball is in flight
                                 const newAngle = currentAngle + Math.PI / 4;
@@ -1993,7 +1898,7 @@ export class MainScene extends Phaser.Scene {
 
                                 // Screen shake for Ram impact
                                 if (troop.type === 'ram') {
-                                    this.cameras.main.shake(80, 0.004);
+                                    this.cameras.main.shake(40, 0.002);
                                 }
 
                                 if (troop.target.health <= 0) {
@@ -2086,7 +1991,7 @@ export class MainScene extends Phaser.Scene {
 
     private createMortarExplosion(x: number, y: number, owner: 'PLAYER' | 'ENEMY', targetGx: number, targetGy: number, level: number = 1) {
         const scale = level >= 3 ? 1.3 : 1.0;
-        this.cameras.main.shake(100, 0.002 * scale);
+        this.cameras.main.shake(50, 0.001 * scale);
 
         // Ground crater/scorch mark (L1-L2 only, L3 uses cracks instead)
         if (level < 3) {
@@ -2259,6 +2164,8 @@ export class MainScene extends Phaser.Scene {
 
         // Capture target reference at the start
         const targetTroop = troop;
+        const stats = getBuildingStats('cannon', cannon.level || 1);
+        const cannonDamage = stats.damage || 70;
 
         const info = BUILDINGS['cannon'];
         const start = IsoUtils.cartToIso(cannon.gridX + info.width / 2, cannon.gridY + info.height / 2);
@@ -2344,9 +2251,9 @@ export class MainScene extends Phaser.Scene {
                 impact.setDepth(ballDepth - 10);
                 this.tweens.add({ targets: impact, alpha: 0, duration: 300, onComplete: () => impact.destroy() });
 
-                // Apply damage to captured target (3x damage: 45)
+                // Apply damage to captured target using level-based damage
                 if (targetTroop && targetTroop.health > 0) {
-                    targetTroop.health -= 45;
+                    targetTroop.health -= cannonDamage;
                     targetTroop.hasTakenDamage = true;
                     this.updateHealthBar(targetTroop);
 
@@ -2671,7 +2578,7 @@ export class MainScene extends Phaser.Scene {
         center.y -= 30; // From crater
 
         // Stronger screen shake for the volcano
-        this.cameras.main.shake(400, 0.005);
+        this.cameras.main.shake(200, 0.0025);
 
         const aoeRadius = stats.range || 4.2;
 
@@ -3163,7 +3070,7 @@ export class MainScene extends Phaser.Scene {
                         particleManager.returnToPool(shell);
 
                         // Explosion effect
-                        this.cameras.main.shake(50, 0.002);
+                        this.cameras.main.shake(25, 0.001);
 
                         const explosion = particleManager.getPooledGraphic();
                         explosion.fillStyle(0xff4400, 0.8);
@@ -3410,10 +3317,12 @@ export class MainScene extends Phaser.Scene {
 
     private shootBallistaAt(ballista: PlacedBuilding, troop: Troop) {
         const info = BUILDINGS['ballista'];
+        const stats = getBuildingStats('ballista', ballista.level || 1);
         const start = IsoUtils.cartToIso(ballista.gridX + info.width / 2, ballista.gridY + info.height / 2);
         const end = IsoUtils.cartToIso(troop.gridX, troop.gridY);
         const angle = Math.atan2(end.y - start.y, end.x - start.x);
         const targetTroop = troop;
+        const ballistaDamage = stats.damage || 240;
 
         // Set target angle for smooth rotation (handled in updateBuildingAnimations)
         ballista.ballistaTargetAngle = angle;
@@ -3524,11 +3433,11 @@ export class MainScene extends Phaser.Scene {
                         }
                     },
                     onComplete: () => {
-                        this.cameras.main.shake(100, 0.0005, true);
+                        this.cameras.main.shake(50, 0.00025, true);
                         bolt.destroy();
                         // Deal damage
                         if (targetTroop && targetTroop.health > 0) {
-                            targetTroop.health -= 100;
+                            targetTroop.health -= ballistaDamage;
                             targetTroop.hasTakenDamage = true;
                             this.updateHealthBar(targetTroop);
                             if (targetTroop.health <= 0) this.destroyTroop(targetTroop);
@@ -4005,8 +3914,8 @@ export class MainScene extends Phaser.Scene {
         const size = Math.max(info.width, info.height);
 
         // Screen shake proportional to building size
-        const shakeIntensity = (0.003 + size * 0.002) * (this.mode === 'HOME' ? 0.2 : 1.0);
-        this.cameras.main.shake(150 + size * 100, shakeIntensity);
+        const shakeIntensity = (0.0015 + size * 0.001) * (this.mode === 'HOME' ? 0.2 : 1.0);
+        this.cameras.main.shake(75 + size * 50, shakeIntensity);
 
         // Initial flash
         const flash = this.add.circle(pos.x, pos.y - 20, 10 * size, 0xffffcc, 0.8);
@@ -5487,7 +5396,7 @@ export class MainScene extends Phaser.Scene {
         );
 
         // Screenshake for the start of the massive salvo
-        this.cameras.main.shake(150, 0.004);
+        this.cameras.main.shake(75, 0.002);
 
         for (let i = 0; i < 16; i++) {
             this.time.delayedCall(i * 50, () => {
@@ -5789,7 +5698,7 @@ export class MainScene extends Phaser.Scene {
 
     private createSpikeZone(x: number, y: number, gridX: number, gridY: number, owner: 'PLAYER' | 'ENEMY', damage: number, radius: number, duration: number) {
         // Camera shake on impact
-        this.cameras.main.shake(50, 0.0015);
+        this.cameras.main.shake(25, 0.00075);
 
         // IMPACT SMOKE EFFECT (small puffs)
         this.createSmokeEffect(x, y - 5, 5, 0.5, 600);
