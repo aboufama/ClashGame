@@ -260,20 +260,31 @@ export class GameBackend {
         const cx = Math.floor(MAP_SIZE / 2);
         const cy = Math.floor(MAP_SIZE / 2);
 
+        // Helper to get random level for a building type
+        const getRandomLevel = (type: BuildingType): number => {
+            const maxLevel = BUILDING_DEFINITIONS[type].maxLevel || 1;
+            return 1 + Math.floor(Math.random() * maxLevel);
+        };
+
+        // Random wall level for this base (1-3)
+        const wallLevel = 1 + Math.floor(Math.random() * 3);
+
         await this.placeBuilding(id, 'town_hall', cx, cy);
 
-        // Add 1-2 Elite Defenses near TH
-        const elites: BuildingType[] = ['dragons_breath', 'prism', 'xbow'];
-        const eliteCount = 2 + Math.floor(Math.random() * 2);
+        // Add 2-4 Elite Defenses near TH
+        const elites: BuildingType[] = ['dragons_breath', 'prism', 'xbow', 'magmavent', 'spike_launcher'];
+        const eliteCount = 2 + Math.floor(Math.random() * 3);
         for (let i = 0; i < eliteCount; i++) {
-            const ex = cx + (Math.random() > 0.5 ? 2 : -2);
-            const ey = cy + (Math.random() > 0.5 ? 2 : -2);
-            const b = await this.placeBuilding(id, elites[Math.floor(Math.random() * elites.length)], ex, ey);
-            if (b) b.level = 3 + Math.floor(Math.random() * 3);
+            const ex = cx + (Math.random() > 0.5 ? 3 : -3) + Math.floor(Math.random() * 2);
+            const ey = cy + (Math.random() > 0.5 ? 3 : -3) + Math.floor(Math.random() * 2);
+            const eliteType = elites[Math.floor(Math.random() * elites.length)];
+            const b = await this.placeBuilding(id, eliteType, ex, ey);
+            if (b) b.level = getRandomLevel(eliteType);
         }
 
-        await this.generateRectWall(id, cx - 3, cy - 3, 7, 7);
+        await this.generateRectWall(id, cx - 3, cy - 3, 7, 7, wallLevel);
 
+        // Add compartments with varied defenses
         const compCount = 3 + Math.floor(Math.random() * 3);
         const compRadius = 6;
         for (let i = 0; i < compCount; i++) {
@@ -281,23 +292,40 @@ export class GameBackend {
             const tx = Math.floor(cx + Math.cos(angle) * compRadius);
             const ty = Math.floor(cy + Math.sin(angle) * compRadius);
 
+            // More varied defense types
             const roll = Math.random();
-            const defType = (roll > 0.85 ? 'dragons_breath' : roll > 0.7 ? 'magmavent' : roll > 0.55 ? 'xbow' : 'mortar') as BuildingType;
-            await this.placeBuilding(id, defType, tx, ty);
-            await this.placeBuilding(id, 'mine', tx + 1, ty + 1);
-            await this.generateRectWall(id, tx - 2, ty - 2, 5, 5);
+            let defType: BuildingType;
+            if (roll > 0.9) defType = 'dragons_breath';
+            else if (roll > 0.8) defType = 'magmavent';
+            else if (roll > 0.7) defType = 'spike_launcher';
+            else if (roll > 0.55) defType = 'xbow';
+            else if (roll > 0.4) defType = 'ballista';
+            else if (roll > 0.25) defType = 'tesla';
+            else defType = 'mortar';
+
+            const b = await this.placeBuilding(id, defType, tx, ty);
+            if (b) b.level = getRandomLevel(defType);
+
+            const mine = await this.placeBuilding(id, 'mine', tx + 1, ty + 1);
+            if (mine) mine.level = getRandomLevel('mine');
+
+            await this.generateRectWall(id, tx - 2, ty - 2, 5, 5, wallLevel);
         }
 
-        const outerCount = 12;
+        // Outer defenses ring - varied types with random levels
+        const outerDefenseTypes: BuildingType[] = ['cannon', 'cannon', 'cannon', 'ballista', 'tesla', 'mortar'];
+        const outerCount = 12 + Math.floor(Math.random() * 4);
         for (let i = 0; i < outerCount; i++) {
             const r = 9 + Math.random() * 3;
             const theta = Math.random() * Math.PI * 2;
             const ox = Math.floor(cx + Math.cos(theta) * r);
             const oy = Math.floor(cy + Math.sin(theta) * r);
-            await this.placeBuilding(id, 'cannon', ox, oy);
+            const defType = outerDefenseTypes[Math.floor(Math.random() * outerDefenseTypes.length)];
+            const b = await this.placeBuilding(id, defType, ox, oy);
+            if (b) b.level = getRandomLevel(defType);
         }
 
-        await this.generateRectWall(id, 3, 3, MAP_SIZE - 7, MAP_SIZE - 7);
+        await this.generateRectWall(id, 3, 3, MAP_SIZE - 7, MAP_SIZE - 7, wallLevel);
 
         world.resources = {
             gold: Math.floor(50000 + Math.random() * 100000),
@@ -307,19 +335,23 @@ export class GameBackend {
         return world;
     }
 
-    private async generateRectWall(id: string, x: number, y: number, w: number, h: number) {
+    private async generateRectWall(id: string, x: number, y: number, w: number, h: number, level: number = 1) {
         const safeX = Math.max(0, x);
         const safeY = Math.max(0, y);
         const safeW = Math.min(MAP_SIZE - 1 - safeX, w);
         const safeH = Math.min(MAP_SIZE - 1 - safeY, h);
 
         for (let i = 0; i <= safeW; i++) {
-            await this.placeBuilding(id, 'wall', safeX + i, safeY);
-            await this.placeBuilding(id, 'wall', safeX + i, safeY + safeH);
+            const b1 = await this.placeBuilding(id, 'wall', safeX + i, safeY);
+            if (b1) b1.level = level;
+            const b2 = await this.placeBuilding(id, 'wall', safeX + i, safeY + safeH);
+            if (b2) b2.level = level;
         }
         for (let j = 0; j <= safeH; j++) {
-            await this.placeBuilding(id, 'wall', safeX, safeY + j);
-            await this.placeBuilding(id, 'wall', safeX + safeW, safeY + j);
+            const b1 = await this.placeBuilding(id, 'wall', safeX, safeY + j);
+            if (b1) b1.level = level;
+            const b2 = await this.placeBuilding(id, 'wall', safeX + safeW, safeY + j);
+            if (b2) b2.level = level;
         }
     }
 }
