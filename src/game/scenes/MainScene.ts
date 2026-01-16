@@ -2723,11 +2723,13 @@ export class MainScene extends Phaser.Scene {
                 t.health -= damage * damageMult;
                 t.hasTakenDamage = true;
 
-                // Hit flash on troop
+                // Hit flash on troop - position the graphics at the troop, draw circle at origin
+                // so scaling animates from center instead of flying off-screen
                 const hitFlash = particleManager.getPooledGraphic();
-                hitFlash.fillStyle(0xff4400, 0.8);
                 const troopPos = IsoUtils.cartToIso(t.gridX, t.gridY);
-                hitFlash.fillCircle(troopPos.x, troopPos.y, 15);
+                hitFlash.setPosition(troopPos.x, troopPos.y);
+                hitFlash.fillStyle(0xff4400, 0.8);
+                hitFlash.fillCircle(0, 0, 15);
                 hitFlash.setDepth(10006);
                 this.tweens.add({
                     targets: hitFlash,
@@ -3833,10 +3835,12 @@ export class MainScene extends Phaser.Scene {
                         if (troop.type === 'archer' || troop.type === 'ram' || troop.type === 'golem' || troop.type === 'sharpshooter' || troop.type === 'mobilemortar' || troop.type === 'phalanx' || troop.type === 'romanwarrior') {
                             const targetPos = IsoUtils.cartToIso(tx, ty);
                             const newFacing = Math.atan2(targetPos.y - pos.y, targetPos.x - pos.x);
-                            troop.facingAngle = newFacing;
-                            // Redraw troops that have direction-dependent visuals
+                            // Redraw troops that have direction-dependent visuals (check BEFORE updating facingAngle)
                             if ((troop.type === 'sharpshooter' || troop.type === 'mobilemortar' || troop.type === 'phalanx' || troop.type === 'romanwarrior') && Math.abs(newFacing - troop.facingAngle) > 0.1) {
+                                troop.facingAngle = newFacing;
                                 this.redrawTroop(troop);
+                            } else {
+                                troop.facingAngle = newFacing;
                             }
                         }
                     }

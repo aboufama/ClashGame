@@ -1,5 +1,5 @@
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Phaser from 'phaser';
 import { GameConfig } from './game/GameConfig';
 import type { GameMode } from './game/types/GameMode';
@@ -339,7 +339,7 @@ function App() {
   }, [user]);
 
 
-  const refreshBuildingCounts = async () => {
+  const refreshBuildingCounts = useCallback(async () => {
     if (!user) return;
     try {
       const counts = await Backend.getBuildingCounts(user.id || 'default_player');
@@ -347,7 +347,7 @@ function App() {
     } catch (error) {
       console.error('Error refreshing building counts:', error);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
     if (isBuildingOpen && user) {
