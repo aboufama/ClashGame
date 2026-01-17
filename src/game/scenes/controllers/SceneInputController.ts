@@ -69,19 +69,24 @@ export class SceneInputController {
             const maxZoom = MobileUtils.getMaxZoom();
             newZoom = Math.max(minZoom, Math.min(maxZoom, newZoom));
 
-            // Get current center for zoom focus
-            const currentCenter = MobileUtils.getTouchCenter(e.touches[0], e.touches[1]);
-
-            // Apply zoom centered on pinch point
             const camera = this.scene.cameras.main;
-            const worldPointBefore = camera.getWorldPoint(currentCenter.x, currentCenter.y);
+            const oldZoom = camera.zoom;
 
+            if (newZoom === oldZoom) return;
+
+            // Get pinch center point
+            const pinchCenter = MobileUtils.getTouchCenter(e.touches[0], e.touches[1]);
+
+            // Calculate world point at pinch center using current zoom
+            const worldX = camera.scrollX + pinchCenter.x / oldZoom;
+            const worldY = camera.scrollY + pinchCenter.y / oldZoom;
+
+            // Apply new zoom
             camera.setZoom(newZoom);
 
-            // Adjust camera position to keep the pinch center fixed
-            const worldPointAfter = camera.getWorldPoint(currentCenter.x, currentCenter.y);
-            camera.scrollX += worldPointBefore.x - worldPointAfter.x;
-            camera.scrollY += worldPointBefore.y - worldPointAfter.y;
+            // Adjust scroll so the world point stays under the pinch center
+            camera.scrollX = worldX - pinchCenter.x / newZoom;
+            camera.scrollY = worldY - pinchCenter.y / newZoom;
         } else if (e.touches.length === 1 && !this.isPinching) {
             this.isTouchDragging = true;
         }

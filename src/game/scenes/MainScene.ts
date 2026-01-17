@@ -210,19 +210,25 @@ export class MainScene extends Phaser.Scene {
             const minZoom = MobileUtils.getMinZoom();
             const maxZoom = MobileUtils.getMaxZoom();
 
-            // Get world point at cursor before zoom
-            const worldPointBefore = camera.getWorldPoint(pointer.x, pointer.y);
+            const oldZoom = camera.zoom;
+            const newZoom = Phaser.Math.Clamp(oldZoom - deltaY * 0.002, minZoom, maxZoom);
 
-            // Calculate and apply new zoom
-            const newZoom = Phaser.Math.Clamp(camera.zoom - deltaY * 0.002, minZoom, maxZoom);
+            if (newZoom === oldZoom) return;
+
+            // Get cursor position relative to camera viewport center
+            const cursorX = pointer.x;
+            const cursorY = pointer.y;
+
+            // Calculate world point at cursor using current zoom
+            const worldX = camera.scrollX + cursorX / oldZoom;
+            const worldY = camera.scrollY + cursorY / oldZoom;
+
+            // Apply new zoom
             camera.setZoom(newZoom);
 
-            // Get world point at cursor after zoom
-            const worldPointAfter = camera.getWorldPoint(pointer.x, pointer.y);
-
-            // Adjust camera to keep cursor position fixed in world space
-            camera.scrollX += worldPointBefore.x - worldPointAfter.x;
-            camera.scrollY += worldPointBefore.y - worldPointAfter.y;
+            // Adjust scroll so the world point stays under the cursor
+            camera.scrollX = worldX - cursorX / newZoom;
+            camera.scrollY = worldY - cursorY / newZoom;
         });
 
         this.events.once('shutdown', () => {

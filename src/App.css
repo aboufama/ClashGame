@@ -1687,7 +1687,7 @@ body.is-touch {
 }
 
 .hud.mobile .loot-display {
-    top: 44px;
+    top: 56px;
     left: 8px;
     gap: 4px;
 }
