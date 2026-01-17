@@ -13,6 +13,7 @@ import { PathfindingSystem } from '../systems/PathfindingSystem';
 import { TargetingSystem } from '../systems/TargetingSystem';
 import { depthForBuilding, depthForGroundPlane, depthForObstacle, depthForRubble, depthForTroop } from '../systems/DepthSystem';
 import { IsoUtils } from '../utils/IsoUtils';
+import { MobileUtils } from '../utils/MobileUtils';
 import { Auth } from '../backend/AuthService';
 import { gameManager } from '../GameManager';
 import { particleManager } from '../systems/ParticleManager';
@@ -173,7 +174,10 @@ export class MainScene extends Phaser.Scene {
 
     create() {
         this.cameras.main.setBackgroundColor('#141824'); // Deep midnight navy background
-        this.cameras.main.setZoom(1);
+
+        // Set default zoom based on device
+        const defaultZoom = MobileUtils.getDefaultZoom();
+        this.cameras.main.setZoom(defaultZoom);
 
         // Register and apply pixelation pipeline
         const renderer = this.game.renderer as Phaser.Renderer.WebGL.WebGLRenderer;
@@ -203,7 +207,9 @@ export class MainScene extends Phaser.Scene {
 
         this.input.on('wheel', (_pointer: any, _gameObjects: any, _deltaX: number, deltaY: number, _deltaZ: number) => {
             const newZoom = this.cameras.main.zoom - deltaY * 0.002;
-            this.cameras.main.setZoom(Phaser.Math.Clamp(newZoom, 0.3, 3));
+            const minZoom = MobileUtils.getMinZoom();
+            const maxZoom = MobileUtils.getMaxZoom();
+            this.cameras.main.setZoom(Phaser.Math.Clamp(newZoom, minZoom, maxZoom));
         });
 
         this.events.once('shutdown', () => {

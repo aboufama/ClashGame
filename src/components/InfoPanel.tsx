@@ -10,9 +10,10 @@ interface InfoPanelProps {
     onUpgrade: () => void;
     onMove: () => void;
     upgradeCost?: number;
+    isMobile?: boolean;
 }
 
-export const InfoPanel: React.FC<InfoPanelProps> = ({ type, level, resources, isExiting, onDelete, onUpgrade, onMove, upgradeCost }) => {
+export const InfoPanel: React.FC<InfoPanelProps> = ({ type, level, resources, isExiting, onDelete, onUpgrade, onMove, upgradeCost, isMobile = false }) => {
     const [mountClass, setMountClass] = useState('');
 
     useEffect(() => {
@@ -38,7 +39,7 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ type, level, resources, is
     const upgradeDisabled = isMaxLevel || !canAfford;
 
     // ... CSS logic ...
-    const className = `info-panel ${isExiting ? 'exiting' : mountClass}`;
+    const className = `info-panel ${isExiting ? 'exiting' : mountClass} ${isMobile ? 'mobile' : ''}`;
 
     return (
         <div className={className}>
@@ -164,7 +165,7 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ type, level, resources, is
 
                 <div className="info-actions">
                     <button className="action-btn-small" onClick={onMove}>
-                        <div className="icon move-icon"></div> MOVE (M)
+                        <div className="icon move-icon"></div> {isMobile ? 'MOVE' : 'MOVE (M)'}
                     </button>
                     <button className="action-btn-small delete" onClick={onDelete}>
                         <div className="icon delete-icon"></div> SELL

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { MobileUtils } from '../utils/MobileUtils';
 
 export interface ParticleOptions {
     x: number;
@@ -12,6 +13,7 @@ export interface ParticleOptions {
     move?: { x: number; y: number }; // Target position
     rotation?: number;
     blendMode?: Phaser.BlendModes | string;
+    skipOnMobile?: boolean; // If true, skip this particle on mobile
 }
 
 export class ParticleManager {
@@ -19,8 +21,12 @@ export class ParticleManager {
     private scene!: Phaser.Scene;
     private pool: Phaser.GameObjects.Graphics[] = [];
     private active: Phaser.GameObjects.Graphics[] = [];
+    private isMobile: boolean = false;
+    private spawnCounter: number = 0; // For throttling on mobile
 
-    private constructor() { }
+    private constructor() {
+        this.isMobile = MobileUtils.isMobile();
+    }
 
     public static getInstance(): ParticleManager {
         if (!ParticleManager.instance) {
@@ -31,8 +37,9 @@ export class ParticleManager {
 
     public init(scene: Phaser.Scene) {
         this.scene = scene;
-        // Pre-warm the pool
-        for (let i = 0; i < 50; i++) {
+        // Pre-warm the pool (smaller pool on mobile)
+        const poolSize = this.isMobile ? 25 : 50;
+        for (let i = 0; i < poolSize; i++) {
             this.createGraphic();
         }
     }
@@ -62,6 +69,18 @@ export class ParticleManager {
 
     public spawn(options: ParticleOptions): Phaser.GameObjects.Graphics | null {
         if (!this.scene) return null;
+
+        // Skip particles marked for mobile skip
+        if (options.skipOnMobile && this.isMobile) return null;
+
+        // Throttle particles on mobile - only spawn every other particle
+        if (this.isMobile) {
+            this.spawnCounter++;
+            if (this.spawnCounter % 2 !== 0) return null;
+        }
+
+        // Limit active particles on mobile
+        if (this.isMobile && this.active.length > 15) return null;
 
         let g = this.pool.pop();
         if (!g) {

@@ -4,6 +4,7 @@ import { BUILDING_DEFINITIONS, type BuildingType, type TroopType } from '../../c
 import { gameManager } from '../../GameManager';
 import { depthForBuilding, depthForGroundPlane } from '../../systems/DepthSystem';
 import { IsoUtils } from '../../utils/IsoUtils';
+import { MobileUtils } from '../../utils/MobileUtils';
 import type { MainScene } from '../MainScene';
 
 const BUILDINGS = BUILDING_DEFINITIONS as any;
@@ -11,11 +12,121 @@ const BUILDINGS = BUILDING_DEFINITIONS as any;
 export class SceneInputController {
     private scene: MainScene;
 
+    // Touch/pinch state
+    private isPinching: boolean = false;
+    private pinchStartDistance: number = 0;
+    private pinchStartZoom: number = 1;
+    private lastTouchCount: number = 0;
+    private touchStartTime: number = 0;
+    private lastTapTime: number = 0;
+    private isTouchDragging: boolean = false;
+
     constructor(scene: MainScene) {
         this.scene = scene;
+        this.setupTouchHandlers();
+    }
+
+    /**
+     * Setup native touch handlers for pinch-to-zoom
+     */
+    private setupTouchHandlers(): void {
+        if (!MobileUtils.isTouchDevice()) return;
+
+        const canvas = this.scene.game.canvas;
+
+        canvas.addEventListener('touchstart', (e) => this.onTouchStart(e), { passive: false });
+        canvas.addEventListener('touchmove', (e) => this.onTouchMove(e), { passive: false });
+        canvas.addEventListener('touchend', (e) => this.onTouchEnd(e), { passive: false });
+        canvas.addEventListener('touchcancel', (e) => this.onTouchEnd(e), { passive: false });
+    }
+
+    private onTouchStart(e: TouchEvent): void {
+        this.touchStartTime = Date.now();
+        this.lastTouchCount = e.touches.length;
+
+        if (e.touches.length === 2) {
+            // Start pinch gesture
+            e.preventDefault();
+            this.isPinching = true;
+            this.isTouchDragging = false;
+            this.pinchStartDistance = MobileUtils.getTouchDistance(e.touches[0], e.touches[1]);
+            this.pinchStartZoom = this.scene.cameras.main.zoom;
+        } else if (e.touches.length === 1) {
+            this.isTouchDragging = false;
+        }
+    }
+
+    private onTouchMove(e: TouchEvent): void {
+        if (e.touches.length === 2 && this.isPinching) {
+            e.preventDefault();
+
+            const currentDistance = MobileUtils.getTouchDistance(e.touches[0], e.touches[1]);
+            const scale = currentDistance / this.pinchStartDistance;
+            let newZoom = this.pinchStartZoom * scale;
+
+            // Clamp zoom
+            const minZoom = MobileUtils.getMinZoom();
+            const maxZoom = MobileUtils.getMaxZoom();
+            newZoom = Math.max(minZoom, Math.min(maxZoom, newZoom));
+
+            // Get current center for zoom focus
+            const currentCenter = MobileUtils.getTouchCenter(e.touches[0], e.touches[1]);
+
+            // Apply zoom centered on pinch point
+            const camera = this.scene.cameras.main;
+            const worldPointBefore = camera.getWorldPoint(currentCenter.x, currentCenter.y);
+
+            camera.setZoom(newZoom);
+
+            // Adjust camera position to keep the pinch center fixed
+            const worldPointAfter = camera.getWorldPoint(currentCenter.x, currentCenter.y);
+            camera.scrollX += worldPointBefore.x - worldPointAfter.x;
+            camera.scrollY += worldPointBefore.y - worldPointAfter.y;
+        } else if (e.touches.length === 1 && !this.isPinching) {
+            this.isTouchDragging = true;
+        }
+    }
+
+    private onTouchEnd(e: TouchEvent): void {
+        const touchDuration = Date.now() - this.touchStartTime;
+
+        if (e.touches.length < 2) {
+            this.isPinching = false;
+        }
+
+        // Detect double-tap for quick zoom (only if not pinching and short touch)
+        if (e.touches.length === 0 && this.lastTouchCount === 1 && touchDuration < 200 && !this.isTouchDragging) {
+            const now = Date.now();
+            if (now - this.lastTapTime < 300) {
+                // Double tap - toggle zoom
+                const camera = this.scene.cameras.main;
+                const defaultZoom = MobileUtils.getDefaultZoom();
+                if (camera.zoom > defaultZoom + 0.3) {
+                    camera.setZoom(defaultZoom);
+                } else {
+                    camera.setZoom(Math.min(MobileUtils.getMaxZoom(), defaultZoom + 0.6));
+                }
+                this.lastTapTime = 0; // Reset to prevent triple tap
+            } else {
+                this.lastTapTime = now;
+            }
+        }
+
+        this.lastTouchCount = e.touches.length;
+        this.isTouchDragging = false;
+    }
+
+    /**
+     * Check if currently in a pinch gesture (used to prevent other interactions)
+     */
+    isPinchGesture(): boolean {
+        return this.isPinching;
     }
 
     onPointerDown(pointer: Phaser.Input.Pointer) {
+        // Skip if pinching
+        if (this.isPinching) return;
+
         const scene = this.scene;
         if (pointer.button === 0) {
             scene.isManualFiring = false; // Reset firing on interaction start
@@ -62,6 +173,9 @@ export class SceneInputController {
     }
 
     async onPointerUp(pointer: Phaser.Input.Pointer) {
+        // Skip if pinching
+        if (this.isPinching) return;
+
         const scene = this.scene;
         // Calculate drag distance
         const dist = Phaser.Math.Distance.Between(pointer.downX, pointer.downY, pointer.upX, pointer.upY);
@@ -254,6 +368,9 @@ export class SceneInputController {
     }
 
     onPointerMove(pointer: Phaser.Input.Pointer) {
+        // Skip if pinching
+        if (this.isPinching) return;
+
         const scene = this.scene;
         // 1. Calculate common coordinate data immediately to avoid redundancy and shadowing
         const worldPoint = scene.cameras.main.getWorldPoint(pointer.x, pointer.y);

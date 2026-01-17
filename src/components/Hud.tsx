@@ -1,4 +1,5 @@
-import type { BuildingType } from '../game/config/GameDefinitions';
+import type { BuildingType, TroopType } from '../game/config/GameDefinitions';
+import { TROOP_DEFINITIONS } from '../game/config/GameDefinitions';
 import type { GameMode } from '../game/types/GameMode';
 import { InfoPanel } from './InfoPanel';
 
@@ -21,6 +22,7 @@ interface HudProps {
   isExiting: boolean;
   wallUpgradeCostOverride?: number;
   showCloudOverlay: boolean;
+  isMobile: boolean;
   onOpenSettings: () => void;
   onOpenBuild: () => void;
   onOpenTrain: () => void;
@@ -46,6 +48,7 @@ export function Hud({
   isExiting,
   wallUpgradeCostOverride,
   showCloudOverlay,
+  isMobile,
   onOpenSettings,
   onOpenBuild,
   onOpenTrain,
@@ -57,17 +60,23 @@ export function Hud({
   onUpgradeBuilding,
   onMoveBuilding
 }: HudProps) {
+  // Get troop name for mobile display
+  const getTroopName = (type: string): string => {
+    const def = TROOP_DEFINITIONS[type as TroopType];
+    return def?.name || type;
+  };
+
   return (
-    <div className={`hud ${showCloudOverlay ? 'hidden-ui' : ''}`}>
+    <div className={`hud ${showCloudOverlay ? 'hidden-ui' : ''} ${isMobile ? 'mobile' : ''}`}>
       <div className="hud-top">
         {view === 'HOME' ? (
           <>
             <div className="resources">
               <div className="res-item gold">
-                <div className="icon gold-icon"></div> {resources.gold.toLocaleString()}
+                <div className="icon gold-icon"></div> {isMobile ? formatCompact(resources.gold) : resources.gold.toLocaleString()}
               </div>
               <div className="res-item elixir">
-                <div className="icon elixir-icon"></div> {resources.elixir.toLocaleString()}
+                <div className="icon elixir-icon"></div> {isMobile ? formatCompact(resources.elixir) : resources.elixir.toLocaleString()}
               </div>
             </div>
             <button className="settings-btn" onClick={onOpenSettings}>
@@ -89,11 +98,11 @@ export function Hud({
                 <div className="loot-display">
                   <div className="loot-item gold">
                     <div className="icon gold-icon"></div>
-                    <span>+{battleStats.goldLooted}</span>
+                    <span>+{isMobile ? formatCompact(battleStats.goldLooted) : battleStats.goldLooted}</span>
                   </div>
                   <div className="loot-item elixir">
                     <div className="icon elixir-icon"></div>
-                    <span>+{battleStats.elixirLooted}</span>
+                    <span>+{isMobile ? formatCompact(battleStats.elixirLooted) : battleStats.elixirLooted}</span>
                   </div>
                 </div>
               </>
@@ -113,6 +122,7 @@ export function Hud({
           onMove={onMoveBuilding}
           upgradeCost={wallUpgradeCostOverride}
           key={selectedBuildingInfo.id}
+          isMobile={isMobile}
         />
       )}
 
@@ -122,26 +132,25 @@ export function Hud({
             <div className="btn-group main-actions">
               <button className="action-btn build" onClick={onOpenBuild}>
                 <span className="btn-icon">🔨</span>
-                <span className="btn-label">BUILD</span>
+                <span className="btn-label">{isMobile ? '' : 'BUILD'}</span>
               </button>
               <button className="action-btn train" onClick={onOpenTrain}>
                 <span className="btn-icon">⚒️</span>
-                <span className="btn-label">TRAIN</span>
+                <span className="btn-label">{isMobile ? '' : 'TRAIN'}</span>
               </button>
               <button
                 className={`action-btn enemy ${capacity.current === 0 ? 'disabled' : ''}`}
                 onClick={onStartAttack}
                 disabled={capacity.current === 0}
-                style={{ marginRight: '10px' }}
               >
                 <span className="btn-icon">⚔️</span>
-                <span className="btn-label">RAID</span>
+                <span className="btn-label">{isMobile ? '' : 'RAID'}</span>
               </button>
             </div>
           </div>
         ) : (
           <div className="menu-inner raid">
-            <div className="troop-selector">
+            <div className={`troop-selector ${isMobile ? 'mobile-troop-selector' : ''}`}>
               {visibleTroops.map(t => {
                 const count = army[t];
                 return (
@@ -151,7 +160,11 @@ export function Hud({
                     disabled={count <= 0}
                     onClick={() => count > 0 && onSelectTroop(t)}
                   >
-                    <div className={`icon ${t}-icon`}></div> {count}
+                    <div className={`icon ${t}-icon`}></div>
+                    <span className="troop-count-badge">{count}</span>
+                    {isMobile && selectedTroopType === t && (
+                      <span className="mobile-troop-name">{getTroopName(t)}</span>
+                    )}
                   </button>
                 );
               })}
@@ -160,7 +173,22 @@ export function Hud({
         )}
       </div>
 
-      {view === 'ATTACK' && !battleStarted && (
+      {/* Mobile floating action buttons for ATTACK mode */}
+      {view === 'ATTACK' && isMobile && (
+        <div className="mobile-attack-controls">
+          {!battleStarted && (
+            <button className="mobile-fab next" onClick={onNextMap}>
+              <span>🗺️</span>
+            </button>
+          )}
+          <button className="mobile-fab home" onClick={onGoHome}>
+            <span>🏠</span>
+          </button>
+        </div>
+      )}
+
+      {/* Desktop scout/home panels */}
+      {view === 'ATTACK' && !battleStarted && !isMobile && (
         <div className="scout-panel">
           <button className="action-btn next-map" onClick={onNextMap}>
             <span className="btn-icon">🗺️</span>
@@ -169,7 +197,7 @@ export function Hud({
         </div>
       )}
 
-      {view === 'ATTACK' && (
+      {view === 'ATTACK' && !isMobile && (
         <div className="home-panel">
           <button className="action-btn home" onClick={onGoHome}>
             <span className="btn-icon">🏠</span>
@@ -179,4 +207,11 @@ export function Hud({
       )}
     </div>
   );
+}
+
+// Helper to format large numbers compactly for mobile
+function formatCompact(num: number): string {
+  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+  if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+  return num.toString();
 }

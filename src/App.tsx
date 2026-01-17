@@ -7,6 +7,7 @@ import { BUILDING_DEFINITIONS, TROOP_DEFINITIONS, type BuildingType, getBuilding
 import { Backend } from './game/backend/GameBackend';
 import { Auth, AuthService, type UserProfile } from './game/backend/AuthService';
 import { gameManager } from './game/GameManager';
+import { MobileUtils } from './game/utils/MobileUtils';
 import { CloudOverlay } from './components/CloudOverlay';
 import { TrainingModal } from './components/TrainingModal';
 import { BuildingShopModal } from './components/BuildingShopModal';
@@ -16,6 +17,10 @@ import { Hud } from './components/Hud';
 import { DebugMenu } from './components/DebugMenu';
 import './App.css';
 
+// Initialize mobile support
+MobileUtils.setupMobileViewport();
+MobileUtils.preventDefaultTouchBehaviors();
+
 
 
 function App() {
@@ -23,10 +28,11 @@ function App() {
 
   // Initialize user - start with null and set it in useEffect to ensure DOM is ready
   const [user, setUser] = useState<UserProfile | null>(null);
-  
+
   const [loading, setLoading] = useState(true);
   const [resources, setResources] = useState({ gold: 0, elixir: 0 });
   const [army, setArmy] = useState({ warrior: 0, archer: 0, giant: 0, ward: 0, recursion: 0, ram: 0, stormmage: 0, golem: 0, sharpshooter: 0, mobilemortar: 0, davincitank: 0, phalanx: 0 });
+  const [isMobile] = useState(() => MobileUtils.isMobile());
 
   // Initialize user on mount - ensure DOM is ready
   useEffect(() => {
@@ -653,6 +659,7 @@ function App() {
         isExiting={isExiting}
         wallUpgradeCostOverride={wallUpgradeCostOverride}
         showCloudOverlay={showCloudOverlay}
+        isMobile={isMobile}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenBuild={() => setIsBuildingOpen(true)}
         onOpenTrain={() => setIsTrainingOpen(true)}
