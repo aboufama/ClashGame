@@ -16,6 +16,7 @@ export class SceneInputController {
     private isPinching: boolean = false;
     private pinchStartDistance: number = 0;
     private pinchStartZoom: number = 1;
+    private lastPinchCenter: { x: number; y: number } | null = null;
     private lastTouchCount: number = 0;
     private touchStartTime: number = 0;
     private lastTapTime: number = 0;
@@ -51,8 +52,12 @@ export class SceneInputController {
             this.isTouchDragging = false;
             this.pinchStartDistance = MobileUtils.getTouchDistance(e.touches[0], e.touches[1]);
             this.pinchStartZoom = this.scene.cameras.main.zoom;
+            // Store initial pinch center for pan tracking
+            const canvas = this.scene.game.canvas;
+            this.lastPinchCenter = MobileUtils.getTouchCenter(e.touches[0], e.touches[1], canvas);
         } else if (e.touches.length === 1) {
             this.isTouchDragging = false;
+            this.lastPinchCenter = null;
         }
     }
 
@@ -60,6 +65,23 @@ export class SceneInputController {
         if (e.touches.length === 2 && this.isPinching) {
             e.preventDefault();
 
+            const camera = this.scene.cameras.main;
+            const canvas = this.scene.game.canvas;
+
+            // Get current pinch center
+            const pinchCenter = MobileUtils.getTouchCenter(e.touches[0], e.touches[1], canvas);
+
+            // Handle panning (movement of pinch center)
+            if (this.lastPinchCenter) {
+                const panDeltaX = this.lastPinchCenter.x - pinchCenter.x;
+                const panDeltaY = this.lastPinchCenter.y - pinchCenter.y;
+
+                // Convert screen delta to world delta using current zoom
+                camera.scrollX += panDeltaX / camera.zoom;
+                camera.scrollY += panDeltaY / camera.zoom;
+            }
+
+            // Handle zooming
             const currentDistance = MobileUtils.getTouchDistance(e.touches[0], e.touches[1]);
             const scale = currentDistance / this.pinchStartDistance;
             let newZoom = this.pinchStartZoom * scale;
@@ -69,29 +91,27 @@ export class SceneInputController {
             const maxZoom = MobileUtils.getMaxZoom();
             newZoom = Math.max(minZoom, Math.min(maxZoom, newZoom));
 
-            const camera = this.scene.cameras.main;
             const oldZoom = camera.zoom;
 
-            if (newZoom === oldZoom) return;
+            if (newZoom !== oldZoom) {
+                // In Phaser, camera.scrollX/Y is where the CENTER of the camera view is in world space
+                const viewportCenterX = camera.width / 2;
+                const viewportCenterY = camera.height / 2;
 
-            // Get pinch center point relative to canvas
-            const canvas = this.scene.game.canvas;
-            const pinchCenter = MobileUtils.getTouchCenter(e.touches[0], e.touches[1], canvas);
+                // Calculate the world point under the pinch center with current zoom
+                const worldX = camera.scrollX + (pinchCenter.x - viewportCenterX) / oldZoom;
+                const worldY = camera.scrollY + (pinchCenter.y - viewportCenterY) / oldZoom;
 
-            // In Phaser, camera.scrollX/Y is where the CENTER of the camera view is in world space
-            const viewportCenterX = camera.width / 2;
-            const viewportCenterY = camera.height / 2;
+                // Apply new zoom
+                camera.setZoom(newZoom);
 
-            // Calculate the world point under the pinch center with current zoom
-            const worldX = camera.scrollX + (pinchCenter.x - viewportCenterX) / oldZoom;
-            const worldY = camera.scrollY + (pinchCenter.y - viewportCenterY) / oldZoom;
+                // Calculate new scroll so the same world point stays under the pinch center
+                camera.scrollX = worldX - (pinchCenter.x - viewportCenterX) / newZoom;
+                camera.scrollY = worldY - (pinchCenter.y - viewportCenterY) / newZoom;
+            }
 
-            // Apply new zoom
-            camera.setZoom(newZoom);
-
-            // Calculate new scroll so the same world point stays under the pinch center
-            camera.scrollX = worldX - (pinchCenter.x - viewportCenterX) / newZoom;
-            camera.scrollY = worldY - (pinchCenter.y - viewportCenterY) / newZoom;
+            // Store current center for next frame
+            this.lastPinchCenter = pinchCenter;
         } else if (e.touches.length === 1 && !this.isPinching) {
             this.isTouchDragging = true;
         }
@@ -102,6 +122,7 @@ export class SceneInputController {
 
         if (e.touches.length < 2) {
             this.isPinching = false;
+            this.lastPinchCenter = null;
         }
 
         // Detect double-tap for quick zoom (only if not pinching and short touch)
