@@ -205,11 +205,24 @@ export class MainScene extends Phaser.Scene {
         this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => this.inputController.onPointerMove(pointer));
         this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => this.inputController.onPointerUp(pointer));
 
-        this.input.on('wheel', (_pointer: any, _gameObjects: any, _deltaX: number, deltaY: number, _deltaZ: number) => {
-            const newZoom = this.cameras.main.zoom - deltaY * 0.002;
+        this.input.on('wheel', (pointer: Phaser.Input.Pointer, _gameObjects: any, _deltaX: number, deltaY: number, _deltaZ: number) => {
+            const camera = this.cameras.main;
             const minZoom = MobileUtils.getMinZoom();
             const maxZoom = MobileUtils.getMaxZoom();
-            this.cameras.main.setZoom(Phaser.Math.Clamp(newZoom, minZoom, maxZoom));
+
+            // Get world point at cursor before zoom
+            const worldPointBefore = camera.getWorldPoint(pointer.x, pointer.y);
+
+            // Calculate and apply new zoom
+            const newZoom = Phaser.Math.Clamp(camera.zoom - deltaY * 0.002, minZoom, maxZoom);
+            camera.setZoom(newZoom);
+
+            // Get world point at cursor after zoom
+            const worldPointAfter = camera.getWorldPoint(pointer.x, pointer.y);
+
+            // Adjust camera to keep cursor position fixed in world space
+            camera.scrollX += worldPointBefore.x - worldPointAfter.x;
+            camera.scrollY += worldPointBefore.y - worldPointAfter.y;
         });
 
         this.events.once('shutdown', () => {

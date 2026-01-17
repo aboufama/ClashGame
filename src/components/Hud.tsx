@@ -175,16 +175,16 @@ export function Hud({
 
       {/* Mobile floating action buttons for ATTACK mode */}
       {view === 'ATTACK' && isMobile && (
-        <div className="mobile-attack-controls">
+        <>
+          <button className="mobile-action-btn home-btn" onClick={onGoHome}>
+            <span>🏠</span>
+          </button>
           {!battleStarted && (
-            <button className="mobile-fab next" onClick={onNextMap}>
+            <button className="mobile-action-btn next-btn" onClick={onNextMap}>
               <span>🗺️</span>
             </button>
           )}
-          <button className="mobile-fab home" onClick={onGoHome}>
-            <span>🏠</span>
-          </button>
-        </div>
+        </>
       )}
 
       {/* Desktop scout/home panels */}
