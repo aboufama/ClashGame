@@ -215,20 +215,27 @@ export class MainScene extends Phaser.Scene {
 
             if (newZoom === oldZoom) return;
 
-            // Get cursor position relative to camera viewport center
-            const cursorX = pointer.x;
-            const cursorY = pointer.y;
+            // Pointer position on screen (relative to canvas)
+            const screenX = pointer.x;
+            const screenY = pointer.y;
 
-            // Calculate world point at cursor using current zoom
-            const worldX = camera.scrollX + cursorX / oldZoom;
-            const worldY = camera.scrollY + cursorY / oldZoom;
+            // In Phaser, camera.scrollX/Y is where the CENTER of the camera view is in world space
+            // Screen to world formula: worldX = scrollX + (screenX - viewportWidth/2) / zoom
+            const viewportCenterX = camera.width / 2;
+            const viewportCenterY = camera.height / 2;
+
+            // Calculate the world point under the cursor with current zoom
+            const worldX = camera.scrollX + (screenX - viewportCenterX) / oldZoom;
+            const worldY = camera.scrollY + (screenY - viewportCenterY) / oldZoom;
 
             // Apply new zoom
             camera.setZoom(newZoom);
 
-            // Adjust scroll so the world point stays under the cursor
-            camera.scrollX = worldX - cursorX / newZoom;
-            camera.scrollY = worldY - cursorY / newZoom;
+            // Calculate new scroll so the same world point stays under the cursor
+            // worldX = newScrollX + (screenX - viewportCenterX) / newZoom
+            // newScrollX = worldX - (screenX - viewportCenterX) / newZoom
+            camera.scrollX = worldX - (screenX - viewportCenterX) / newZoom;
+            camera.scrollY = worldY - (screenY - viewportCenterY) / newZoom;
         });
 
         this.events.once('shutdown', () => {

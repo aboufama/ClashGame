@@ -75,12 +75,13 @@ export class MobileUtils {
     }
 
     /**
-     * Calculate center point between two touches
+     * Calculate center point between two touches, relative to canvas
      */
-    static getTouchCenter(touch1: Touch, touch2: Touch): { x: number; y: number } {
+    static getTouchCenter(touch1: Touch, touch2: Touch, canvas: HTMLCanvasElement): { x: number; y: number } {
+        const rect = canvas.getBoundingClientRect();
         return {
-            x: (touch1.clientX + touch2.clientX) / 2,
-            y: (touch1.clientY + touch2.clientY) / 2
+            x: ((touch1.clientX + touch2.clientX) / 2) - rect.left,
+            y: ((touch1.clientY + touch2.clientY) / 2) - rect.top
         };
     }
 

@@ -74,19 +74,24 @@ export class SceneInputController {
 
             if (newZoom === oldZoom) return;
 
-            // Get pinch center point
-            const pinchCenter = MobileUtils.getTouchCenter(e.touches[0], e.touches[1]);
+            // Get pinch center point relative to canvas
+            const canvas = this.scene.game.canvas;
+            const pinchCenter = MobileUtils.getTouchCenter(e.touches[0], e.touches[1], canvas);
 
-            // Calculate world point at pinch center using current zoom
-            const worldX = camera.scrollX + pinchCenter.x / oldZoom;
-            const worldY = camera.scrollY + pinchCenter.y / oldZoom;
+            // In Phaser, camera.scrollX/Y is where the CENTER of the camera view is in world space
+            const viewportCenterX = camera.width / 2;
+            const viewportCenterY = camera.height / 2;
+
+            // Calculate the world point under the pinch center with current zoom
+            const worldX = camera.scrollX + (pinchCenter.x - viewportCenterX) / oldZoom;
+            const worldY = camera.scrollY + (pinchCenter.y - viewportCenterY) / oldZoom;
 
             // Apply new zoom
             camera.setZoom(newZoom);
 
-            // Adjust scroll so the world point stays under the pinch center
-            camera.scrollX = worldX - pinchCenter.x / newZoom;
-            camera.scrollY = worldY - pinchCenter.y / newZoom;
+            // Calculate new scroll so the same world point stays under the pinch center
+            camera.scrollX = worldX - (pinchCenter.x - viewportCenterX) / newZoom;
+            camera.scrollY = worldY - (pinchCenter.y - viewportCenterY) / newZoom;
         } else if (e.touches.length === 1 && !this.isPinching) {
             this.isTouchDragging = true;
         }

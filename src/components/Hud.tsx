@@ -176,7 +176,10 @@ export function Hud({
       {/* Mobile floating action buttons for ATTACK mode */}
       {view === 'ATTACK' && isMobile && (
         <>
-          <button className="mobile-action-btn home-btn" onClick={onGoHome}>
+          <button
+            className={`mobile-action-btn home-btn ${battleStarted ? 'battle-active' : ''}`}
+            onClick={onGoHome}
+          >
             <span>🏠</span>
           </button>
           {!battleStarted && (
