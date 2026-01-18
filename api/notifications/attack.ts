@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { BlobStorage as Storage } from '../_blobStorage';
+import { BlobStorage as Storage } from '../_blobStorage.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Handle CORS preflight

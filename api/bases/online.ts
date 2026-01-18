@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { BlobStorage as Storage } from '../_blobStorage';
+import { BlobStorage as Storage } from '../_blobStorage.js';
 
 // Bot base generator for when no real bases exist
 function generateBotBase(index: number): any {
