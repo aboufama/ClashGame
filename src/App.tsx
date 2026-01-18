@@ -17,6 +17,7 @@ import { Hud } from './components/Hud';
 import { DebugMenu } from './components/DebugMenu';
 import { LoginScreen } from './components/LoginScreen';
 import { NotificationsPanel } from './components/NotificationsPanel';
+import { LeaderboardPanel } from './components/LeaderboardPanel';
 import './App.css';
 
 // Initialize mobile support
@@ -548,6 +549,17 @@ function App() {
     setIsTrainingOpen(false);
   };
 
+  const handleAttackUser = (userId: string, username: string) => {
+    if (capacity.current === 0) {
+      alert('Train some troops first!');
+      return;
+    }
+    // Close any open modals
+    setIsTrainingOpen(false);
+    // Start attack on specific user
+    gameManager.startAttackOnUser(userId, username);
+  };
+
   const handleBattleResultsGoHome = () => {
     setShowBattleResults(false);
     const scene = gameRef.current?.scene.getScene('MainScene') as any;
@@ -727,9 +739,14 @@ function App() {
         onMoveBuilding={() => gameManager.moveSelectedBuilding()}
       />
 
-      {/* Notifications panel - only show when in HOME mode and online */}
+      {/* Notifications and Leaderboard - only show when in HOME mode and online */}
       {view === 'HOME' && isOnline && (
-        <div style={{ position: 'fixed', top: '16px', right: '60px', zIndex: 100 }}>
+        <div style={{ position: 'fixed', top: '16px', right: '60px', zIndex: 100, display: 'flex', gap: '8px' }}>
+          <LeaderboardPanel
+            currentUserId={user.id}
+            isOnline={isOnline}
+            onAttackUser={handleAttackUser}
+          />
           <NotificationsPanel userId={user.id} isOnline={isOnline} />
         </div>
       )}

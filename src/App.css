@@ -2416,8 +2416,17 @@ body.is-touch {
 }
 
 @keyframes pulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.5; transform: scale(0.8); }
+
+    0%,
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.5;
+        transform: scale(0.8);
+    }
 }
 
 /* Mobile Login adjustments */
@@ -2449,4 +2458,163 @@ body.is-touch {
         font-size: 9px;
         padding: 10px;
     }
+}
+
+/* ============================================
+   LEADERBOARD PANEL
+   ============================================ */
+
+.leaderboard-container {
+    position: relative;
+}
+
+.leaderboard-btn {
+    background: var(--panel-bg);
+    border: 3px solid var(--panel-border);
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow:
+        2px 2px 0 var(--panel-border-dark),
+        inset 2px 2px 0 var(--panel-border-light);
+    transition: all 0.1s ease;
+}
+
+.leaderboard-btn:hover {
+    transform: translate(1px, 1px);
+    box-shadow:
+        1px 1px 0 var(--panel-border-dark),
+        inset 1px 1px 0 var(--panel-border-light);
+}
+
+.leaderboard-icon {
+    font-size: 18px;
+}
+
+.leaderboard-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 99;
+}
+
+.leaderboard-dropdown {
+    position: absolute;
+    top: 50px;
+    right: 0;
+    width: 280px;
+    max-height: 400px;
+    background: var(--panel-bg);
+    border: 3px solid var(--panel-border);
+    box-shadow:
+        4px 4px 0 var(--panel-border-dark),
+        inset 2px 2px 0 var(--panel-border-light);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.leaderboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    background: var(--panel-accent);
+    border-bottom: 2px solid var(--panel-border-dark);
+}
+
+.leaderboard-header h3 {
+    margin: 0;
+    font-size: 10px;
+    color: var(--fantasy-gold);
+    text-shadow: 1px 1px 0 #000;
+}
+
+.refresh-btn {
+    background: transparent;
+    border: 2px solid var(--panel-border);
+    color: var(--text-primary);
+    font-size: 14px;
+    padding: 2px 6px;
+    cursor: pointer;
+    box-shadow: none;
+}
+
+.refresh-btn:hover {
+    background: var(--panel-border-dark);
+}
+
+.leaderboard-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+}
+
+.leaderboard-loading,
+.leaderboard-empty {
+    text-align: center;
+    padding: 20px;
+    font-size: 9px;
+    color: var(--text-secondary);
+}
+
+.leaderboard-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    background: var(--panel-accent);
+    border: 2px solid var(--panel-border-dark);
+    margin-bottom: 6px;
+}
+
+.leaderboard-item .rank {
+    font-size: 10px;
+    color: var(--fantasy-gold);
+    min-width: 30px;
+}
+
+.leaderboard-item .user-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.leaderboard-item .username {
+    font-size: 9px;
+    color: var(--text-primary);
+}
+
+.leaderboard-item .buildings {
+    font-size: 7px;
+    color: var(--text-secondary);
+}
+
+.leaderboard-item .attack-btn {
+    background: var(--fantasy-red);
+    border: 2px solid #A52A2A;
+    color: #fff;
+    padding: 4px 8px;
+    font-size: 14px;
+    cursor: pointer;
+    box-shadow: 2px 2px 0 #000;
+}
+
+.leaderboard-item .attack-btn:hover {
+    background: #B22222;
+}
+
+.leaderboard-item .you-badge {
+    font-size: 7px;
+    color: var(--fantasy-green);
+    padding: 2px 6px;
+    border: 1px solid var(--fantasy-green);
 }

@@ -5200,6 +5200,29 @@ export class MainScene extends Phaser.Scene {
                     this.updateBattleStats();
                 });
             },
+            startAttackOnUser: (userId: string, username: string) => {
+                this.showCloudTransition(async () => {
+                    // Set UI immediately
+                    gameManager.setGameMode('ATTACK');
+                    this.mode = 'ATTACK';
+
+                    this.clearScene();
+                    // Load the specific user's base
+                    const success = await this.generateEnemyVillageFromUser(userId, username);
+                    if (!success) {
+                        // Fallback to random if user has no base
+                        await this.generateOnlineEnemyVillage();
+                    }
+                    this.centerCamera();
+                    // Initialize battle stats
+                    this.initialEnemyBuildings = this.buildings.filter(b => b.owner === 'ENEMY' && b.type !== 'wall').length;
+                    this.destroyedBuildings = 0;
+                    this.goldLooted = 0;
+                    this.elixirLooted = 0;
+                    this.raidEndScheduled = false;
+                    this.updateBattleStats();
+                });
+            },
             findNewMap: () => {
                 // Only allow if no troops have been deployed yet
                 const deployedTroops = this.troops.filter(t => t.owner === 'PLAYER').length;
@@ -5436,6 +5459,30 @@ export class MainScene extends Phaser.Scene {
         return true;
     }
 
+    // Load a specific user's base for attack (from leaderboard)
+    public async generateEnemyVillageFromUser(userId: string, username: string): Promise<boolean> {
+        const userBase = await Backend.loadFromCloud(userId);
+        if (!userBase || userBase.buildings.length === 0) {
+            return false;
+        }
+
+        // Track enemy info for village name and notifications
+        this.currentEnemyWorld = {
+            id: userId,
+            username: username,
+            isBot: false
+        };
+
+        const lootMap = LootSystem.calculateLootDistribution(userBase.buildings, userBase.resources.gold, userBase.resources.elixir);
+
+        userBase.buildings.forEach((b: any) => {
+            const inst = this.instantiateBuilding(b, 'ENEMY');
+            if (inst) inst.loot = lootMap.get(b.id);
+        });
+
+        this.updateVillageName();
+        return true;
+    }
 
 
     private findWardTarget(ward: Troop): Troop | PlacedBuilding | null {
