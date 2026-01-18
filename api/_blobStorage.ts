@@ -283,6 +283,21 @@ export const BlobStorage = {
             base.resources.elixir = Math.max(0, base.resources.elixir - elixir);
             await this.saveBase(base);
         }
+    },
+
+    async wipeBases(): Promise<number> {
+        try {
+            const { blobs } = await list({ prefix: 'bases/' });
+            if (blobs.length > 0) {
+                const urls = blobs.map(b => b.url);
+                await del(urls);
+                return urls.length;
+            }
+            return 0;
+        } catch (error) {
+            console.error('Failed to wipe bases:', error);
+            throw error;
+        }
     }
 };
 

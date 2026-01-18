@@ -759,7 +759,12 @@ export class MainScene extends Phaser.Scene {
         }
 
         // If newly created or empty, return false to trigger default village placement
-        if (world.buildings.length === 0) return false;
+        // Require at least 1 building and it MUST include a Town Hall
+        const hasTownHall = world.buildings.some(b => b.type === 'town_hall');
+        if (world.buildings.length === 0 || !hasTownHall) {
+            console.log("loadSavedBase: No buildings or Town Hall missing. Triggering default placement.");
+            return false;
+        }
 
         this.buildings = []; // Clear current
         world.buildings.forEach(b => {
@@ -3930,6 +3935,12 @@ export class MainScene extends Phaser.Scene {
 
 
     private destroyBuilding(b: PlacedBuilding) {
+        // SAFETY: Town Hall cannot be deleted by the player
+        if (this.mode === 'HOME' && b.type === 'town_hall') {
+            console.log("Cannot destroy Town Hall in HOME mode.");
+            return;
+        }
+
         const index = this.buildings.findIndex(x => x.id === b.id);
         if (index === -1) return;
 
