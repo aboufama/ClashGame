@@ -167,7 +167,7 @@ export class GameBackend {
         // Save to local storage
         localStorage.setItem(`clashIso_world_${world.id}`, JSON.stringify(world));
 
-        // Debounced cloud sync (every 2 seconds max)
+        // Debounced cloud sync (every 500ms max for faster persistence)
         if (this.isOnline()) {
             this.pendingSave = world;
             if (!this.saveTimeout) {
@@ -177,7 +177,7 @@ export class GameBackend {
                         this.pendingSave = null;
                     }
                     this.saveTimeout = null;
-                }, 2000);
+                }, 500);
             }
         }
     }

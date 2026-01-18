@@ -5295,6 +5295,9 @@ export class MainScene extends Phaser.Scene {
                         gameManager.refreshCampCapacity(campLevels);
                     }
 
+                    // Persist upgrade to backend
+                    Backend.upgradeBuilding(this.userId, this.selectedInWorld.id);
+
                     return this.selectedInWorld.level;
                 }
                 return null;
