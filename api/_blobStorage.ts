@@ -97,6 +97,7 @@ export const BlobStorage = {
             const result = await put(`users/${user.id}.json`, JSON.stringify(user), {
                 access: 'public',
                 addRandomSuffix: false,
+                allowOverwrite: true,
             });
             console.log('User created successfully:', user.id, result.url);
         } catch (error) {
@@ -112,6 +113,7 @@ export const BlobStorage = {
             await put(`users/${id}.json`, JSON.stringify(user), {
                 access: 'public',
                 addRandomSuffix: false,
+                allowOverwrite: true,
             });
         }
     },
@@ -167,6 +169,7 @@ export const BlobStorage = {
             const result = await put(`bases/${base.ownerId}.json`, JSON.stringify(base), {
                 access: 'public',
                 addRandomSuffix: false,
+                allowOverwrite: true,
             });
             console.log('Base saved successfully:', base.ownerId, result.url);
         } catch (error) {
@@ -229,6 +232,7 @@ export const BlobStorage = {
         await put(`notifications/${notification.victimId}.json`, JSON.stringify(existing), {
             access: 'public',
             addRandomSuffix: false,
+            allowOverwrite: true,
         });
     },
 
@@ -246,6 +250,7 @@ export const BlobStorage = {
             await put(`notifications/${userId}.json`, JSON.stringify(notifications), {
                 access: 'public',
                 addRandomSuffix: false,
+                allowOverwrite: true,
             });
         }
     },
