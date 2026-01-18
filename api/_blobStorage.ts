@@ -93,10 +93,16 @@ export const BlobStorage = {
     },
 
     async createUser(user: User): Promise<void> {
-        await put(`users/${user.id}.json`, JSON.stringify(user), {
-            access: 'public',
-            addRandomSuffix: false,
-        });
+        try {
+            const result = await put(`users/${user.id}.json`, JSON.stringify(user), {
+                access: 'public',
+                addRandomSuffix: false,
+            });
+            console.log('User created successfully:', user.id, result.url);
+        } catch (error) {
+            console.error('Failed to create user in blob storage:', error);
+            throw error; // Re-throw to propagate to API handler
+        }
     },
 
     async updateUserLogin(id: string): Promise<void> {
@@ -157,10 +163,16 @@ export const BlobStorage = {
     },
 
     async saveBase(base: StoredBase): Promise<void> {
-        await put(`bases/${base.ownerId}.json`, JSON.stringify(base), {
-            access: 'public',
-            addRandomSuffix: false,
-        });
+        try {
+            const result = await put(`bases/${base.ownerId}.json`, JSON.stringify(base), {
+                access: 'public',
+                addRandomSuffix: false,
+            });
+            console.log('Base saved successfully:', base.ownerId, result.url);
+        } catch (error) {
+            console.error('Failed to save base in blob storage:', error);
+            throw error;
+        }
     },
 
     async getOnlineBases(excludeUserId: string, limit: number = 10): Promise<StoredBase[]> {

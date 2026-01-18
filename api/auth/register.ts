@@ -67,6 +67,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   } catch (error) {
     console.error('Registration error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error';
+    return res.status(500).json({
+      error: 'Registration failed',
+      details: errorMessage,
+      hint: 'Check if BLOB_READ_WRITE_TOKEN is configured in Vercel'
+    });
   }
 }

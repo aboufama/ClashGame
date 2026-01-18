@@ -72,7 +72,10 @@ export class AuthService {
             const data = await response.json();
 
             if (!response.ok) {
-                return { success: false, error: data.error || 'Registration failed' };
+                const errorMsg = data.details
+                    ? `${data.error}: ${data.details}`
+                    : (data.error || 'Registration failed');
+                return { success: false, error: errorMsg };
             }
 
             this.currentUser = data.user;
