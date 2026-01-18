@@ -6,7 +6,7 @@ import { BUILDING_DEFINITIONS } from '../config/GameDefinitions';
 export class BuildingRenderer {
 
     /**
-     * Draws the Town Hall with all its ornate details.
+     * Draws the Town Hall as a simple, bright building with flag.
      */
     static drawTownHall(graphics: Phaser.GameObjects.Graphics, gridX: number, gridY: number, time: number, alpha: number = 1, tint: number | null = null, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
         const info = BUILDING_DEFINITIONS['town_hall'];
@@ -16,178 +16,181 @@ export class BuildingRenderer {
         const c4 = IsoUtils.cartToIso(gridX, gridY + info.height);
         const center = IsoUtils.cartToIso(gridX + info.width / 2, gridY + info.height / 2);
 
-        const g = baseGraphics || graphics; // Draw floor on baseGraphics
+        const g = baseGraphics || graphics;
 
-        const height = 65;
+        // Building dimensions - simple box
+        const height = 55;
+
+        // Wall top corners
         const t1 = new Phaser.Math.Vector2(c1.x, c1.y - height);
         const t2 = new Phaser.Math.Vector2(c2.x, c2.y - height);
         const t3 = new Phaser.Math.Vector2(c3.x, c3.y - height);
         const t4 = new Phaser.Math.Vector2(c4.x, c4.y - height);
 
         if (!skipBase) {
-            // === ORNATE STONE FOUNDATION ===
-            g.fillStyle(tint ?? 0x7a6a5a, alpha);
+            // === SIMPLE STONE FOUNDATION ===
+            g.fillStyle(tint ?? 0x9a8a7a, alpha);
             g.fillPoints([c1, c2, c3, c4], true);
 
-            // Foundation borders
-            g.lineStyle(2, 0x5a4a3a, alpha);
-            g.strokePoints([c1, c2, c3, c4], true, true);
-
-            // Red carpet leading to door
-            g.fillStyle(0xaa2222, alpha);
-            g.fillCircle(center.x, center.y, 10);
-
-            // Foundation stone texture (moved to baseGraphics)
-            g.fillStyle(0x6a5a4a, alpha * 0.4);
+            // Light stone texture
+            g.fillStyle(0xa89888, alpha * 0.4);
             for (let i = 0; i < 6; i++) {
-                const px = center.x + Math.sin(i * 2.3) * 20;
-                const py = center.y + Math.cos(i * 1.7) * 12;
-                g.fillCircle(px, py, 3 + Math.sin(i) * 1.5);
+                const px = center.x + Math.sin(i * 2.3) * 22;
+                const py = center.y + Math.cos(i * 1.7) * 13;
+                g.fillCircle(px, py, 3);
             }
+
+            // Foundation border
+            g.lineStyle(2, 0x7a6a5a, alpha);
+            g.strokePoints([c1, c2, c3, c4], true, true);
         }
 
         if (!onlyBase) {
-            // === MAGNIFICENT WALLS ===
-            // Right wall (shadow side) - clean surface
-            graphics.fillStyle(tint ?? 0x5a4a3a, alpha);
+            const windowGlow = 0.75 + Math.sin(time / 600) * 0.05;  // Very subtle pulse
+
+            // === SIMPLE WALLS (warm stone colors) ===
+            // Right wall (slightly darker)
+            graphics.fillStyle(tint ?? 0xc4a484, alpha);
             graphics.fillPoints([c2, c3, t3, t2], true);
 
-            // Left wall (lit side) - clean surface
-            graphics.fillStyle(tint ?? 0x8a7a6a, alpha);
+            // Left wall (lighter)
+            graphics.fillStyle(tint ?? 0xdcc4a4, alpha);
             graphics.fillPoints([c3, c4, t4, t3], true);
 
-            // Wall edges
-            graphics.lineStyle(2, 0x3a2a1a, 0.5 * alpha);
-            graphics.strokePoints([c2, c3, t3, t2], true, true);
-            graphics.strokePoints([c3, c4, t4, t3], true, true);
+            // Wall edge outlines
+            graphics.lineStyle(2, 0xa48464, alpha * 0.7);
+            graphics.lineBetween(c2.x, c2.y, t2.x, t2.y);
+            graphics.lineBetween(c3.x, c3.y, t3.x, t3.y);
+            graphics.lineBetween(c4.x, c4.y, t4.x, t4.y);
 
-            // === ARCHED WINDOWS WITH WARM GLOW (ISOMETRIC) ===
-            // Window glow
-            const windowGlow = 0.6 + Math.sin(time / 300) * 0.15;
+            // === ISOMETRIC WINDOWS matching wall angles ===
+            const rightWallDir = { x: (c3.x - c2.x), y: (c3.y - c2.y) };
+            const leftWallDir = { x: (c4.x - c3.x), y: (c4.y - c3.y) };
 
-            // Calculate wall directions for isometric window placement
-            const rightWallDirX = (c3.x - c2.x);
-            const rightWallDirY = (c3.y - c2.y);
-            const leftWallDirX = (c4.x - c3.x);
-            const leftWallDirY = (c4.y - c3.y);
-
-            // Right wall windows
-            for (let i = 0; i < 2; i++) {
-                const t = 0.3 + i * 0.4;
-                const baseX = c2.x + rightWallDirX * t;
-                const baseY = c2.y + rightWallDirY * t - height * 0.5;
-                const wh = 14;
-                const skewX = rightWallDirX * 0.08;
-                const skewY = rightWallDirY * 0.08;
-                graphics.fillStyle(0x3a2a1a, alpha);
-                graphics.beginPath();
-                graphics.moveTo(baseX - skewX * 2, baseY - wh / 2);
-                graphics.lineTo(baseX + skewX * 2, baseY - wh / 2 + skewY * 4);
-                graphics.lineTo(baseX + skewX * 2, baseY + wh / 2 + skewY * 4);
-                graphics.lineTo(baseX - skewX * 2, baseY + wh / 2);
-                graphics.closePath();
-                graphics.fillPath();
-                graphics.fillStyle(0xffdd88, alpha * windowGlow);
-                graphics.beginPath();
-                graphics.moveTo(baseX - skewX * 1.5, baseY - wh / 2 + 2);
-                graphics.lineTo(baseX + skewX * 1.5, baseY - wh / 2 + 2 + skewY * 3);
-                graphics.lineTo(baseX + skewX * 1.5, baseY + wh / 2 - 2 + skewY * 3);
-                graphics.lineTo(baseX - skewX * 1.5, baseY + wh / 2 - 2);
-                graphics.closePath();
-                graphics.fillPath();
-            }
-
-            // Left wall windows
-            for (let i = 0; i < 2; i++) {
-                const t = 0.3 + i * 0.4;
-                const baseX = c3.x + leftWallDirX * t;
-                const baseY = c3.y + leftWallDirY * t - height * 0.5;
-                const wh = 14;
-                const skewX = leftWallDirX * 0.08;
-                const skewY = leftWallDirY * 0.08;
-                graphics.fillStyle(0x3a2a1a, alpha);
-                graphics.beginPath();
-                graphics.moveTo(baseX - skewX * 2, baseY - wh / 2);
-                graphics.lineTo(baseX + skewX * 2, baseY - wh / 2 + skewY * 4);
-                graphics.lineTo(baseX + skewX * 2, baseY + wh / 2 + skewY * 4);
-                graphics.lineTo(baseX - skewX * 2, baseY + wh / 2);
-                graphics.closePath();
-                graphics.fillPath();
-                graphics.fillStyle(0xffdd88, alpha * windowGlow);
-                graphics.beginPath();
-                graphics.moveTo(baseX - skewX * 1.5, baseY - wh / 2 + 2);
-                graphics.lineTo(baseX + skewX * 1.5, baseY - wh / 2 + 2 + skewY * 3);
-                graphics.lineTo(baseX + skewX * 1.5, baseY + wh / 2 - 2 + skewY * 3);
-                graphics.lineTo(baseX - skewX * 1.5, baseY + wh / 2 - 2);
-                graphics.closePath();
-                graphics.fillPath();
-            }
-
-            // === DECORATIVE CORNER TOWERS ===
-            const towerHeight = 25;
-            const towerPositions = [
-                { x: c1.x + 8, y: c1.y - 5 }
-            ];
-
-            for (const pos of towerPositions) {
-                graphics.fillStyle(0x6a5a4a, alpha);
-                graphics.fillRect(pos.x - 6, pos.y - height - towerHeight, 12, height + towerHeight);
-                graphics.lineStyle(1, 0x4a3a2a, alpha);
-                graphics.strokeRect(pos.x - 6, pos.y - height - towerHeight, 12, height + towerHeight);
-
-                graphics.fillStyle(0xb84c4c, alpha);
-                graphics.beginPath();
-                graphics.moveTo(pos.x, pos.y - height - towerHeight - 15);
-                graphics.lineTo(pos.x - 8, pos.y - height - towerHeight);
-                graphics.lineTo(pos.x + 8, pos.y - height - towerHeight);
-                graphics.closePath();
-                graphics.fillPath();
-
-                graphics.lineStyle(1, 0xd85c5c, alpha * 0.5);
-                graphics.lineBetween(pos.x, pos.y - height - towerHeight - 15, pos.x + 8, pos.y - height - towerHeight);
-
-                graphics.fillStyle(0xffdd88, alpha * windowGlow);
-                graphics.fillCircle(pos.x, pos.y - height - 10, 4);
-            }
-
-            // === MAGNIFICENT ROOF ===
-            const roofColor = tint ?? 0xc86444;
-
-            graphics.fillStyle(roofColor, alpha);
-            graphics.fillPoints([t1, t2, t3, t4], true);
-
-            const peakHeight = 20;
-            const peak = new Phaser.Math.Vector2(center.x, center.y - height - peakHeight);
-
-            graphics.fillStyle(0xb85434, alpha);
-            graphics.fillTriangle(t1.x, t1.y, t2.x, t2.y, peak.x, peak.y);
-            graphics.fillStyle(0x983424, alpha);
-            graphics.fillTriangle(t2.x, t2.y, t3.x, t3.y, peak.x, peak.y);
-            graphics.fillTriangle(t3.x, t3.y, t4.x, t4.y, peak.x, peak.y);
-            graphics.fillStyle(0xc86444, alpha);
-            graphics.fillTriangle(t4.x, t4.y, t1.x, t1.y, peak.x, peak.y);
-
-            graphics.lineStyle(2, 0xd4a04a, alpha);
-            graphics.lineBetween(t1.x, t1.y, t2.x, t2.y);
-            graphics.lineBetween(t1.x, t1.y, t4.x, t4.y);
-            graphics.lineBetween(t2.x, t2.y, peak.x, peak.y);
-            graphics.lineBetween(t4.x, t4.y, peak.x, peak.y);
-
-            graphics.fillStyle(0xd4a04a, alpha);
-            graphics.fillCircle(peak.x, peak.y - 2, 4);
-            graphics.lineStyle(2, 0xffffff, alpha * 0.6);
-            graphics.lineBetween(peak.x, peak.y - 4, peak.x, peak.y - 12);
-
-            // Flag (simplified for renderer) - You can add the flag part if needed or keep it simple
-            const flagWave = Math.sin(time / 200) * 5;
-            graphics.fillStyle(0xdd2222, alpha);
+            // Right wall window - parallelogram following the c2->c3 wall
+            const rMidPt = 0.5;  // Position along wall (0 to 1)
+            const rWinBaseX = c2.x + rightWallDir.x * rMidPt;
+            const rWinBaseY = c2.y + rightWallDir.y * rMidPt;
+            const rWinTopY = rWinBaseY - height * 0.7;  // Window top
+            const rWinBotY = rWinBaseY - height * 0.3;  // Window bottom
+            const rWinWidth = rightWallDir.x * 0.15;  // Width along wall direction
+            const rWinSlant = rightWallDir.y * 0.15;  // Vertical slant matching wall
+            // Window frame
+            graphics.fillStyle(0x4a3020, alpha);
             graphics.beginPath();
-            graphics.moveTo(peak.x, peak.y - 12);
-            graphics.lineTo(peak.x + 12, peak.y - 10 + flagWave * 0.2);
-            graphics.lineTo(peak.x + 12, peak.y - 4 + flagWave * 0.2);
-            graphics.lineTo(peak.x, peak.y - 6);
+            graphics.moveTo(rWinBaseX - rWinWidth, rWinTopY - rWinSlant);
+            graphics.lineTo(rWinBaseX + rWinWidth, rWinTopY + rWinSlant);
+            graphics.lineTo(rWinBaseX + rWinWidth, rWinBotY + rWinSlant);
+            graphics.lineTo(rWinBaseX - rWinWidth, rWinBotY - rWinSlant);
             graphics.closePath();
             graphics.fillPath();
+            // Window glass glow
+            graphics.fillStyle(0xffeebb, alpha * windowGlow);
+            graphics.beginPath();
+            graphics.moveTo(rWinBaseX - rWinWidth + 2, rWinTopY - rWinSlant + 2);
+            graphics.lineTo(rWinBaseX + rWinWidth - 2, rWinTopY + rWinSlant + 2);
+            graphics.lineTo(rWinBaseX + rWinWidth - 2, rWinBotY + rWinSlant - 2);
+            graphics.lineTo(rWinBaseX - rWinWidth + 2, rWinBotY - rWinSlant - 2);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Left wall window - parallelogram following the c3->c4 wall
+            const lMidPt = 0.5;
+            const lWinBaseX = c3.x + leftWallDir.x * lMidPt;
+            const lWinBaseY = c3.y + leftWallDir.y * lMidPt;
+            const lWinTopY = lWinBaseY - height * 0.7;
+            const lWinBotY = lWinBaseY - height * 0.3;
+            const lWinWidth = leftWallDir.x * 0.15;
+            const lWinSlant = leftWallDir.y * 0.15;
+            // Window frame
+            graphics.fillStyle(0x4a3020, alpha);
+            graphics.beginPath();
+            graphics.moveTo(lWinBaseX - lWinWidth, lWinTopY - lWinSlant);
+            graphics.lineTo(lWinBaseX + lWinWidth, lWinTopY + lWinSlant);
+            graphics.lineTo(lWinBaseX + lWinWidth, lWinBotY + lWinSlant);
+            graphics.lineTo(lWinBaseX - lWinWidth, lWinBotY - lWinSlant);
+            graphics.closePath();
+            graphics.fillPath();
+            // Window glass glow
+            graphics.fillStyle(0xffeebb, alpha * windowGlow);
+            graphics.beginPath();
+            graphics.moveTo(lWinBaseX - lWinWidth + 2, lWinTopY - lWinSlant + 2);
+            graphics.lineTo(lWinBaseX + lWinWidth - 2, lWinTopY + lWinSlant + 2);
+            graphics.lineTo(lWinBaseX + lWinWidth - 2, lWinBotY + lWinSlant - 2);
+            graphics.lineTo(lWinBaseX - lWinWidth + 2, lWinBotY - lWinSlant - 2);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // === SIMPLE PITCHED ROOF ===
+            // Roof base (flat top)
+            graphics.fillStyle(tint ?? 0xd4a484, alpha);
+            graphics.fillPoints([t1, t2, t3, t4], true);
+
+            // Roof peak
+            const peakHeight = 25;
+            const peak = new Phaser.Math.Vector2(center.x, center.y - height - peakHeight);
+
+            // Front roof face (lighter)
+            graphics.fillStyle(0xcc6644, alpha);
+            graphics.fillTriangle(t4.x, t4.y, t1.x, t1.y, peak.x, peak.y);
+
+            // Right roof face
+            graphics.fillStyle(0xb85534, alpha);
+            graphics.fillTriangle(t1.x, t1.y, t2.x, t2.y, peak.x, peak.y);
+
+            // Back roof faces (darker)
+            graphics.fillStyle(0xa84424, alpha);
+            graphics.fillTriangle(t2.x, t2.y, t3.x, t3.y, peak.x, peak.y);
+            graphics.fillTriangle(t3.x, t3.y, t4.x, t4.y, peak.x, peak.y);
+
+            // Roof ridge lines
+            graphics.lineStyle(2, 0xd4a04a, alpha * 0.8);
+            graphics.lineBetween(t1.x, t1.y, peak.x, peak.y);
+            graphics.lineBetween(t4.x, t4.y, peak.x, peak.y);
+
+            // === PROMINENT FLAG POLE AND BANNER ===
+            const flagPoleX = center.x;
+            const flagPoleY = center.y - height - peakHeight + 5;
+            const flagWave = Math.sin(time / 150) * 5;
+
+            // Flag pole
+            graphics.lineStyle(4, 0x6a5040, alpha);
+            graphics.lineBetween(flagPoleX, flagPoleY, flagPoleX, flagPoleY - 35);
+
+            // Pole top finial (golden ball)
+            graphics.fillStyle(0xffd700, alpha);
+            graphics.fillCircle(flagPoleX, flagPoleY - 38, 5);
+
+            // Large waving banner
+            graphics.fillStyle(0xdd3333, alpha);
+            graphics.beginPath();
+            graphics.moveTo(flagPoleX, flagPoleY - 35);
+            graphics.lineTo(flagPoleX + 25, flagPoleY - 30 + flagWave * 0.3);
+            graphics.lineTo(flagPoleX + 22, flagPoleY - 22 + flagWave * 0.5);
+            graphics.lineTo(flagPoleX + 25, flagPoleY - 14 + flagWave * 0.3);
+            graphics.lineTo(flagPoleX, flagPoleY - 17);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Banner golden stripe
+            graphics.fillStyle(0xffd700, alpha);
+            graphics.beginPath();
+            graphics.moveTo(flagPoleX, flagPoleY - 30);
+            graphics.lineTo(flagPoleX + 20, flagPoleY - 26 + flagWave * 0.4);
+            graphics.lineTo(flagPoleX + 20, flagPoleY - 23 + flagWave * 0.4);
+            graphics.lineTo(flagPoleX, flagPoleY - 27);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Banner shadow/outline
+            graphics.lineStyle(1, 0x991111, alpha * 0.6);
+            graphics.beginPath();
+            graphics.moveTo(flagPoleX, flagPoleY - 35);
+            graphics.lineTo(flagPoleX + 25, flagPoleY - 30 + flagWave * 0.3);
+            graphics.lineTo(flagPoleX + 22, flagPoleY - 22 + flagWave * 0.5);
+            graphics.lineTo(flagPoleX + 25, flagPoleY - 14 + flagWave * 0.3);
+            graphics.lineTo(flagPoleX, flagPoleY - 17);
+            graphics.strokePath();
         }
     }
 

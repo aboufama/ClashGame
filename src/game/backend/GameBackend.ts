@@ -1,14 +1,25 @@
 
 import type { SerializedWorld, SerializedBuilding, SerializedObstacle } from '../data/Models';
 import { BUILDING_DEFINITIONS, OBSTACLE_DEFINITIONS, type BuildingType, type ObstacleType, MAP_SIZE, getBuildingStats } from '../config/GameDefinitions';
+import { Auth } from './AuthService';
+
+// API base URL
+const API_BASE = '';
 
 export class GameBackend {
     private worlds: Map<string, SerializedWorld> = new Map();
     static instance: GameBackend;
+    private saveTimeout: ReturnType<typeof setTimeout> | null = null;
+    private pendingSave: SerializedWorld | null = null;
 
     constructor() {
         if (GameBackend.instance) return GameBackend.instance;
         GameBackend.instance = this;
+    }
+
+    // Check if we're in online mode
+    private isOnline(): boolean {
+        return Auth.isOnlineMode();
     }
 
     public async deleteWorld(worldId: string): Promise<void> {
@@ -16,20 +27,177 @@ export class GameBackend {
         localStorage.removeItem(`clashIso_world_${worldId}`);
     }
 
-    // --- LOCAL STORAGE ONLY ---
+    // --- CLOUD SYNC ---
+
+    private async syncToCloud(world: SerializedWorld): Promise<void> {
+        if (!this.isOnline() || world.ownerId === 'ENEMY' || world.id.startsWith('enemy_') || world.id.startsWith('bot_')) {
+            return;
+        }
+
+        try {
+            const user = Auth.getCurrentUser();
+            await fetch(`${API_BASE}/api/bases/save`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId: user?.id,
+                    username: user?.username,
+                    buildings: world.buildings,
+                    obstacles: world.obstacles,
+                    resources: world.resources,
+                    army: world.army
+                })
+            });
+        } catch (error) {
+            console.error('Failed to sync to cloud:', error);
+        }
+    }
+
+    public async loadFromCloud(userId: string): Promise<SerializedWorld | null> {
+        if (!this.isOnline()) return null;
+
+        try {
+            const response = await fetch(`${API_BASE}/api/bases/load?userId=${encodeURIComponent(userId)}`);
+            if (!response.ok) return null;
+
+            const data = await response.json();
+            if (data.success && data.base) {
+                // Cache locally
+                this.worlds.set(userId, data.base);
+                return data.base;
+            }
+            return null;
+        } catch (error) {
+            console.error('Failed to load from cloud:', error);
+            return null;
+        }
+    }
+
+    public async getOnlineBase(excludeUserId: string): Promise<SerializedWorld | null> {
+        try {
+            const response = await fetch(`${API_BASE}/api/bases/online?excludeUserId=${encodeURIComponent(excludeUserId)}`);
+            if (!response.ok) return null;
+
+            const data = await response.json();
+            if (data.success && data.base) {
+                return data.base;
+            }
+            return null;
+        } catch (error) {
+            console.error('Failed to get online base:', error);
+            return null;
+        }
+    }
+
+    // Record attack result and notify victim
+    public async recordAttack(victimId: string, attackerId: string, attackerName: string, goldLooted: number, elixirLooted: number, destruction: number): Promise<void> {
+        if (!this.isOnline()) return;
+
+        try {
+            await fetch(`${API_BASE}/api/notifications/attack`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    victimId,
+                    attackerId,
+                    attackerName,
+                    goldLooted,
+                    elixirLooted,
+                    destruction
+                })
+            });
+        } catch (error) {
+            console.error('Failed to record attack:', error);
+        }
+    }
+
+    // Get attack notifications
+    public async getNotifications(userId: string): Promise<any[]> {
+        if (!this.isOnline()) return [];
+
+        try {
+            const response = await fetch(`${API_BASE}/api/notifications/attack?userId=${encodeURIComponent(userId)}`);
+            if (!response.ok) return [];
+
+            const data = await response.json();
+            return data.notifications || [];
+        } catch (error) {
+            console.error('Failed to get notifications:', error);
+            return [];
+        }
+    }
+
+    public async getUnreadNotificationCount(userId: string): Promise<number> {
+        if (!this.isOnline()) return 0;
+
+        try {
+            const response = await fetch(`${API_BASE}/api/notifications/attack?userId=${encodeURIComponent(userId)}`);
+            if (!response.ok) return 0;
+
+            const data = await response.json();
+            return data.unreadCount || 0;
+        } catch (error) {
+            return 0;
+        }
+    }
+
+    public async markNotificationsRead(userId: string): Promise<void> {
+        if (!this.isOnline()) return;
+
+        try {
+            await fetch(`${API_BASE}/api/notifications/attack`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId })
+            });
+        } catch (error) {
+            console.error('Failed to mark notifications read:', error);
+        }
+    }
+
+    // --- LOCAL STORAGE ---
 
     public async saveWorld(world: SerializedWorld): Promise<void> {
         world.lastSaveTime = Date.now();
-        this.worlds.set(world.id, world); // Update local cache
-        if (world.ownerId === 'ENEMY' || world.id.startsWith('enemy_')) return;
+        this.worlds.set(world.id, world);
+
+        // Don't save enemy worlds
+        if (world.ownerId === 'ENEMY' || world.id.startsWith('enemy_') || world.id.startsWith('bot_')) return;
+
+        // Save to local storage
         localStorage.setItem(`clashIso_world_${world.id}`, JSON.stringify(world));
+
+        // Debounced cloud sync (every 2 seconds max)
+        if (this.isOnline()) {
+            this.pendingSave = world;
+            if (!this.saveTimeout) {
+                this.saveTimeout = setTimeout(async () => {
+                    if (this.pendingSave) {
+                        await this.syncToCloud(this.pendingSave);
+                        this.pendingSave = null;
+                    }
+                    this.saveTimeout = null;
+                }, 2000);
+            }
+        }
     }
 
     public async getWorld(id: string): Promise<SerializedWorld | null> {
         // 1. Check Memory Cache
         if (this.worlds.has(id)) return this.worlds.get(id)!;
 
-        // 2. Check Local Storage
+        // 2. Try cloud first if online
+        if (this.isOnline() && !id.startsWith('enemy_') && !id.startsWith('bot_')) {
+            const cloudWorld = await this.loadFromCloud(id);
+            if (cloudWorld) {
+                this.worlds.set(id, cloudWorld);
+                // Also update local storage
+                localStorage.setItem(`clashIso_world_${id}`, JSON.stringify(cloudWorld));
+                return cloudWorld;
+            }
+        }
+
+        // 3. Check Local Storage
         const saved = localStorage.getItem(`clashIso_world_${id}`);
         if (saved) {
             try {
@@ -53,10 +221,11 @@ export class GameBackend {
     }
 
     public async createWorld(id: string, owner: string): Promise<SerializedWorld> {
+        const user = Auth.getCurrentUser();
         const w: SerializedWorld = {
             id,
             ownerId: owner,
-            username: 'Player',
+            username: user?.username || 'Commander',
             buildings: [],
             resources: { gold: 100000, elixir: 100000 },
             army: {},

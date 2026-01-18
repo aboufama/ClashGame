@@ -472,6 +472,13 @@ button:disabled {
 .btn-icon {
     font-size: 20px;
     filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.8));
+    /* Support for CSS pixel art icons */
+    width: 28px;
+    height: 28px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .btn-label {
@@ -1767,6 +1774,7 @@ body.is-touch {
 
 /* Mobile Modal adjustments */
 @media (max-width: 768px) {
+
     .training-modal,
     .modal-content {
         width: 95vw;
@@ -1997,5 +2005,448 @@ body.is-touch {
 
     .mobile-action-btn.next-btn {
         right: max(12px, env(safe-area-inset-right));
+    }
+}
+
+/* ============================================
+   LOGIN SCREEN
+   ============================================ */
+
+.login-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: linear-gradient(135deg, #1a0f0a 0%, #2d1810 50%, #1a0f0a 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Press Start 2P', monospace;
+    z-index: 1000;
+}
+
+.login-screen::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image:
+        radial-gradient(ellipse at 20% 30%, rgba(255, 215, 0, 0.05) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 70%, rgba(139, 69, 19, 0.1) 0%, transparent 50%);
+    pointer-events: none;
+}
+
+.login-container {
+    background: var(--panel-bg);
+    border: 4px solid var(--panel-border);
+    border-radius: 8px;
+    padding: 32px 40px;
+    max-width: 400px;
+    width: 90%;
+    box-shadow:
+        0 0 0 2px var(--panel-border-dark),
+        0 8px 32px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    position: relative;
+}
+
+.login-header {
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.login-header h1 {
+    color: var(--fantasy-gold);
+    font-size: 24px;
+    margin: 0 0 12px 0;
+    text-shadow:
+        2px 2px 0 #000,
+        0 0 10px rgba(255, 215, 0, 0.3);
+    letter-spacing: 2px;
+}
+
+.login-header .subtitle {
+    color: var(--text-primary);
+    font-size: 8px;
+    margin: 0;
+    opacity: 0.7;
+}
+
+.login-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.login-tabs .tab {
+    flex: 1;
+    background: var(--panel-accent);
+    border: 2px solid var(--panel-border);
+    color: var(--text-primary);
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px;
+    padding: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.login-tabs .tab:hover {
+    background: var(--panel-border);
+}
+
+.login-tabs .tab.active {
+    background: var(--fantasy-gold-dark);
+    border-color: var(--fantasy-gold);
+    color: #fff;
+}
+
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.input-group label {
+    color: var(--text-secondary);
+    font-size: 8px;
+    letter-spacing: 1px;
+}
+
+.input-group input {
+    background: #1a1410;
+    border: 2px solid var(--panel-border);
+    color: var(--text-primary);
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px;
+    padding: 12px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.input-group input:focus {
+    border-color: var(--fantasy-gold);
+}
+
+.input-group input::placeholder {
+    color: #666;
+}
+
+.error-message {
+    background: rgba(139, 0, 0, 0.3);
+    border: 2px solid var(--fantasy-red);
+    color: #ff6666;
+    font-size: 8px;
+    padding: 10px;
+    text-align: center;
+}
+
+.submit-btn {
+    background: linear-gradient(180deg, #4a9c3d 0%, #2d6b25 100%);
+    border: 3px solid #5bb34d;
+    color: #fff;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 12px;
+    padding: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-shadow: 1px 1px 0 #000;
+    box-shadow: 0 4px 0 #1a4015;
+}
+
+.submit-btn:hover:not(:disabled) {
+    background: linear-gradient(180deg, #5bb34d 0%, #3d8532 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 0 #1a4015;
+}
+
+.submit-btn:active:not(:disabled) {
+    transform: translateY(2px);
+    box-shadow: 0 2px 0 #1a4015;
+}
+
+.submit-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.divider {
+    display: flex;
+    align-items: center;
+    margin: 16px 0;
+}
+
+.divider::before,
+.divider::after {
+    content: '';
+    flex: 1;
+    height: 2px;
+    background: var(--panel-border);
+}
+
+.divider span {
+    color: var(--text-primary);
+    font-size: 8px;
+    padding: 0 12px;
+    opacity: 0.5;
+}
+
+.offline-btn {
+    background: linear-gradient(180deg, #666 0%, #444 100%);
+    border: 3px solid #888;
+    color: #fff;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px;
+    padding: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-shadow: 1px 1px 0 #000;
+    box-shadow: 0 4px 0 #333;
+    width: 100%;
+}
+
+.offline-btn:hover:not(:disabled) {
+    background: linear-gradient(180deg, #777 0%, #555 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 0 #333;
+}
+
+.offline-btn:active:not(:disabled) {
+    transform: translateY(2px);
+    box-shadow: 0 2px 0 #333;
+}
+
+.offline-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.info-text {
+    color: var(--text-primary);
+    font-size: 7px;
+    text-align: center;
+    margin-top: 16px;
+    opacity: 0.6;
+    line-height: 1.6;
+}
+
+/* Notifications Bell */
+.notifications-container {
+    position: relative;
+}
+
+.notifications-btn {
+    background: var(--panel-accent);
+    border: 2px solid var(--panel-border);
+    color: var(--text-primary);
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+}
+
+.notifications-btn:hover {
+    background: var(--panel-border);
+}
+
+.notifications-btn .bell-icon {
+    font-size: 16px;
+}
+
+.notification-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: #ff4444;
+    color: #fff;
+    font-size: 8px;
+    font-family: 'Press Start 2P', monospace;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--panel-bg);
+}
+
+.notifications-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 8px;
+    background: var(--panel-bg);
+    border: 3px solid var(--panel-border);
+    min-width: 280px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 100;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.notifications-header {
+    padding: 12px;
+    border-bottom: 2px solid var(--panel-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.notifications-header h3 {
+    margin: 0;
+    font-size: 10px;
+    color: var(--fantasy-gold);
+}
+
+.mark-read-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 8px;
+    cursor: pointer;
+    font-family: 'Press Start 2P', monospace;
+}
+
+.mark-read-btn:hover {
+    color: var(--fantasy-gold);
+}
+
+.notification-item {
+    padding: 12px;
+    border-bottom: 1px solid var(--panel-border);
+    transition: background 0.2s;
+}
+
+.notification-item:hover {
+    background: var(--panel-accent);
+}
+
+.notification-item.unread {
+    background: rgba(255, 215, 0, 0.05);
+    border-left: 3px solid var(--fantasy-gold);
+}
+
+.notification-item .attacker {
+    color: #ff6666;
+    font-size: 9px;
+    margin-bottom: 4px;
+}
+
+.notification-item .loot-info {
+    display: flex;
+    gap: 12px;
+    font-size: 8px;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.notification-item .timestamp {
+    font-size: 7px;
+    color: #666;
+}
+
+.no-notifications {
+    padding: 20px;
+    text-align: center;
+    color: #666;
+    font-size: 8px;
+}
+
+.notifications-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: transparent;
+    z-index: 99;
+}
+
+/* Attack Online Button */
+.attack-online-btn {
+    background: linear-gradient(180deg, #cc4444 0%, #992222 100%);
+    border: 3px solid #ff5555;
+    color: #fff;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px;
+    padding: 12px 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-shadow: 1px 1px 0 #000;
+    box-shadow: 0 4px 0 #661111;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.attack-online-btn:hover:not(:disabled) {
+    background: linear-gradient(180deg, #dd5555 0%, #aa3333 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 0 #661111;
+}
+
+.attack-online-btn:active:not(:disabled) {
+    transform: translateY(2px);
+    box-shadow: 0 2px 0 #661111;
+}
+
+.attack-online-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.attack-online-btn .online-indicator {
+    width: 8px;
+    height: 8px;
+    background: #44ff44;
+    border-radius: 50%;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+/* Mobile Login adjustments */
+@media (max-width: 480px) {
+    .login-container {
+        padding: 24px;
+    }
+
+    .login-header h1 {
+        font-size: 18px;
+    }
+
+    .login-tabs .tab {
+        font-size: 8px;
+        padding: 8px;
+    }
+
+    .input-group input {
+        font-size: 9px;
+        padding: 10px;
+    }
+
+    .submit-btn {
+        font-size: 10px;
+        padding: 12px;
+    }
+
+    .offline-btn {
+        font-size: 9px;
+        padding: 10px;
     }
 }

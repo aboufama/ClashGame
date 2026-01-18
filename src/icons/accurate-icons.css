@@ -144,42 +144,80 @@
 
 
 
-/* WARD - Magical GREEN shield aura */
+/* WARD - Magical guardian with green shield aura, hooded */
 .ward-icon::before {
     content: '';
     position: absolute;
-    width: 3px;
-    height: 3px;
-    background: #00FF00;
+    width: 2px;
+    height: 2px;
+    background: #32CD32;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     box-shadow:
-        0 -12px #CCFFCC, 0 -9px #90EE90,
-        -9px -6px #228B22, -6px -6px #90EE90, 0 -6px #CCFFCC, 6px -6px #90EE90, 9px -6px #228B22,
-        -12px 0 #228B22, -6px 0 #32CD32, 0 0 #90EE90, 6px 0 #32CD32, 12px 0 #228B22,
-        -9px 6px #228B22, -6px 6px #90EE90, 6px 6px #90EE90, 9px 6px #228B22,
-        0 9px #32CD32, 0 12px #228B22;
+        /* Hooded head */
+        -4px -16px #1B5E20, -2px -16px #228B22, 0 -16px #2E7D32, 2px -16px #228B22, 4px -16px #1B5E20,
+        -6px -14px #145214, -4px -14px #1B5E20, -2px -14px #228B22, 0 -14px #2E7D32, 2px -14px #228B22, 4px -14px #1B5E20, 6px -14px #145214,
+        /* Face visible under hood */
+        -4px -12px #1B5E20, -2px -12px #DEB887, 0 -12px #F5DEB3, 2px -12px #DEB887, 4px -12px #1B5E20,
+        /* Green glowing eyes */
+        -2px -12px #90EE90, 2px -12px #90EE90,
+        /* Body robes */
+        -6px -10px #0D3D0D, -4px -10px #145214, -2px -10px #1B5E20, 0 -10px #228B22, 2px -10px #1B5E20, 4px -10px #145214, 6px -10px #0D3D0D,
+        -6px -8px #0A2F0A, -4px -8px #0D3D0D, -2px -8px #145214, 0 -8px #1B5E20, 2px -8px #145214, 4px -8px #0D3D0D, 6px -8px #0A2F0A,
+        /* Shield aura (glowing green) */
+        -12px -6px #90EE90, -10px -6px #32CD32, 10px -6px #32CD32, 12px -6px #90EE90,
+        -14px -2px #228B22, -12px -2px #90EE90, 12px -2px #90EE90, 14px -2px #228B22,
+        -14px 2px #228B22, -12px 2px #90EE90, 12px 2px #90EE90, 14px 2px #228B22,
+        -12px 6px #90EE90, -10px 6px #32CD32, 10px 6px #32CD32, 12px 6px #90EE90,
+        /* Arms holding staff */
+        -8px -6px #1B5E20, 8px -6px #1B5E20,
+        /* Staff with gem */
+        -10px -10px #8B4513, -10px -8px #654321, -10px -4px #654321, -10px 0 #8B4513,
+        -10px -12px #90EE90, -10px -14px #00FF00,
+        /* Lower robes */
+        -6px -6px #145214, -4px -6px #1B5E20, -2px -6px #228B22, 0 -6px #1B5E20, 2px -6px #228B22, 4px -6px #1B5E20, 6px -6px #145214,
+        -6px -4px #0D3D0D, -4px -4px #145214, -2px -4px #1B5E20, 0 -4px #145214, 2px -4px #1B5E20, 4px -4px #145214, 6px -4px #0D3D0D,
+        -4px -2px #0D3D0D, -2px -2px #145214, 0 -2px #0D3D0D, 2px -2px #145214, 4px -2px #0D3D0D,
+        /* Feet */
+        -4px 0 #3E2723, -2px 0 #5C3317, 2px 0 #5C3317, 4px 0 #3E2723;
 }
 
 
-/* RECURSION - Crystal mage */
+/* RECURSION - Teal crystal mage with robes and crystalline staff */
 .recursion-icon::before {
     content: '';
     position: absolute;
-    width: 3px;
-    height: 3px;
+    width: 2px;
+    height: 2px;
     background: #00FFAA;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     box-shadow:
-        0 -12px #00FFDD, 0 -9px #00FFAA,
-        -6px -6px #00CC88, 0 -6px #00FFDD, 6px -6px #00CC88,
-        -9px -3px #00AA66, -3px -3px #00FFAA, 0 -3px #00FFDD, 3px -3px #00FFAA, 9px -3px #00AA66,
-        -9px 0 #008844, -3px 0 #00CC88, 0 0 #00FFAA, 3px 0 #00CC88, 9px 0 #008844,
-        -6px 3px #006633, 0 3px #00AA66, 6px 3px #006633,
-        0 6px #004422;
+        /* Hooded head */
+        -4px -16px #006666, -2px -16px #008888, 0 -16px #00AAAA, 2px -16px #008888, 4px -16px #006666,
+        -6px -14px #004444, -4px -14px #006666, -2px -14px #008888, 0 -14px #00AAAA, 2px -14px #008888, 4px -14px #006666, 6px -14px #004444,
+        /* Face visible */
+        -4px -12px #006666, -2px -12px #DEB887, 0 -12px #F5DEB3, 2px -12px #DEB887, 4px -12px #006666,
+        /* Glowing teal eyes */
+        -2px -12px #00FFDD, 2px -12px #00FFDD,
+        /* Body robes */
+        -6px -10px #003333, -4px -10px #004444, -2px -10px #006666, 0 -10px #008888, 2px -10px #006666, 4px -10px #004444, 6px -10px #003333,
+        -6px -8px #002222, -4px -8px #003333, -2px -8px #004444, 0 -8px #006666, 2px -8px #004444, 4px -8px #003333, 6px -8px #002222,
+        /* Crystal staff */
+        10px -14px #00FFDD, 10px -12px #00FFAA, 10px -10px #00CC88,
+        10px -8px #654321, 10px -6px #8B4513, 10px -4px #654321, 10px -2px #8B4513, 10px 0 #654321,
+        /* Crystal sparkles */
+        8px -16px #FFFFFF, 12px -14px #00FFFF, 8px -12px #AAFFFF,
+        /* Arms */
+        -8px -6px #004444, 8px -6px #DEB887,
+        /* Lower robes */
+        -6px -6px #004444, -4px -6px #006666, -2px -6px #008888, 0 -6px #006666, 2px -6px #008888, 4px -6px #006666, 6px -6px #004444,
+        -6px -4px #003333, -4px -4px #004444, -2px -4px #006666, 0 -4px #004444, 2px -4px #006666, 4px -4px #004444, 6px -4px #003333,
+        -4px -2px #003333, -2px -2px #004444, 0 -2px #003333, 2px -2px #004444, 4px -2px #003333,
+        /* Feet */
+        -4px 0 #3E2723, -2px 0 #5C3317, 2px 0 #5C3317, 4px 0 #3E2723;
 }
 
 /* RAM - Battering ram siege weapon with log, metal head, wooden frame, wheels */
@@ -225,22 +263,43 @@
 
 
 /* STORMMAGE - Lightning mage */
+/* STORMMAGE - Blue robed mage with electric lightning staff */
 .stormmage-icon::before {
     content: '';
     position: absolute;
-    width: 3px;
-    height: 3px;
+    width: 2px;
+    height: 2px;
     background: #4169E1;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     box-shadow:
-        -6px -12px #FFF, 0 -12px #FFFF00, 6px -12px #FFF,
-        -3px -9px #FFFF00, 0 -9px #FFF, 3px -9px #FFFF00,
-        -6px -6px #4169E1, 0 -6px #1E90FF, 6px -6px #4169E1,
-        -6px -3px #4169E1, 0 -3px #1E90FF, 6px -3px #4169E1,
-        -6px 0 #0000CD, 0 0 #4169E1, 6px 0 #0000CD,
-        -6px 3px #00008B, 0 3px #0000CD, 6px 3px #00008B;
+        /* Hooded head */
+        -4px -16px #191970, -2px -16px #0000CD, 0 -16px #4169E1, 2px -16px #0000CD, 4px -16px #191970,
+        -6px -14px #0D0D5C, -4px -14px #191970, -2px -14px #0000CD, 0 -14px #4169E1, 2px -14px #0000CD, 4px -14px #191970, 6px -14px #0D0D5C,
+        /* Face visible */
+        -4px -12px #191970, -2px -12px #DEB887, 0 -12px #F5DEB3, 2px -12px #DEB887, 4px -12px #191970,
+        /* Glowing electric blue eyes */
+        -2px -12px #00BFFF, 2px -12px #00BFFF,
+        /* Lightning bolts above */
+        0 -20px #FFFF00, -2px -18px #FFFFFF, 2px -18px #FFFFFF,
+        -4px -20px #FFFF00, 4px -20px #FFFF00,
+        /* Body robes */
+        -6px -10px #0A0A4A, -4px -10px #0D0D5C, -2px -10px #191970, 0 -10px #0000CD, 2px -10px #191970, 4px -10px #0D0D5C, 6px -10px #0A0A4A,
+        -6px -8px #080838, -4px -8px #0A0A4A, -2px -8px #0D0D5C, 0 -8px #191970, 2px -8px #0D0D5C, 4px -8px #0A0A4A, 6px -8px #080838,
+        /* Electric staff */
+        10px -12px #FFFF00, 10px -10px #1E90FF,
+        10px -8px #654321, 10px -6px #8B4513, 10px -4px #654321, 10px -2px #8B4513, 10px 0 #654321,
+        /* Lightning sparks */
+        8px -14px #FFFFFF, 12px -12px #FFFF00, 8px -10px #00BFFF, 12px -8px #FFFFFF,
+        /* Arms */
+        -8px -6px #0D0D5C, 8px -6px #DEB887,
+        /* Lower robes */
+        -6px -6px #0D0D5C, -4px -6px #191970, -2px -6px #0000CD, 0 -6px #191970, 2px -6px #0000CD, 4px -6px #191970, 6px -6px #0D0D5C,
+        -6px -4px #0A0A4A, -4px -4px #0D0D5C, -2px -4px #191970, 0 -4px #0D0D5C, 2px -4px #191970, 4px -4px #0D0D5C, 6px -4px #0A0A4A,
+        -4px -2px #0A0A4A, -2px -2px #0D0D5C, 0 -2px #0A0A4A, 2px -2px #0D0D5C, 4px -2px #0A0A4A,
+        /* Feet */
+        -4px 0 #3E2723, -2px 0 #5C3317, 2px 0 #5C3317, 4px 0 #3E2723;
 }
 
 /* GOLEM - Massive stone humanoid with glowing eyes, rock body, thick limbs */
@@ -587,6 +646,77 @@
         -4px 8px #303030, -2px 8px #404040, 0 8px #505050, 2px 8px #404040, 4px 8px #303030,
         /* Base */
         -2px 10px #303030, 0 10px #404040, 2px 10px #303030;
+}
+
+/* ====================================
+   RESOURCE COLLECTION ANIMATIONS
+   ==================================== */
+
+@keyframes gold-collect {
+
+    0%,
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+        filter: brightness(1);
+    }
+
+    15% {
+        transform: translate(-50%, -50%) scale(1.25) translateY(-2px);
+        filter: brightness(1.5) drop-shadow(0 0 6px #FFD700);
+    }
+
+    30% {
+        transform: translate(-50%, -50%) scale(1.1);
+        filter: brightness(1.3);
+    }
+
+    50% {
+        transform: translate(-50%, -50%) scale(1.15) translateY(-1px);
+        filter: brightness(1.2);
+    }
+
+    70% {
+        transform: translate(-50%, -50%) scale(1.05);
+        filter: brightness(1.1);
+    }
+}
+
+@keyframes elixir-collect {
+
+    0%,
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+        filter: brightness(1);
+    }
+
+    15% {
+        transform: translate(-50%, -50%) scale(1.2);
+        filter: brightness(1.4) drop-shadow(0 0 8px #FF00FF);
+    }
+
+    30% {
+        transform: translate(-50%, -50%) scale(1.08);
+        filter: brightness(1.2) drop-shadow(0 0 4px #BA55D3);
+    }
+
+    50% {
+        transform: translate(-50%, -50%) scale(1.12);
+        filter: brightness(1.3) drop-shadow(0 0 6px #FF00FF);
+    }
+
+    70% {
+        transform: translate(-50%, -50%) scale(1.03);
+        filter: brightness(1.1);
+    }
+}
+
+/* Apply animation when .collecting class is added */
+.gold-icon.collecting::before {
+    animation: gold-collect 0.5s ease-out;
+}
+
+.elixir-icon.collecting::before {
+    animation: elixir-collect 0.5s ease-out;
 }
 
 /* TOWN HALL - Grand building with gold dome, red roof, stone walls */

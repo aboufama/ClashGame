@@ -5,7 +5,7 @@ import { GameConfig } from './game/GameConfig';
 import type { GameMode } from './game/types/GameMode';
 import { BUILDING_DEFINITIONS, TROOP_DEFINITIONS, type BuildingType, getBuildingStats } from './game/config/GameDefinitions';
 import { Backend } from './game/backend/GameBackend';
-import { Auth, AuthService, type UserProfile } from './game/backend/AuthService';
+import { Auth, type UserProfile } from './game/backend/AuthService';
 import { gameManager } from './game/GameManager';
 import { MobileUtils } from './game/utils/MobileUtils';
 import { CloudOverlay } from './components/CloudOverlay';
@@ -15,6 +15,8 @@ import { SettingsModal } from './components/SettingsModal';
 import { BattleResultsModal } from './components/BattleResultsModal';
 import { Hud } from './components/Hud';
 import { DebugMenu } from './components/DebugMenu';
+import { LoginScreen } from './components/LoginScreen';
+import { NotificationsPanel } from './components/NotificationsPanel';
 import './App.css';
 
 // Initialize mobile support
@@ -28,39 +30,50 @@ function App() {
 
   // Initialize user - start with null and set it in useEffect to ensure DOM is ready
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [showLogin, setShowLogin] = useState(true);
+  const [isOnline, setIsOnline] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [resources, setResources] = useState({ gold: 0, elixir: 0 });
   const [army, setArmy] = useState({ warrior: 0, archer: 0, giant: 0, ward: 0, recursion: 0, ram: 0, stormmage: 0, golem: 0, sharpshooter: 0, mobilemortar: 0, davincitank: 0, phalanx: 0 });
   const [isMobile] = useState(() => MobileUtils.isMobile());
 
-  // Initialize user on mount - ensure DOM is ready
+  // Check for existing session on mount
   useEffect(() => {
-    if (!user) {
-      try {
-        console.log('Initializing user...');
-        const current = Auth.getCurrentUser();
-        if (current) {
-          console.log('Found existing user:', current.username);
-          setUser(current);
-        } else {
-          console.log('Creating default user...');
-          const defaultUser = AuthService.getOrCreateDefaultUser();
-          console.log('Default user created:', defaultUser.username);
-          setUser(defaultUser);
-        }
-      } catch (error) {
-        console.error('Error initializing user:', error);
-        // Fallback: create minimal user
-        const fallbackUser: UserProfile = {
-          id: 'default_player',
-          username: 'Player',
-          lastLogin: Date.now()
-        };
-        setUser(fallbackUser);
-      }
+    const existingUser = Auth.getCurrentUser();
+    if (existingUser) {
+      setUser(existingUser);
+      setIsOnline(Auth.isOnlineMode());
+      setShowLogin(false);
+    } else {
+      setLoading(false);
     }
-  }, [user]);
+  }, []);
+
+  const handleLogin = async (loggedInUser: UserProfile, cloudBase?: any) => {
+    setUser(loggedInUser);
+    setIsOnline(Auth.isOnlineMode());
+    setShowLogin(false);
+
+    // If we got a base from login, load it
+    if (cloudBase && cloudBase.buildings) {
+      // The world will be loaded via Backend.getWorld in the init effect
+    }
+  };
+
+  const handleLogout = () => {
+    Auth.logout();
+    setUser(null);
+    setIsOnline(false);
+    setShowLogin(true);
+    setLoading(true);
+
+    // Destroy game
+    if (gameRef.current) {
+      gameRef.current.destroy(true);
+      gameRef.current = null;
+    }
+  };
 
   useEffect(() => {
     return () => {
@@ -70,7 +83,7 @@ function App() {
 
   // Load World & Resources once user is known
   useEffect(() => {
-    if (!user) return;
+    if (!user || showLogin) return;
 
     const init = async () => {
       try {
@@ -120,11 +133,11 @@ function App() {
     };
 
     init();
-  }, [user]);
+  }, [user, showLogin]);
 
   // Persist resources & army
   useEffect(() => {
-    if (user && !loading) {
+    if (user && !loading && !showLogin) {
       try {
         const userId = user.id || 'default_player';
         Backend.updateResources(userId, resources.gold, resources.elixir);
@@ -133,7 +146,7 @@ function App() {
         console.error('Error saving game state:', error);
       }
     }
-  }, [resources, army, user, loading]);
+  }, [resources, army, user, loading, showLogin]);
   const [capacity, setCapacity] = useState({ current: 0, max: 20 });
   const [selectedTroopType, setSelectedTroopType] = useState<'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'ram' | 'stormmage' | 'golem' | 'sharpshooter' | 'mobilemortar' | 'davincitank' | 'phalanx'>('warrior');
   const [visibleTroops, setVisibleTroops] = useState<string[]>([]);
@@ -145,6 +158,11 @@ function App() {
   const [battleStats, setBattleStats] = useState({ destruction: 0, goldLooted: 0, elixirLooted: 0 });
   const [showCloudOverlay, setShowCloudOverlay] = useState(false);
   const [battleStarted, setBattleStarted] = useState(false); // Track if first troop deployed
+  // Animation states for resource collection
+  const [goldAnimating, setGoldAnimating] = useState(false);
+  const [elixirAnimating, setElixirAnimating] = useState(false);
+  const prevGoldLootedRef = useRef(0);
+  const prevElixirLootedRef = useRef(0);
   const [isExiting, setIsExiting] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showBattleResults, setShowBattleResults] = useState(false);
@@ -166,8 +184,8 @@ function App() {
   const [cloudOpening, setCloudOpening] = useState(false);
 
   useEffect(() => {
-    // If no user, ensure game is destroyed to clean up state
-    if (!user) {
+    // If no user or showing login, ensure game is destroyed to clean up state
+    if (!user || showLogin) {
       gameManager.clearUI();
       if (gameRef.current) {
         try {
@@ -236,6 +254,17 @@ function App() {
         }
       },
       updateBattleStats: (destruction: number, gold: number, elixir: number) => {
+        // Trigger animations when gold/elixir increases
+        if (gold > prevGoldLootedRef.current) {
+          setGoldAnimating(true);
+          setTimeout(() => setGoldAnimating(false), 500); // Match animation duration
+        }
+        if (elixir > prevElixirLootedRef.current) {
+          setElixirAnimating(true);
+          setTimeout(() => setElixirAnimating(false), 500); // Match animation duration
+        }
+        prevGoldLootedRef.current = gold;
+        prevElixirLootedRef.current = elixir;
         setBattleStats({ destruction, goldLooted: gold, elixirLooted: elixir });
       },
       onBuildingSelected: (data: { id: string; type: BuildingType; level: number } | null) => {
@@ -269,15 +298,30 @@ function App() {
       onPlacementCancelled: () => {
         setSelectedInMap(null);
       },
-      onRaidEnded: (goldLooted: number, elixirLooted: number) => {
+      onRaidEnded: async (goldLooted: number, elixirLooted: number) => {
         setResources(prev => ({
           ...prev,
           gold: prev.gold + goldLooted,
           elixir: prev.elixir + elixirLooted
         }));
 
-        // Auto-trigger "Return Home" flow on raid end
+        // Record the attack for notifications (if online and attacking a real player)
         const scene = gameRef.current?.scene.getScene('MainScene') as any;
+        if (scene && scene.currentEnemyWorld && isOnline) {
+          const enemyWorld = scene.currentEnemyWorld;
+          if (!enemyWorld.isBot && enemyWorld.id !== 'practice') {
+            await Backend.recordAttack(
+              enemyWorld.id,
+              user?.id || '',
+              user?.username || 'Unknown',
+              goldLooted,
+              elixirLooted,
+              battleStats.destruction
+            );
+          }
+        }
+
+        // Auto-trigger "Return Home" flow on raid end
         if (scene) {
           // Hide results initially to allow transition
           setShowBattleResults(false);
@@ -286,12 +330,6 @@ function App() {
             setView('HOME');
             setSelectedInMap(null);
             scene.goHome();
-            // Show results summary after arriving home (optional, but requested behavior is "same path")
-            // In Clash, you see results over the battle, then click return.
-            // Since we auto-ended, let's show the results now that we are safe at home (or purely resource update).
-            // For now, mirroring "return home" button which just goes home.
-            // If user wants to see results, we can enable this:
-            // setShowBattleResults(true);
           });
         }
       },
@@ -342,7 +380,7 @@ function App() {
         gameRef.current = null;
       }
     };
-  }, [user]);
+  }, [user, showLogin, isOnline, battleStats.destruction]);
 
 
   const refreshBuildingCounts = useCallback(async () => {
@@ -384,40 +422,40 @@ function App() {
   }, [isBuildingOpen, user]);
 
   useEffect(() => {
-    if (!user) return;
-    
+    if (!user || showLogin) return;
+
     gameManager.registerUI({
       onBuildingPlaced: async (type: string, isFree: boolean = false) => {
-      if (isFree) {
-        refreshBuildingCounts();
-        return;
-      }
-      const def = (BUILDING_DEFINITIONS as any)[type];
-      if (def) {
-        let cost = def.cost;
-        if (type === 'wall') {
-          try {
-            const world = await Backend.getWorld(user.id || 'default_player');
-            if (world) {
-              const walls = world.buildings.filter((b: any) => b.type === 'wall');
-              if (walls.length > 0) {
-                const maxLevel = Math.max(...walls.map((w: any) => w.level || 1));
-                cost = def.cost * maxLevel;
-              }
-            }
-          } catch (error) {
-            console.error('Error calculating wall cost:', error);
-          }
+        if (isFree) {
+          refreshBuildingCounts();
+          return;
         }
-        setResources(prev => ({
-          ...prev,
-          gold: Math.max(0, prev.gold - cost)
-        }));
-      }
-      refreshBuildingCounts();
+        const def = (BUILDING_DEFINITIONS as any)[type];
+        if (def) {
+          let cost = def.cost;
+          if (type === 'wall') {
+            try {
+              const world = await Backend.getWorld(user.id || 'default_player');
+              if (world) {
+                const walls = world.buildings.filter((b: any) => b.type === 'wall');
+                if (walls.length > 0) {
+                  const maxLevel = Math.max(...walls.map((w: any) => w.level || 1));
+                  cost = def.cost * maxLevel;
+                }
+              }
+            } catch (error) {
+              console.error('Error calculating wall cost:', error);
+            }
+          }
+          setResources(prev => ({
+            ...prev,
+            gold: Math.max(0, prev.gold - cost)
+          }));
+        }
+        refreshBuildingCounts();
       }
     });
-  }, [user, refreshBuildingCounts]);
+  }, [user, showLogin, refreshBuildingCounts]);
 
   const handleSelect = (type: string) => {
     gameManager.selectBuilding(type);
@@ -501,6 +539,12 @@ function App() {
   const handleFindMatch = () => {
     if (capacity.current === 0) return;
     handleRaidNow();
+    setIsTrainingOpen(false);
+  };
+
+  const handleAttackOnline = () => {
+    if (capacity.current === 0) return;
+    gameManager.startOnlineAttack();
     setIsTrainingOpen(false);
   };
 
@@ -624,6 +668,15 @@ function App() {
     calcWallCost();
   }, [selectedBuildingInfo, view]);
 
+  // Show login screen if no user
+  if (showLogin) {
+    return (
+      <div className="app-container">
+        <LoginScreen onLogin={handleLogin} />
+      </div>
+    );
+  }
+
   // Don't render until user is set
   if (!user) {
     return (
@@ -660,6 +713,8 @@ function App() {
         wallUpgradeCostOverride={wallUpgradeCostOverride}
         showCloudOverlay={showCloudOverlay}
         isMobile={isMobile}
+        goldAnimating={goldAnimating}
+        elixirAnimating={elixirAnimating}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenBuild={() => setIsBuildingOpen(true)}
         onOpenTrain={() => setIsTrainingOpen(true)}
@@ -672,6 +727,13 @@ function App() {
         onMoveBuilding={() => gameManager.moveSelectedBuilding()}
       />
 
+      {/* Notifications panel - only show when in HOME mode and online */}
+      {view === 'HOME' && isOnline && (
+        <div style={{ position: 'fixed', top: '16px', right: '60px', zIndex: 100 }}>
+          <NotificationsPanel userId={user.id} isOnline={isOnline} />
+        </div>
+      )}
+
       <DebugMenu isOpen={isDebugOpen} />
 
       <TrainingModal
@@ -681,9 +743,11 @@ function App() {
         resources={resources}
         army={army}
         troops={troopList}
+        isOnline={isOnline}
         onClose={() => setIsTrainingOpen(false)}
         onStartPractice={handleStartPractice}
         onFindMatch={handleFindMatch}
+        onAttackOnline={handleAttackOnline}
         onTrainTroop={handleTrainTroop}
         onUntrainTroop={handleUntrainTroop}
       />
@@ -708,6 +772,9 @@ function App() {
         onTogglePixelation={handleTogglePixelation}
         onSensitivityChange={handleSensitivityChange}
         onResetGame={handleResetGame}
+        onLogout={handleLogout}
+        isOnline={isOnline}
+        username={user.username}
         onClose={() => setIsSettingsOpen(false)}
       />
 

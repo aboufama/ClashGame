@@ -24,6 +24,7 @@ type SceneCommands = {
     selectBuilding: (type: string | null) => void;
     startAttack: () => void;
     startPracticeAttack: () => void;
+    startOnlineAttack: () => void;
     findNewMap: () => void;
     deleteSelectedBuilding: () => void;
     moveSelectedBuilding: () => void;
@@ -122,6 +123,10 @@ class GameManager {
 
     startPracticeAttack() {
         this.sceneCommands.startPracticeAttack?.();
+    }
+
+    startOnlineAttack() {
+        this.sceneCommands.startOnlineAttack?.();
     }
 
     findNewMap() {

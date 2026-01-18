@@ -6,10 +6,16 @@ export interface UserProfile {
     lastLogin: number;
 }
 
+// API base URL - auto-detect based on environment
+const API_BASE = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+    ? ''  // Use relative URLs for local development with Vite proxy
+    : ''; // Same for production (relative URLs work on Vercel)
+
 export class AuthService {
     private static instance: AuthService;
     private currentUser: UserProfile | null = null;
     private readonly SESSION_KEY = 'clashIso_session';
+    private isOnline: boolean = false;
 
     constructor() {
         if (AuthService.instance) return AuthService.instance;
@@ -21,10 +27,23 @@ export class AuthService {
         const saved = localStorage.getItem(this.SESSION_KEY);
         if (saved) {
             try {
-                this.currentUser = JSON.parse(saved);
+                const data = JSON.parse(saved);
+                this.currentUser = data.user;
+                this.isOnline = data.isOnline || false;
             } catch (e) {
                 console.error("Failed to load session", e);
             }
+        }
+    }
+
+    private saveSession() {
+        if (this.currentUser) {
+            localStorage.setItem(this.SESSION_KEY, JSON.stringify({
+                user: this.currentUser,
+                isOnline: this.isOnline
+            }));
+        } else {
+            localStorage.removeItem(this.SESSION_KEY);
         }
     }
 
@@ -32,33 +51,143 @@ export class AuthService {
         return this.currentUser;
     }
 
-    // Auto-create default user for offline mode
+    public isOnlineMode(): boolean {
+        return this.isOnline;
+    }
+
+    public setOnlineMode(online: boolean) {
+        this.isOnline = online;
+        this.saveSession();
+    }
+
+    // Register new user (online)
+    public async register(username: string, password: string): Promise<{ success: boolean; error?: string; user?: UserProfile }> {
+        try {
+            const response = await fetch(`${API_BASE}/api/auth/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                return { success: false, error: data.error || 'Registration failed' };
+            }
+
+            this.currentUser = data.user;
+            this.isOnline = true;
+            this.saveSession();
+
+            return { success: true, user: data.user };
+        } catch (error) {
+            console.error('Registration error:', error);
+            return { success: false, error: 'Network error. Try offline mode.' };
+        }
+    }
+
+    // Login existing user (online)
+    public async login(username: string, password: string): Promise<{ success: boolean; error?: string; user?: UserProfile; base?: any }> {
+        try {
+            const response = await fetch(`${API_BASE}/api/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                return { success: false, error: data.error || 'Login failed' };
+            }
+
+            this.currentUser = data.user;
+            this.isOnline = true;
+            this.saveSession();
+
+            return { success: true, user: data.user, base: data.base };
+        } catch (error) {
+            console.error('Login error:', error);
+            return { success: false, error: 'Network error. Try offline mode.' };
+        }
+    }
+
+    // Logout
+    public logout() {
+        this.currentUser = null;
+        this.isOnline = false;
+        localStorage.removeItem(this.SESSION_KEY);
+    }
+
+    // Delete account permanently
+    public async deleteAccount(password: string): Promise<{ success: boolean; error?: string }> {
+        if (!this.currentUser) {
+            return { success: false, error: 'Not logged in' };
+        }
+
+        // Offline users can just clear local data
+        if (!this.isOnline || this.currentUser.id === 'offline_player') {
+            this.logout();
+            localStorage.clear();
+            return { success: true };
+        }
+
+        try {
+            const response = await fetch(`${API_BASE}/api/auth/delete`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId: this.currentUser.id,
+                    password
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                return { success: false, error: data.error || 'Delete failed' };
+            }
+
+            // Clear local session
+            this.logout();
+            localStorage.clear();
+
+            return { success: true };
+        } catch (error) {
+            console.error('Delete account error:', error);
+            return { success: false, error: 'Network error' };
+        }
+    }
+
+    // Play offline (no account needed)
+    public playOffline(): UserProfile {
+        const offlineUser: UserProfile = {
+            id: 'offline_player',
+            username: 'Commander',
+            lastLogin: Date.now()
+        };
+        this.currentUser = offlineUser;
+        this.isOnline = false;
+        this.saveSession();
+        return offlineUser;
+    }
+
+    // Auto-create default user for offline mode (legacy support)
     public static getOrCreateDefaultUser(): UserProfile {
         try {
-            // Ensure instance exists
             const auth = AuthService.instance || new AuthService();
             const existing = auth.getCurrentUser();
             if (existing) {
                 return existing;
             }
 
-            // Create default user
-            const defaultUser: UserProfile = {
-                id: 'default_player',
-                username: 'Player',
-                lastLogin: Date.now()
-            };
-
-            auth.currentUser = defaultUser;
-            localStorage.setItem(auth.SESSION_KEY, JSON.stringify(defaultUser));
-
-            return defaultUser;
+            // Create offline user by default
+            return auth.playOffline();
         } catch (error) {
             console.error('Error creating default user:', error);
-            // Return a minimal user object even if localStorage fails
             return {
-                id: 'default_player',
-                username: 'Player',
+                id: 'offline_player',
+                username: 'Commander',
                 lastLogin: Date.now()
             };
         }

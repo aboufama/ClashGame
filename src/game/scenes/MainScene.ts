@@ -148,6 +148,9 @@ export class MainScene extends Phaser.Scene {
     public attackModeSelectedBuilding: PlacedBuilding | null = null;
     private manualFireDummyTarget: Troop | null = null;
 
+    // Online attack tracking
+    public currentEnemyWorld: { id: string; username: string; isBot?: boolean } | null = null;
+
     public get userId(): string {
         try {
             const user = Auth.getCurrentUser();
@@ -832,7 +835,8 @@ export class MainScene extends Phaser.Scene {
         if (this.mode === 'HOME') {
             name = Auth.getCurrentUser()?.username || 'COMMANDER';
         } else {
-            name = 'ENEMY';
+            // Use the enemy's username if attacking an online base
+            name = this.currentEnemyWorld?.username || 'ENEMY';
         }
 
         this.villageNameLabel.setText(`${name.toUpperCase()}'S VILLAGE`);
@@ -5143,6 +5147,12 @@ export class MainScene extends Phaser.Scene {
                     // Load player's own base as the enemy
                     const playerWorld = await Backend.getWorld(this.userId);
                     if (playerWorld && playerWorld.buildings.length > 0) {
+                        // Track as practice
+                        this.currentEnemyWorld = {
+                            id: 'practice',
+                            username: 'Your Base',
+                            isBot: true
+                        };
                         // Distribute loot
                         const lootMap = LootSystem.calculateLootDistribution(playerWorld.buildings, playerWorld.resources.gold, playerWorld.resources.elixir);
                         playerWorld.buildings.forEach((b: any) => {
@@ -5154,7 +5164,32 @@ export class MainScene extends Phaser.Scene {
                         await this.placeDefaultVillage();
                         // Convert all to enemy
                         this.buildings.forEach(b => b.owner = 'ENEMY');
+                        this.currentEnemyWorld = {
+                            id: 'practice',
+                            username: 'Default Base',
+                            isBot: true
+                        };
                     }
+                    this.updateVillageName();
+                    this.centerCamera();
+                    // Initialize battle stats
+                    this.initialEnemyBuildings = this.buildings.filter(b => b.owner === 'ENEMY' && b.type !== 'wall').length;
+                    this.destroyedBuildings = 0;
+                    this.goldLooted = 0;
+                    this.elixirLooted = 0;
+                    this.raidEndScheduled = false;
+                    this.updateBattleStats();
+                });
+            },
+            startOnlineAttack: () => {
+                this.showCloudTransition(async () => {
+                    // Set UI immediately
+                    gameManager.setGameMode('ATTACK');
+                    this.mode = 'ATTACK';
+
+                    this.clearScene();
+                    // Load a random online player's base
+                    await this.generateOnlineEnemyVillage();
                     this.centerCamera();
                     // Initialize battle stats
                     this.initialEnemyBuildings = this.buildings.filter(b => b.owner === 'ENEMY' && b.type !== 'wall').length;
@@ -5357,12 +5392,48 @@ export class MainScene extends Phaser.Scene {
             elixir: Math.floor(10000 + Math.random() * 40000)
         };
 
+        // Track enemy info for village name
+        this.currentEnemyWorld = {
+            id: enemyWorld.id,
+            username: 'Bot Base',
+            isBot: true
+        };
+
         const lootMap = LootSystem.calculateLootDistribution(enemyWorld.buildings, enemyWorld.resources.gold, enemyWorld.resources.elixir);
 
         enemyWorld.buildings.forEach(b => {
             const inst = this.instantiateBuilding(b, 'ENEMY');
             if (inst) inst.loot = lootMap.get(b.id);
         });
+
+        this.updateVillageName();
+    }
+
+    // Load an online player's base for attack
+    public async generateOnlineEnemyVillage(): Promise<boolean> {
+        const onlineBase = await Backend.getOnlineBase(this.userId);
+        if (!onlineBase || onlineBase.buildings.length === 0) {
+            // Fallback to procedural generation if no online bases
+            await this.generateEnemyVillage();
+            return false;
+        }
+
+        // Track enemy info for village name and notifications
+        this.currentEnemyWorld = {
+            id: onlineBase.ownerId,
+            username: onlineBase.username || 'Unknown Player',
+            isBot: (onlineBase as any).isBot || false
+        };
+
+        const lootMap = LootSystem.calculateLootDistribution(onlineBase.buildings, onlineBase.resources.gold, onlineBase.resources.elixir);
+
+        onlineBase.buildings.forEach((b: any) => {
+            const inst = this.instantiateBuilding(b, 'ENEMY');
+            if (inst) inst.loot = lootMap.get(b.id);
+        });
+
+        this.updateVillageName();
+        return true;
     }
 
 

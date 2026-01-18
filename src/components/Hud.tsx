@@ -14,7 +14,7 @@ interface HudProps {
   resources: { gold: number; elixir: number };
   battleStats: BattleStats;
   battleStarted: boolean;
-  capacity: { current: number; max: number };
+  capacity: { current: number; max: number };  // Used for future capacity display
   visibleTroops: string[];
   selectedTroopType: string;
   army: Record<string, number>;
@@ -23,10 +23,12 @@ interface HudProps {
   wallUpgradeCostOverride?: number;
   showCloudOverlay: boolean;
   isMobile: boolean;
+  goldAnimating?: boolean;
+  elixirAnimating?: boolean;
   onOpenSettings: () => void;
   onOpenBuild: () => void;
   onOpenTrain: () => void;
-  onStartAttack: () => void;
+  onStartAttack: () => void;  // Used for quick attack shortcut
   onSelectTroop: (type: string) => void;
   onNextMap: () => void;
   onGoHome: () => void;
@@ -40,7 +42,7 @@ export function Hud({
   resources,
   battleStats,
   battleStarted,
-  capacity,
+  capacity: _capacity,  // Reserved for future capacity display
   visibleTroops,
   selectedTroopType,
   army,
@@ -49,10 +51,12 @@ export function Hud({
   wallUpgradeCostOverride,
   showCloudOverlay,
   isMobile,
+  goldAnimating,
+  elixirAnimating,
   onOpenSettings,
   onOpenBuild,
   onOpenTrain,
-  onStartAttack,
+  onStartAttack: _onStartAttack,  // Reserved for quick attack shortcut
   onSelectTroop,
   onNextMap,
   onGoHome,
@@ -60,6 +64,9 @@ export function Hud({
   onUpgradeBuilding,
   onMoveBuilding
 }: HudProps) {
+  // Unused props (kept for interface compatibility):
+  void _capacity;
+  void _onStartAttack;
   // Get troop name for mobile display
   const getTroopName = (type: string): string => {
     const def = TROOP_DEFINITIONS[type as TroopType];
@@ -80,7 +87,7 @@ export function Hud({
               </div>
             </div>
             <button className="settings-btn" onClick={onOpenSettings}>
-              <span className="btn-icon">⚙️</span>
+              <div className="btn-icon icon settings-icon"></div>
             </button>
           </>
         ) : (
@@ -97,11 +104,11 @@ export function Hud({
                 </div>
                 <div className="loot-display">
                   <div className="loot-item gold">
-                    <div className="icon gold-icon"></div>
+                    <div className={`icon gold-icon ${goldAnimating ? 'collecting' : ''}`}></div>
                     <span>+{isMobile ? formatCompact(battleStats.goldLooted) : battleStats.goldLooted}</span>
                   </div>
                   <div className="loot-item elixir">
-                    <div className="icon elixir-icon"></div>
+                    <div className={`icon elixir-icon ${elixirAnimating ? 'collecting' : ''}`}></div>
                     <span>+{isMobile ? formatCompact(battleStats.elixirLooted) : battleStats.elixirLooted}</span>
                   </div>
                 </div>
@@ -131,19 +138,11 @@ export function Hud({
           <div className="menu-inner">
             <div className="btn-group main-actions">
               <button className="action-btn build" onClick={onOpenBuild}>
-                <span className="btn-icon">🔨</span>
+                <div className="btn-icon icon build-icon"></div>
                 <span className="btn-label">{isMobile ? '' : 'BUILD'}</span>
               </button>
-              <button className="action-btn train" onClick={onOpenTrain}>
-                <span className="btn-icon">⚒️</span>
-                <span className="btn-label">{isMobile ? '' : 'TRAIN'}</span>
-              </button>
-              <button
-                className={`action-btn enemy ${capacity.current === 0 ? 'disabled' : ''}`}
-                onClick={onStartAttack}
-                disabled={capacity.current === 0}
-              >
-                <span className="btn-icon">⚔️</span>
+              <button className="action-btn raid" onClick={onOpenTrain}>
+                <div className="btn-icon icon raid-icon"></div>
                 <span className="btn-label">{isMobile ? '' : 'RAID'}</span>
               </button>
             </div>
@@ -180,11 +179,11 @@ export function Hud({
             className={`mobile-action-btn home-btn ${battleStarted ? 'battle-active' : ''}`}
             onClick={onGoHome}
           >
-            <span>🏠</span>
+            <div className="icon home-icon"></div>
           </button>
           {!battleStarted && (
             <button className="mobile-action-btn next-btn" onClick={onNextMap}>
-              <span>🗺️</span>
+              <div className="icon findmatch-icon"></div>
             </button>
           )}
         </>
@@ -194,7 +193,7 @@ export function Hud({
       {view === 'ATTACK' && !battleStarted && !isMobile && (
         <div className="scout-panel">
           <button className="action-btn next-map" onClick={onNextMap}>
-            <span className="btn-icon">🗺️</span>
+            <div className="btn-icon icon findmatch-icon"></div>
             <span className="btn-label">NEXT</span>
           </button>
         </div>
@@ -203,7 +202,7 @@ export function Hud({
       {view === 'ATTACK' && !isMobile && (
         <div className="home-panel">
           <button className="action-btn home" onClick={onGoHome}>
-            <span className="btn-icon">🏠</span>
+            <div className="btn-icon icon home-icon"></div>
             <span className="btn-label">HOME</span>
           </button>
         </div>

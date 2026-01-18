@@ -7,9 +7,11 @@ interface TrainingModalProps {
   resources: { gold: number; elixir: number };
   army: Record<string, number>;
   troops: TroopDef[];
+  isOnline: boolean;
   onClose: () => void;
   onStartPractice: () => void;
   onFindMatch: () => void;
+  onAttackOnline: () => void;
   onTrainTroop: (type: string) => void;
   onUntrainTroop: (type: string) => void;
 }
@@ -21,9 +23,11 @@ export function TrainingModal({
   resources,
   army,
   troops,
+  isOnline,
   onClose,
   onStartPractice,
   onFindMatch,
+  onAttackOnline,
   onTrainTroop,
   onUntrainTroop
 }: TrainingModalProps) {
@@ -41,7 +45,7 @@ export function TrainingModal({
               disabled={capacity.current === 0}
               style={{ marginRight: '10px' }}
             >
-              <span className="btn-icon">🎯</span>
+              <div className="btn-icon icon practice-icon"></div>
               <span className="btn-label">PRACTICE</span>
             </button>
             <button
@@ -49,9 +53,20 @@ export function TrainingModal({
               onClick={onFindMatch}
               disabled={capacity.current === 0}
             >
-              <span className="btn-icon">🔍</span>
+              <div className="btn-icon icon findmatch-icon"></div>
               <span className="btn-label">FIND MATCH</span>
             </button>
+            {isOnline && (
+              <button
+                className={`attack-online-btn ${capacity.current === 0 ? 'disabled' : ''}`}
+                onClick={onAttackOnline}
+                disabled={capacity.current === 0}
+                style={{ marginLeft: '10px' }}
+              >
+                <span className="online-indicator"></span>
+                <span className="btn-label">ATTACK ONLINE</span>
+              </button>
+            )}
             <button className="close-btn" onClick={onClose}>×</button>
           </div>
         </div>

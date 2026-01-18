@@ -44,3 +44,243 @@
         -2px 0 #ddd, 2px 0 #ddd,
         0 2px #ddd, 0 4px #ddd;
 }
+
+/* SETTINGS ICON - Grey gear with hole in center */
+.settings-icon {
+    position: relative !important;
+}
+
+.settings-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: transparent;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Outer gear teeth (8 teeth) */
+        0 -10px #808080, 0 -8px #A0A0A0,
+        0 10px #606060, 0 8px #808080,
+        -10px 0 #808080, -8px 0 #A0A0A0,
+        10px 0 #606060, 8px 0 #808080,
+        /* Diagonal teeth */
+        -7px -7px #808080, -5px -5px #A0A0A0,
+        7px -7px #808080, 5px -5px #A0A0A0,
+        -7px 7px #606060, -5px 5px #808080,
+        7px 7px #606060, 5px 5px #808080,
+        /* Gear body ring (NOT filled center) */
+        -6px 0 #B0B0B0, 6px 0 #909090,
+        0 -6px #B0B0B0, 0 6px #909090,
+        -4px -4px #C0C0C0, 4px -4px #B0B0B0,
+        -4px 4px #909090, 4px 4px #808080,
+        /* Clear center hole - dark to show hole */
+        -2px -2px #303030, 0 -2px #404040, 2px -2px #303030,
+        -2px 0 #404040, 0 0 #252525, 2px 0 #404040,
+        -2px 2px #303030, 0 2px #404040, 2px 2px #303030;
+}
+
+/* BUILD ICON - Large hammer with wooden handle */
+.build-icon {
+    position: relative !important;
+}
+
+.build-icon::before {
+    content: '';
+    position: absolute;
+    width: 3px;
+    height: 3px;
+    background: #8B4513;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(1.3);
+    box-shadow:
+        /* Wooden handle (diagonal, longer) */
+        3px 3px #5D4037, 6px 6px #6D4C41, 9px 9px #795548, 12px 12px #8D6E63,
+        0 0 #4E342E,
+        /* Metal hammer head - larger */
+        -9px -9px #505050, -6px -9px #606060, -3px -9px #707070, 0 -9px #707070, 3px -9px #606060,
+        -9px -6px #606060, -6px -6px #808080, -3px -6px #909090, 0 -6px #909090, 3px -6px #808080,
+        -9px -3px #707070, -6px -3px #909090, -3px -3px #B0B0B0, 0 -3px #B0B0B0, 3px -3px #909090,
+        -9px 0 #606060, -6px 0 #808080, -3px 0 #909090, 0 0 #808080, 3px 0 #707070,
+        /* Hammer head shine */
+        -6px -8px #C0C0C0, -3px -8px #D4D4D4, 0 -8px #E8E8E8,
+        /* Handle grip texture */
+        4px 4px #3E2723, 7px 7px #4E342E, 10px 10px #3E2723;
+}
+
+/* RAID ICON - Single upward sword */
+.raid-icon {
+    position: relative !important;
+}
+
+.raid-icon::before {
+    content: '';
+    position: absolute;
+    width: 3px;
+    height: 3px;
+    background: #E0E0E0;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(1.3);
+    box-shadow:
+        /* Blade pointing up - centered */
+        0 -15px #FFFFFF, 0 -12px #F0F0F0, 0 -9px #E0E0E0, 0 -6px #D0D0D0, 0 -3px #C0C0C0,
+        /* Blade edge highlight (left side lighter) */
+        -3px -12px #F8F8F8, -3px -9px #E8E8E8, -3px -6px #D8D8D8, -3px -3px #C8C8C8,
+        /* Blade edge shadow (right side darker) */
+        3px -12px #C0C0C0, 3px -9px #B0B0B0, 3px -6px #A0A0A0, 3px -3px #909090,
+        /* Sword point/tip */
+        0 -18px #FFFFFF, -3px -15px #F0F0F0, 3px -15px #D0D0D0,
+        /* Golden cross guard */
+        -9px 0 #DAA520, -6px 0 #FFD700, -3px 0 #FFD700, 0 0 #B8860B, 3px 0 #FFD700, 6px 0 #FFD700, 9px 0 #DAA520,
+        -9px -3px #B8860B, 9px -3px #B8860B,
+        /* Leather wrapped handle */
+        0 3px #5D4037, -3px 3px #4E342E, 3px 3px #6D4C41,
+        0 6px #6D4C41, -3px 6px #5D4037, 3px 6px #4E342E,
+        0 9px #5D4037, -3px 9px #4E342E, 3px 9px #6D4C41,
+        /* Pommel */
+        0 12px #B8860B, -3px 12px #DAA520, 3px 12px #DAA520,
+        0 15px #FFD700;
+}
+
+/* NEXT/HOURGLASS ICON - For finding next match */
+.map-icon {
+    position: relative !important;
+}
+
+.map-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #DAA520;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Top cap */
+        -8px -12px #CD853F, -6px -12px #DAA520, -4px -12px #FFD700, -2px -12px #FFD700, 0 -12px #FFD700, 2px -12px #FFD700, 4px -12px #DAA520, 6px -12px #CD853F,
+        -8px -10px #B8860B, -6px -10px #CD853F, -4px -10px #DAA520, -2px -10px #DAA520, 0 -10px #DAA520, 2px -10px #DAA520, 4px -10px #CD853F, 6px -10px #B8860B,
+        /* Top bulb (narrowing) */
+        -6px -8px #ADD8E6, -4px -8px #87CEEB, -2px -8px #E0FFFF, 0 -8px #E0FFFF, 2px -8px #87CEEB, 4px -8px #ADD8E6,
+        -4px -6px #87CEEB, -2px -6px #B0E0E6, 0 -6px #E0FFFF, 2px -6px #B0E0E6, 4px -6px #87CEEB,
+        -2px -4px #ADD8E6, 0 -4px #87CEEB, 2px -4px #ADD8E6,
+        /* Center narrow (sand passing) */
+        0 -2px #F4A460, 0 0 #DEB887, 0 2px #F4A460,
+        /* Bottom bulb (widening) - filling with sand */
+        -2px 4px #F4A460, 0 4px #DEB887, 2px 4px #F4A460,
+        -4px 6px #D2B48C, -2px 6px #DEB887, 0 6px #F4A460, 2px 6px #DEB887, 4px 6px #D2B48C,
+        -6px 8px #D2B48C, -4px 8px #DEB887, -2px 8px #F5DEB3, 0 8px #F5DEB3, 2px 8px #DEB887, 4px 8px #D2B48C,
+        /* Bottom cap */
+        -8px 10px #B8860B, -6px 10px #CD853F, -4px 10px #DAA520, -2px 10px #DAA520, 0 10px #DAA520, 2px 10px #DAA520, 4px 10px #CD853F, 6px 10px #B8860B,
+        -8px 12px #CD853F, -6px 12px #DAA520, -4px 12px #FFD700, -2px 12px #FFD700, 0 12px #FFD700, 2px 12px #FFD700, 4px 12px #DAA520, 6px 12px #CD853F,
+        /* Frame outlines */
+        -6px -8px #8B4513, 6px -8px #8B4513, -6px 8px #8B4513, 6px 8px #8B4513;
+}
+
+/* HOME ICON - Lighter medieval cottage */
+.home-icon {
+    position: relative !important;
+}
+
+.home-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #D4A574;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Roof (triangle) - warmer red */
+        0 -10px #CC4444, -2px -10px #DD5555, 2px -10px #DD5555,
+        -4px -8px #DD6666, -2px -8px #EE7777, 0 -8px #EE8888, 2px -8px #EE7777, 4px -8px #DD6666,
+        -6px -6px #CC4444, -4px -6px #DD5555, -2px -6px #EE6666, 0 -6px #EE7777, 2px -6px #EE6666, 4px -6px #DD5555, 6px -6px #CC4444,
+        /* Chimney */
+        4px -10px #888888, 4px -12px #999999, 6px -10px #777777, 6px -12px #888888,
+        /* Stone walls - lighter warm grey/tan */
+        -6px -4px #C0B0A0, -4px -4px #D0C0B0, -2px -4px #E0D0C0, 0 -4px #E0D0C0, 2px -4px #E0D0C0, 4px -4px #D0C0B0, 6px -4px #C0B0A0,
+        -6px -2px #B0A090, -4px -2px #C0B0A0, -2px -2px #D0C0B0, 0 -2px #D0C0B0, 2px -2px #D0C0B0, 4px -2px #C0B0A0, 6px -2px #B0A090,
+        -6px 0 #A09080, -4px 0 #B0A090, -2px 0 #C0B0A0, 0 0 #C0B0A0, 2px 0 #C0B0A0, 4px 0 #B0A090, 6px 0 #A09080,
+        -6px 2px #908070, -4px 2px #A09080, -2px 2px #B0A090, 0 2px #B0A090, 2px 2px #B0A090, 4px 2px #A09080, 6px 2px #908070,
+        /* Door - warm wood */
+        -2px 0 #8B4513, 0 0 #A0522D, 2px 0 #8B4513,
+        -2px 2px #8B4513, 0 2px #A0522D, 2px 2px #8B4513,
+        /* Window with warm glow */
+        -4px -2px #FFE4B5, 4px -2px #FFE4B5,
+        /* Foundation - lighter */
+        -8px 4px #707060, -6px 4px #808070, -4px 4px #909080, -2px 4px #909080, 0 4px #909080, 2px 4px #909080, 4px 4px #909080, 6px 4px #808070, 8px 4px #707060;
+}
+
+/* PRACTICE ICON - Target/bullseye */
+.practice-icon {
+    position: relative !important;
+}
+
+.practice-icon::before {
+    content: '';
+    position: absolute;
+    width: 3px;
+    height: 3px;
+    background: #FF0000;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Outer white ring */
+        0 -12px #FFFFFF, 0 12px #FFFFFF, -12px 0 #FFFFFF, 12px 0 #FFFFFF,
+        -9px -9px #F0F0F0, 9px -9px #F0F0F0, -9px 9px #E0E0E0, 9px 9px #E0E0E0,
+        3px -12px #F8F8F8, -3px -12px #F8F8F8, 3px 12px #E8E8E8, -3px 12px #E8E8E8,
+        12px -3px #F8F8F8, 12px 3px #E8E8E8, -12px -3px #F8F8F8, -12px 3px #E8E8E8,
+        /* Red middle ring */
+        0 -9px #CC0000, 0 9px #990000, -9px 0 #CC0000, 9px 0 #990000,
+        -6px -6px #DD0000, 6px -6px #DD0000, -6px 6px #AA0000, 6px 6px #AA0000,
+        3px -9px #BB0000, -3px -9px #BB0000, 3px 9px #880000, -3px 9px #880000,
+        9px -3px #BB0000, 9px 3px #880000, -9px -3px #BB0000, -9px 3px #880000,
+        /* White inner ring */
+        0 -6px #FFFFFF, 0 6px #E0E0E0, -6px 0 #FFFFFF, 6px 0 #E0E0E0,
+        -3px -6px #F8F8F8, 3px -6px #F8F8F8, -3px 6px #D0D0D0, 3px 6px #D0D0D0,
+        6px -3px #F8F8F8, 6px 3px #D0D0D0, -6px -3px #F8F8F8, -6px 3px #D0D0D0,
+        /* Red bullseye center */
+        0 -3px #FF0000, 0 3px #CC0000, -3px 0 #FF0000, 3px 0 #CC0000,
+        0 0 #FF3333;
+}
+
+/* FINDMATCH ICON - Magnifying glass */
+.findmatch-icon {
+    position: relative !important;
+}
+
+.findmatch-icon::before {
+    content: '';
+    position: absolute;
+    width: 3px;
+    height: 3px;
+    background: #4169E1;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Lens frame (top circle) */
+        0 -9px #505050, -3px -9px #606060, 3px -9px #606060,
+        -6px -6px #707070, 6px -6px #707070,
+        -9px -3px #707070, 9px -3px #707070,
+        -9px 0 #808080, 9px 0 #606060,
+        -9px 3px #707070, 9px 3px #505050,
+        -6px 6px #606060, 6px 6px #505050,
+        -3px 9px #505050, 0 9px #404040, 3px 9px #404040,
+        /* Glass lens (light blue center) */
+        0 -6px #87CEEB, -3px -6px #ADD8E6, 3px -6px #87CEEB,
+        -6px -3px #87CEEB, 0 -3px #E0FFFF, 3px -3px #ADD8E6, 6px -3px #87CEEB,
+        -6px 0 #ADD8E6, -3px 0 #E0FFFF, 0 0 #F0FFFF, 3px 0 #ADD8E6, 6px 0 #87CEEB,
+        -6px 3px #87CEEB, -3px 3px #ADD8E6, 0 3px #ADD8E6, 3px 3px #87CEEB, 6px 3px #6495ED,
+        0 6px #5F9EA0, -3px 6px #6495ED, 3px 6px #5F9EA0,
+        /* Handle going down-right */
+        6px 9px #5D4037, 9px 12px #6D4C41, 12px 15px #7A5C4A,
+        9px 9px #4E342E, 12px 12px #5D4037, 15px 15px #6D4C41,
+        /* Handle end */
+        15px 18px #7A5C4A, 18px 18px #5D4037;
+}
