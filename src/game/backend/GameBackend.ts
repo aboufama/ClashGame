@@ -217,12 +217,20 @@ export class GameBackend {
 
         // 2. Try cloud first if online
         if (this.isOnline() && !id.startsWith('enemy_') && !id.startsWith('bot_')) {
-            const cloudWorld = await this.loadFromCloud(id);
-            if (cloudWorld) {
-                this.worlds.set(id, cloudWorld);
-                // Also update local storage
-                localStorage.setItem(`clashIso_world_${id}`, JSON.stringify(cloudWorld));
-                return cloudWorld;
+            try {
+                const cloudWorld = await this.loadFromCloud(id);
+                if (cloudWorld) {
+                    this.worlds.set(id, cloudWorld);
+                    // Also update local storage
+                    localStorage.setItem(`clashIso_world_${id}`, JSON.stringify(cloudWorld));
+                    return cloudWorld;
+                } else {
+                    // Cloud returned 404 (null). Explicitly no base found in cloud.
+                    // We should return null to trigger fresh placement instead of using stale local storage.
+                    return null;
+                }
+            } catch (error) {
+                console.error('getWorld: Cloud load error, will attempt local storage fallback', error);
             }
         }
 
