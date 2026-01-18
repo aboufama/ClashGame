@@ -128,6 +128,8 @@ function App() {
         }
       } catch (error) {
         console.error('Error initializing game:', error);
+        // CRITICAL: If initialization fails, don't just proceed or it might overwrite cloud data
+        setLoading(false);
       } finally {
         setLoading(false);
       }
@@ -354,6 +356,13 @@ function App() {
           return sum + 20;
         }, 0);
         setCapacity(prev => ({ ...prev, max: totalCapacity }));
+      },
+      closeMenus: () => {
+        setIsTrainingOpen(false);
+        setIsBuildingOpen(false);
+        setIsSettingsOpen(false);
+        setSelectedInMap(null);
+        setSelectedBuildingInfo(null);
       }
     });
 

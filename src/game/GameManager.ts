@@ -18,6 +18,7 @@ type UIHandlers = {
     deployTroop: (type: string) => void;
     refreshCampCapacity: (campLevels: number[]) => void;
     onBuildingPlaced: (type: string, isFree?: boolean) => void;
+    closeMenus: () => void;
 };
 
 type SceneCommands = {
@@ -156,6 +157,10 @@ class GameManager {
 
     setSensitivity(val: number) {
         this.sceneCommands.setSensitivity?.(val);
+    }
+
+    closeMenus() {
+        this.uiHandlers.closeMenus?.();
     }
 }
 

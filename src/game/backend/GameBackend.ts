@@ -65,7 +65,10 @@ export class GameBackend {
 
         try {
             const response = await fetch(`${API_BASE}/api/bases/load?userId=${encodeURIComponent(userId)}`);
-            if (!response.ok) return null;
+            if (response.status === 404) return null; // Base doesn't exist yet
+            if (!response.ok) {
+                throw new Error(`Cloud load failed with status: ${response.status}`);
+            }
 
             const data = await response.json();
             if (data.success && data.base) {
@@ -76,8 +79,16 @@ export class GameBackend {
             return null;
         } catch (error) {
             console.error('Failed to load from cloud:', error);
-            return null;
+            throw error; // Re-throw so the caller knows it was a network/server error
         }
+    }
+
+    /**
+     * Force a fresh load from the cloud, bypassing memory cache
+     */
+    public async forceLoadFromCloud(userId: string): Promise<SerializedWorld | null> {
+        this.worlds.delete(userId);
+        return this.loadFromCloud(userId);
     }
 
     public async getOnlineBase(excludeUserId: string): Promise<SerializedWorld | null> {

@@ -779,6 +779,7 @@ export class MainScene extends Phaser.Scene {
 
         const campLevels = this.buildings.filter(b => b.type === 'army_camp').map(b => b.level ?? 1);
         gameManager.refreshCampCapacity(campLevels);
+        gameManager.closeMenus?.(); // Ensure UI is reset when loading
         return true;
     }
 
@@ -5311,13 +5312,11 @@ export class MainScene extends Phaser.Scene {
         this.mode = 'HOME';
         this.hasDeployed = false;
         this.clearScene();
-        // Load saved base instead of default
-        if (!await this.loadSavedBase()) {
-            await this.placeDefaultVillage();
-        }
+        await this.loadSavedBase();
         this.centerCamera();
         const campLevels = this.buildings.filter(b => b.type === 'army_camp').map(b => b.level ?? 1);
         gameManager.refreshCampCapacity(campLevels);
+        gameManager.closeMenus?.();
     }
 
 
@@ -5337,6 +5336,19 @@ export class MainScene extends Phaser.Scene {
         // Clear all troops
         this.troops.forEach(t => { t.gameObject.destroy(); t.healthBar.destroy(); });
         this.troops = [];
+
+        // Clear the ground render texture (redraw fresh grass)
+        if (this.groundRenderTexture) {
+            this.groundRenderTexture.clear();
+            // Redraw grass
+            for (let x = 0; x < this.mapSize; x++) {
+                for (let y = 0; y < this.mapSize; y++) {
+                    this.tempGraphics.clear();
+                    this.drawIsoTile(this.tempGraphics, x, y);
+                    this.groundRenderTexture.draw(this.tempGraphics, this.RT_OFFSET_X, this.RT_OFFSET_Y);
+                }
+            }
+        }
 
         // Clear spike zones
         this.spikeZones.forEach(zone => zone.graphics.destroy());
