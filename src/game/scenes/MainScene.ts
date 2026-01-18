@@ -770,7 +770,7 @@ export class MainScene extends Phaser.Scene {
         this.obstacles = [];
         if (world.obstacles && world.obstacles.length > 0) {
             world.obstacles.forEach(o => {
-                this.placeObstacle(o.gridX, o.gridY, o.type);
+                this.placeObstacle(o.gridX, o.gridY, o.type, true); // skipBackend=true to prevent duplication
             });
         } else {
             // Existing base has no obstacles - spawn some!
@@ -1237,7 +1237,7 @@ export class MainScene extends Phaser.Scene {
     }
 
     // === OBSTACLE SYSTEM (Rocks, Trees, Grass) ===
-    private placeObstacle(gridX: number, gridY: number, type: ObstacleType): boolean {
+    public placeObstacle(gridX: number, gridY: number, type: ObstacleType, skipBackend: boolean = false) {
         const info = OBSTACLES[type];
         if (!info) return false;
 
@@ -1245,7 +1245,7 @@ export class MainScene extends Phaser.Scene {
         if (!this.isObstaclePositionValid(gridX, gridY, info.width, info.height)) return false;
 
         const graphics = this.add.graphics();
-        const animOffset = Math.random() * 1000;
+        const animOffset = Math.random() * Math.PI * 2;
 
         const obstacle: PlacedObstacle = {
             id: Phaser.Utils.String.UUID(),
@@ -1262,8 +1262,8 @@ export class MainScene extends Phaser.Scene {
 
         this.obstacles.push(obstacle);
 
-        // Persist to backend if in HOME mode
-        if (this.mode === 'HOME') {
+        // Persist to backend if in HOME mode and not skipping
+        if (this.mode === 'HOME' && !skipBackend) {
             Backend.placeObstacle(this.userId, type, gridX, gridY);
         }
         return true;

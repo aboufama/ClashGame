@@ -160,8 +160,18 @@ export const BlobStorage = {
 
     async getBase(userId: string): Promise<StoredBase | null> {
         const url = await findBlob(`bases/${userId}.json`);
-        if (!url) return null;
-        return fetchBlobJson<StoredBase>(url);
+        if (!url) {
+            console.log(`No base found in blob storage for user: ${userId}`);
+            return null;
+        }
+        const base = await fetchBlobJson<StoredBase>(url);
+        if (base) {
+            console.log(`Base loaded from cloud for user: ${userId}`, {
+                buildings: base.buildings.length,
+                lastSave: new Date(base.lastSaveTime).toISOString()
+            });
+        }
+        return base;
     },
 
     async saveBase(base: StoredBase): Promise<void> {
@@ -171,7 +181,11 @@ export const BlobStorage = {
                 addRandomSuffix: false,
                 allowOverwrite: true,
             });
-            console.log('Base saved successfully:', base.ownerId, result.url);
+            console.log(`Base saved to cloud for user: ${base.ownerId}`, {
+                url: result.url,
+                buildings: base.buildings.length,
+                timestamp: new Date(base.lastSaveTime).toISOString()
+            });
         } catch (error) {
             console.error('Failed to save base in blob storage:', error);
             throw error;

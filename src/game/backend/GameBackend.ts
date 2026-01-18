@@ -36,7 +36,7 @@ export class GameBackend {
 
         try {
             const user = Auth.getCurrentUser();
-            await fetch(`${API_BASE}/api/bases/save`, {
+            const response = await fetch(`${API_BASE}/api/bases/save`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -48,6 +48,13 @@ export class GameBackend {
                     army: world.army
                 })
             });
+
+            if (response.ok) {
+                console.log(`Cloud sync successful for ${user?.username} (ID: ${user?.id})`);
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                console.error('Cloud sync failed with status:', response.status, errorData);
+            }
         } catch (error) {
             console.error('Failed to sync to cloud:', error);
         }
@@ -157,7 +164,7 @@ export class GameBackend {
 
     // --- LOCAL STORAGE ---
 
-    public async saveWorld(world: SerializedWorld): Promise<void> {
+    public async saveWorld(world: SerializedWorld, immediate: boolean = false): Promise<void> {
         world.lastSaveTime = Date.now();
         this.worlds.set(world.id, world);
 
@@ -167,17 +174,28 @@ export class GameBackend {
         // Save to local storage
         localStorage.setItem(`clashIso_world_${world.id}`, JSON.stringify(world));
 
-        // Debounced cloud sync (every 500ms max for faster persistence)
+        // Cloud sync
         if (this.isOnline()) {
-            this.pendingSave = world;
-            if (!this.saveTimeout) {
-                this.saveTimeout = setTimeout(async () => {
-                    if (this.pendingSave) {
-                        await this.syncToCloud(this.pendingSave);
-                        this.pendingSave = null;
-                    }
+            if (immediate) {
+                // Clear any pending timeout
+                if (this.saveTimeout) {
+                    clearTimeout(this.saveTimeout);
                     this.saveTimeout = null;
-                }, 500);
+                }
+                this.pendingSave = null;
+                await this.syncToCloud(world);
+            } else {
+                // Debounced cloud sync (every 500ms max for faster persistence)
+                this.pendingSave = world;
+                if (!this.saveTimeout) {
+                    this.saveTimeout = setTimeout(async () => {
+                        if (this.pendingSave) {
+                            await this.syncToCloud(this.pendingSave);
+                            this.pendingSave = null;
+                        }
+                        this.saveTimeout = null;
+                    }, 500);
+                }
             }
         }
     }
@@ -282,7 +300,7 @@ export class GameBackend {
             level: initialLevel
         };
         world.buildings.push(newB);
-        await this.saveWorld(world);
+        await this.saveWorld(world, true); // Immediate sync for placement
         return newB;
     }
 
@@ -294,7 +312,7 @@ export class GameBackend {
         if (idx === -1) return false;
 
         world.buildings.splice(idx, 1);
-        await this.saveWorld(world);
+        await this.saveWorld(world, true); // Immediate sync for removal
         return true;
     }
 
@@ -316,7 +334,7 @@ export class GameBackend {
             b.level += 1;
         }
 
-        await this.saveWorld(world);
+        await this.saveWorld(world, true); // Immediate sync for upgrade
         return true;
     }
 
@@ -331,7 +349,7 @@ export class GameBackend {
 
         building.gridX = newX;
         building.gridY = newY;
-        await this.saveWorld(world);
+        await this.saveWorld(world, true); // Immediate sync for move
         return true;
     }
 
@@ -370,7 +388,7 @@ export class GameBackend {
         };
 
         world.obstacles.push(newObstacle);
-        await this.saveWorld(world);
+        await this.saveWorld(world, true); // Immediate sync
         return newObstacle;
     }
 
@@ -382,7 +400,7 @@ export class GameBackend {
         if (idx === -1) return false;
 
         world.obstacles.splice(idx, 1);
-        await this.saveWorld(world);
+        await this.saveWorld(world, true); // Immediate sync
         return true;
     }
 
