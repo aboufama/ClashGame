@@ -23,13 +23,57 @@ export class GameBackend {
     }
 
     private normalizeWorld(world: SerializedWorld): SerializedWorld {
-        world.buildings = world.buildings.map((building) => {
-            const type = building.type as string;
-            if (type === 'mine' || type === 'elixir_collector') {
-                return { ...building, type: 'solana_collector' as BuildingType };
+        const canonicalize = (value: string) =>
+            value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+
+        const readCoord = (raw: Record<string, unknown>, keys: string[]): number => {
+            for (const key of keys) {
+                if (!(key in raw)) continue;
+                const n = Number(raw[key]);
+                if (Number.isFinite(n)) return n;
             }
-            return building;
+            return NaN;
+        };
+
+        world.buildings = world.buildings.map((building) => {
+            const raw = building as unknown as Record<string, unknown>;
+            const rawType = typeof raw.type === 'string' ? raw.type : '';
+            const canonical = canonicalize(rawType || '');
+            let normalizedType = canonical;
+            if (normalizedType === 'mine' || normalizedType === 'elixir_collector' || normalizedType === 'gold_mine' || normalizedType === 'elixir_pump' || normalizedType === 'gold_collector' || normalizedType === 'solana_mine') {
+                normalizedType = 'solana_collector';
+            }
+
+            const gridX = Number.isFinite(building.gridX)
+                ? building.gridX
+                : readCoord(raw, ['gridX', 'x', 'grid_x', 'tileX', 'posX']);
+            const gridY = Number.isFinite(building.gridY)
+                ? building.gridY
+                : readCoord(raw, ['gridY', 'y', 'grid_y', 'tileY', 'posY']);
+
+            let id = building.id as unknown as string;
+            if (typeof id !== 'string' || !id.trim()) {
+                if (typeof raw.id === 'number' && Number.isFinite(raw.id)) id = String(raw.id);
+                else if (typeof raw.uuid === 'string') id = raw.uuid;
+                else if (typeof raw.instanceId === 'string') id = raw.instanceId;
+            }
+
+            const level = typeof building.level === 'number' && Number.isFinite(building.level)
+                ? building.level
+                : typeof raw.level === 'number' && Number.isFinite(raw.level)
+                    ? raw.level
+                    : (typeof raw.lvl === 'number' && Number.isFinite(raw.lvl) ? raw.lvl : 1);
+
+            return {
+                ...building,
+                id,
+                type: normalizedType as BuildingType,
+                gridX,
+                gridY,
+                level
+            };
         }).filter((building) => {
+            if (!Number.isFinite(building.gridX) || !Number.isFinite(building.gridY)) return false;
             const type = building.type as BuildingType;
             return !!BUILDING_DEFINITIONS[type];
         });

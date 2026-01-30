@@ -1,6 +1,10 @@
 export const LEGACY_BUILDING_MAP: Record<string, string> = {
   mine: 'solana_collector',
   elixir_collector: 'solana_collector',
+  gold_mine: 'solana_collector',
+  elixir_pump: 'solana_collector',
+  gold_collector: 'solana_collector',
+  solana_mine: 'solana_collector',
 };
 
 export const BUILDING_TYPES = [
@@ -48,9 +52,14 @@ const BUILDING_SET = new Set<string>(BUILDING_TYPES);
 const OBSTACLE_SET = new Set<string>(OBSTACLE_TYPES);
 const TROOP_SET = new Set<string>(TROOP_TYPES);
 
+function canonicalizeType(raw: string): string {
+  return raw.trim().toLowerCase().replace(/[\s-]+/g, '_');
+}
+
 export function normalizeBuildingType(raw: string | null): string | null {
   if (!raw) return null;
-  const mapped = LEGACY_BUILDING_MAP[raw] || raw;
+  const canonical = canonicalizeType(raw);
+  const mapped = LEGACY_BUILDING_MAP[canonical] || canonical;
   return BUILDING_SET.has(mapped) ? mapped : null;
 }
 

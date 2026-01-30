@@ -21,6 +21,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function readCoord(raw: Record<string, unknown>, keys: string[]): number {
+  for (const key of keys) {
+    if (!(key in raw)) continue;
+    const value = (raw as Record<string, unknown>)[key];
+    const parsed = toInt(value, NaN);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return NaN;
+}
+
 export function normalizeUsername(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
@@ -81,16 +91,40 @@ export function sanitizeBuildings(value: unknown): StoredBuilding[] {
   const buildings: StoredBuilding[] = [];
   for (const raw of value.slice(0, MAX_BUILDINGS)) {
     if (!isRecord(raw)) continue;
-    const id = typeof raw.id === 'string' && raw.id.trim() ? raw.id : null;
-    const rawType = typeof raw.type === 'string' && raw.type.trim() ? raw.type : null;
-    const gridX = toInt(raw.gridX, NaN);
-    const gridY = toInt(raw.gridY, NaN);
+    let id: string | null = null;
+    if (typeof raw.id === 'string' && raw.id.trim()) {
+      id = raw.id.trim();
+    } else if (typeof raw.id === 'number' && Number.isFinite(raw.id)) {
+      id = String(raw.id);
+    } else if (typeof raw.id === 'bigint') {
+      id = raw.id.toString();
+    } else if (typeof raw.uuid === 'string' && raw.uuid.trim()) {
+      id = raw.uuid.trim();
+    } else if (typeof raw.instanceId === 'string' && raw.instanceId.trim()) {
+      id = raw.instanceId.trim();
+    }
+
+    const rawType =
+      typeof raw.type === 'string' && raw.type.trim()
+        ? raw.type
+        : typeof raw.buildingType === 'string' && raw.buildingType.trim()
+          ? raw.buildingType
+          : typeof raw.kind === 'string' && raw.kind.trim()
+            ? raw.kind
+            : null;
+
+    const gridX = readCoord(raw, ['gridX', 'x', 'grid_x', 'tileX', 'posX']);
+    const gridY = readCoord(raw, ['gridY', 'y', 'grid_y', 'tileY', 'posY']);
     if (!id || !rawType) continue;
     if (!Number.isFinite(gridX) || !Number.isFinite(gridY)) continue;
     if (gridX < COORD_MIN || gridY < COORD_MIN || gridX > COORD_MAX || gridY > COORD_MAX) continue;
     const normalizedType = normalizeBuildingType(rawType);
     if (!normalizedType) continue;
-    const level = clampNumber(toInt(raw.level, 1), LEVEL_MIN, LEVEL_MAX);
+    const level = clampNumber(
+      toInt('level' in raw ? raw.level : ('lvl' in raw ? (raw as Record<string, unknown>).lvl : 1), 1),
+      LEVEL_MIN,
+      LEVEL_MAX
+    );
     buildings.push({
       id,
       type: normalizedType,
@@ -107,10 +141,30 @@ export function sanitizeObstacles(value: unknown): StoredObstacle[] {
   const obstacles: StoredObstacle[] = [];
   for (const raw of value.slice(0, MAX_OBSTACLES)) {
     if (!isRecord(raw)) continue;
-    const id = typeof raw.id === 'string' && raw.id.trim() ? raw.id : null;
-    const rawType = typeof raw.type === 'string' && raw.type.trim() ? raw.type : null;
-    const gridX = toInt(raw.gridX, NaN);
-    const gridY = toInt(raw.gridY, NaN);
+    let id: string | null = null;
+    if (typeof raw.id === 'string' && raw.id.trim()) {
+      id = raw.id.trim();
+    } else if (typeof raw.id === 'number' && Number.isFinite(raw.id)) {
+      id = String(raw.id);
+    } else if (typeof raw.id === 'bigint') {
+      id = raw.id.toString();
+    } else if (typeof raw.uuid === 'string' && raw.uuid.trim()) {
+      id = raw.uuid.trim();
+    } else if (typeof raw.instanceId === 'string' && raw.instanceId.trim()) {
+      id = raw.instanceId.trim();
+    }
+
+    const rawType =
+      typeof raw.type === 'string' && raw.type.trim()
+        ? raw.type
+        : typeof raw.obstacleType === 'string' && raw.obstacleType.trim()
+          ? raw.obstacleType
+          : typeof raw.kind === 'string' && raw.kind.trim()
+            ? raw.kind
+            : null;
+
+    const gridX = readCoord(raw, ['gridX', 'x', 'grid_x', 'tileX', 'posX']);
+    const gridY = readCoord(raw, ['gridY', 'y', 'grid_y', 'tileY', 'posY']);
     if (!id || !rawType) continue;
     if (!Number.isFinite(gridX) || !Number.isFinite(gridY)) continue;
     if (gridX < COORD_MIN || gridY < COORD_MIN || gridX > COORD_MAX || gridY > COORD_MAX) continue;

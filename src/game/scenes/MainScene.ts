@@ -174,8 +174,12 @@ export class MainScene extends Phaser.Scene {
     }
 
     private normalizeBuildingType(type: string): BuildingType | null {
-        if (type === 'mine' || type === 'elixir_collector') return 'solana_collector';
-        return BUILDINGS[type] ? (type as BuildingType) : null;
+        if (!type) return null;
+        const canonical = type.trim().toLowerCase().replace(/[\s-]+/g, '_');
+        if (canonical === 'mine' || canonical === 'elixir_collector' || canonical === 'gold_mine' || canonical === 'elixir_pump' || canonical === 'gold_collector' || canonical === 'solana_mine') {
+            return 'solana_collector';
+        }
+        return BUILDINGS[canonical] ? (canonical as BuildingType) : null;
     }
 
     private getAttackEnemyBuildings(): PlacedBuilding[] {
