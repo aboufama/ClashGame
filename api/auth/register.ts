@@ -1,77 +1,58 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { BlobStorage as Storage, hashPassword } from '../_blobStorage.js';
+import { handleOptions, getBody, jsonError, jsonOk, requireMethod } from '../_lib/http.js';
+import { createInitialBase } from '../_lib/bases.js';
+import { hashPassword } from '../_lib/passwords.js';
+import { getStorage } from '../_lib/storage/index.js';
+import { validatePassword, validateUsername } from '../_lib/validators.js';
+import { randomId } from '../_lib/utils.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (handleOptions(req, res)) return;
+  if (!requireMethod(req, res, 'POST')) return;
 
   try {
-    const { username, password } = req.body;
+    const body = getBody<{ username?: string; password?: string }>(req);
+    const username = validateUsername(body.username);
+    const password = validatePassword(body.password);
 
     if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password required' });
+      return jsonError(res, 400, 'Username and password required');
     }
 
-    if (username.length < 3 || username.length > 20) {
-      return res.status(400).json({ error: 'Username must be 3-20 characters' });
-    }
-
-    if (password.length < 4) {
-      return res.status(400).json({ error: 'Password must be at least 4 characters' });
-    }
-
-    // Check if username already exists
-    const existing = await Storage.getUserByUsername(username);
+    const storage = getStorage();
+    const existing = await storage.getUserByUsername(username);
     if (existing) {
-      return res.status(409).json({ error: 'Username already taken' });
+      return jsonError(res, 409, 'Username already taken');
     }
 
-    // Create user
-    const userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const userId = `user_${Date.now()}_${randomId().slice(0, 8)}`;
+    const now = Date.now();
+
     const user = {
       id: userId,
-      username: username.trim(),
+      username,
       passwordHash: hashPassword(password),
-      createdAt: Date.now(),
-      lastLogin: Date.now()
+      createdAt: now,
+      lastLogin: now,
     };
 
-    await Storage.createUser(user);
+    await storage.createUser(user);
+    await storage.saveBase(createInitialBase(userId, username));
 
-    // Create initial base for user
-    const initialBase = {
-      id: userId,
-      ownerId: userId,
-      username: username.trim(),
-      buildings: [],
-      obstacles: [],
-      resources: { gold: 100000, elixir: 100000 },
-      army: {},
-      lastSaveTime: Date.now()
-    };
-    await Storage.saveBase(initialBase);
-
-    return res.status(201).json({
+    return jsonOk(res, {
       success: true,
       user: {
         id: userId,
         username: user.username,
-        lastLogin: user.lastLogin
-      }
-    });
+        lastLogin: user.lastLogin,
+      },
+    }, 201);
   } catch (error) {
-    console.error('Registration error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Internal server error';
+    const message = error instanceof Error ? error.message : 'Internal server error';
     return res.status(500).json({
       error: 'Registration failed',
-      details: errorMessage,
-      hint: 'Check if BLOB_READ_WRITE_TOKEN is configured in Vercel'
+      details: message,
+      hint: 'Check if BLOB_READ_WRITE_TOKEN is configured in Vercel',
     });
   }
 }

@@ -197,7 +197,8 @@ export class MainScene extends Phaser.Scene {
             },
             setSensitivity: (val: number) => {
                 this.cameraSensitivity = val;
-            }
+            },
+            loadBase: () => this.loadSavedBase()
         });
 
         // Initialize at 1.5
@@ -758,21 +759,22 @@ export class MainScene extends Phaser.Scene {
             world = await Backend.createWorld(this.userId, 'PLAYER');
         }
 
-        // If newly created or empty, return false to trigger default village placement
-        // Require at least 1 building and it MUST include a Town Hall
+        // Check if there's anything valid to load
         const hasTownHall = world.buildings.some(b => b.type === 'town_hall');
         if (world.buildings.length === 0 || !hasTownHall) {
             console.log("loadSavedBase: No buildings or Town Hall missing. Triggering default placement.");
             return false;
         }
 
-        this.buildings = []; // Clear current
+        // SUCCESS: Clear existing graphics and state before instantiation
+        this.clearScene();
+
+        // Load buildings
         world.buildings.forEach(b => {
             this.instantiateBuilding(b, 'PLAYER');
         });
 
         // Load obstacles from backend, or spawn some if none exist
-        this.obstacles = [];
         if (world.obstacles && world.obstacles.length > 0) {
             world.obstacles.forEach(o => {
                 this.placeObstacle(o.gridX, o.gridY, o.type, true); // skipBackend=true to prevent duplication
@@ -5412,8 +5414,7 @@ export class MainScene extends Phaser.Scene {
     }
 
     private async placeDefaultVillage() {
-        // Clear existing if any (safety)
-        this.buildings = [];
+        this.clearScene();
 
         // Core Layout - Starter Clean Slate
         const cx = 11;

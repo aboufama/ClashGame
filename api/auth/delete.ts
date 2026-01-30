@@ -1,45 +1,43 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { BlobStorage as Storage, verifyPassword } from '../_blobStorage.js';
+import { handleOptions, getBody, getQueryParam, jsonError, jsonOk } from '../_lib/http.js';
+import { verifyPassword } from '../_lib/passwords.js';
+import { getStorage } from '../_lib/storage/index.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-    // Handle CORS preflight
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
+  if (handleOptions(req, res)) return;
+
+  if (!(req.method === 'DELETE' || req.method === 'POST')) {
+    return jsonError(res, 405, 'Method not allowed');
+  }
+
+  try {
+    const body = getBody<{ userId?: string; password?: string }>(req);
+    const userId = body.userId || getQueryParam(req, 'userId');
+    const password = body.password || getQueryParam(req, 'password');
+
+    if (!userId || !password) {
+      return jsonError(res, 400, 'User ID and password required');
     }
 
-    if (req.method !== 'DELETE') {
-        return res.status(405).json({ error: 'Method not allowed' });
+    const storage = getStorage();
+    const user = await storage.getUser(userId);
+    if (!user) {
+      return jsonError(res, 404, 'User not found');
     }
 
-    try {
-        const { userId, password } = req.body;
-
-        if (!userId || !password) {
-            return res.status(400).json({ error: 'User ID and password required' });
-        }
-
-        // Verify the user exists and password is correct
-        const user = await Storage.getUser(userId);
-        if (!user) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-
-        if (!verifyPassword(password, user.passwordHash)) {
-            return res.status(401).json({ error: 'Invalid password' });
-        }
-
-        // Delete the account
-        const deleted = await Storage.deleteUser(userId);
-        if (!deleted) {
-            return res.status(500).json({ error: 'Failed to delete account' });
-        }
-
-        return res.status(200).json({
-            success: true,
-            message: 'Account deleted successfully'
-        });
-    } catch (error) {
-        console.error('Delete account error:', error);
-        return res.status(500).json({ error: 'Internal server error' });
+    const { valid } = verifyPassword(password, user.passwordHash);
+    if (!valid) {
+      return jsonError(res, 401, 'Invalid password');
     }
+
+    const deleted = await storage.deleteUser(userId);
+    if (!deleted) {
+      return jsonError(res, 500, 'Failed to delete account');
+    }
+
+    return jsonOk(res, { success: true, message: 'Account deleted successfully' });
+  } catch (error) {
+    console.error('Delete account error:', error);
+    return jsonError(res, 500, 'Internal server error');
+  }
 }

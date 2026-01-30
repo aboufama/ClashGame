@@ -1,35 +1,26 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { BlobStorage as Storage } from '../_blobStorage.js';
+import { handleOptions, getQueryParam, jsonError, jsonOk, requireMethod } from '../_lib/http.js';
+import { getStorage } from '../_lib/storage/index.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (handleOptions(req, res)) return;
+  if (!requireMethod(req, res, 'GET')) return;
 
   try {
-    const userId = req.query.userId as string;
-
+    const userId = getQueryParam(req, 'userId');
     if (!userId) {
-      return res.status(400).json({ error: 'User ID required' });
+      return jsonError(res, 400, 'User ID required');
     }
 
-    const base = await Storage.getBase(userId);
-
+    const storage = getStorage();
+    const base = await storage.getBase(userId);
     if (!base) {
-      return res.status(404).json({ error: 'Base not found' });
+      return jsonError(res, 404, 'Base not found');
     }
 
-    return res.status(200).json({
-      success: true,
-      base: base
-    });
+    return jsonOk(res, { success: true, base });
   } catch (error) {
     console.error('Load base error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return jsonError(res, 500, 'Internal server error');
   }
 }

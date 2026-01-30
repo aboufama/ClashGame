@@ -36,12 +36,13 @@ export class GameBackend {
 
         try {
             const user = Auth.getCurrentUser();
+            if (!user?.id || !user?.username) return;
             const response = await fetch(`${API_BASE}/api/bases/save`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    userId: user?.id,
-                    username: user?.username,
+                    userId: user.id,
+                    username: user.username,
                     buildings: world.buildings,
                     obstacles: world.obstacles,
                     resources: world.resources,
@@ -67,19 +68,19 @@ export class GameBackend {
             const response = await fetch(`${API_BASE}/api/bases/load?userId=${encodeURIComponent(userId)}`);
             if (response.status === 404) return null; // Base doesn't exist yet
             if (!response.ok) {
-                throw new Error(`Cloud load failed with status: ${response.status}`);
+                console.error('Cloud load failed with status:', response.status);
+                return null;
             }
 
             const data = await response.json();
             if (data.success && data.base) {
-                // Cache locally
                 this.worlds.set(userId, data.base);
                 return data.base;
             }
             return null;
         } catch (error) {
             console.error('Failed to load from cloud:', error);
-            throw error; // Re-throw so the caller knows it was a network/server error
+            return null;
         }
     }
 
@@ -92,6 +93,7 @@ export class GameBackend {
     }
 
     public async getOnlineBase(excludeUserId: string): Promise<SerializedWorld | null> {
+        if (!this.isOnline()) return null;
         try {
             const response = await fetch(`${API_BASE}/api/bases/online?excludeUserId=${encodeURIComponent(excludeUserId)}`);
             if (!response.ok) return null;
@@ -110,6 +112,7 @@ export class GameBackend {
     // Record attack result and notify victim
     public async recordAttack(victimId: string, attackerId: string, attackerName: string, goldLooted: number, elixirLooted: number, destruction: number): Promise<void> {
         if (!this.isOnline()) return;
+        if (!victimId || victimId.startsWith('bot_') || victimId.startsWith('enemy_')) return;
 
         try {
             await fetch(`${API_BASE}/api/notifications/attack`, {
@@ -183,7 +186,11 @@ export class GameBackend {
         if (world.ownerId === 'ENEMY' || world.id.startsWith('enemy_') || world.id.startsWith('bot_')) return;
 
         // Save to local storage
-        localStorage.setItem(`clashIso_world_${world.id}`, JSON.stringify(world));
+        try {
+            localStorage.setItem(`clashIso_world_${world.id}`, JSON.stringify(world));
+        } catch (error) {
+            console.warn('Failed to persist world to localStorage:', error);
+        }
 
         // Cloud sync
         if (this.isOnline()) {

@@ -1,43 +1,34 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { BlobStorage as Storage } from '../_blobStorage.js';
+import { handleOptions, jsonError, jsonOk, requireMethod } from '../_lib/http.js';
+import { getStorage } from '../_lib/storage/index.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-    // Handle CORS preflight
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
-    }
+  if (handleOptions(req, res)) return;
+  if (!requireMethod(req, res, 'GET')) return;
 
-    if (req.method !== 'GET') {
-        return res.status(405).json({ error: 'Method not allowed' });
-    }
+  try {
+    const storage = getStorage();
+    const users = await storage.getAllUsers();
+    const bases = await storage.getAllBases();
+    const baseMap = new Map(bases.map((base) => [base.ownerId, base]));
 
-    try {
-        const users = await Storage.getAllUsers();
+    const usersWithBases = users.map((user) => {
+      const base = baseMap.get(user.id);
+      return {
+        id: user.id,
+        username: user.username,
+        buildingCount: base ? base.buildings.length : 0,
+        hasBase: !!base && base.buildings.length > 0,
+      };
+    });
 
-        // Get base info for each user to show building count
-        const usersWithBases = await Promise.all(
-            users.map(async (user) => {
-                const base = await Storage.getBase(user.id);
-                return {
-                    id: user.id,
-                    username: user.username,
-                    buildingCount: base ? base.buildings.length : 0,
-                    hasBase: !!base && base.buildings.length > 0
-                };
-            })
-        );
+    const validUsers = usersWithBases
+      .filter((user) => user.hasBase)
+      .sort((a, b) => b.buildingCount - a.buildingCount);
 
-        // Filter to only users with bases and sort by building count
-        const validUsers = usersWithBases
-            .filter(u => u.hasBase)
-            .sort((a, b) => b.buildingCount - a.buildingCount);
-
-        return res.status(200).json({
-            success: true,
-            users: validUsers
-        });
-    } catch (error) {
-        console.error('List users error:', error);
-        return res.status(500).json({ error: 'Internal server error' });
-    }
+    return jsonOk(res, { success: true, users: validUsers });
+  } catch (error) {
+    console.error('List users error:', error);
+    return jsonError(res, 500, 'Internal server error');
+  }
 }

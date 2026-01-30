@@ -33,6 +33,7 @@ type SceneCommands = {
     upgradeSelectedBuilding: () => number | null;
     setPixelation: (size: number) => void;
     setSensitivity: (val: number) => void;
+    loadBase: () => Promise<boolean>;
 };
 
 class GameManager {
@@ -161,6 +162,10 @@ class GameManager {
 
     closeMenus() {
         this.uiHandlers.closeMenus?.();
+    }
+
+    async loadBase() {
+        return await this.sceneCommands.loadBase?.() ?? false;
     }
 }
 

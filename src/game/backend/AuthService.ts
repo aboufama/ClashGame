@@ -24,26 +24,35 @@ export class AuthService {
     }
 
     private loadSession() {
-        const saved = localStorage.getItem(this.SESSION_KEY);
-        if (saved) {
-            try {
-                const data = JSON.parse(saved);
-                this.currentUser = data.user;
-                this.isOnline = data.isOnline || false;
-            } catch (e) {
-                console.error("Failed to load session", e);
+        try {
+            const saved = localStorage.getItem(this.SESSION_KEY);
+            if (saved) {
+                try {
+                    const data = JSON.parse(saved);
+                    this.currentUser = data.user;
+                    this.isOnline = data.isOnline || false;
+                } catch (e) {
+                    console.error("Failed to load session", e);
+                    localStorage.removeItem(this.SESSION_KEY);
+                }
             }
+        } catch (e) {
+            console.warn("Session storage unavailable", e);
         }
     }
 
     private saveSession() {
-        if (this.currentUser) {
-            localStorage.setItem(this.SESSION_KEY, JSON.stringify({
-                user: this.currentUser,
-                isOnline: this.isOnline
-            }));
-        } else {
-            localStorage.removeItem(this.SESSION_KEY);
+        try {
+            if (this.currentUser) {
+                localStorage.setItem(this.SESSION_KEY, JSON.stringify({
+                    user: this.currentUser,
+                    isOnline: this.isOnline
+                }));
+            } else {
+                localStorage.removeItem(this.SESSION_KEY);
+            }
+        } catch (e) {
+            console.warn("Failed to persist session", e);
         }
     }
 
@@ -119,7 +128,11 @@ export class AuthService {
     public logout() {
         this.currentUser = null;
         this.isOnline = false;
-        localStorage.removeItem(this.SESSION_KEY);
+        try {
+            localStorage.removeItem(this.SESSION_KEY);
+        } catch (e) {
+            console.warn("Failed to clear session", e);
+        }
     }
 
     // Delete account permanently
@@ -131,7 +144,11 @@ export class AuthService {
         // Offline users can just clear local data
         if (!this.isOnline || this.currentUser.id === 'offline_player') {
             this.logout();
-            localStorage.clear();
+            try {
+                localStorage.clear();
+            } catch (e) {
+                console.warn("Failed to clear local storage", e);
+            }
             return { success: true };
         }
 
@@ -153,7 +170,11 @@ export class AuthService {
 
             // Clear local session
             this.logout();
-            localStorage.clear();
+            try {
+                localStorage.clear();
+            } catch (e) {
+                console.warn("Failed to clear local storage", e);
+            }
 
             return { success: true };
         } catch (error) {

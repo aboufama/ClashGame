@@ -1,49 +1,58 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { BlobStorage as Storage, verifyPassword } from '../_blobStorage.js';
+import { handleOptions, getBody, jsonError, jsonOk, requireMethod } from '../_lib/http.js';
+import { createInitialBase } from '../_lib/bases.js';
+import { verifyPassword } from '../_lib/passwords.js';
+import { getStorage } from '../_lib/storage/index.js';
+import { validatePassword, validateUsername } from '../_lib/validators.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (handleOptions(req, res)) return;
+  if (!requireMethod(req, res, 'POST')) return;
 
   try {
-    const { username, password } = req.body;
+    const body = getBody<{ username?: string; password?: string }>(req);
+    const username = validateUsername(body.username);
+    const password = validatePassword(body.password);
 
     if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password required' });
+      return jsonError(res, 400, 'Username and password required');
     }
 
-    const user = await Storage.getUserByUsername(username);
+    const storage = getStorage();
+    const user = await storage.getUserByUsername(username);
     if (!user) {
-      return res.status(401).json({ error: 'Invalid username or password' });
+      return jsonError(res, 401, 'Invalid username or password');
     }
 
-    if (!verifyPassword(password, user.passwordHash)) {
-      return res.status(401).json({ error: 'Invalid username or password' });
+    const { valid, upgradedHash } = verifyPassword(password, user.passwordHash);
+    if (!valid) {
+      return jsonError(res, 401, 'Invalid username or password');
     }
 
-    // Update last login
-    await Storage.updateUserLogin(user.id);
+    const now = Date.now();
+    user.lastLogin = now;
+    if (upgradedHash) {
+      user.passwordHash = upgradedHash;
+    }
+    await storage.updateUser(user);
 
-    // Get user's base
-    const base = await Storage.getBase(user.id);
+    let base = await storage.getBase(user.id);
+    if (!base) {
+      base = createInitialBase(user.id, user.username);
+      await storage.saveBase(base);
+    }
 
-    return res.status(200).json({
+    return jsonOk(res, {
       success: true,
       user: {
         id: user.id,
         username: user.username,
-        lastLogin: Date.now()
+        lastLogin: now,
       },
-      base: base
+      base,
     });
   } catch (error) {
     console.error('Login error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return jsonError(res, 500, 'Internal server error');
   }
 }

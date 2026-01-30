@@ -123,6 +123,9 @@ function App() {
           scene.updateUsername(user.username);
         }
 
+        // IMPORTANT: Trigger Phaser to reload the base using the now-known userId
+        await gameManager.loadBase();
+
         if (offline.gold > 0 || offline.elixir > 0) {
           console.log(`Welcome back ${user.username}! Offline Production: ${offline.gold} Gold, ${offline.elixir} Elixir`);
         }
