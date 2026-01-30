@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, getBody, getQueryParam, jsonError, jsonOk } from '../_lib/http.js';
 import { getStorage } from '../_lib/storage/index.js';
+import { sanitizeDisplayName } from '../_lib/validators.js';
 import { clampNumber, randomId, toInt } from '../_lib/utils.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -21,7 +22,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const attackerId = typeof body.attackerId === 'string' ? body.attackerId : 'unknown';
-      const attackerName = typeof body.attackerName === 'string' ? body.attackerName : 'Unknown Attacker';
+      const attackerName = sanitizeDisplayName(body.attackerName, 'Unknown Attacker');
+      const attackId = typeof body.attackId === 'string' && body.attackId.trim()
+        ? body.attackId.trim().slice(0, 64)
+        : undefined;
       const solLooted = clampNumber(toInt(body.solLooted, NaN), 0, 1_000_000_000);
       const legacyGold = clampNumber(toInt(body.goldLooted, 0), 0, 1_000_000_000);
       const legacyElixir = clampNumber(toInt(body.elixirLooted, 0), 0, 1_000_000_000);
@@ -35,6 +39,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         attackerName,
         solLost: totalSol,
         destruction,
+        ...(attackId ? { attackId } : {}),
         timestamp: Date.now(),
         read: false,
       };

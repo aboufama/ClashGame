@@ -41,6 +41,7 @@ export interface AttackNotification {
   attackerName: string;
   solLost: number;
   destruction: number;
+  attackId?: string;
   timestamp: number;
   read: boolean;
 }

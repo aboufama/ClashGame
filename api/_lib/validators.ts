@@ -1,4 +1,5 @@
 import type { StoredBase, StoredBuilding, StoredObstacle } from './types.js';
+import { isValidObstacleType, isValidTroopType, normalizeBuildingType } from './game-defs.js';
 import { clampNumber, toInt } from './utils.js';
 
 const USERNAME_MIN = 3;
@@ -15,36 +16,6 @@ const LEVEL_MIN = 1;
 const LEVEL_MAX = 100;
 
 const SOL_MAX = 1_000_000_000;
-
-const LEGACY_BUILDING_MAP: Record<string, string> = {
-  mine: 'solana_collector',
-  elixir_collector: 'solana_collector',
-};
-
-const VALID_BUILDING_TYPES = new Set([
-  'town_hall',
-  'barracks',
-  'cannon',
-  'ballista',
-  'xbow',
-  'solana_collector',
-  'mortar',
-  'tesla',
-  'wall',
-  'army_camp',
-  'prism',
-  'magmavent',
-  'dragons_breath',
-  'spike_launcher',
-]);
-
-const VALID_OBSTACLE_TYPES = new Set([
-  'rock_small',
-  'rock_large',
-  'tree_oak',
-  'tree_pine',
-  'grass_patch',
-]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -91,10 +62,18 @@ export function sanitizeArmy(value: unknown): Record<string, number> {
   const army: Record<string, number> = {};
   for (const [key, raw] of entries) {
     if (typeof key !== 'string' || !key.trim()) continue;
+    if (!isValidTroopType(key)) continue;
     const count = clampNumber(toInt(raw, 0), 0, 9999);
     army[key] = count;
   }
   return army;
+}
+
+export function sanitizeDisplayName(value: unknown, fallback: string = 'Unknown'): string {
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.trim();
+  if (!trimmed) return fallback;
+  return trimmed.length > USERNAME_MAX ? trimmed.slice(0, USERNAME_MAX) : trimmed;
 }
 
 export function sanitizeBuildings(value: unknown): StoredBuilding[] {
@@ -109,8 +88,8 @@ export function sanitizeBuildings(value: unknown): StoredBuilding[] {
     if (!id || !rawType) continue;
     if (!Number.isFinite(gridX) || !Number.isFinite(gridY)) continue;
     if (gridX < COORD_MIN || gridY < COORD_MIN || gridX > COORD_MAX || gridY > COORD_MAX) continue;
-    const normalizedType = LEGACY_BUILDING_MAP[rawType] || rawType;
-    if (!VALID_BUILDING_TYPES.has(normalizedType)) continue;
+    const normalizedType = normalizeBuildingType(rawType);
+    if (!normalizedType) continue;
     const level = clampNumber(toInt(raw.level, 1), LEVEL_MIN, LEVEL_MAX);
     buildings.push({
       id,
@@ -135,7 +114,7 @@ export function sanitizeObstacles(value: unknown): StoredObstacle[] {
     if (!id || !rawType) continue;
     if (!Number.isFinite(gridX) || !Number.isFinite(gridY)) continue;
     if (gridX < COORD_MIN || gridY < COORD_MIN || gridX > COORD_MAX || gridY > COORD_MAX) continue;
-    if (!VALID_OBSTACLE_TYPES.has(rawType)) continue;
+    if (!isValidObstacleType(rawType)) continue;
     obstacles.push({
       id,
       type: rawType,
@@ -148,7 +127,7 @@ export function sanitizeObstacles(value: unknown): StoredObstacle[] {
 
 export function sanitizeBasePayload(payload: Record<string, unknown>): StoredBase {
   const ownerId = typeof payload.userId === 'string' && payload.userId.trim() ? payload.userId : '';
-  const username = typeof payload.username === 'string' && payload.username.trim() ? payload.username.trim() : 'Unknown';
+  const username = sanitizeDisplayName(payload.username, 'Unknown');
   const buildings = sanitizeBuildings(payload.buildings);
   const obstacles = sanitizeObstacles(payload.obstacles);
   const resources = sanitizeResources(payload.resources);
