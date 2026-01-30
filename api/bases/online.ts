@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { generateBotBase } from '../_lib/bots.js';
 import { handleOptions, getQueryParam, jsonError, jsonOk, requireMethod } from '../_lib/http.js';
 import { getStorage } from '../_lib/storage/index.js';
+import { sanitizeBuildings, sanitizeObstacles, sanitizeResources } from '../_lib/validators.js';
 import { pickRandom } from '../_lib/utils.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -35,9 +36,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return jsonError(res, 500, 'Failed to select base');
     }
 
+    const normalized = {
+      ...selected,
+      buildings: sanitizeBuildings((selected as unknown as Record<string, unknown>).buildings),
+      obstacles: sanitizeObstacles((selected as unknown as Record<string, unknown>).obstacles),
+      resources: sanitizeResources((selected as unknown as Record<string, unknown>).resources),
+    };
+
     return jsonOk(res, {
       success: true,
-      base: selected,
+      base: normalized,
       totalAvailable: bases.length,
     });
   } catch (error) {

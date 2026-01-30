@@ -7,7 +7,7 @@ export function createInitialBase(userId: string, username: string): StoredBase 
     username,
     buildings: [],
     obstacles: [],
-    resources: { gold: 100000, elixir: 100000 },
+    resources: { sol: 200000 },
     army: {},
     lastSaveTime: Date.now(),
     schemaVersion: 1,

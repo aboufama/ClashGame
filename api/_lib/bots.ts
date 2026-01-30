@@ -44,14 +44,14 @@ export function generateBotBase(index: number): StoredBase {
 
   buildings.push({
     id: `${botId}_b${buildingId++}`,
-    type: 'mine',
+    type: 'solana_collector',
     gridX: cx + 5,
     gridY: cy + 2,
     level: 2,
   });
   buildings.push({
     id: `${botId}_b${buildingId++}`,
-    type: 'elixir_collector',
+    type: 'solana_collector',
     gridX: cx - 4,
     gridY: cy + 2,
     level: 2,
@@ -97,8 +97,7 @@ export function generateBotBase(index: number): StoredBase {
     buildings,
     obstacles: [],
     resources: {
-      gold: 30000 + Math.floor(Math.random() * 70000),
-      elixir: 30000 + Math.floor(Math.random() * 70000),
+      sol: 60000 + Math.floor(Math.random() * 140000),
     },
     army: {},
     lastSaveTime: Date.now(),

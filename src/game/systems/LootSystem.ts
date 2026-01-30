@@ -7,55 +7,40 @@ export class LootSystem {
 
     public static calculateLootDistribution(
         buildings: SerializedBuilding[],
-        totalGold: number,
-        totalElixir: number
-    ): Map<string, { gold: number, elixir: number }> {
-        const lootMap = new Map<string, { gold: number, elixir: number }>();
+        totalSol: number
+    ): Map<string, { sol: number }> {
+        const lootMap = new Map<string, { sol: number }>();
 
-        const availableGold = Math.floor(totalGold * this.LOOT_PERCENTAGE);
-        const availableElixir = Math.floor(totalElixir * this.LOOT_PERCENTAGE);
+        const availableSol = Math.floor(totalSol * this.LOOT_PERCENTAGE);
 
         // Identify storage containers
-        // In the future, include Gold Storage / Elixir Storage here
+        // In the future, include dedicated storage buildings here
         const townHalls = buildings.filter(b => b.type === 'town_hall');
-        const mines = buildings.filter(b => b.type === 'mine');
-        const collectors = buildings.filter(b => b.type === 'elixir_collector');
+        const resourceBuildings = buildings.filter(b => {
+            const type = b.type as string;
+            return type === 'solana_collector' || type === 'mine' || type === 'elixir_collector';
+        });
 
         // Distribution Rules:
         // TH holds 50%
-        // Collectors/Mines hold 50%
-
-        const goldInTH = Math.floor(availableGold * 0.5);
-        const elixirInTH = Math.floor(availableElixir * 0.5);
-
-        const goldInMines = availableGold - goldInTH;
-        const elixirInCollectors = availableElixir - elixirInTH;
+        // Resource buildings hold 50%
+        const solInTH = Math.floor(availableSol * 0.5);
+        const solInResources = availableSol - solInTH;
 
         // Assign TH loot
         if (townHalls.length > 0) {
             const perTH = {
-                gold: Math.floor(goldInTH / townHalls.length),
-                elixir: Math.floor(elixirInTH / townHalls.length)
+                sol: Math.floor(solInTH / townHalls.length)
             };
             townHalls.forEach(b => lootMap.set(b.id, perTH));
         }
 
-        // Assign Mine loot
-        if (mines.length > 0) {
-            const perMine = Math.floor(goldInMines / mines.length);
-            mines.forEach(b => {
-                const existing = lootMap.get(b.id) || { gold: 0, elixir: 0 };
-                existing.gold += perMine;
-                lootMap.set(b.id, existing);
-            });
-        }
-
-        // Assign Collector loot
-        if (collectors.length > 0) {
-            const perColl = Math.floor(elixirInCollectors / collectors.length);
-            collectors.forEach(b => {
-                const existing = lootMap.get(b.id) || { gold: 0, elixir: 0 };
-                existing.elixir += perColl;
+        // Assign resource building loot
+        if (resourceBuildings.length > 0) {
+            const perResource = Math.floor(solInResources / resourceBuildings.length);
+            resourceBuildings.forEach(b => {
+                const existing = lootMap.get(b.id) || { sol: 0 };
+                existing.sol += perResource;
                 lootMap.set(b.id, existing);
             });
         }

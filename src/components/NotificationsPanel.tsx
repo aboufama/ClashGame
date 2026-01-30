@@ -4,8 +4,9 @@ import { Backend } from '../game/backend/GameBackend';
 interface Notification {
   id: string;
   attackerName: string;
-  goldLost: number;
-  elixirLost: number;
+  solLost?: number;
+  goldLost?: number;
+  elixirLost?: number;
   destruction: number;
   timestamp: number;
   read: boolean;
@@ -90,17 +91,21 @@ export function NotificationsPanel({ userId, isOnline }: NotificationsPanelProps
                 No attacks yet. Your base is safe!
               </div>
             ) : (
-              notifications.map(notif => (
+              notifications.map(notif => {
+                const solLost = typeof notif.solLost === 'number'
+                  ? notif.solLost
+                  : (notif.goldLost || 0) + (notif.elixirLost || 0);
+                return (
                 <div key={notif.id} className={`notification-item ${!notif.read ? 'unread' : ''}`}>
                   <div className="attacker">{notif.attackerName} raided you!</div>
                   <div className="loot-info">
-                    <span>-{notif.goldLost} Gold</span>
-                    <span>-{notif.elixirLost} Elixir</span>
+                    <span>-{solLost} SOL</span>
                     <span>{notif.destruction}% destroyed</span>
                   </div>
                   <div className="timestamp">{formatTimeAgo(notif.timestamp)}</div>
                 </div>
-              ))
+              );
+            })
             )}
           </div>
         </>

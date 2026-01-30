@@ -1,11 +1,12 @@
 import type { BuildingDef } from '../game/config/GameDefinitions';
+import { formatSol } from '../game/solana/Currency';
 
 interface BuildingShopModalProps {
   isOpen: boolean;
   showCloudOverlay: boolean;
   buildingList: BuildingDef[];
   buildingCounts: Record<string, number>;
-  resources: { gold: number; elixir: number };
+  resources: { sol: number };
   shopWallLevel: number;
   onClose: () => void;
   onSelect: (id: string) => void;
@@ -42,7 +43,7 @@ export function BuildingShopModal({
                 name = `${b.name} (Lvl ${shopWallLevel})`;
               }
 
-              const isDisabled = resources.gold < cost || (buildingCounts[b.id] || 0) >= b.maxCount;
+              const isDisabled = resources.sol < cost || (buildingCounts[b.id] || 0) >= b.maxCount;
               return (
                 <div
                   key={b.id}
@@ -58,8 +59,7 @@ export function BuildingShopModal({
                   <span className="name">{name}</span>
                   <span className="desc-text" style={{ fontSize: '10px', color: '#aaa', display: 'block', marginBottom: '4px' }}>{b.desc}</span>
                   <div className="cost-badge">
-                    <div className="icon gold-icon" style={{ width: '12px', height: '12px' }}></div>
-                    {cost}
+                    {formatSol(cost)}
                   </div>
                 </div>
               );

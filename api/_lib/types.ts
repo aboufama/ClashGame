@@ -27,7 +27,7 @@ export interface StoredBase {
   username: string;
   buildings: StoredBuilding[];
   obstacles?: StoredObstacle[];
-  resources: { gold: number; elixir: number };
+  resources: { sol: number };
   army?: Record<string, number>;
   lastSaveTime: number;
   schemaVersion?: number;
@@ -39,8 +39,7 @@ export interface AttackNotification {
   victimId: string;
   attackerId: string;
   attackerName: string;
-  goldLost: number;
-  elixirLost: number;
+  solLost: number;
   destruction: number;
   timestamp: number;
   read: boolean;

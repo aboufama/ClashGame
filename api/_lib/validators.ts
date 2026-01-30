@@ -14,8 +14,37 @@ const COORD_MAX = 200; // generous upper bound for future map sizes
 const LEVEL_MIN = 1;
 const LEVEL_MAX = 100;
 
-const GOLD_MAX = 1_000_000_000;
-const ELIXIR_MAX = 1_000_000_000;
+const SOL_MAX = 1_000_000_000;
+
+const LEGACY_BUILDING_MAP: Record<string, string> = {
+  mine: 'solana_collector',
+  elixir_collector: 'solana_collector',
+};
+
+const VALID_BUILDING_TYPES = new Set([
+  'town_hall',
+  'barracks',
+  'cannon',
+  'ballista',
+  'xbow',
+  'solana_collector',
+  'mortar',
+  'tesla',
+  'wall',
+  'army_camp',
+  'prism',
+  'magmavent',
+  'dragons_breath',
+  'spike_launcher',
+]);
+
+const VALID_OBSTACLE_TYPES = new Set([
+  'rock_small',
+  'rock_large',
+  'tree_oak',
+  'tree_pine',
+  'grass_patch',
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -41,13 +70,19 @@ export function validatePassword(value: unknown): string | null {
   return value;
 }
 
-export function sanitizeResources(value: unknown): { gold: number; elixir: number } {
+export function sanitizeResources(value: unknown): { sol: number } {
   if (!isRecord(value)) {
-    return { gold: 100000, elixir: 100000 };
+    return { sol: 200000 };
   }
-  const gold = clampNumber(toInt(value.gold, 100000), 0, GOLD_MAX);
-  const elixir = clampNumber(toInt(value.elixir, 100000), 0, ELIXIR_MAX);
-  return { gold, elixir };
+
+  if ('sol' in value) {
+    const sol = clampNumber(toInt(value.sol, 200000), 0, SOL_MAX);
+    return { sol };
+  }
+
+  const legacyGold = clampNumber(toInt((value as Record<string, unknown>).gold, 0), 0, SOL_MAX);
+  const legacyElixir = clampNumber(toInt((value as Record<string, unknown>).elixir, 0), 0, SOL_MAX);
+  return { sol: clampNumber(legacyGold + legacyElixir, 0, SOL_MAX) };
 }
 
 export function sanitizeArmy(value: unknown): Record<string, number> {
@@ -68,16 +103,18 @@ export function sanitizeBuildings(value: unknown): StoredBuilding[] {
   for (const raw of value.slice(0, MAX_BUILDINGS)) {
     if (!isRecord(raw)) continue;
     const id = typeof raw.id === 'string' && raw.id.trim() ? raw.id : null;
-    const type = typeof raw.type === 'string' && raw.type.trim() ? raw.type : null;
+    const rawType = typeof raw.type === 'string' && raw.type.trim() ? raw.type : null;
     const gridX = toInt(raw.gridX, NaN);
     const gridY = toInt(raw.gridY, NaN);
-    if (!id || !type) continue;
+    if (!id || !rawType) continue;
     if (!Number.isFinite(gridX) || !Number.isFinite(gridY)) continue;
     if (gridX < COORD_MIN || gridY < COORD_MIN || gridX > COORD_MAX || gridY > COORD_MAX) continue;
+    const normalizedType = LEGACY_BUILDING_MAP[rawType] || rawType;
+    if (!VALID_BUILDING_TYPES.has(normalizedType)) continue;
     const level = clampNumber(toInt(raw.level, 1), LEVEL_MIN, LEVEL_MAX);
     buildings.push({
       id,
-      type,
+      type: normalizedType,
       gridX,
       gridY,
       level,
@@ -92,15 +129,16 @@ export function sanitizeObstacles(value: unknown): StoredObstacle[] {
   for (const raw of value.slice(0, MAX_OBSTACLES)) {
     if (!isRecord(raw)) continue;
     const id = typeof raw.id === 'string' && raw.id.trim() ? raw.id : null;
-    const type = typeof raw.type === 'string' && raw.type.trim() ? raw.type : null;
+    const rawType = typeof raw.type === 'string' && raw.type.trim() ? raw.type : null;
     const gridX = toInt(raw.gridX, NaN);
     const gridY = toInt(raw.gridY, NaN);
-    if (!id || !type) continue;
+    if (!id || !rawType) continue;
     if (!Number.isFinite(gridX) || !Number.isFinite(gridY)) continue;
     if (gridX < COORD_MIN || gridY < COORD_MIN || gridX > COORD_MAX || gridY > COORD_MAX) continue;
+    if (!VALID_OBSTACLE_TYPES.has(rawType)) continue;
     obstacles.push({
       id,
-      type,
+      type: rawType,
       gridX,
       gridY,
     });

@@ -1,10 +1,11 @@
 import type { TroopDef } from '../game/config/GameDefinitions';
+import { formatSol } from '../game/solana/Currency';
 
 interface TrainingModalProps {
   isOpen: boolean;
   showCloudOverlay: boolean;
   capacity: { current: number; max: number };
-  resources: { gold: number; elixir: number };
+  resources: { sol: number };
   army: Record<string, number>;
   troops: TroopDef[];
   isOnline: boolean;
@@ -90,7 +91,7 @@ export function TrainingModal({
 
           <div className="troop-grid">
             {troops.map(t => {
-              const canAfford = resources.elixir >= t.cost;
+              const canAfford = resources.sol >= t.cost;
               const hasSpace = capacity.current + t.space <= capacity.max;
               const isAvailable = canAfford && hasSpace;
 
@@ -104,8 +105,7 @@ export function TrainingModal({
                   <div className={`icon ${t.id}-icon large`}></div>
                   <span className="name" style={{ fontSize: '0.7rem', fontWeight: 900 }}>{t.name}</span>
                   <div className="cost-badge">
-                    <div className="icon elixir-icon" style={{ width: '12px', height: '12px' }}></div>
-                    {t.cost}
+                    {formatSol(t.cost)}
                   </div>
                   {!hasSpace && <div style={{ fontSize: '8px', color: '#ff4444', position: 'absolute', bottom: '2px' }}>NO SPACE</div>}
                 </div>

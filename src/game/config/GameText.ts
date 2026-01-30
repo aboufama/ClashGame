@@ -1,7 +1,6 @@
 export const BUILDING_TEXTS: Record<string, { flavor: string; details: string }> = {
     town_hall: { flavor: "The heart of the village.", details: "Protects resources. Losing this grants the enemy a victory star." },
-    mine: { flavor: "Gold rush.", details: "Extracts Gold from the ground. Keep these running to fund your army." },
-    elixir_collector: { flavor: "Pure magic.", details: "Pumps Elixir from ley lines. Required for training troops and research." },
+    solana_collector: { flavor: "On-chain flow.", details: "Harvests SOL for training troops and upgrades." },
     cannon: { flavor: "Keep the fuse dry.", details: "A basic point defense. Fires heavy cast iron balls at ground targets." },
     archer_tower: { flavor: "Eyes in the sky.", details: "Versatile tower that shoots arrows at both Air and Ground units." },
     barracks: { flavor: "Discipline and glory.", details: "The primary recruitment center. Train Warriors, Archers, and other units here." },

@@ -1,7 +1,8 @@
+import { formatSol } from '../game/solana/Currency';
+
 interface BattleStats {
   destruction: number;
-  goldLooted: number;
-  elixirLooted: number;
+  solLooted: number;
 }
 
 interface BattleResultsModalProps {
@@ -23,17 +24,9 @@ export function BattleResultsModal({ isOpen, stats, onGoHome }: BattleResultsMod
             <span className="battle-stat-value destruction">{stats.destruction}%</span>
           </div>
           <div className="battle-stat">
-            <span className="battle-stat-label">GOLD LOOTED:</span>
+            <span className="battle-stat-label">SOL LOOTED:</span>
             <span className="battle-stat-value">
-              <div className="icon gold-icon" style={{ display: 'inline-block', marginRight: '8px' }}></div>
-              {stats.goldLooted}
-            </span>
-          </div>
-          <div className="battle-stat">
-            <span className="battle-stat-label">ELIXIR LOOTED:</span>
-            <span className="battle-stat-value">
-              <div className="icon elixir-icon" style={{ display: 'inline-block', marginRight: '8px' }}></div>
-              {stats.elixirLooted}
+              {formatSol(stats.solLooted)}
             </span>
           </div>
         </div>

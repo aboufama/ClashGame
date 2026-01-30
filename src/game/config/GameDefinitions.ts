@@ -3,7 +3,7 @@ export const MAP_SIZE = 25;
 
 export type BuildingType =
     | 'town_hall' | 'barracks' | 'cannon' | 'ballista' | 'xbow'
-    | 'mine' | 'elixir_collector' | 'mortar' | 'tesla' | 'wall'
+    | 'solana_collector' | 'mortar' | 'tesla' | 'wall'
     | 'army_camp' | 'prism' | 'magmavent' | 'dragons_breath' | 'spike_launcher';
 
 export type TroopType =
@@ -111,46 +111,25 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
             { hp: 1750, damage: 18, fireRate: 180, cost: 1200 }     // Level 2 - Enhanced
         ]
     },
-    mine: {
-        id: 'mine',
-        name: 'Gold Mine',
-        cost: 150,
-        desc: 'Produces glorious Gold.',
+    solana_collector: {
+        id: 'solana_collector',
+        name: 'Solana Collector',
+        cost: 300,
+        desc: 'Harvests SOL from the grid.',
         width: 1,
         height: 1,
-        maxHealth: 600,
+        maxHealth: 700,
         category: 'resource',
-        maxCount: 8,
-        color: 0xffaa00,
-        productionRate: 2.5,
+        maxCount: 16,
+        color: 0x14f195,
+        productionRate: 5.0,
         maxLevel: 5,
         levels: [
-            { hp: 600, productionRate: 2.5, cost: 150 },   // Level 1 - Basic
-            { hp: 720, productionRate: 3.2, cost: 300 },   // Level 2 - Reinforced
-            { hp: 850, productionRate: 4.0, cost: 500 },   // Level 3 - Advanced
-            { hp: 1000, productionRate: 5.0, cost: 750 },  // Level 4 - Masterwork
-            { hp: 1200, productionRate: 7.0, cost: 1200 }  // Level 5 - Industrial (tech leap)
-        ]
-    },
-    elixir_collector: {
-        id: 'elixir_collector',
-        name: 'Elixir Collector',
-        cost: 150,
-        desc: 'Pumps magical Elixir.',
-        width: 1,
-        height: 1,
-        maxHealth: 600,
-        category: 'resource',
-        maxCount: 8,
-        color: 0x9b59b6,
-        productionRate: 2.5,
-        maxLevel: 5,
-        levels: [
-            { hp: 600, productionRate: 2.5, cost: 150 },   // Level 1 - Basic
-            { hp: 720, productionRate: 3.2, cost: 300 },   // Level 2 - Reinforced
-            { hp: 850, productionRate: 4.0, cost: 500 },   // Level 3 - Advanced
-            { hp: 1000, productionRate: 5.0, cost: 750 },  // Level 4 - Masterwork
-            { hp: 1200, productionRate: 7.0, cost: 1200 }  // Level 5 - Deep Extraction (tech leap)
+            { hp: 700, productionRate: 5.0, cost: 300 },    // Level 1 - Basic
+            { hp: 820, productionRate: 6.4, cost: 550 },    // Level 2 - Reinforced
+            { hp: 950, productionRate: 8.0, cost: 850 },    // Level 3 - Advanced
+            { hp: 1100, productionRate: 10.0, cost: 1300 }, // Level 4 - Masterwork
+            { hp: 1300, productionRate: 14.0, cost: 2000 }  // Level 5 - Validator-grade
         ]
     },
     mortar: {
@@ -339,11 +318,11 @@ export interface TroopDef {
 export interface ObstacleDef {
     id: ObstacleType;
     name: string;
-    clearCost: number; // Gold to remove
+    clearCost: number; // SOL to remove
     clearTime: number; // Seconds to clear
     width: number;
     height: number;
-    goldReward: number; // Gold gained when cleared
+    solReward: number; // SOL gained when cleared
 }
 
 
@@ -367,9 +346,9 @@ export const TROOP_DEFINITIONS: Record<TroopType, TroopDef> = {
 };
 
 export const OBSTACLE_DEFINITIONS: Record<ObstacleType, ObstacleDef> = {
-    rock_small: { id: 'rock_small', name: 'Small Rock', clearCost: 50, clearTime: 5, width: 1, height: 1, goldReward: 10 },
-    rock_large: { id: 'rock_large', name: 'Large Rock', clearCost: 150, clearTime: 15, width: 2, height: 2, goldReward: 50 },
-    tree_oak: { id: 'tree_oak', name: 'Oak Tree', clearCost: 100, clearTime: 10, width: 2, height: 2, goldReward: 30 },
-    tree_pine: { id: 'tree_pine', name: 'Pine Tree', clearCost: 75, clearTime: 8, width: 1, height: 1, goldReward: 20 },
-    grass_patch: { id: 'grass_patch', name: 'Tall Grass', clearCost: 25, clearTime: 3, width: 1, height: 1, goldReward: 5 },
+    rock_small: { id: 'rock_small', name: 'Small Rock', clearCost: 50, clearTime: 5, width: 1, height: 1, solReward: 10 },
+    rock_large: { id: 'rock_large', name: 'Large Rock', clearCost: 150, clearTime: 15, width: 2, height: 2, solReward: 50 },
+    tree_oak: { id: 'tree_oak', name: 'Oak Tree', clearCost: 100, clearTime: 10, width: 2, height: 2, solReward: 30 },
+    tree_pine: { id: 'tree_pine', name: 'Pine Tree', clearCost: 75, clearTime: 8, width: 1, height: 1, solReward: 20 },
+    grass_patch: { id: 'grass_patch', name: 'Tall Grass', clearCost: 25, clearTime: 3, width: 1, height: 1, solReward: 5 },
 };

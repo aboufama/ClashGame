@@ -264,11 +264,16 @@ export function createBlobStorage() {
       return notifications.filter((notification) => !notification.read).length;
     },
 
-    async deductResources(userId: string, gold: number, elixir: number): Promise<void> {
+    async deductResources(userId: string, sol: number): Promise<void> {
       const base = await getBase(userId);
       if (!base) return;
-      base.resources.gold = Math.max(0, base.resources.gold - gold);
-      base.resources.elixir = Math.max(0, base.resources.elixir - elixir);
+      const resources = base.resources as unknown as Record<string, unknown>;
+      if (typeof resources.sol !== 'number') {
+        const legacyGold = typeof resources.gold === 'number' ? resources.gold : 0;
+        const legacyElixir = typeof resources.elixir === 'number' ? resources.elixir : 0;
+        base.resources = { sol: legacyGold + legacyElixir };
+      }
+      base.resources.sol = Math.max(0, base.resources.sol - sol);
       await saveBase(base);
     },
 

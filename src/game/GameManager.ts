@@ -6,13 +6,12 @@ export type BuildingSelection = { id: string; type: BuildingType; level: number 
 type UIHandlers = {
     showCloudOverlay: () => void;
     hideCloudOverlay: () => void;
-    addGold: (amount: number) => void;
-    addElixir: (amount: number) => void;
+    addSol: (amount: number) => void;
     setGameMode: (mode: GameMode) => void;
-    updateBattleStats: (destruction: number, gold: number, elixir: number) => void;
+    updateBattleStats: (destruction: number, sol: number) => void;
     onBuildingSelected: (data: BuildingSelection) => void;
     onPlacementCancelled: () => void;
-    onRaidEnded: (goldLooted: number, elixirLooted: number) => void;
+    onRaidEnded: (solLooted: number) => void;
     getArmy: () => Record<string, number>;
     getSelectedTroopType: () => string | null;
     deployTroop: (type: string) => void;
@@ -64,20 +63,16 @@ class GameManager {
         this.uiHandlers.hideCloudOverlay?.();
     }
 
-    addGold(amount: number) {
-        this.uiHandlers.addGold?.(amount);
-    }
-
-    addElixir(amount: number) {
-        this.uiHandlers.addElixir?.(amount);
+    addSol(amount: number) {
+        this.uiHandlers.addSol?.(amount);
     }
 
     setGameMode(mode: GameMode) {
         this.uiHandlers.setGameMode?.(mode);
     }
 
-    updateBattleStats(destruction: number, gold: number, elixir: number) {
-        this.uiHandlers.updateBattleStats?.(destruction, gold, elixir);
+    updateBattleStats(destruction: number, sol: number) {
+        this.uiHandlers.updateBattleStats?.(destruction, sol);
     }
 
     onBuildingSelected(data: BuildingSelection) {
@@ -88,9 +83,9 @@ class GameManager {
         this.uiHandlers.onPlacementCancelled?.();
     }
 
-    onRaidEnded(goldLooted: number, elixirLooted: number) {
+    onRaidEnded(solLooted: number) {
         if (this.uiHandlers.onRaidEnded) {
-            this.uiHandlers.onRaidEnded(goldLooted, elixirLooted);
+            this.uiHandlers.onRaidEnded(solLooted);
             return true;
         }
         return false;

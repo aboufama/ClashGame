@@ -21,7 +21,7 @@ export interface StorageProvider {
   markNotificationsRead(userId: string): Promise<void>;
   getUnreadCount(userId: string): Promise<number>;
 
-  deductResources(userId: string, gold: number, elixir: number): Promise<void>;
+  deductResources(userId: string, sol: number): Promise<void>;
   wipeBases(): Promise<number>;
   wipeNotifications(): Promise<number>;
 }

@@ -22,8 +22,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const attackerId = typeof body.attackerId === 'string' ? body.attackerId : 'unknown';
       const attackerName = typeof body.attackerName === 'string' ? body.attackerName : 'Unknown Attacker';
-      const goldLooted = clampNumber(toInt(body.goldLooted, 0), 0, 1_000_000_000);
-      const elixirLooted = clampNumber(toInt(body.elixirLooted, 0), 0, 1_000_000_000);
+      const solLooted = clampNumber(toInt(body.solLooted, NaN), 0, 1_000_000_000);
+      const legacyGold = clampNumber(toInt(body.goldLooted, 0), 0, 1_000_000_000);
+      const legacyElixir = clampNumber(toInt(body.elixirLooted, 0), 0, 1_000_000_000);
+      const totalSol = Number.isFinite(solLooted) ? solLooted : clampNumber(legacyGold + legacyElixir, 0, 1_000_000_000);
       const destruction = clampNumber(toInt(body.destruction, 0), 0, 100);
 
       const notification = {
@@ -31,8 +33,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         victimId,
         attackerId,
         attackerName,
-        goldLost: goldLooted,
-        elixirLost: elixirLooted,
+        solLost: totalSol,
         destruction,
         timestamp: Date.now(),
         read: false,
@@ -40,8 +41,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       await storage.addNotification(notification);
 
-      if (goldLooted > 0 || elixirLooted > 0) {
-        await storage.deductResources(victimId, goldLooted, elixirLooted);
+      if (totalSol > 0) {
+        await storage.deductResources(victimId, totalSol);
       }
 
       return jsonOk(res, { success: true, notification });
@@ -59,9 +60,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const notifications = await storage.getNotifications(userId);
+      const normalized = notifications.map((notif: Record<string, unknown>) => {
+        const solLost = typeof notif.solLost === 'number'
+          ? notif.solLost
+          : clampNumber(toInt((notif as Record<string, unknown>).goldLost, 0), 0, 1_000_000_000)
+            + clampNumber(toInt((notif as Record<string, unknown>).elixirLost, 0), 0, 1_000_000_000);
+        return {
+          ...notif,
+          solLost,
+        };
+      });
       const unreadCount = await storage.getUnreadCount(userId);
 
-      return jsonOk(res, { success: true, notifications, unreadCount });
+      return jsonOk(res, { success: true, notifications: normalized, unreadCount });
     } catch (error) {
       console.error('Get notifications error:', error);
       return jsonError(res, 500, 'Internal server error');

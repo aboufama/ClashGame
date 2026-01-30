@@ -1,17 +1,17 @@
 import type { BuildingType, TroopType } from '../game/config/GameDefinitions';
 import { TROOP_DEFINITIONS } from '../game/config/GameDefinitions';
 import type { GameMode } from '../game/types/GameMode';
+import { formatSol } from '../game/solana/Currency';
 import { InfoPanel } from './InfoPanel';
 
 interface BattleStats {
   destruction: number;
-  goldLooted: number;
-  elixirLooted: number;
+  solLooted: number;
 }
 
 interface HudProps {
   view: GameMode;
-  resources: { gold: number; elixir: number };
+  resources: { sol: number };
   battleStats: BattleStats;
   battleStarted: boolean;
   capacity: { current: number; max: number };  // Used for future capacity display
@@ -23,8 +23,6 @@ interface HudProps {
   wallUpgradeCostOverride?: number;
   showCloudOverlay: boolean;
   isMobile: boolean;
-  goldAnimating?: boolean;
-  elixirAnimating?: boolean;
   onOpenSettings: () => void;
   onOpenBuild: () => void;
   onOpenTrain: () => void;
@@ -51,8 +49,6 @@ export function Hud({
   wallUpgradeCostOverride,
   showCloudOverlay,
   isMobile,
-  goldAnimating,
-  elixirAnimating,
   onOpenSettings,
   onOpenBuild,
   onOpenTrain,
@@ -79,11 +75,8 @@ export function Hud({
         {view === 'HOME' ? (
           <>
             <div className="resources">
-              <div className="res-item gold">
-                <div className="icon gold-icon"></div> {isMobile ? formatCompact(resources.gold) : resources.gold.toLocaleString()}
-              </div>
-              <div className="res-item elixir">
-                <div className="icon elixir-icon"></div> {isMobile ? formatCompact(resources.elixir) : resources.elixir.toLocaleString()}
+              <div className="res-item sol">
+                {formatSol(resources.sol, isMobile)}
               </div>
             </div>
             <button className="settings-btn" onClick={onOpenSettings}>
@@ -103,13 +96,8 @@ export function Hud({
                   </div>
                 </div>
                 <div className="loot-display">
-                  <div className="loot-item gold">
-                    <div className={`icon gold-icon ${goldAnimating ? 'collecting' : ''}`}></div>
-                    <span>+{isMobile ? formatCompact(battleStats.goldLooted) : battleStats.goldLooted}</span>
-                  </div>
-                  <div className="loot-item elixir">
-                    <div className={`icon elixir-icon ${elixirAnimating ? 'collecting' : ''}`}></div>
-                    <span>+{isMobile ? formatCompact(battleStats.elixirLooted) : battleStats.elixirLooted}</span>
+                  <div className="loot-item sol">
+                    <span>+{formatSol(battleStats.solLooted, isMobile)}</span>
                   </div>
                 </div>
               </>
@@ -211,9 +199,4 @@ export function Hud({
   );
 }
 
-// Helper to format large numbers compactly for mobile
-function formatCompact(num: number): string {
-  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-  if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
-  return num.toString();
-}
+// formatSol handles compact formatting for mobile.

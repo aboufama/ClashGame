@@ -14,8 +14,8 @@
 
 :root {
     /* Fantasy Color Palette */
-    --fantasy-gold: #FFD700;
-    --fantasy-gold-dark: #B8860B;
+    --fantasy-gold: #14F195;
+    --fantasy-gold-dark: #9945FF;
     --fantasy-silver: #C0C0C0;
     --fantasy-bronze: #CD7F32;
     --fantasy-red: #8B0000;
@@ -137,19 +137,14 @@
     min-width: 140px;
 }
 
-.res-item.gold {
-    color: #FFD700;
-    border-color: #B8860B;
-}
-
-.res-item.elixir {
-    color: #BA55D3;
-    border-color: #8B008B;
+.res-item.sol {
+    color: #14F195;
+    border-color: var(--panel-border);
 }
 
 .res-item .icon {
-    width: 28px;
-    height: 28px;
+    width: 48px;
+    height: 48px;
 }
 
 
@@ -767,47 +762,25 @@ button:disabled {
     height: 18px;
 }
 
-/* Tiny elixir icon for cost badges - 18px version */
-.troop-grid-item .cost-badge .elixir-icon::before,
-.building-grid-item .cost-badge .elixir-icon::before {
+/* Tiny SOL icon for cost badges - 18px version */
+.troop-grid-item .cost-badge .sol-icon::before,
+.building-grid-item .cost-badge .sol-icon::before {
     content: '';
     position: relative !important;
     display: block;
     width: 2px;
     height: 2px;
-    background: #9370DB;
+    background: #14F195;
     top: 7px;
     left: 7px;
     box-shadow:
-        0 -4px #696969, 0 -3px #808080,
-        -1px -3px #8B008B, 0 -3px #BA55D3, 1px -3px #8B008B,
-        -2px -2px #696969, -1px -2px #9370DB, 0 -2px #DDA0DD, 1px -2px #9370DB, 2px -2px #696969,
-        -3px -1px #696969, -2px -1px #9370DB, -1px -1px #BA55D3, 0 -1px #FF00FF, 1px -1px #BA55D3, 2px -1px #9370DB, 3px -1px #696969,
-        -3px 0 #696969, -2px 0 #9370DB, -1px 0 #DDA0DD, 0 0 #BA55D3, 1px 0 #DDA0DD, 2px 0 #9370DB, 3px 0 #696969,
-        -2px 1px #8B008B, -1px 1px #9370DB, 0 1px #BA55D3, 1px 1px #9370DB, 2px 1px #8B008B,
-        -1px 2px #8B008B, 0 2px #8B008B, 1px 2px #8B008B,
-        0 3px #696969;
-}
-
-/* Tiny gold icon for cost badges - 18px version */
-.troop-grid-item .cost-badge .gold-icon::before,
-.building-grid-item .cost-badge .gold-icon::before {
-    content: '';
-    position: relative !important;
-    display: block;
-    width: 2px;
-    height: 2px;
-    background: #FFD700;
-    top: 7px;
-    left: 7px;
-    box-shadow:
-        0 -3px #FFFACD, 0 -2px #FFF,
-        -1px -2px #DAA520, 0 -2px #FFFACD, 1px -2px #DAA520,
-        -2px -1px #B8860B, -1px -1px #FFD700, 0 -1px #FFF, 1px -1px #FFD700, 2px -1px #B8860B,
-        -3px 0 #B8860B, -2px 0 #FFD700, -1px 0 #FFFACD, 0 0 #FFF, 1px 0 #FFFACD, 2px 0 #FFD700, 3px 0 #B8860B,
-        -2px 1px #B8860B, -1px 1px #DAA520, 0 1px #FFD700, 1px 1px #DAA520, 2px 1px #B8860B,
-        -1px 2px #B8860B, 0 2px #DAA520, 1px 2px #B8860B,
-        0 3px #8B6914;
+        0 -3px #0fbf75, 0 -2px #eafff6,
+        -1px -2px #9945FF, 0 -2px #8dfed4, 1px -2px #7b2ff2,
+        -2px -1px #0a6f43, -1px -1px #14F195, 0 -1px #c8ffee, 1px -1px #14F195, 2px -1px #0a6f43,
+        -3px 0 #3a1a6b, -2px 0 #14F195, -1px 0 #c8ffee, 0 0 #ffffff, 1px 0 #c8ffee, 2px 0 #14F195, 3px 0 #3a1a6b,
+        -2px 1px #3a1a6b, -1px 1px #7b2ff2, 0 1px #14F195, 1px 1px #7b2ff2, 2px 1px #3a1a6b,
+        -1px 2px #3a1a6b, 0 2px #0fbf75, 1px 2px #3a1a6b,
+        0 3px #2a114d;
 }
 
 
@@ -1133,10 +1106,9 @@ button:disabled {
     height: 72px;
 }
 
-.icon.elixir-icon,
-.icon.gold-icon {
-    width: 24px;
-    height: 24px;
+.icon.sol-icon {
+    width: 48px;
+    height: 48px;
 }
 
 /* ==============================================
@@ -1207,19 +1179,14 @@ button:disabled {
     box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.5);
 }
 
-.loot-item.gold {
-    color: #FFD700;
-    border-color: #B8860B;
-}
-
-.loot-item.elixir {
-    color: #BA55D3;
-    border-color: #8B008B;
+.loot-item.sol {
+    color: #14F195;
+    border-color: var(--panel-border);
 }
 
 .loot-item .icon {
-    width: 24px;
-    height: 24px;
+    width: 48px;
+    height: 48px;
 }
 
 /* Simple Square Cloud Transition */

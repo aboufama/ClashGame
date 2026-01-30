@@ -18,8 +18,7 @@ export interface SerializedObstacle {
 }
 
 export interface PlayerResources {
-    gold: number;
-    elixir: number;
+    sol: number;
 }
 
 export interface SerializedWorld {

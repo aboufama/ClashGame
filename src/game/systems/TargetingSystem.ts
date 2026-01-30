@@ -7,11 +7,17 @@ export class TargetingSystem {
     static findTarget(troop: Troop, buildings: PlacedBuilding[]): PlacedBuilding | null {
         const def = TROOP_DEFINITIONS[troop.type];
 
-        const enemies = buildings.filter(b => b.owner !== troop.owner && b.health > 0);
+        const enemies = buildings.filter(b => {
+            if (b.owner === troop.owner || b.health <= 0) return false;
+            return !!BUILDING_DEFINITIONS[b.type as keyof typeof BUILDING_DEFINITIONS];
+        });
         if (enemies.length === 0) return null;
 
         const isWall = (b: PlacedBuilding) => b.type === 'wall';
-        const isDefense = (b: PlacedBuilding) => BUILDING_DEFINITIONS[b.type as keyof typeof BUILDING_DEFINITIONS].category === 'defense';
+        const isDefense = (b: PlacedBuilding) => {
+            const def = BUILDING_DEFINITIONS[b.type as keyof typeof BUILDING_DEFINITIONS];
+            return def ? def.category === 'defense' : false;
+        };
 
         const nonWalls = enemies.filter(b => !isWall(b));
 
@@ -46,6 +52,7 @@ export class TargetingSystem {
 
         candidates.forEach(b => {
             const info = BUILDING_DEFINITIONS[b.type as keyof typeof BUILDING_DEFINITIONS];
+            if (!info) return;
             const centerX = b.gridX + info.width / 2;
             const centerY = b.gridY + info.height / 2;
 

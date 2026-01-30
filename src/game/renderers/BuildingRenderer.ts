@@ -1341,6 +1341,11 @@ export class BuildingRenderer {
         }
     }
 
+    static drawSolanaCollector(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, time: number = 0, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
+        // Reuse the gold mine renderer with SOL-like tinting for now.
+        this.drawGoldMine(graphics, c1, c2, c3, c4, center, alpha, tint ?? 0x14f195, building, time, baseGraphics, skipBase, onlyBase);
+    }
+
     static drawElixirCollector(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, time: number = 0, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
         // Purple/pink theme for elixir
         const level = building?.level ?? 1;

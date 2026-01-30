@@ -19,6 +19,7 @@ import { gameManager } from '../GameManager';
 import { particleManager } from '../systems/ParticleManager';
 import type { GameMode } from '../types/GameMode';
 import { SceneInputController } from './controllers/SceneInputController';
+import solanaCoin from '../../assets/Solana.png';
 
 const BUILDINGS = BUILDING_DEFINITIONS as any;
 const OBSTACLES = OBSTACLE_DEFINITIONS as any;
@@ -138,8 +139,7 @@ export class MainScene extends Phaser.Scene {
     public lastGrassGrowTime = 0;
 
     public destroyedBuildings = 0;
-    public goldLooted = 0;
-    public elixirLooted = 0;
+    public solLooted = 0;
     public hasDeployed = false;
     public raidEndScheduled = false; // Prevent multiple end calls
     public pendingSpawnCount = 0; // Prevent battle end during troop splits (phalanx/recursion)
@@ -173,7 +173,28 @@ export class MainScene extends Phaser.Scene {
         super('MainScene');
     }
 
-    preload() { }
+    private normalizeBuildingType(type: string): BuildingType | null {
+        if (type === 'mine' || type === 'elixir_collector') return 'solana_collector';
+        return BUILDINGS[type] ? (type as BuildingType) : null;
+    }
+
+    private getAttackEnemyBuildings(): PlacedBuilding[] {
+        if (this.mode === 'ATTACK') {
+            return this.buildings.filter(b => b.type !== 'wall');
+        }
+        return this.buildings.filter(b => b.owner === 'ENEMY' && b.type !== 'wall');
+    }
+
+    private getBattleTotals() {
+        const enemies = this.getAttackEnemyBuildings();
+        const remaining = enemies.filter(b => b.health > 0 && !b.isDestroyed).length;
+        const totalKnown = Math.max(this.initialEnemyBuildings, this.destroyedBuildings + remaining, enemies.length);
+        return { remaining, totalKnown };
+    }
+
+    preload() {
+        this.load.image('solanaCoin', solanaCoin);
+    }
 
     create() {
         this.cameras.main.setBackgroundColor('#141824'); // Deep midnight navy background
@@ -203,6 +224,10 @@ export class MainScene extends Phaser.Scene {
 
         // Initialize at 1.5
         PixelatePipeline.size = 1.5;
+
+        if (this.textures.exists('solanaCoin')) {
+            this.textures.get('solanaCoin').setFilter(Phaser.Textures.FilterMode.NEAREST);
+        }
 
         this.inputController = new SceneInputController(this);
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => this.inputController.onPointerDown(pointer));
@@ -358,27 +383,31 @@ export class MainScene extends Phaser.Scene {
         // We filter by health > 0 to exclude dying troops that might still be in the array for animation handling
         const activeTroops = this.troops.filter(t => t.health > 0).length;
 
-        // 3. Check Destruction Percentage
-        // Ensure we don't divide by zero
-        const totalBuildings = Math.max(1, this.initialEnemyBuildings);
-        const percent = Math.floor((this.destroyedBuildings / totalBuildings) * 100);
+        const { remaining } = this.getBattleTotals();
 
         // Debug info (console logs would be visible in browser)
-        // console.log(`Battle State: Army: ${armyRemaining}, Active: ${activeTroops}, Destruction: ${percent}%`);
+        // console.log(`Battle State: Army: ${armyRemaining}, Active: ${activeTroops}, Remaining: ${remaining}`);
 
         // END CONDITION:
         // A) No reinforcements left AND no troops fighting AND no pending spawns (splits)
-        // B) Base is 100% destroyed
-        if ((armyRemaining <= 0 && activeTroops === 0 && this.pendingSpawnCount === 0) || percent >= 100) {
+        // B) Base is 100% destroyed (no non-wall buildings remain)
+        const noEnemiesRemaining = remaining === 0 && (this.destroyedBuildings > 0 || this.initialEnemyBuildings > 0);
+        if ((armyRemaining <= 0 && activeTroops === 0 && this.pendingSpawnCount === 0) || noEnemiesRemaining) {
             this.raidEndScheduled = true;
 
             // 2-second delay to let final animations play / player realize what happened
             this.time.delayedCall(2000, () => {
                 // Trigger the end sequence via the game manager callback, but pass a flag or handle it there
                 // The user wants the SAME pathway as "Return Home"
-                const handled = gameManager.onRaidEnded(this.goldLooted, this.elixirLooted);
+                let handled = false;
+                try {
+                    handled = gameManager.onRaidEnded(this.solLooted);
+                } catch (error) {
+                    console.error('onRaidEnded handler failed:', error);
+                }
                 if (!handled) {
                     this.showCloudTransition(() => {
+                        gameManager.setGameMode('HOME');
                         this.goHome();
                         // We also need to tell React to switch view if possible, but goHome handles internal state
                     });
@@ -896,16 +925,19 @@ export class MainScene extends Phaser.Scene {
 
     private instantiateBuilding(data: SerializedBuilding, owner: 'PLAYER' | 'ENEMY') {
         const { gridX, gridY, type, id, level = 1 } = data;
-        const info = BUILDINGS[type];
-        if (!info) return;
+        const normalizedType = this.normalizeBuildingType(type as string);
+        if (!normalizedType) {
+            console.warn('Unknown building type skipped:', type);
+            return;
+        }
 
         // Calculate stats based on level
-        const stats = getBuildingStats(type as BuildingType, level);
+        const stats = getBuildingStats(normalizedType as BuildingType, level);
 
         const graphics = this.add.graphics();
         const baseGraphics = undefined; // Optimization: Bake to Ground Texture instead of per-building graphics
         const building: PlacedBuilding = {
-            id, type, gridX, gridY, level, graphics, baseGraphics,
+            id, type: normalizedType, gridX, gridY, level, graphics, baseGraphics,
             healthBar: this.add.graphics(),
             health: stats.maxHealth || 100,
             maxHealth: stats.maxHealth || 100,
@@ -917,26 +949,26 @@ export class MainScene extends Phaser.Scene {
 
         // Draw dynamic visuals (skipBase=true implied by bake, but drawBuildingVisuals handles default)
         // We pass skipBase=true to ensure only dynamic parts are drawn to 'graphics'
-        this.drawBuildingVisuals(graphics, gridX, gridY, type, 1, null, building, baseGraphics, true);
+        this.drawBuildingVisuals(graphics, gridX, gridY, normalizedType, 1, null, building, baseGraphics, true);
 
-        const depth = depthForBuilding(gridX, gridY, type as BuildingType);
+        const depth = depthForBuilding(gridX, gridY, normalizedType as BuildingType);
         graphics.setDepth(depth);
 
         // Initialize cannon angle
-        if (type === 'cannon') {
+        if (normalizedType === 'cannon') {
             building.ballistaAngle = Math.PI / 4; // Default facing bottom-right
         }
 
         this.buildings.push(building);
         this.updateHealthBar(building);
 
-        if (type === 'army_camp') {
+        if (normalizedType === 'army_camp') {
             const campLevels = this.buildings.filter(b => b.type === 'army_camp').map(b => b.level ?? 1);
             gameManager.refreshCampCapacity(campLevels);
         }
 
         // Update neighbor wall connections when a new wall is placed
-        if (type === 'wall') {
+        if (normalizedType === 'wall') {
             this.refreshWallNeighbors(gridX, gridY, owner);
         }
 
@@ -1072,11 +1104,8 @@ export class MainScene extends Phaser.Scene {
                     BuildingRenderer.drawBallista(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, skipBase, onlyBase);
                 }
                 break;
-            case 'mine':
-                BuildingRenderer.drawGoldMine(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now, baseGraphics, skipBase, onlyBase);
-                break;
-            case 'elixir_collector':
-                BuildingRenderer.drawElixirCollector(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now, baseGraphics, skipBase, onlyBase);
+            case 'solana_collector':
+                BuildingRenderer.drawSolanaCollector(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now, baseGraphics, skipBase, onlyBase);
                 break;
             case 'mortar':
                 BuildingRenderer.drawMortar(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now, baseGraphics);
@@ -1224,6 +1253,7 @@ export class MainScene extends Phaser.Scene {
         this.rubble.forEach(r => {
             // Only animate large rubble (3x3)
             if (r.width >= 3 || r.height >= 3) {
+                if (!r.graphics || !r.graphics.scene) return;
                 r.graphics.clear();
 
                 // Fire fades out over time: full for 15s, then fades over 30s
@@ -1375,7 +1405,8 @@ export class MainScene extends Phaser.Scene {
 
 
     public updateHealthBar(item: PlacedBuilding | Troop) {
-        if (!item.healthBar) return; // Safely ignore dummy targets without health bars
+        if (!item.healthBar || !item.healthBar.scene) return; // Ignore destroyed or dummy health bars
+        if ('isDestroyed' in item && item.isDestroyed) return;
         const bar = item.healthBar;
         bar.clear();
 
@@ -1395,6 +1426,7 @@ export class MainScene extends Phaser.Scene {
 
         if (isBuilding) {
             const info = BUILDINGS[item.type];
+            if (!info) return;
             const p = IsoUtils.cartToIso(item.gridX + info.width / 2, item.gridY + info.height / 2);
             width = 36 + info.width * 8;
             height = 8;
@@ -3946,6 +3978,20 @@ export class MainScene extends Phaser.Scene {
         const index = this.buildings.findIndex(x => x.id === b.id);
         if (index === -1) return;
 
+        if (b.isDestroyed) return;
+        b.isDestroyed = true;
+
+        const info = BUILDINGS[b.type];
+        if (!info) {
+            if (b.graphics) b.graphics.destroy();
+            if (b.baseGraphics) b.baseGraphics.destroy();
+            if (b.barrelGraphics) b.barrelGraphics.destroy();
+            if (b.rangeIndicator) b.rangeIndicator.destroy();
+            if (b.healthBar) b.healthBar.destroy();
+            this.buildings.splice(index, 1);
+            return;
+        }
+
         // Remove any baked base from the ground layer so ruins can replace it.
         this.unbakeBuildingFromGround(b);
 
@@ -3963,7 +4009,6 @@ export class MainScene extends Phaser.Scene {
             b.rangeIndicator.destroy();
         }
 
-        const info = BUILDINGS[b.type];
         const pos = IsoUtils.cartToIso(b.gridX + info.width / 2, b.gridY + info.height / 2);
         const size = Math.max(info.width, info.height);
 
@@ -4066,23 +4111,8 @@ export class MainScene extends Phaser.Scene {
                     onComplete: () => spark.destroy()
                 });
             }
-        } else if (b.type === 'mine') {
-            // Gold coins scatter
-            for (let i = 0; i < 10; i++) {
-                const coin = this.add.circle(pos.x, pos.y - 10, 4, 0xffd700, 1);
-                coin.setDepth(30000);
-                const angle = Math.random() * Math.PI * 2;
-                const dist = 25 + Math.random() * 25;
-                this.tweens.add({
-                    targets: coin,
-                    x: pos.x + Math.cos(angle) * dist,
-                    y: [pos.y - 30, pos.y + 5],
-                    duration: 400, ease: 'Quad.easeIn',
-                    onComplete: () => {
-                        this.tweens.add({ targets: coin, alpha: 0, duration: 200, onComplete: () => coin.destroy() });
-                    }
-                });
-            }
+        } else if (b.type === 'solana_collector' || b.type === 'mine' || b.type === 'elixir_collector') {
+            this.spawnSolCoinBurst(pos.x, pos.y - 10);
         }
 
         // Create rubble at the building location (attack mode only)
@@ -4096,6 +4126,11 @@ export class MainScene extends Phaser.Scene {
         if (b.barrelGraphics) b.barrelGraphics.destroy();
         b.healthBar.destroy();
         this.buildings.splice(index, 1);
+
+        // Clear any troops still targeting this building
+        this.troops.forEach(t => {
+            if (t.target && t.target.id === b.id) t.target = null;
+        });
 
         // If a wall is broken, force all troops to re-evaluate paths
         // This allows them to switch from attacking a wall to using a new gap
@@ -4111,25 +4146,14 @@ export class MainScene extends Phaser.Scene {
 
         if (this.mode === 'ATTACK') {
             // Track destruction stats and loot
-            if (b.owner === 'ENEMY') {
-                if (b.type !== 'wall') this.destroyedBuildings++;
+            if (b.type !== 'wall') this.destroyedBuildings++;
 
-                // Award loot if available
-                if (b.loot) {
-                    this.goldLooted += b.loot.gold;
-                    this.elixirLooted += b.loot.elixir;
-                }
-
-                this.updateBattleStats();
+            // Award loot if available
+            if (b.loot) {
+                this.solLooted += b.loot.sol;
             }
 
-            const enemies = this.buildings.filter(eb => eb.owner === 'ENEMY' && eb.type !== 'wall');
-            if (enemies.length === 0 && !this.raidEndScheduled) {
-                this.raidEndScheduled = true;
-                const gold = this.goldLooted;
-                const elixir = this.elixirLooted;
-                this.time.delayedCall(2000, () => { gameManager.onRaidEnded(gold, elixir); });
-            }
+            this.updateBattleStats();
 
         } else {
             if (b.type === 'army_camp') {
@@ -4145,10 +4169,11 @@ export class MainScene extends Phaser.Scene {
 
 
     private updateBattleStats() {
-        const destruction = this.initialEnemyBuildings > 0
-            ? Math.round((this.destroyedBuildings / this.initialEnemyBuildings) * 100)
+        const { totalKnown } = this.getBattleTotals();
+        const destruction = totalKnown > 0
+            ? Math.min(100, Math.round((this.destroyedBuildings / totalKnown) * 100))
             : 0;
-        gameManager.updateBattleStats(destruction, this.goldLooted, this.elixirLooted);
+        gameManager.updateBattleStats(destruction, this.solLooted);
     }
 
 
@@ -4604,23 +4629,80 @@ export class MainScene extends Phaser.Scene {
         this.lastResourceUpdate = time;
 
         const intervalSeconds = this.resourceInterval / 1000;
-        let goldPerSecond = 0;
-        let elixirPerSecond = 0;
+        let solPerSecond = 0;
+        const collectorPositions: Phaser.Math.Vector2[] = [];
 
         this.buildings.forEach(b => {
             if (b.owner !== 'PLAYER') return;
-            if (b.type !== 'mine' && b.type !== 'elixir_collector') return;
-            const stats = getBuildingStats(b.type as BuildingType, b.level || 1);
+            if (b.type !== 'solana_collector' && b.type !== 'mine' && b.type !== 'elixir_collector') return;
+            const statsType = b.type === 'mine' || b.type === 'elixir_collector' ? 'solana_collector' : b.type;
+            const stats = getBuildingStats(statsType as BuildingType, b.level || 1);
             const rate = stats.productionRate || 0;
-            if (b.type === 'mine') goldPerSecond += rate;
-            if (b.type === 'elixir_collector') elixirPerSecond += rate;
+            solPerSecond += rate;
+            collectorPositions.push(IsoUtils.cartToIso(b.gridX, b.gridY));
         });
 
-        const goldToAdd = Math.floor(goldPerSecond * intervalSeconds);
-        const elixirToAdd = Math.floor(elixirPerSecond * intervalSeconds);
+        const solToAdd = Math.floor(solPerSecond * intervalSeconds);
 
-        if (goldToAdd > 0) gameManager.addGold(goldToAdd);
-        if (elixirToAdd > 0) gameManager.addElixir(elixirToAdd);
+        if (solToAdd > 0) {
+            gameManager.addSol(solToAdd);
+            collectorPositions.forEach(pos => {
+                const burstCount = 2 + (Math.random() < 0.5 ? 1 : 0);
+                for (let i = 0; i < burstCount; i++) {
+                    const jitterX = (Math.random() - 0.5) * 8;
+                    const jitterY = (Math.random() - 0.5) * 4;
+                    this.spawnSolCoinRise(pos.x + jitterX, pos.y - 18 + jitterY);
+                }
+            });
+        }
+    }
+
+    private spawnSolCoinRise(x: number, y: number) {
+        if (!this.textures.exists('solanaCoin')) return;
+        const coin = this.add.image(x, y, 'solanaCoin');
+        coin.setDepth(30000);
+        coin.setDisplaySize(14, 14);
+        coin.setAlpha(0.9);
+        coin.setAngle((Math.random() - 0.5) * 12);
+
+        const drift = (Math.random() - 0.5) * 10;
+        const rise = 16 + Math.random() * 10;
+
+        this.tweens.add({
+            targets: coin,
+            x: x + drift,
+            y: y - rise,
+            alpha: 0,
+            duration: 750,
+            ease: 'Sine.easeOut',
+            onComplete: () => coin.destroy()
+        });
+    }
+
+    private spawnSolCoinBurst(x: number, y: number, count: number = 14) {
+        if (!this.textures.exists('solanaCoin')) return;
+
+        for (let i = 0; i < count; i++) {
+            const coin = this.add.image(x, y, 'solanaCoin');
+            coin.setDepth(30000);
+            coin.setDisplaySize(16, 16);
+            coin.setAlpha(1);
+            coin.setAngle((Math.random() - 0.5) * 20);
+
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 18 + Math.random() * 26;
+            const rise = 18 + Math.random() * 20;
+
+            this.tweens.add({
+                targets: coin,
+                x: x + Math.cos(angle) * dist,
+                y: y - rise,
+                alpha: 0,
+                duration: 550 + Math.random() * 150,
+                ease: 'Quad.easeOut',
+                onComplete: () => coin.destroy()
+            });
+        }
     }
 
 
@@ -5143,10 +5225,9 @@ export class MainScene extends Phaser.Scene {
                     await this.generateEnemyVillage();
                     this.centerCamera();
                     // Initialize battle stats
-                    this.initialEnemyBuildings = this.buildings.filter(b => b.owner === 'ENEMY' && b.type !== 'wall').length;
+                    this.initialEnemyBuildings = this.getAttackEnemyBuildings().length;
                     this.destroyedBuildings = 0;
-                    this.goldLooted = 0;
-                    this.elixirLooted = 0;
+                    this.solLooted = 0;
                     this.raidEndScheduled = false; // Reset for new raid
                     this.updateBattleStats();
                 });
@@ -5168,7 +5249,7 @@ export class MainScene extends Phaser.Scene {
                             isBot: true
                         };
                         // Distribute loot
-                        const lootMap = LootSystem.calculateLootDistribution(playerWorld.buildings, playerWorld.resources.gold, playerWorld.resources.elixir);
+                        const lootMap = LootSystem.calculateLootDistribution(playerWorld.buildings, playerWorld.resources.sol);
                         playerWorld.buildings.forEach((b: any) => {
                             const inst = this.instantiateBuilding(b, 'ENEMY'); // Load as enemy so defenses work
                             if (inst) inst.loot = lootMap.get(b.id);
@@ -5187,10 +5268,9 @@ export class MainScene extends Phaser.Scene {
                     this.updateVillageName();
                     this.centerCamera();
                     // Initialize battle stats
-                    this.initialEnemyBuildings = this.buildings.filter(b => b.owner === 'ENEMY' && b.type !== 'wall').length;
+                    this.initialEnemyBuildings = this.getAttackEnemyBuildings().length;
                     this.destroyedBuildings = 0;
-                    this.goldLooted = 0;
-                    this.elixirLooted = 0;
+                    this.solLooted = 0;
                     this.raidEndScheduled = false;
                     this.updateBattleStats();
                 });
@@ -5206,10 +5286,9 @@ export class MainScene extends Phaser.Scene {
                     await this.generateOnlineEnemyVillage();
                     this.centerCamera();
                     // Initialize battle stats
-                    this.initialEnemyBuildings = this.buildings.filter(b => b.owner === 'ENEMY' && b.type !== 'wall').length;
+                    this.initialEnemyBuildings = this.getAttackEnemyBuildings().length;
                     this.destroyedBuildings = 0;
-                    this.goldLooted = 0;
-                    this.elixirLooted = 0;
+                    this.solLooted = 0;
                     this.raidEndScheduled = false;
                     this.updateBattleStats();
                 });
@@ -5229,10 +5308,9 @@ export class MainScene extends Phaser.Scene {
                     }
                     this.centerCamera();
                     // Initialize battle stats
-                    this.initialEnemyBuildings = this.buildings.filter(b => b.owner === 'ENEMY' && b.type !== 'wall').length;
+                    this.initialEnemyBuildings = this.getAttackEnemyBuildings().length;
                     this.destroyedBuildings = 0;
-                    this.goldLooted = 0;
-                    this.elixirLooted = 0;
+                    this.solLooted = 0;
                     this.raidEndScheduled = false;
                     this.updateBattleStats();
                 });
@@ -5251,10 +5329,9 @@ export class MainScene extends Phaser.Scene {
                     await this.generateEnemyVillage();
                     this.centerCamera();
                     // Reset battle stats for new village
-                    this.initialEnemyBuildings = this.buildings.filter(b => b.owner === 'ENEMY' && b.type !== 'wall').length;
+                    this.initialEnemyBuildings = this.getAttackEnemyBuildings().length;
                     this.destroyedBuildings = 0;
-                    this.goldLooted = 0;
-                    this.elixirLooted = 0;
+                    this.solLooted = 0;
                     this.updateBattleStats();
                 });
             },
@@ -5427,8 +5504,7 @@ export class MainScene extends Phaser.Scene {
         await this.placeBuilding(cx - 3, cy, 'cannon', 'PLAYER', true);         // Defense
         await this.placeBuilding(cx + 4, cy, 'barracks', 'PLAYER', true);       // Troops
         await this.placeBuilding(cx, cy + 4, 'army_camp', 'PLAYER', true);      // Army
-        await this.placeBuilding(cx + 3, cy + 3, 'mine', 'PLAYER', true);       // Resource
-        await this.placeBuilding(cx - 3, cy - 3, 'elixir_collector', 'PLAYER', true); // Resource
+        await this.placeBuilding(cx + 3, cy + 3, 'solana_collector', 'PLAYER', true); // Resource
 
         // Spawn random wildlife/obstacles (Fewer for clean slate)
         this.spawnRandomObstacles(8);
@@ -5438,8 +5514,7 @@ export class MainScene extends Phaser.Scene {
         const enemyWorld = await Backend.generateEnemyWorld();
         // Give fake resources for loot
         enemyWorld.resources = {
-            gold: Math.floor(10000 + Math.random() * 40000),
-            elixir: Math.floor(10000 + Math.random() * 40000)
+            sol: Math.floor(20000 + Math.random() * 80000)
         };
 
         // Track enemy info for village name
@@ -5449,7 +5524,7 @@ export class MainScene extends Phaser.Scene {
             isBot: true
         };
 
-        const lootMap = LootSystem.calculateLootDistribution(enemyWorld.buildings, enemyWorld.resources.gold, enemyWorld.resources.elixir);
+        const lootMap = LootSystem.calculateLootDistribution(enemyWorld.buildings, enemyWorld.resources.sol);
 
         enemyWorld.buildings.forEach(b => {
             const inst = this.instantiateBuilding(b, 'ENEMY');
@@ -5475,7 +5550,7 @@ export class MainScene extends Phaser.Scene {
             isBot: (onlineBase as any).isBot || false
         };
 
-        const lootMap = LootSystem.calculateLootDistribution(onlineBase.buildings, onlineBase.resources.gold, onlineBase.resources.elixir);
+        const lootMap = LootSystem.calculateLootDistribution(onlineBase.buildings, onlineBase.resources.sol);
 
         onlineBase.buildings.forEach((b: any) => {
             const inst = this.instantiateBuilding(b, 'ENEMY');
@@ -5500,7 +5575,7 @@ export class MainScene extends Phaser.Scene {
             isBot: false
         };
 
-        const lootMap = LootSystem.calculateLootDistribution(userBase.buildings, userBase.resources.gold, userBase.resources.elixir);
+        const lootMap = LootSystem.calculateLootDistribution(userBase.buildings, userBase.resources.sol);
 
         userBase.buildings.forEach((b: any) => {
             const inst = this.instantiateBuilding(b, 'ENEMY');

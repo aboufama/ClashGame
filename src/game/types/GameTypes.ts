@@ -13,7 +13,7 @@ export interface PlacedBuilding {
     health: number;
     maxHealth: number;
     owner: 'PLAYER' | 'ENEMY';
-    loot?: { gold: number, elixir: number };
+    loot?: { sol: number };
     // Ballista-specific properties
     ballistaAngle?: number;        // Current angle in radians (0 = facing right/east)
     ballistaTargetAngle?: number;  // Target angle to smoothly rotate towards
@@ -38,6 +38,7 @@ export interface PlacedBuilding {
     lastTrailTime?: number;     // For specialized smoke trails
     lastSmokeTime?: number;     // For defensive smoke effects
     baseGraphics?: Phaser.GameObjects.Graphics; // Separate graphics for ground-level base (prevents clipping)
+    isDestroyed?: boolean;
 }
 
 export interface Troop {

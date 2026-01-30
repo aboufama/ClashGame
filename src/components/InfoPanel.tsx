@@ -4,7 +4,7 @@ import { BUILDING_TEXTS } from '../game/config/GameText';
 interface InfoPanelProps {
     type: BuildingType;
     level: number;
-    resources: { gold: number, elixir: number };
+    resources: { sol: number };
     isExiting: boolean;
     onDelete: () => void;
     onUpgrade: () => void;
@@ -35,7 +35,7 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ type, level, resources, is
 
     // Use override cost if provided, else standard next level cost
     const finalCost = upgradeCost !== undefined ? upgradeCost : (nextLevelStats?.cost || 0);
-    const canAfford = nextLevelStats ? resources.gold >= finalCost : true;
+    const canAfford = nextLevelStats ? resources.sol >= finalCost : true;
     const upgradeDisabled = isMaxLevel || !canAfford;
 
     // ... CSS logic ...
@@ -179,8 +179,8 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ type, level, resources, is
                         {isMaxLevel ? 'MAX LEVEL' : (
                             <>
                                 <span>UPGRADE</span>
-                                <span style={{ fontSize: '0.65rem', opacity: canAfford ? 1 : 0.7, color: canAfford ? '#ffd700' : '#ff4444' }}>
-                                    {finalCost} Gold
+                                <span style={{ fontSize: '0.65rem', opacity: canAfford ? 1 : 0.7, color: canAfford ? '#14F195' : '#ff4444' }}>
+                                    {finalCost} SOL
                                 </span>
                             </>
                         )}

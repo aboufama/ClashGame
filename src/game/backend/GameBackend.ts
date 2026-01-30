@@ -22,6 +22,30 @@ export class GameBackend {
         return Auth.isOnlineMode();
     }
 
+    private normalizeWorld(world: SerializedWorld): SerializedWorld {
+        world.buildings = world.buildings.map((building) => {
+            const type = building.type as string;
+            if (type === 'mine' || type === 'elixir_collector') {
+                return { ...building, type: 'solana_collector' as BuildingType };
+            }
+            return building;
+        }).filter((building) => {
+            const type = building.type as BuildingType;
+            return !!BUILDING_DEFINITIONS[type];
+        });
+
+        const resources = (world.resources as unknown as Record<string, unknown>) || {};
+        if (typeof resources.sol === 'number' && Number.isFinite(resources.sol)) {
+            world.resources = { sol: Math.max(0, resources.sol) };
+            return world;
+        }
+
+        const legacyGold = typeof resources.gold === 'number' ? resources.gold : 0;
+        const legacyElixir = typeof resources.elixir === 'number' ? resources.elixir : 0;
+        world.resources = { sol: Math.max(0, legacyGold + legacyElixir) };
+        return world;
+    }
+
     public async deleteWorld(worldId: string): Promise<void> {
         this.worlds.delete(worldId);
         localStorage.removeItem(`clashIso_world_${worldId}`);
@@ -74,8 +98,9 @@ export class GameBackend {
 
             const data = await response.json();
             if (data.success && data.base) {
-                this.worlds.set(userId, data.base);
-                return data.base;
+                const normalized = this.normalizeWorld(data.base);
+                this.worlds.set(userId, normalized);
+                return normalized;
             }
             return null;
         } catch (error) {
@@ -100,7 +125,7 @@ export class GameBackend {
 
             const data = await response.json();
             if (data.success && data.base) {
-                return data.base;
+                return this.normalizeWorld(data.base);
             }
             return null;
         } catch (error) {
@@ -110,7 +135,7 @@ export class GameBackend {
     }
 
     // Record attack result and notify victim
-    public async recordAttack(victimId: string, attackerId: string, attackerName: string, goldLooted: number, elixirLooted: number, destruction: number): Promise<void> {
+    public async recordAttack(victimId: string, attackerId: string, attackerName: string, solLooted: number, destruction: number): Promise<void> {
         if (!this.isOnline()) return;
         if (!victimId || victimId.startsWith('bot_') || victimId.startsWith('enemy_')) return;
 
@@ -122,8 +147,7 @@ export class GameBackend {
                     victimId,
                     attackerId,
                     attackerName,
-                    goldLooted,
-                    elixirLooted,
+                    solLooted,
                     destruction
                 })
             });
@@ -180,14 +204,15 @@ export class GameBackend {
 
     public async saveWorld(world: SerializedWorld, immediate: boolean = false): Promise<void> {
         world.lastSaveTime = Date.now();
-        this.worlds.set(world.id, world);
+        const normalized = this.normalizeWorld(world);
+        this.worlds.set(world.id, normalized);
 
         // Don't save enemy worlds
         if (world.ownerId === 'ENEMY' || world.id.startsWith('enemy_') || world.id.startsWith('bot_')) return;
 
         // Save to local storage
         try {
-            localStorage.setItem(`clashIso_world_${world.id}`, JSON.stringify(world));
+            localStorage.setItem(`clashIso_world_${world.id}`, JSON.stringify(normalized));
         } catch (error) {
             console.warn('Failed to persist world to localStorage:', error);
         }
@@ -201,10 +226,10 @@ export class GameBackend {
                     this.saveTimeout = null;
                 }
                 this.pendingSave = null;
-                await this.syncToCloud(world);
+                await this.syncToCloud(normalized);
             } else {
                 // Debounced cloud sync (every 500ms max for faster persistence)
-                this.pendingSave = world;
+                this.pendingSave = normalized;
                 if (!this.saveTimeout) {
                     this.saveTimeout = setTimeout(async () => {
                         if (this.pendingSave) {
@@ -227,10 +252,11 @@ export class GameBackend {
             try {
                 const cloudWorld = await this.loadFromCloud(id);
                 if (cloudWorld) {
-                    this.worlds.set(id, cloudWorld);
+                    const normalized = this.normalizeWorld(cloudWorld);
+                    this.worlds.set(id, normalized);
                     // Also update local storage
-                    localStorage.setItem(`clashIso_world_${id}`, JSON.stringify(cloudWorld));
-                    return cloudWorld;
+                    localStorage.setItem(`clashIso_world_${id}`, JSON.stringify(normalized));
+                    return normalized;
                 } else {
                     // Cloud returned 404 (null). Explicitly no base found in cloud.
                     // We should return null to trigger fresh placement instead of using stale local storage.
@@ -246,8 +272,9 @@ export class GameBackend {
         if (saved) {
             try {
                 const parsed = JSON.parse(saved);
-                this.worlds.set(id, parsed);
-                return parsed;
+                const normalized = this.normalizeWorld(parsed);
+                this.worlds.set(id, normalized);
+                return normalized;
             } catch { }
         }
 
@@ -271,7 +298,7 @@ export class GameBackend {
             ownerId: owner,
             username: user?.username || 'Commander',
             buildings: [],
-            resources: { gold: 100000, elixir: 100000 },
+            resources: { sol: 200000 },
             army: {},
             lastSaveTime: Date.now()
         };
@@ -289,12 +316,11 @@ export class GameBackend {
         }
     }
 
-    public async updateResources(worldId: string, gold: number, elixir: number): Promise<void> {
+    public async updateResources(worldId: string, sol: number): Promise<void> {
         const world = await this.getWorld(worldId);
         if (world) {
             world.resources = {
-                gold: Math.max(0, gold),
-                elixir: Math.max(0, elixir)
+                sol: Math.max(0, sol)
             };
             await this.saveWorld(world);
         }
@@ -430,36 +456,35 @@ export class GameBackend {
         return true;
     }
 
-    public async calculateOfflineProduction(worldId: string): Promise<{ gold: number, elixir: number }> {
+    public async calculateOfflineProduction(worldId: string): Promise<{ sol: number }> {
         const world = await this.getWorld(worldId);
-        if (!world || !world.lastSaveTime) return { gold: 0, elixir: 0 };
+        if (!world || !world.lastSaveTime) return { sol: 0 };
 
         const now = Date.now();
         const diffMs = now - world.lastSaveTime;
-        if (diffMs < 10000) return { gold: 0, elixir: 0 };
+        if (diffMs < 10000) return { sol: 0 };
 
         const diffSeconds = diffMs / 1000;
         const offlineFactor = 0.2;
 
-        let totalGold = 0;
-        let totalElixir = 0;
+        let totalSol = 0;
 
         world.buildings.forEach(b => {
-            const stats = getBuildingStats(b.type, b.level || 1);
+            const type = b.type as string;
+            const statsType = type === 'mine' || type === 'elixir_collector' ? 'solana_collector' : b.type;
+            const stats = getBuildingStats(statsType, b.level || 1);
             if (stats.productionRate && stats.productionRate > 0) {
                 const amount = Math.floor(stats.productionRate * diffSeconds * offlineFactor);
-                if (b.type === 'mine') totalGold += amount;
-                if (b.type === 'elixir_collector') totalElixir += amount;
+                if (type === 'solana_collector' || type === 'mine' || type === 'elixir_collector') totalSol += amount;
             }
         });
 
-        if (totalGold > 0 || totalElixir > 0) {
-            world.resources.gold += totalGold;
-            world.resources.elixir += totalElixir;
+        if (totalSol > 0) {
+            world.resources.sol += totalSol;
             await this.saveWorld(world);
         }
 
-        return { gold: totalGold, elixir: totalElixir };
+        return { sol: totalSol };
     }
 
     public async generateEnemyWorld(): Promise<SerializedWorld> {
@@ -519,8 +544,8 @@ export class GameBackend {
             const b = await this.placeBuilding(id, defType, tx, ty);
             if (b) b.level = getRandomLevel(defType);
 
-            const mine = await this.placeBuilding(id, 'mine', tx + 1, ty + 1);
-            if (mine) mine.level = getRandomLevel('mine');
+            const collector = await this.placeBuilding(id, 'solana_collector', tx + 1, ty + 1);
+            if (collector) collector.level = getRandomLevel('solana_collector');
 
             await this.generateRectWall(id, tx - 2, ty - 2, 5, 5, wallLevel);
         }
@@ -541,8 +566,7 @@ export class GameBackend {
         await this.generateRectWall(id, 3, 3, MAP_SIZE - 7, MAP_SIZE - 7, wallLevel);
 
         world.resources = {
-            gold: Math.floor(50000 + Math.random() * 100000),
-            elixir: Math.floor(50000 + Math.random() * 100000)
+            sol: Math.floor(100000 + Math.random() * 200000)
         };
         await this.saveWorld(world);
         return world;

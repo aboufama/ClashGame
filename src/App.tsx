@@ -35,7 +35,7 @@ function App() {
   const [isOnline, setIsOnline] = useState(false);
 
   const [loading, setLoading] = useState(true);
-  const [resources, setResources] = useState({ gold: 0, elixir: 0 });
+  const [resources, setResources] = useState({ sol: 0 });
   const [army, setArmy] = useState({ warrior: 0, archer: 0, giant: 0, ward: 0, recursion: 0, ram: 0, stormmage: 0, golem: 0, sharpshooter: 0, mobilemortar: 0, davincitank: 0, phalanx: 0 });
   const [isMobile] = useState(() => MobileUtils.isMobile());
 
@@ -101,8 +101,7 @@ function App() {
           world = latestWorld;
         }
         setResources({
-          gold: Math.max(0, world.resources.gold),
-          elixir: Math.max(0, world.resources.elixir)
+          sol: Math.max(0, world.resources.sol)
         });
 
         // Load Army from storage and sync capacity
@@ -126,8 +125,8 @@ function App() {
         // IMPORTANT: Trigger Phaser to reload the base using the now-known userId
         await gameManager.loadBase();
 
-        if (offline.gold > 0 || offline.elixir > 0) {
-          console.log(`Welcome back ${user.username}! Offline Production: ${offline.gold} Gold, ${offline.elixir} Elixir`);
+        if (offline.sol > 0) {
+          console.log(`Welcome back ${user.username}! Offline Production: ${offline.sol} SOL`);
         }
       } catch (error) {
         console.error('Error initializing game:', error);
@@ -146,7 +145,7 @@ function App() {
     if (user && !loading && !showLogin) {
       try {
         const userId = user.id || 'default_player';
-        Backend.updateResources(userId, resources.gold, resources.elixir);
+        Backend.updateResources(userId, resources.sol);
         Backend.updateArmy(userId, army);
       } catch (error) {
         console.error('Error saving game state:', error);
@@ -161,14 +160,9 @@ function App() {
   const [view, setView] = useState<GameMode>('HOME');
   const [selectedInMap, setSelectedInMap] = useState<string | null>(null);
   const [selectedBuildingInfo, setSelectedBuildingInfo] = useState<{ id: string; type: BuildingType; level: number } | null>(null);
-  const [battleStats, setBattleStats] = useState({ destruction: 0, goldLooted: 0, elixirLooted: 0 });
+  const [battleStats, setBattleStats] = useState({ destruction: 0, solLooted: 0 });
   const [showCloudOverlay, setShowCloudOverlay] = useState(false);
   const [battleStarted, setBattleStarted] = useState(false); // Track if first troop deployed
-  // Animation states for resource collection
-  const [goldAnimating, setGoldAnimating] = useState(false);
-  const [elixirAnimating, setElixirAnimating] = useState(false);
-  const prevGoldLootedRef = useRef(0);
-  const prevElixirLootedRef = useRef(0);
   const [isExiting, setIsExiting] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showBattleResults, setShowBattleResults] = useState(false);
@@ -234,16 +228,13 @@ function App() {
           setCloudOpening(false);
         }, 600); // Match CSS animation duration
       },
-      addGold: (amount: number) => {
-        setResources(prev => ({ ...prev, gold: prev.gold + amount }));
-      },
-      addElixir: (amount: number) => {
-        setResources(prev => ({ ...prev, elixir: prev.elixir + amount }));
+      addSol: (amount: number) => {
+        setResources(prev => ({ ...prev, sol: prev.sol + amount }));
       },
       setGameMode: (mode: GameMode) => {
         setView(mode);
         if (mode === 'ATTACK') {
-          setBattleStats({ destruction: 0, goldLooted: 0, elixirLooted: 0 });
+          setBattleStats({ destruction: 0, solLooted: 0 });
           setBattleStarted(false); // Reset when entering attack mode
 
           // Auto-select first available troop
@@ -259,19 +250,8 @@ function App() {
           setVisibleTroops(battleTroops);
         }
       },
-      updateBattleStats: (destruction: number, gold: number, elixir: number) => {
-        // Trigger animations when gold/elixir increases
-        if (gold > prevGoldLootedRef.current) {
-          setGoldAnimating(true);
-          setTimeout(() => setGoldAnimating(false), 500); // Match animation duration
-        }
-        if (elixir > prevElixirLootedRef.current) {
-          setElixirAnimating(true);
-          setTimeout(() => setElixirAnimating(false), 500); // Match animation duration
-        }
-        prevGoldLootedRef.current = gold;
-        prevElixirLootedRef.current = elixir;
-        setBattleStats({ destruction, goldLooted: gold, elixirLooted: elixir });
+      updateBattleStats: (destruction: number, sol: number) => {
+        setBattleStats({ destruction, solLooted: sol });
       },
       onBuildingSelected: (data: { id: string; type: BuildingType; level: number } | null) => {
         // Handle legacy calls that might strictly pass a string ID (just in case) or the new object
@@ -304,39 +284,29 @@ function App() {
       onPlacementCancelled: () => {
         setSelectedInMap(null);
       },
-      onRaidEnded: async (goldLooted: number, elixirLooted: number) => {
+      onRaidEnded: async (solLooted: number) => {
         setResources(prev => ({
           ...prev,
-          gold: prev.gold + goldLooted,
-          elixir: prev.elixir + elixirLooted
+          sol: prev.sol + solLooted
         }));
 
-        // Record the attack for notifications (if online and attacking a real player)
         const scene = gameRef.current?.scene.getScene('MainScene') as any;
-        if (scene && scene.currentEnemyWorld && isOnline) {
-          const enemyWorld = scene.currentEnemyWorld;
-          if (!enemyWorld.isBot && enemyWorld.id !== 'practice') {
-            await Backend.recordAttack(
-              enemyWorld.id,
-              user?.id || '',
-              user?.username || 'Unknown',
-              goldLooted,
-              elixirLooted,
-              battleStats.destruction
-            );
-          }
-        }
+        const enemyWorld = scene?.currentEnemyWorld;
+        const destruction = battleStats.destruction;
 
         // Auto-trigger "Return Home" flow on raid end
-        if (scene) {
-          // Hide results initially to allow transition
-          setShowBattleResults(false);
+        setShowBattleResults(false);
+        transitionHome();
 
-          scene.showCloudTransition(() => {
-            setView('HOME');
-            setSelectedInMap(null);
-            scene.goHome();
-          });
+        // Record the attack for notifications (if online and attacking a real player)
+        if (enemyWorld && isOnline && !enemyWorld.isBot && enemyWorld.id !== 'practice') {
+          void Backend.recordAttack(
+            enemyWorld.id,
+            user?.id || '',
+            user?.username || 'Unknown',
+            solLooted,
+            destruction
+          );
         }
       },
       getArmy: () => armyRef.current,
@@ -393,7 +363,7 @@ function App() {
         gameRef.current = null;
       }
     };
-  }, [user, showLogin, isOnline, battleStats.destruction]);
+  }, [user, showLogin, isOnline]);
 
 
   const refreshBuildingCounts = useCallback(async () => {
@@ -462,7 +432,7 @@ function App() {
           }
           setResources(prev => ({
             ...prev,
-            gold: Math.max(0, prev.gold - cost)
+            sol: Math.max(0, prev.sol - cost)
           }));
         }
         refreshBuildingCounts();
@@ -482,8 +452,8 @@ function App() {
     const cost = def.cost;
     const space = def.space;
 
-    if (resources.elixir < cost) {
-      alert("Not enough Elixir!");
+    if (resources.sol < cost) {
+      alert("Not enough SOL!");
       return;
     }
     if (capacity.current + space > capacity.max) {
@@ -497,7 +467,7 @@ function App() {
     });
     setResources(prev => ({
       ...prev,
-      elixir: Math.max(0, prev.elixir - cost)
+      sol: Math.max(0, prev.sol - cost)
     }));
     setCapacity(prev => ({ ...prev, current: prev.current + space }));
   };
@@ -513,18 +483,11 @@ function App() {
       const key = type as keyof typeof prev;
       return { ...prev, [key]: (prev[key] ?? 0) - 1 };
     });
-    setResources(prev => ({ ...prev, elixir: prev.elixir + cost }));
+    setResources(prev => ({ ...prev, sol: prev.sol + cost }));
     setCapacity(prev => ({ ...prev, current: prev.current - space }));
   };
 
-  const handleStartAttack = () => {
-    if (capacity.current === 0) return;
-    // Don't set view here - the game will call setGameMode when transition is complete
-    gameManager.startAttack();
-  };
-
-
-  const handleGoHome = () => {
+  const transitionHome = useCallback(() => {
     const scene = gameRef.current?.scene.getScene('MainScene') as any;
     if (scene) {
       scene.showCloudTransition(() => {
@@ -536,6 +499,17 @@ function App() {
       setView('HOME');
       setSelectedInMap(null);
     }
+  }, []);
+
+  const handleStartAttack = () => {
+    if (capacity.current === 0) return;
+    // Don't set view here - the game will call setGameMode when transition is complete
+    gameManager.startAttack();
+  };
+
+
+  const handleGoHome = () => {
+    transitionHome();
   };
 
   const handleRaidNow = () => {
@@ -574,14 +548,7 @@ function App() {
 
   const handleBattleResultsGoHome = () => {
     setShowBattleResults(false);
-    const scene = gameRef.current?.scene.getScene('MainScene') as any;
-    if (scene) {
-      scene.showCloudTransition(() => {
-        setView('HOME');
-        setSelectedInMap(null);
-        scene.goHome();
-      });
-    }
+    transitionHome();
   };
 
   const handleTogglePixelation = () => {
@@ -615,7 +582,7 @@ function App() {
       gameManager.deleteSelectedBuilding();
       const stats = getBuildingStats(selectedBuildingInfo.type, selectedBuildingInfo.level);
       const refund = Math.floor(stats.cost * 0.8);
-      setResources(prev => ({ ...prev, gold: prev.gold + refund }));
+      setResources(prev => ({ ...prev, sol: prev.sol + refund }));
       setSelectedInMap(null);
       setSelectedBuildingInfo(null);
     }
@@ -643,11 +610,11 @@ function App() {
           }
         }
 
-        if (resources.gold >= upgradeCost) {
+        if (resources.sol >= upgradeCost) {
           // Subtract cost
           setResources(prev => ({
             ...prev,
-            gold: Math.max(0, prev.gold - upgradeCost)
+            sol: Math.max(0, prev.sol - upgradeCost)
           }));
 
           // Sync with backend
@@ -737,8 +704,6 @@ function App() {
         wallUpgradeCostOverride={wallUpgradeCostOverride}
         showCloudOverlay={showCloudOverlay}
         isMobile={isMobile}
-        goldAnimating={goldAnimating}
-        elixirAnimating={elixirAnimating}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenBuild={() => setIsBuildingOpen(true)}
         onOpenTrain={() => setIsTrainingOpen(true)}
