@@ -193,7 +193,9 @@ export function sanitizeObstacles(value: unknown): StoredObstacle[] {
 }
 
 export function ensureTownHall(base: StoredBase): StoredBase {
-  if (base.buildings.length === 0) return base;
+  if (!base.buildings || base.buildings.length === 0) {
+    base.buildings = [];
+  }
   const hasTownHall = base.buildings.some((b) => b.type === 'town_hall');
   if (hasTownHall) return base;
   base.buildings.unshift({
