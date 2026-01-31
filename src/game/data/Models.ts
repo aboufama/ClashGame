@@ -30,6 +30,7 @@ export interface SerializedWorld {
     resources: PlayerResources;
     army?: Record<string, number>; // Persisted army state
     lastSaveTime: number;
+    revision?: number;
 }
 
 // Army state is usually per-player, not per-world (you take your army to attack worlds)

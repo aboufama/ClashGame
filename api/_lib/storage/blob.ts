@@ -4,9 +4,17 @@ import { shuffle } from '../utils.js';
 
 const JSON_HEADERS = { 'content-type': 'application/json' } as const;
 const USERS_PREFIX = 'users/';
-const BASES_PREFIX = 'bases/';
 const NOTIFICATIONS_PREFIX = 'notifications/';
 const USERNAME_INDEX_PATH = 'indexes/usernames.json';
+
+const BASE_STORE_PATH = 'bases/store.json';
+const BASE_STORE_VERSION = 1;
+
+type BaseStoreFile = {
+  version: number;
+  updatedAt: number;
+  bases: Record<string, StoredBase>;
+};
 
 async function fetchBlobJson<T>(url: string): Promise<T | null> {
   try {
@@ -65,6 +73,54 @@ async function saveUsernameIndex(index: Record<string, string>): Promise<void> {
   await putJson(USERNAME_INDEX_PATH, index);
 }
 
+async function migrateLegacyBases(): Promise<Record<string, StoredBase>> {
+  const bases: Record<string, StoredBase> = {};
+  try {
+    const blobs = await listAll('bases/', 2000);
+    for (const blob of blobs) {
+      if (blob.pathname === BASE_STORE_PATH) continue;
+      if (!blob.pathname.endsWith('.json')) continue;
+      const base = await fetchBlobJson<StoredBase>(blob.url);
+      if (!base) continue;
+      const key = base.ownerId || base.id;
+      if (!key) continue;
+      bases[key] = base;
+    }
+  } catch {
+    return bases;
+  }
+  return bases;
+}
+
+async function loadBaseStore(): Promise<BaseStoreFile> {
+  const url = await findBlobUrl(BASE_STORE_PATH);
+  if (url) {
+    const data = await fetchBlobJson<BaseStoreFile>(url);
+    if (data && data.bases) {
+      return {
+        version: Number.isFinite(data.version) ? data.version : BASE_STORE_VERSION,
+        updatedAt: Number.isFinite(data.updatedAt) ? data.updatedAt : Date.now(),
+        bases: data.bases || {},
+      };
+    }
+  }
+
+  const migrated = await migrateLegacyBases();
+  const store: BaseStoreFile = {
+    version: BASE_STORE_VERSION,
+    updatedAt: Date.now(),
+    bases: migrated,
+  };
+  await putJson(BASE_STORE_PATH, store);
+  return store;
+}
+
+async function saveBaseStore(store: BaseStoreFile): Promise<void> {
+  store.updatedAt = Date.now();
+  store.version = (store.version || BASE_STORE_VERSION) + 1;
+  await putJson(BASE_STORE_PATH, store);
+}
+
 export function createBlobStorage() {
   const getUser = async (id: string): Promise<User | null> => {
     const url = await findBlobUrl(`${USERS_PREFIX}${id}.json`);
@@ -84,13 +140,22 @@ export function createBlobStorage() {
   };
 
   const getBase = async (userId: string): Promise<StoredBase | null> => {
-    const url = await findBlobUrl(`${BASES_PREFIX}${userId}.json`);
-    if (!url) return null;
-    return fetchBlobJson<StoredBase>(url);
+    const store = await loadBaseStore();
+    return store.bases[userId] || null;
   };
 
   const saveBase = async (base: StoredBase): Promise<void> => {
-    await putJson(`${BASES_PREFIX}${base.ownerId}.json`, base);
+    const store = await loadBaseStore();
+    store.bases[base.ownerId] = base;
+    await saveBaseStore(store);
+  };
+
+  const deleteBase = async (userId: string): Promise<void> => {
+    const store = await loadBaseStore();
+    if (store.bases[userId]) {
+      delete store.bases[userId];
+      await saveBaseStore(store);
+    }
   };
 
   const getNotifications = async (userId: string): Promise<AttackNotification[]> => {
@@ -156,8 +221,7 @@ export function createBlobStorage() {
         const userUrl = await findBlobUrl(`${USERS_PREFIX}${userId}.json`);
         if (userUrl) await del(userUrl);
 
-        const baseUrl = await findBlobUrl(`${BASES_PREFIX}${userId}.json`);
-        if (baseUrl) await del(baseUrl);
+        await deleteBase(userId);
 
         const notifUrl = await findBlobUrl(`${NOTIFICATIONS_PREFIX}${userId}.json`);
         if (notifUrl) await del(notifUrl);
@@ -210,20 +274,17 @@ export function createBlobStorage() {
 
     async getOnlineBases(excludeUserId: string, limit: number = 10): Promise<StoredBase[]> {
       try {
-        const blobs = await listAll(BASES_PREFIX, 1000);
-        const shuffled = shuffle(blobs);
-        const bases: StoredBase[] = [];
-        for (const blob of shuffled) {
-          if (bases.length >= limit * 3) break;
-          const base = await fetchBlobJson<StoredBase>(blob.url);
-          if (!base) continue;
-          if (base.ownerId === excludeUserId) continue;
-          if (!base.buildings || base.buildings.length === 0) continue;
+        const store = await loadBaseStore();
+        const allBases = Object.values(store.bases);
+        const filtered = allBases.filter((base) => {
+          if (!base) return false;
+          if (base.ownerId === excludeUserId) return false;
+          if (!base.buildings || base.buildings.length === 0) return false;
           const nonWall = base.buildings.some((b) => b.type !== 'wall');
-          if (!nonWall) continue;
-          bases.push(base);
-        }
-        return shuffle(bases).slice(0, limit);
+          if (!nonWall) return false;
+          return true;
+        });
+        return shuffle(filtered).slice(0, limit);
       } catch {
         return [];
       }
@@ -231,13 +292,8 @@ export function createBlobStorage() {
 
     async getAllBases(): Promise<StoredBase[]> {
       try {
-        const blobs = await listAll(BASES_PREFIX, 2000);
-        const bases: StoredBase[] = [];
-        for (const blob of blobs) {
-          const base = await fetchBlobJson<StoredBase>(blob.url);
-          if (base) bases.push(base);
-        }
-        return bases;
+        const store = await loadBaseStore();
+        return Object.values(store.bases);
       } catch {
         return [];
       }
@@ -265,7 +321,8 @@ export function createBlobStorage() {
     },
 
     async deductResources(userId: string, sol: number): Promise<void> {
-      const base = await getBase(userId);
+      const store = await loadBaseStore();
+      const base = store.bases[userId];
       if (!base) return;
       const resources = base.resources as unknown as Record<string, unknown>;
       if (typeof resources.sol !== 'number') {
@@ -274,14 +331,16 @@ export function createBlobStorage() {
         base.resources = { sol: legacyGold + legacyElixir };
       }
       base.resources.sol = Math.max(0, base.resources.sol - sol);
-      await saveBase(base);
+      store.bases[userId] = base;
+      await saveBaseStore(store);
     },
 
     async wipeBases(): Promise<number> {
-      const blobs = await listAll(BASES_PREFIX, 2000);
-      if (!blobs.length) return 0;
-      await del(blobs.map((blob) => blob.url));
-      return blobs.length;
+      const store = await loadBaseStore();
+      const count = Object.keys(store.bases).length;
+      store.bases = {};
+      await saveBaseStore(store);
+      return count;
     },
 
     async wipeNotifications(): Promise<number> {

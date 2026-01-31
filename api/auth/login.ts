@@ -3,7 +3,7 @@ import { handleOptions, getBody, jsonError, jsonOk, requireMethod } from '../_li
 import { createInitialBase } from '../_lib/bases.js';
 import { verifyPassword } from '../_lib/passwords.js';
 import { getStorage } from '../_lib/storage/index.js';
-import { sanitizeBuildings, sanitizeObstacles, sanitizeResources, validatePassword, validateUsername } from '../_lib/validators.js';
+import { ensureTownHall, sanitizeArmy, sanitizeBuildings, sanitizeObstacles, sanitizeResources, validatePassword, validateUsername } from '../_lib/validators.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleOptions(req, res)) return;
@@ -41,12 +41,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       base = createInitialBase(user.id, user.username);
       await storage.saveBase(base);
     }
-    const normalizedBase = {
+    const normalizedBase = ensureTownHall({
       ...base,
       buildings: sanitizeBuildings((base as unknown as Record<string, unknown>).buildings),
       obstacles: sanitizeObstacles((base as unknown as Record<string, unknown>).obstacles),
       resources: sanitizeResources((base as unknown as Record<string, unknown>).resources),
-    };
+      army: sanitizeArmy((base as unknown as Record<string, unknown>).army),
+    });
 
     return jsonOk(res, {
       success: true,

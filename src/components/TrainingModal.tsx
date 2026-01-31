@@ -13,8 +13,8 @@ interface TrainingModalProps {
   onStartPractice: () => void;
   onFindMatch: () => void;
   onAttackOnline: () => void;
-  onTrainTroop: (type: string) => void;
-  onUntrainTroop: (type: string) => void;
+  onTrainTroop: (type: string) => void | Promise<void>;
+  onUntrainTroop: (type: string) => void | Promise<void>;
 }
 
 export function TrainingModal({

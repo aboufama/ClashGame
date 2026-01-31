@@ -16,6 +16,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const storage = getStorage();
     const base = sanitizeBasePayload({ ...body, userId });
+    const existing = await storage.getBase(userId);
+    const incomingRevision = typeof body.revision === 'number' && Number.isFinite(body.revision)
+      ? Math.trunc(body.revision)
+      : undefined;
+
+    if (existing) {
+      const existingRevision = typeof existing.revision === 'number' ? existing.revision : 0;
+      if (incomingRevision !== undefined && incomingRevision < existingRevision) {
+        return jsonError(res, 409, 'Stale base revision', `currentRevision:${existingRevision}`);
+      }
+      if (existing.buildings.length > 0 && base.buildings.length === 0) {
+        return jsonOk(res, {
+          success: true,
+          ignored: true,
+          lastSaveTime: existing.lastSaveTime,
+          revision: existingRevision,
+        });
+      }
+      base.resources = existing.resources;
+      if (existing.resourceLedger) {
+        base.resourceLedger = existing.resourceLedger;
+      }
+      base.revision = existingRevision + 1;
+    } else {
+      base.revision = 1;
+    }
 
     if (!base.username || base.username === 'Unknown') {
       const user = await storage.getUser(userId);
@@ -27,6 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return jsonOk(res, {
       success: true,
       lastSaveTime: base.lastSaveTime,
+      revision: base.revision ?? 0,
     });
   } catch (error) {
     console.error('Save base error:', error);

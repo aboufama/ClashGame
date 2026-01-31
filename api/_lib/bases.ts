@@ -11,5 +11,6 @@ export function createInitialBase(userId: string, username: string): StoredBase 
     army: {},
     lastSaveTime: Date.now(),
     schemaVersion: 1,
+    revision: 1,
   };
 }

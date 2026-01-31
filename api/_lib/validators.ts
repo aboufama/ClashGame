@@ -1,6 +1,6 @@
 import type { StoredBase, StoredBuilding, StoredObstacle } from './types.js';
 import { isValidObstacleType, isValidTroopType, normalizeBuildingType } from './game-defs.js';
-import { clampNumber, toInt } from './utils.js';
+import { clampNumber, randomId, toInt } from './utils.js';
 
 const USERNAME_MIN = 3;
 const USERNAME_MAX = 20;
@@ -89,6 +89,7 @@ export function sanitizeDisplayName(value: unknown, fallback: string = 'Unknown'
 export function sanitizeBuildings(value: unknown): StoredBuilding[] {
   if (!Array.isArray(value)) return [];
   const buildings: StoredBuilding[] = [];
+  const seen = new Set<string>();
   for (const raw of value.slice(0, MAX_BUILDINGS)) {
     if (!isRecord(raw)) continue;
     let id: string | null = null;
@@ -115,16 +116,21 @@ export function sanitizeBuildings(value: unknown): StoredBuilding[] {
 
     const gridX = readCoord(raw, ['gridX', 'x', 'grid_x', 'tileX', 'posX']);
     const gridY = readCoord(raw, ['gridY', 'y', 'grid_y', 'tileY', 'posY']);
-    if (!id || !rawType) continue;
+    if (!rawType) continue;
     if (!Number.isFinite(gridX) || !Number.isFinite(gridY)) continue;
     if (gridX < COORD_MIN || gridY < COORD_MIN || gridX > COORD_MAX || gridY > COORD_MAX) continue;
     const normalizedType = normalizeBuildingType(rawType);
     if (!normalizedType) continue;
+    if (!id) {
+      id = `auto_${normalizedType}_${gridX}_${gridY}`;
+    }
+    if (seen.has(id)) continue;
     const level = clampNumber(
       toInt('level' in raw ? raw.level : ('lvl' in raw ? (raw as Record<string, unknown>).lvl : 1), 1),
       LEVEL_MIN,
       LEVEL_MAX
     );
+    seen.add(id);
     buildings.push({
       id,
       type: normalizedType,
@@ -139,6 +145,7 @@ export function sanitizeBuildings(value: unknown): StoredBuilding[] {
 export function sanitizeObstacles(value: unknown): StoredObstacle[] {
   if (!Array.isArray(value)) return [];
   const obstacles: StoredObstacle[] = [];
+  const seen = new Set<string>();
   for (const raw of value.slice(0, MAX_OBSTACLES)) {
     if (!isRecord(raw)) continue;
     let id: string | null = null;
@@ -165,18 +172,38 @@ export function sanitizeObstacles(value: unknown): StoredObstacle[] {
 
     const gridX = readCoord(raw, ['gridX', 'x', 'grid_x', 'tileX', 'posX']);
     const gridY = readCoord(raw, ['gridY', 'y', 'grid_y', 'tileY', 'posY']);
-    if (!id || !rawType) continue;
+    if (!rawType) continue;
     if (!Number.isFinite(gridX) || !Number.isFinite(gridY)) continue;
     if (gridX < COORD_MIN || gridY < COORD_MIN || gridX > COORD_MAX || gridY > COORD_MAX) continue;
-    if (!isValidObstacleType(rawType)) continue;
+    const normalizedType = rawType.trim().toLowerCase().replace(/[\s-]+/g, '_');
+    if (!isValidObstacleType(normalizedType)) continue;
+    if (!id) {
+      id = `auto_${normalizedType}_${gridX}_${gridY}`;
+    }
+    if (seen.has(id)) continue;
+    seen.add(id);
     obstacles.push({
       id,
-      type: rawType,
+      type: normalizedType,
       gridX,
       gridY,
     });
   }
   return obstacles;
+}
+
+export function ensureTownHall(base: StoredBase): StoredBase {
+  if (base.buildings.length === 0) return base;
+  const hasTownHall = base.buildings.some((b) => b.type === 'town_hall');
+  if (hasTownHall) return base;
+  base.buildings.unshift({
+    id: `auto_town_hall_${randomId().slice(0, 8)}`,
+    type: 'town_hall',
+    gridX: 12,
+    gridY: 12,
+    level: 1,
+  });
+  return base;
 }
 
 export function sanitizeBasePayload(payload: Record<string, unknown>): StoredBase {
@@ -187,7 +214,7 @@ export function sanitizeBasePayload(payload: Record<string, unknown>): StoredBas
   const resources = sanitizeResources(payload.resources);
   const army = sanitizeArmy(payload.army);
 
-  return {
+  const base: StoredBase = {
     id: ownerId,
     ownerId,
     username,
@@ -198,6 +225,7 @@ export function sanitizeBasePayload(payload: Record<string, unknown>): StoredBas
     lastSaveTime: Date.now(),
     schemaVersion: 1,
   };
+  return ensureTownHall(base);
 }
 
 export function summarizeBase(base: StoredBase) {

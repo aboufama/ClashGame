@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { generateBotBase } from '../_lib/bots.js';
 import { handleOptions, getQueryParam, jsonError, jsonOk, requireMethod } from '../_lib/http.js';
 import { getStorage } from '../_lib/storage/index.js';
-import { sanitizeBuildings, sanitizeObstacles, sanitizeResources } from '../_lib/validators.js';
+import { ensureTownHall, sanitizeArmy, sanitizeBuildings, sanitizeObstacles, sanitizeResources } from '../_lib/validators.js';
 import { pickRandom } from '../_lib/utils.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -36,16 +36,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return jsonError(res, 500, 'Failed to select base');
     }
 
-    const normalized = {
+    let normalized = ensureTownHall({
       ...selected,
       buildings: sanitizeBuildings((selected as unknown as Record<string, unknown>).buildings),
       obstacles: sanitizeObstacles((selected as unknown as Record<string, unknown>).obstacles),
       resources: sanitizeResources((selected as unknown as Record<string, unknown>).resources),
+      army: sanitizeArmy((selected as unknown as Record<string, unknown>).army),
+    });
+
+    if (!normalized.buildings.length) {
+      const fallback = generateBotBase(0);
+      normalized = ensureTownHall({
+        ...fallback,
+        buildings: sanitizeBuildings((fallback as unknown as Record<string, unknown>).buildings),
+        obstacles: sanitizeObstacles((fallback as unknown as Record<string, unknown>).obstacles),
+        resources: sanitizeResources((fallback as unknown as Record<string, unknown>).resources),
+        army: sanitizeArmy((fallback as unknown as Record<string, unknown>).army),
+      });
+    }
+
+    const candidate = {
+      id: selected.ownerId,
+      username: selected.username,
+      isBot: !!(selected as any).isBot,
     };
 
     return jsonOk(res, {
       success: true,
-      base: normalized,
+      candidate,
+      ...(candidate.isBot ? { base: normalized } : {}),
       totalAvailable: bases.length,
     });
   } catch (error) {

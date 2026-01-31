@@ -149,7 +149,8 @@ export class MainScene extends Phaser.Scene {
     private manualFireDummyTarget: Troop | null = null;
 
     // Online attack tracking
-    public currentEnemyWorld: { id: string; username: string; isBot?: boolean } | null = null;
+    public currentEnemyWorld: { id: string; username: string; isBot?: boolean; attackId?: string } | null = null;
+    private needsDefaultBase = false;
 
     public get userId(): string {
         try {
@@ -323,9 +324,9 @@ export class MainScene extends Phaser.Scene {
             }
         });
 
-        // Try to load saved base, otherwise place default
+        // Try to load saved base, otherwise place default if needed
         this.loadSavedBase().then(async success => {
-            if (!success) {
+            if (!success && this.needsDefaultBase) {
                 await this.placeDefaultVillage();
             }
             this.centerCamera();
@@ -783,19 +784,33 @@ export class MainScene extends Phaser.Scene {
 
     // Persistent state is now managed by Backend service automatically on modification
 
-    private async loadSavedBase(): Promise<boolean> {
+    private async loadSavedBase(forceOnline: boolean = false): Promise<boolean> {
         // Load player home world from Backend
-        let world = await Backend.getWorld(this.userId);
+        this.needsDefaultBase = false;
+        let world = forceOnline && Auth.isOnlineMode()
+            ? await Backend.forceLoadFromCloud(this.userId)
+            : await Backend.getWorld(this.userId);
 
         // If world doesn't exist, create it (empty)
         if (!world) {
-            world = await Backend.createWorld(this.userId, 'PLAYER');
+            if (!Auth.isOnlineMode()) {
+                world = await Backend.createWorld(this.userId, 'PLAYER');
+            } else {
+                console.warn('loadSavedBase: Online base unavailable, skipping default placement.');
+                return false;
+            }
         }
 
         // Check if there's anything valid to load
         const hasTownHall = world.buildings.some(b => b.type === 'town_hall');
         if (world.buildings.length === 0 || !hasTownHall) {
-            console.log("loadSavedBase: No buildings or Town Hall missing. Triggering default placement.");
+            if (world.buildings.length === 0) {
+                console.log("loadSavedBase: Empty base. Triggering default placement.");
+                this.needsDefaultBase = true;
+            } else if (!hasTownHall) {
+                console.warn("loadSavedBase: Town Hall missing. Skipping default placement to avoid data loss.");
+                this.needsDefaultBase = !Auth.isOnlineMode();
+            }
             return false;
         }
 
@@ -5406,7 +5421,7 @@ export class MainScene extends Phaser.Scene {
         this.mode = 'HOME';
         this.hasDeployed = false;
         this.clearScene();
-        await this.loadSavedBase();
+        await this.loadSavedBase(true);
         this.centerCamera();
         const campLevels = this.buildings.filter(b => b.type === 'army_camp').map(b => b.level ?? 1);
         gameManager.refreshCampCapacity(campLevels);
@@ -5551,7 +5566,8 @@ export class MainScene extends Phaser.Scene {
         this.currentEnemyWorld = {
             id: onlineBase.ownerId,
             username: onlineBase.username || 'Unknown Player',
-            isBot: (onlineBase as any).isBot || false
+            isBot: (onlineBase as any).isBot || false,
+            attackId: Phaser.Utils.String.UUID()
         };
 
         const lootMap = LootSystem.calculateLootDistribution(onlineBase.buildings, onlineBase.resources.sol);
@@ -5576,7 +5592,8 @@ export class MainScene extends Phaser.Scene {
         this.currentEnemyWorld = {
             id: userId,
             username: username,
-            isBot: false
+            isBot: false,
+            attackId: Phaser.Utils.String.UUID()
         };
 
         const lootMap = LootSystem.calculateLootDistribution(userBase.buildings, userBase.resources.sol);

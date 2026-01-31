@@ -32,6 +32,20 @@ export interface StoredBase {
   lastSaveTime: number;
   schemaVersion?: number;
   isBot?: boolean;
+  resourceLedger?: ResourceLedger;
+  revision?: number;
+}
+
+export interface ResourceTx {
+  id: string;
+  delta: number;
+  timestamp: number;
+  reason?: string;
+}
+
+export interface ResourceLedger {
+  lastUpdated: number;
+  recent: ResourceTx[];
 }
 
 export interface AttackNotification {

@@ -1,8 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, getBody, getQueryParam, jsonError, jsonOk } from '../_lib/http.js';
 import { getStorage } from '../_lib/storage/index.js';
+import { applyResourceDelta, clampLootAmount, findResourceTx } from '../_lib/resources.js';
 import { sanitizeDisplayName } from '../_lib/validators.js';
 import { clampNumber, randomId, toInt } from '../_lib/utils.js';
+
+const MAX_LOOT_PCT = 0.2;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleOptions(req, res)) return;
@@ -25,32 +28,82 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const attackerName = sanitizeDisplayName(body.attackerName, 'Unknown Attacker');
       const attackId = typeof body.attackId === 'string' && body.attackId.trim()
         ? body.attackId.trim().slice(0, 64)
-        : undefined;
+        : `attack_${randomId()}`;
       const solLooted = clampNumber(toInt(body.solLooted, NaN), 0, 1_000_000_000);
       const legacyGold = clampNumber(toInt(body.goldLooted, 0), 0, 1_000_000_000);
       const legacyElixir = clampNumber(toInt(body.elixirLooted, 0), 0, 1_000_000_000);
       const totalSol = Number.isFinite(solLooted) ? solLooted : clampNumber(legacyGold + legacyElixir, 0, 1_000_000_000);
       const destruction = clampNumber(toInt(body.destruction, 0), 0, 100);
 
-      const notification = {
+      const victimBase = await storage.getBase(victimId);
+      const attackerBase = attackerId && attackerId !== 'unknown'
+        ? await storage.getBase(attackerId)
+        : null;
+
+      let actualLoot = 0;
+      let existingNotification = null as null | Record<string, unknown>;
+
+      if (attackId) {
+        const existing = await storage.getNotifications(victimId);
+        existingNotification = existing.find((notif) => notif.attackId === attackId) || null;
+      }
+
+      if (victimBase && attackerBase) {
+        const victimTxId = `attack:${attackId}:victim`;
+        const attackerTxId = `attack:${attackId}:attacker`;
+        const existingVictimTx = findResourceTx(victimBase, victimTxId);
+        const existingAttackerTx = findResourceTx(attackerBase, attackerTxId);
+        const existingAmount = existingVictimTx
+          ? Math.abs(existingVictimTx.delta)
+          : existingAttackerTx
+            ? Math.abs(existingAttackerTx.delta)
+            : null;
+
+        if (existingAmount !== null) {
+          actualLoot = existingAmount;
+        } else if (existingNotification && typeof existingNotification.solLost === 'number') {
+          actualLoot = existingNotification.solLost;
+        } else {
+          actualLoot = clampLootAmount(victimBase.resources.sol, totalSol, MAX_LOOT_PCT);
+        }
+
+        const victimResult = applyResourceDelta(victimBase, -actualLoot, victimTxId, 'battle_loss');
+        if (victimResult.insufficient) {
+          actualLoot = 0;
+        }
+        const attackerResult = applyResourceDelta(attackerBase, actualLoot, attackerTxId, 'battle_loot');
+
+        if (victimResult.applied) {
+          await storage.saveBase(victimBase);
+        }
+        if (attackerResult.applied) {
+          await storage.saveBase(attackerBase);
+        }
+      }
+
+      const notification = existingNotification || {
         id: `notif_${randomId()}`,
         victimId,
         attackerId,
         attackerName,
-        solLost: totalSol,
+        solLost: actualLoot,
         destruction,
         ...(attackId ? { attackId } : {}),
         timestamp: Date.now(),
         read: false,
       };
 
-      await storage.addNotification(notification);
-
-      if (totalSol > 0) {
-        await storage.deductResources(victimId, totalSol);
+      if (!existingNotification) {
+        await storage.addNotification(notification);
       }
 
-      return jsonOk(res, { success: true, notification });
+      return jsonOk(res, {
+        success: true,
+        notification,
+        lootApplied: actualLoot,
+        attackerBalance: attackerBase?.resources.sol ?? null,
+        victimBalance: victimBase?.resources.sol ?? null,
+      });
     } catch (error) {
       console.error('Record attack error:', error);
       return jsonError(res, 500, 'Internal server error');

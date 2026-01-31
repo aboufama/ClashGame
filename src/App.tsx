@@ -36,8 +36,28 @@ function App() {
 
   const [loading, setLoading] = useState(true);
   const [resources, setResources] = useState({ sol: 0 });
+  const resourcesRef = useRef(resources);
   const [army, setArmy] = useState({ warrior: 0, archer: 0, giant: 0, ward: 0, recursion: 0, ram: 0, stormmage: 0, golem: 0, sharpshooter: 0, mobilemortar: 0, davincitank: 0, phalanx: 0 });
   const [isMobile] = useState(() => MobileUtils.isMobile());
+
+  const applySolDelta = useCallback(async (delta: number, reason: string, refId?: string) => {
+    if (!user) return { applied: false, sol: resourcesRef.current.sol };
+    if (!isOnline) {
+      let nextSol = resourcesRef.current.sol;
+      setResources(prev => {
+        nextSol = Math.max(0, prev.sol + delta);
+        return { ...prev, sol: nextSol };
+      });
+      return { applied: true, sol: nextSol };
+    }
+
+    const result = await Backend.applyResourceDelta(user.id || 'default_player', delta, reason, refId);
+    if (result && typeof result.sol === 'number') {
+      setResources({ sol: Math.max(0, result.sol) });
+      return { applied: !!result.applied, sol: result.sol };
+    }
+    return { applied: false, sol: resourcesRef.current.sol };
+  }, [user, isOnline]);
 
   // Check for existing session on mount
   useEffect(() => {
@@ -92,6 +112,10 @@ function App() {
         const userId = user.id || 'default_player';
         let world = await Backend.getWorld(userId);
         if (!world) {
+          if (Auth.isOnlineMode()) {
+            console.error('Online base unavailable. Skipping local creation to avoid overwrite.');
+            return;
+          }
           world = await Backend.createWorld(userId, 'PLAYER');
         }
 
@@ -174,12 +198,15 @@ function App() {
   const selectedInMapRef = useRef<string | null>(null);
   const armyRef = useRef(army);
   const selectedTroopTypeRef = useRef(selectedTroopType);
+  const battleStatsRef = useRef(battleStats);
 
   useEffect(() => {
     selectedInMapRef.current = selectedInMap;
     armyRef.current = army;
     selectedTroopTypeRef.current = selectedTroopType;
-  }, [selectedInMap, army, selectedTroopType]);
+    battleStatsRef.current = battleStats;
+    resourcesRef.current = resources;
+  }, [selectedInMap, army, selectedTroopType, battleStats, resources]);
 
   const [cloudOpening, setCloudOpening] = useState(false);
 
@@ -229,7 +256,7 @@ function App() {
         }, 600); // Match CSS animation duration
       },
       addSol: (amount: number) => {
-        setResources(prev => ({ ...prev, sol: prev.sol + amount }));
+        void applySolDelta(amount, 'production');
       },
       setGameMode: (mode: GameMode) => {
         setView(mode);
@@ -285,29 +312,34 @@ function App() {
         setSelectedInMap(null);
       },
       onRaidEnded: async (solLooted: number) => {
-        setResources(prev => ({
-          ...prev,
-          sol: prev.sol + solLooted
-        }));
-
         const scene = gameRef.current?.scene.getScene('MainScene') as any;
         const enemyWorld = scene?.currentEnemyWorld;
-        const destruction = battleStats.destruction;
+        const destruction = battleStatsRef.current.destruction;
 
-        // Auto-trigger "Return Home" flow on raid end
-        setShowBattleResults(false);
-        transitionHome();
-
-        // Record the attack for notifications (if online and attacking a real player)
         if (enemyWorld && isOnline && !enemyWorld.isBot && enemyWorld.id !== 'practice') {
-          void Backend.recordAttack(
+          const result = await Backend.recordAttack(
             enemyWorld.id,
             user?.id || '',
             user?.username || 'Unknown',
             solLooted,
-            destruction
+            destruction,
+            enemyWorld.attackId
           );
+          if (result?.attackerBalance !== undefined) {
+            setResources({ sol: Math.max(0, result.attackerBalance) });
+          } else if (result?.lootApplied !== undefined) {
+            setResources(prev => ({ ...prev, sol: prev.sol + result.lootApplied }));
+          }
+          if (result?.lootApplied !== undefined) {
+            setBattleStats(prev => ({ ...prev, solLooted: result.lootApplied }));
+          }
+        } else {
+          await applySolDelta(solLooted, 'battle_loot');
         }
+
+        // Auto-trigger "Return Home" flow on raid end
+        setShowBattleResults(false);
+        transitionHome();
       },
       getArmy: () => armyRef.current,
       getSelectedTroopType: () => selectedTroopTypeRef.current,
@@ -363,7 +395,7 @@ function App() {
         gameRef.current = null;
       }
     };
-  }, [user, showLogin, isOnline]);
+  }, [user, showLogin, isOnline, applySolDelta]);
 
 
   const refreshBuildingCounts = useCallback(async () => {
@@ -430,15 +462,12 @@ function App() {
               console.error('Error calculating wall cost:', error);
             }
           }
-          setResources(prev => ({
-            ...prev,
-            sol: Math.max(0, prev.sol - cost)
-          }));
+          void applySolDelta(-cost, 'build');
         }
         refreshBuildingCounts();
       }
     });
-  }, [user, showLogin, refreshBuildingCounts]);
+  }, [user, showLogin, refreshBuildingCounts, applySolDelta]);
 
   const handleSelect = (type: string) => {
     gameManager.selectBuilding(type);
@@ -446,7 +475,7 @@ function App() {
     setIsBuildingOpen(false);
   };
 
-  const handleTrainTroop = (type: string) => {
+  const handleTrainTroop = async (type: string) => {
     const def = TROOP_DEFINITIONS[type as keyof typeof TROOP_DEFINITIONS];
     if (!def) return;
     const cost = def.cost;
@@ -461,29 +490,48 @@ function App() {
       return;
     }
 
+    if (isOnline) {
+      const result = await applySolDelta(-cost, 'train_troop');
+      if (!result.applied) {
+        alert("Not enough SOL!");
+        return;
+      }
+    }
+
     setArmy(prev => {
       const key = type as keyof typeof prev;
       return { ...prev, [key]: (prev[key] ?? 0) + 1 };
     });
-    setResources(prev => ({
-      ...prev,
-      sol: Math.max(0, prev.sol - cost)
-    }));
+    if (!isOnline) {
+      setResources(prev => ({
+        ...prev,
+        sol: Math.max(0, prev.sol - cost)
+      }));
+    }
     setCapacity(prev => ({ ...prev, current: prev.current + space }));
   };
 
-  const handleUntrainTroop = (type: string) => {
+  const handleUntrainTroop = async (type: string) => {
     if (army[type as keyof typeof army] <= 0) return;
     const def = TROOP_DEFINITIONS[type as keyof typeof TROOP_DEFINITIONS];
     if (!def) return;
     const cost = def.cost;
     const space = def.space;
 
+    if (isOnline) {
+      const result = await applySolDelta(cost, 'untrain_troop');
+      if (!result.applied) {
+        return;
+      }
+    }
+
     setArmy(prev => {
       const key = type as keyof typeof prev;
       return { ...prev, [key]: (prev[key] ?? 0) - 1 };
     });
-    setResources(prev => ({ ...prev, sol: prev.sol + cost }));
+    if (!isOnline) {
+      setResources(prev => ({ ...prev, sol: prev.sol + cost }));
+    }
     setCapacity(prev => ({ ...prev, current: prev.current - space }));
   };
 
@@ -504,7 +552,7 @@ function App() {
   const handleStartAttack = () => {
     if (capacity.current === 0) return;
     // Don't set view here - the game will call setGameMode when transition is complete
-    gameManager.startAttack();
+    void Backend.flushPendingSave().finally(() => gameManager.startAttack());
   };
 
 
@@ -519,19 +567,19 @@ function App() {
 
   const handleStartPractice = () => {
     if (capacity.current === 0) return;
-    gameManager.startPracticeAttack();
+    void Backend.flushPendingSave().finally(() => gameManager.startPracticeAttack());
     setIsTrainingOpen(false);
   };
 
   const handleFindMatch = () => {
     if (capacity.current === 0) return;
-    handleRaidNow();
+    void Backend.flushPendingSave().finally(() => handleRaidNow());
     setIsTrainingOpen(false);
   };
 
   const handleAttackOnline = () => {
     if (capacity.current === 0) return;
-    gameManager.startOnlineAttack();
+    void Backend.flushPendingSave().finally(() => gameManager.startOnlineAttack());
     setIsTrainingOpen(false);
   };
 
@@ -543,7 +591,7 @@ function App() {
     // Close any open modals
     setIsTrainingOpen(false);
     // Start attack on specific user
-    gameManager.startAttackOnUser(userId, username);
+    void Backend.flushPendingSave().finally(() => gameManager.startAttackOnUser(userId, username));
   };
 
   const handleBattleResultsGoHome = () => {
@@ -582,7 +630,11 @@ function App() {
       gameManager.deleteSelectedBuilding();
       const stats = getBuildingStats(selectedBuildingInfo.type, selectedBuildingInfo.level);
       const refund = Math.floor(stats.cost * 0.8);
-      setResources(prev => ({ ...prev, sol: prev.sol + refund }));
+      if (isOnline) {
+        void applySolDelta(refund, 'refund_building');
+      } else {
+        setResources(prev => ({ ...prev, sol: prev.sol + refund }));
+      }
       setSelectedInMap(null);
       setSelectedBuildingInfo(null);
     }
@@ -611,11 +663,16 @@ function App() {
         }
 
         if (resources.sol >= upgradeCost) {
-          // Subtract cost
-          setResources(prev => ({
-            ...prev,
-            sol: Math.max(0, prev.sol - upgradeCost)
-          }));
+          if (isOnline) {
+            const result = await applySolDelta(-upgradeCost, 'upgrade_building');
+            if (!result.applied) return;
+          } else {
+            // Subtract cost locally
+            setResources(prev => ({
+              ...prev,
+              sol: Math.max(0, prev.sol - upgradeCost)
+            }));
+          }
 
           // Sync with backend
           await Backend.upgradeBuilding(user?.id || 'default_player', selectedInMap);

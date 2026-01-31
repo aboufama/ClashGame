@@ -114,13 +114,22 @@ export class GameBackend {
                     buildings: world.buildings,
                     obstacles: world.obstacles,
                     resources: world.resources,
-                    army: world.army
+                    army: world.army,
+                    revision: world.revision
                 })
             });
 
             if (response.ok) {
+                const data = await response.json().catch(() => ({}));
+                if (data && typeof data.revision === 'number') {
+                    world.revision = data.revision;
+                }
                 console.log(`Cloud sync successful for ${user?.username} (ID: ${user?.id})`);
             } else {
+                if (response.status === 409) {
+                    // Stale revision; refresh from cloud on next access
+                    this.worlds.delete(world.id);
+                }
                 const errorData = await response.json().catch(() => ({}));
                 console.error('Cloud sync failed with status:', response.status, errorData);
             }
@@ -171,6 +180,12 @@ export class GameBackend {
             if (data.success && data.base) {
                 return this.normalizeWorld(data.base);
             }
+            if (data.success && data.candidate && data.candidate.id) {
+                const base = await this.loadFromCloud(data.candidate.id);
+                if (base) {
+                    return base;
+                }
+            }
             return null;
         } catch (error) {
             console.error('Failed to get online base:', error);
@@ -179,12 +194,19 @@ export class GameBackend {
     }
 
     // Record attack result and notify victim
-    public async recordAttack(victimId: string, attackerId: string, attackerName: string, solLooted: number, destruction: number): Promise<void> {
+    public async recordAttack(
+        victimId: string,
+        attackerId: string,
+        attackerName: string,
+        solLooted: number,
+        destruction: number,
+        attackId?: string
+    ): Promise<{ lootApplied?: number; attackerBalance?: number } | null> {
         if (!this.isOnline()) return;
         if (!victimId || victimId.startsWith('bot_') || victimId.startsWith('enemy_')) return;
 
         try {
-            await fetch(`${API_BASE}/api/notifications/attack`, {
+            const response = await fetch(`${API_BASE}/api/notifications/attack`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -192,11 +214,66 @@ export class GameBackend {
                     attackerId,
                     attackerName,
                     solLooted,
-                    destruction
+                    destruction,
+                    ...(attackId ? { attackId } : {})
                 })
             });
+
+            if (!response.ok) return null;
+            const data = await response.json();
+            return {
+                lootApplied: typeof data.lootApplied === 'number' ? data.lootApplied : undefined,
+                attackerBalance: typeof data.attackerBalance === 'number' ? data.attackerBalance : undefined
+            };
         } catch (error) {
             console.error('Failed to record attack:', error);
+            return null;
+        }
+    }
+
+    // Apply a resource delta in a server-authoritative way (online) or locally (offline)
+    public async applyResourceDelta(userId: string, delta: number, reason?: string, refId?: string): Promise<{ sol: number; applied: boolean } | null> {
+        if (!this.isOnline()) {
+            const world = await this.getWorld(userId);
+            if (!world) return null;
+            world.resources.sol = Math.max(0, world.resources.sol + delta);
+            await this.saveWorld(world);
+            return { sol: world.resources.sol, applied: true };
+        }
+
+        try {
+            const response = await fetch(`${API_BASE}/api/resources/apply`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId,
+                    delta,
+                    reason,
+                    refId
+                })
+            });
+            if (!response.ok) return null;
+            const data = await response.json();
+            if (data && typeof data.sol === 'number') {
+                return { sol: data.sol, applied: !!data.applied };
+            }
+            return null;
+        } catch (error) {
+            console.error('Failed to apply resource delta:', error);
+            return null;
+        }
+    }
+
+    public async getResourceBalance(userId: string): Promise<number | null> {
+        if (!this.isOnline()) return null;
+        try {
+            const response = await fetch(`${API_BASE}/api/resources/balance?userId=${encodeURIComponent(userId)}`);
+            if (!response.ok) return null;
+            const data = await response.json();
+            return typeof data.sol === 'number' ? data.sol : null;
+        } catch (error) {
+            console.error('Failed to fetch resource balance:', error);
+            return null;
         }
     }
 
@@ -254,11 +331,13 @@ export class GameBackend {
         // Don't save enemy worlds
         if (world.ownerId === 'ENEMY' || world.id.startsWith('enemy_') || world.id.startsWith('bot_')) return;
 
-        // Save to local storage
-        try {
-            localStorage.setItem(`clashIso_world_${world.id}`, JSON.stringify(normalized));
-        } catch (error) {
-            console.warn('Failed to persist world to localStorage:', error);
+        // Save to local storage (offline only)
+        if (!this.isOnline()) {
+            try {
+                localStorage.setItem(`clashIso_world_${world.id}`, JSON.stringify(normalized));
+            } catch (error) {
+                console.warn('Failed to persist world to localStorage:', error);
+            }
         }
 
         // Cloud sync
@@ -287,6 +366,19 @@ export class GameBackend {
         }
     }
 
+    public async flushPendingSave(): Promise<void> {
+        if (this.saveTimeout) {
+            clearTimeout(this.saveTimeout);
+            this.saveTimeout = null;
+        }
+        if (!this.pendingSave) return;
+        const pending = this.pendingSave;
+        this.pendingSave = null;
+        if (this.isOnline()) {
+            await this.syncToCloud(pending);
+        }
+    }
+
     public async getWorld(id: string): Promise<SerializedWorld | null> {
         // 1. Check Memory Cache
         if (this.worlds.has(id)) return this.worlds.get(id)!;
@@ -298,8 +390,6 @@ export class GameBackend {
                 if (cloudWorld) {
                     const normalized = this.normalizeWorld(cloudWorld);
                     this.worlds.set(id, normalized);
-                    // Also update local storage
-                    localStorage.setItem(`clashIso_world_${id}`, JSON.stringify(normalized));
                     return normalized;
                 } else {
                     // Cloud returned 404 (null). Explicitly no base found in cloud.
@@ -311,7 +401,10 @@ export class GameBackend {
             }
         }
 
-        // 3. Check Local Storage
+        // 3. Check Local Storage (offline only)
+        if (this.isOnline()) {
+            return null;
+        }
         const saved = localStorage.getItem(`clashIso_world_${id}`);
         if (saved) {
             try {
@@ -344,7 +437,8 @@ export class GameBackend {
             buildings: [],
             resources: { sol: 200000 },
             army: {},
-            lastSaveTime: Date.now()
+            lastSaveTime: Date.now(),
+            revision: 1
         };
         await this.saveWorld(w);
         return w;
@@ -366,7 +460,9 @@ export class GameBackend {
             world.resources = {
                 sol: Math.max(0, sol)
             };
-            await this.saveWorld(world);
+            if (!this.isOnline()) {
+                await this.saveWorld(world);
+            }
         }
     }
 
@@ -524,8 +620,15 @@ export class GameBackend {
         });
 
         if (totalSol > 0) {
-            world.resources.sol += totalSol;
-            await this.saveWorld(world);
+            if (this.isOnline()) {
+                const result = await this.applyResourceDelta(worldId, totalSol, 'offline_production');
+                if (result) {
+                    world.resources.sol = result.sol;
+                }
+            } else {
+                world.resources.sol += totalSol;
+                await this.saveWorld(world);
+            }
         }
 
         return { sol: totalSol };
