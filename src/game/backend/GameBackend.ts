@@ -215,8 +215,8 @@ export class GameBackend {
         destruction: number,
         attackId?: string
     ): Promise<{ lootApplied?: number; attackerBalance?: number } | null> {
-        if (!this.isOnline()) return;
-        if (!victimId || victimId.startsWith('bot_') || victimId.startsWith('enemy_')) return;
+        if (!this.isOnline()) return null;
+        if (!victimId || victimId.startsWith('bot_') || victimId.startsWith('enemy_')) return null;
 
         try {
             const response = await fetch(`${API_BASE}/api/notifications/attack`, {

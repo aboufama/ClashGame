@@ -325,13 +325,14 @@ function App() {
             destruction,
             enemyWorld.attackId
           );
+          const lootApplied = typeof result?.lootApplied === 'number' ? result.lootApplied : null;
           if (result?.attackerBalance !== undefined) {
             setResources({ sol: Math.max(0, result.attackerBalance) });
-          } else if (result?.lootApplied !== undefined) {
-            setResources(prev => ({ ...prev, sol: prev.sol + result.lootApplied }));
+          } else if (lootApplied !== null) {
+            setResources(prev => ({ ...prev, sol: prev.sol + lootApplied }));
           }
-          if (result?.lootApplied !== undefined) {
-            setBattleStats(prev => ({ ...prev, solLooted: result.lootApplied }));
+          if (lootApplied !== null) {
+            setBattleStats(prev => ({ ...prev, solLooted: lootApplied }));
           }
         } else {
           await applySolDelta(solLooted, 'battle_loot');
