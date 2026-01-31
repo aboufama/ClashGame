@@ -111,12 +111,19 @@ function App() {
         setLoading(true);
         const userId = user.id || 'default_player';
         let world = await Backend.getWorld(userId);
-        if (!world) {
+        const needsBootstrap = !world || !world.buildings || world.buildings.length === 0;
+        if (needsBootstrap) {
           if (Auth.isOnlineMode()) {
-            console.error('Online base unavailable. Skipping local creation to avoid overwrite.');
-            return;
+            const bootstrapped = await Backend.bootstrapBase(userId);
+            if (bootstrapped) {
+              world = bootstrapped;
+            } else {
+              console.error('Online base unavailable. Skipping local creation to avoid overwrite.');
+              return;
+            }
+          } else {
+            world = await Backend.createWorld(userId, 'PLAYER');
           }
-          world = await Backend.createWorld(userId, 'PLAYER');
         }
 
         const offline = await Backend.calculateOfflineProduction(userId);
@@ -124,6 +131,11 @@ function App() {
         if (latestWorld) {
           world = latestWorld;
         }
+        if (!world) {
+          console.error('Failed to initialize base.');
+          return;
+        }
+
         setResources({
           sol: Math.max(0, world.resources.sol)
         });

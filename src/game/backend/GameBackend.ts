@@ -204,6 +204,36 @@ export class GameBackend {
         }
     }
 
+    public async bootstrapBase(userId: string): Promise<SerializedWorld | null> {
+        if (!this.isOnline()) return null;
+        const sessionToken = this.getSessionToken();
+        if (!sessionToken) return null;
+
+        try {
+            const response = await fetch(`${API_BASE}/api/bases/bootstrap`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId, sessionToken })
+            });
+            if (!response.ok) {
+                if (response.status === 401) {
+                    Auth.setOnlineMode(false);
+                }
+                return null;
+            }
+            const data = await response.json();
+            if (data && data.success && data.base) {
+                const normalized = this.normalizeWorld(data.base);
+                this.worlds.set(userId, normalized);
+                return normalized;
+            }
+            return null;
+        } catch (error) {
+            console.error('Failed to bootstrap base:', error);
+            return null;
+        }
+    }
+
     /**
      * Force a fresh load from the cloud, bypassing memory cache
      */
