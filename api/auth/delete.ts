@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, getBody, getQueryParam, jsonError, jsonOk } from '../_lib/http.js';
 import { verifyPassword } from '../_lib/passwords.js';
+import { readSessionToken, verifySession } from '../_lib/sessions.js';
 import { getStorage } from '../_lib/storage/index.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -11,7 +12,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const body = getBody<{ userId?: string; password?: string }>(req);
+    const body = getBody<{ userId?: string; password?: string; sessionToken?: string }>(req);
     const userId = body.userId || getQueryParam(req, 'userId');
     const password = body.password || getQueryParam(req, 'password');
 
@@ -20,7 +21,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const storage = getStorage();
-    const user = await storage.getUser(userId);
+    const sessionToken = readSessionToken(body.sessionToken);
+    const sessionCheck = await verifySession(storage, userId, sessionToken);
+    if (!sessionCheck.ok) {
+      return jsonError(res, sessionCheck.status || 401, sessionCheck.message || 'Session invalid', sessionCheck.details);
+    }
+
+    const user = sessionCheck.user;
     if (!user) {
       return jsonError(res, 404, 'User not found');
     }

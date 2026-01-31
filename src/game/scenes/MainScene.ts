@@ -1,7 +1,7 @@
 
 import Phaser from 'phaser';
 import { Backend } from '../backend/GameBackend';
-import type { SerializedBuilding } from '../data/Models';
+import type { SerializedBuilding, SerializedWorld } from '../data/Models';
 import { BUILDING_DEFINITIONS, OBSTACLE_DEFINITIONS, TROOP_DEFINITIONS, getBuildingStats, type BuildingType, type ObstacleType } from '../config/GameDefinitions';
 import { LootSystem } from '../systems/LootSystem';
 import type { PlacedBuilding, Troop, PlacedObstacle } from '../types/GameTypes';
@@ -795,37 +795,13 @@ export class MainScene extends Phaser.Scene {
 
     // Persistent state is now managed by Backend service automatically on modification
 
-    private async loadSavedBase(forceOnline: boolean = false): Promise<boolean> {
-        // Load player home world from Backend
-        this.needsDefaultBase = false;
-        let world = forceOnline && Auth.isOnlineMode()
-            ? await Backend.forceLoadFromCloud(this.userId)
-            : await Backend.getWorld(this.userId);
-
-        // If world doesn't exist, create it (empty)
-        if (!world) {
-            if (!Auth.isOnlineMode()) {
-                world = await Backend.createWorld(this.userId, 'PLAYER');
-            } else {
-                console.warn('loadSavedBase: Online base unavailable, skipping default placement.');
-                return false;
-            }
-        }
-
-        // Check if there's anything valid to load
+    private isWorldValid(world: SerializedWorld): boolean {
         const hasTownHall = world.buildings.some(b => b.type === 'town_hall');
-        if (world.buildings.length === 0 || !hasTownHall) {
-            if (world.buildings.length === 0) {
-                console.log("loadSavedBase: Empty base. Triggering default placement.");
-                this.needsDefaultBase = true;
-            } else if (!hasTownHall) {
-                console.warn("loadSavedBase: Town Hall missing. Skipping default placement to avoid data loss.");
-                this.needsDefaultBase = !Auth.isOnlineMode();
-            }
-            return false;
-        }
+        return world.buildings.length > 0 && hasTownHall;
+    }
 
-        // SUCCESS: Clear existing graphics and state before instantiation
+    private applyWorldToScene(world: SerializedWorld) {
+        // Clear existing graphics and state before instantiation
         this.clearScene();
 
         // Load buildings
@@ -846,6 +822,72 @@ export class MainScene extends Phaser.Scene {
         const campLevels = this.buildings.filter(b => b.type === 'army_camp').map(b => b.level ?? 1);
         gameManager.refreshCampCapacity(campLevels);
         gameManager.closeMenus?.(); // Ensure UI is reset when loading
+    }
+
+    private async refreshHomeBaseFromCloud(lastKnownSaveTime: number) {
+        if (!Auth.isOnlineMode()) return;
+        if (this.mode !== 'HOME') return;
+        const refreshed = await Backend.refreshWorldFromCloud(this.userId);
+        if (!refreshed || !this.isWorldValid(refreshed)) return;
+        const refreshedSave = refreshed.lastSaveTime ?? 0;
+        if (refreshedSave <= lastKnownSaveTime) return;
+        if (this.mode !== 'HOME') return;
+        this.applyWorldToScene(refreshed);
+    }
+
+    private async loadSavedBase(
+        forceOnline: boolean = false,
+        options: { preferCache?: boolean; refreshOnline?: boolean } = {}
+    ): Promise<boolean> {
+        // Load player home world from Backend
+        this.needsDefaultBase = false;
+        let world: SerializedWorld | null = null;
+        let lastKnownSaveTime = 0;
+
+        if (options.preferCache) {
+            const cached = Backend.getCachedWorld(this.userId);
+            if (cached && this.isWorldValid(cached)) {
+                this.applyWorldToScene(cached);
+                world = cached;
+                lastKnownSaveTime = cached.lastSaveTime ?? 0;
+            }
+        }
+
+        if (!world) {
+            world = forceOnline && Auth.isOnlineMode()
+                ? await Backend.forceLoadFromCloud(this.userId)
+                : await Backend.getWorld(this.userId);
+
+            // If world doesn't exist, create it (empty)
+            if (!world) {
+                if (!Auth.isOnlineMode()) {
+                    world = await Backend.createWorld(this.userId, 'PLAYER');
+                } else {
+                    console.warn('loadSavedBase: Online base unavailable, skipping default placement.');
+                    return false;
+                }
+            }
+
+            // Check if there's anything valid to load
+            if (!this.isWorldValid(world)) {
+                if (world.buildings.length === 0) {
+                    console.log("loadSavedBase: Empty base. Triggering default placement.");
+                    this.needsDefaultBase = true;
+                } else {
+                    console.warn("loadSavedBase: Town Hall missing. Skipping default placement to avoid data loss.");
+                    this.needsDefaultBase = !Auth.isOnlineMode();
+                }
+                return false;
+            }
+
+            this.applyWorldToScene(world);
+            lastKnownSaveTime = world.lastSaveTime ?? 0;
+        }
+
+        if (options.refreshOnline && Auth.isOnlineMode()) {
+            void this.refreshHomeBaseFromCloud(lastKnownSaveTime);
+        }
+
         return true;
     }
 
@@ -5423,12 +5465,11 @@ export class MainScene extends Phaser.Scene {
         gameManager.setGameMode('HOME');
         this.mode = 'HOME';
         this.hasDeployed = false;
-        this.clearScene();
-        await this.loadSavedBase(true);
+        const success = await this.loadSavedBase(false, { preferCache: true, refreshOnline: true });
+        if (!success && this.needsDefaultBase) {
+            await this.placeDefaultVillage();
+        }
         this.centerCamera();
-        const campLevels = this.buildings.filter(b => b.type === 'army_camp').map(b => b.level ?? 1);
-        gameManager.refreshCampCapacity(campLevels);
-        gameManager.closeMenus?.();
     }
 
 

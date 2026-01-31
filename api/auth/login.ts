@@ -4,6 +4,7 @@ import { createInitialBase } from '../_lib/bases.js';
 import { verifyPassword } from '../_lib/passwords.js';
 import { getStorage } from '../_lib/storage/index.js';
 import { ensureTownHall, sanitizeArmy, sanitizeBuildings, sanitizeObstacles, sanitizeResources, validatePassword, validateUsername } from '../_lib/validators.js';
+import { randomId } from '../_lib/utils.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleOptions(req, res)) return;
@@ -30,7 +31,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const now = Date.now();
+    const sessionToken = `sess_${randomId()}`;
     user.lastLogin = now;
+    user.sessionToken = sessionToken;
+    user.sessionIssuedAt = now;
     if (upgradedHash) {
       user.passwordHash = upgradedHash;
     }
@@ -55,6 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         id: user.id,
         username: user.username,
         lastLogin: now,
+        sessionToken,
       },
       base: normalizedBase,
     });

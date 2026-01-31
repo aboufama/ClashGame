@@ -4,6 +4,8 @@ export interface User {
   passwordHash: string;
   createdAt: number;
   lastLogin: number;
+  sessionToken?: string;
+  sessionIssuedAt?: number;
 }
 
 export interface StoredBuilding {

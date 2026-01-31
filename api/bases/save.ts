@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, getBody, jsonError, jsonOk, requireMethod } from '../_lib/http.js';
 import { getStorage } from '../_lib/storage/index.js';
 import { sanitizeBasePayload } from '../_lib/validators.js';
+import { readSessionToken, verifySession } from '../_lib/sessions.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleOptions(req, res)) return;
@@ -15,6 +16,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const storage = getStorage();
+    const sessionToken = readSessionToken((body as Record<string, unknown>).sessionToken);
+    const sessionCheck = await verifySession(storage, userId, sessionToken);
+    if (!sessionCheck.ok) {
+      return jsonError(res, sessionCheck.status || 401, sessionCheck.message || 'Session invalid', sessionCheck.details);
+    }
+
     const base = sanitizeBasePayload({ ...body, userId });
     const existing = await storage.getBase(userId);
     const incomingRevision = typeof body.revision === 'number' && Number.isFinite(body.revision)
@@ -23,7 +30,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (existing) {
       const existingRevision = typeof existing.revision === 'number' ? existing.revision : 0;
-      if (incomingRevision !== undefined && incomingRevision < existingRevision) {
+      if (incomingRevision === undefined) {
+        return jsonError(res, 409, 'Revision required', `currentRevision:${existingRevision}`);
+      }
+      if (incomingRevision !== existingRevision) {
         return jsonError(res, 409, 'Stale base revision', `currentRevision:${existingRevision}`);
       }
       if (existing.buildings.length > 0 && base.buildings.length === 0) {

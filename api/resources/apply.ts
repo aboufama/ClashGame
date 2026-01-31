@@ -4,6 +4,7 @@ import { applyResourceDelta } from '../_lib/resources.js';
 import { getStorage } from '../_lib/storage/index.js';
 import { createInitialBase } from '../_lib/bases.js';
 import { clampNumber, randomId, toInt } from '../_lib/utils.js';
+import { readSessionToken, verifySession } from '../_lib/sessions.js';
 
 const SOL_MAX = 1_000_000_000;
 
@@ -26,10 +27,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       : randomId('tx_');
 
     const storage = getStorage();
+    const sessionToken = readSessionToken((body as Record<string, unknown>).sessionToken);
+    const sessionCheck = await verifySession(storage, userId, sessionToken);
+    if (!sessionCheck.ok) {
+      return jsonError(res, sessionCheck.status || 401, sessionCheck.message || 'Session invalid', sessionCheck.details);
+    }
+
     let base = await storage.getBase(userId);
     if (!base) {
-      const user = await storage.getUser(userId);
-      base = createInitialBase(userId, user?.username || 'Unknown');
+      const user = sessionCheck.user;
+      if (!user) return jsonError(res, 404, 'User not found');
+      base = createInitialBase(userId, user.username || 'Unknown');
     }
 
     const result = applyResourceDelta(base, delta, refId, reason);

@@ -22,6 +22,10 @@ export class GameBackend {
         return Auth.isOnlineMode();
     }
 
+    private getSessionToken(): string | null {
+        return Auth.getCurrentUser()?.sessionToken ?? null;
+    }
+
     private normalizeWorld(world: SerializedWorld): SerializedWorld {
         const canonicalize = (value: string) =>
             value.trim().toLowerCase().replace(/[\s-]+/g, '_');
@@ -97,6 +101,30 @@ export class GameBackend {
         return world;
     }
 
+    public getCachedWorld(id: string): SerializedWorld | null {
+        return this.worlds.get(id) ?? null;
+    }
+
+    public async refreshWorldFromCloud(id: string): Promise<SerializedWorld | null> {
+        if (!this.isOnline()) return this.getCachedWorld(id);
+        if (id.startsWith('enemy_') || id.startsWith('bot_')) return this.getCachedWorld(id);
+
+        const cached = this.worlds.get(id) ?? null;
+        const loaded = await this.loadFromCloud(id);
+        if (!loaded) return cached;
+
+        const normalized = this.normalizeWorld(loaded);
+        const hasTownHall = normalized.buildings.some(b => b.type === 'town_hall');
+        if (normalized.buildings.length === 0 || !hasTownHall) return cached;
+
+        const cachedSave = cached?.lastSaveTime ?? 0;
+        const loadedSave = normalized.lastSaveTime ?? 0;
+        if (cached && loadedSave <= cachedSave) return cached;
+
+        this.worlds.set(id, normalized);
+        return normalized;
+    }
+
     public async deleteWorld(worldId: string): Promise<void> {
         this.worlds.delete(worldId);
         localStorage.removeItem(`clashIso_world_${worldId}`);
@@ -112,6 +140,7 @@ export class GameBackend {
         try {
             const user = Auth.getCurrentUser();
             if (!user?.id || !user?.username) return;
+            const sessionToken = this.getSessionToken();
             const response = await fetch(`${API_BASE}/api/bases/save`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -122,7 +151,8 @@ export class GameBackend {
                     obstacles: world.obstacles,
                     resources: world.resources,
                     army: world.army,
-                    revision: world.revision
+                    revision: world.revision,
+                    ...(sessionToken ? { sessionToken } : {})
                 })
             });
 
@@ -133,6 +163,11 @@ export class GameBackend {
                 }
                 console.log(`Cloud sync successful for ${user?.username} (ID: ${user?.id})`);
             } else {
+                if (response.status === 401) {
+                    console.warn('Cloud sync rejected (session invalid). Switching to offline mode.');
+                    Auth.setOnlineMode(false);
+                    return;
+                }
                 if (response.status === 409) {
                     // Stale revision; refresh from cloud on next access
                     this.worlds.delete(world.id);
@@ -226,6 +261,7 @@ export class GameBackend {
         if (!victimId || victimId.startsWith('bot_') || victimId.startsWith('enemy_')) return null;
 
         try {
+            const sessionToken = this.getSessionToken();
             const response = await fetch(`${API_BASE}/api/notifications/attack`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -235,11 +271,17 @@ export class GameBackend {
                     attackerName,
                     solLooted,
                     destruction,
-                    ...(attackId ? { attackId } : {})
+                    ...(attackId ? { attackId } : {}),
+                    ...(sessionToken ? { sessionToken } : {})
                 })
             });
 
-            if (!response.ok) return null;
+            if (!response.ok) {
+                if (response.status === 401) {
+                    Auth.setOnlineMode(false);
+                }
+                return null;
+            }
             const data = await response.json();
             return {
                 lootApplied: typeof data.lootApplied === 'number' ? data.lootApplied : undefined,
@@ -262,6 +304,7 @@ export class GameBackend {
         }
 
         try {
+            const sessionToken = this.getSessionToken();
             const response = await fetch(`${API_BASE}/api/resources/apply`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -269,10 +312,16 @@ export class GameBackend {
                     userId,
                     delta,
                     reason,
-                    refId
+                    refId,
+                    ...(sessionToken ? { sessionToken } : {})
                 })
             });
-            if (!response.ok) return null;
+            if (!response.ok) {
+                if (response.status === 401) {
+                    Auth.setOnlineMode(false);
+                }
+                return null;
+            }
             const data = await response.json();
             if (data && typeof data.sol === 'number') {
                 return { sol: data.sol, applied: !!data.applied };
@@ -331,11 +380,18 @@ export class GameBackend {
         if (!this.isOnline()) return;
 
         try {
-            await fetch(`${API_BASE}/api/notifications/attack`, {
+            const sessionToken = this.getSessionToken();
+            const response = await fetch(`${API_BASE}/api/notifications/attack`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId })
+                body: JSON.stringify({
+                    userId,
+                    ...(sessionToken ? { sessionToken } : {})
+                })
             });
+            if (!response.ok && response.status === 401) {
+                Auth.setOnlineMode(false);
+            }
         } catch (error) {
             console.error('Failed to mark notifications read:', error);
         }

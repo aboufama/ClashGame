@@ -28,12 +28,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const userId = `user_${Date.now()}_${randomId().slice(0, 8)}`;
     const now = Date.now();
 
+    const sessionToken = `sess_${randomId()}`;
     const user = {
       id: userId,
       username,
       passwordHash: hashPassword(password),
       createdAt: now,
       lastLogin: now,
+      sessionToken,
+      sessionIssuedAt: now,
     };
 
     await storage.createUser(user);
@@ -45,6 +48,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         id: userId,
         username: user.username,
         lastLogin: user.lastLogin,
+        sessionToken,
       },
     }, 201);
   } catch (error) {

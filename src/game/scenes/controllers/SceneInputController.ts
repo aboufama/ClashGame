@@ -254,26 +254,30 @@ export class SceneInputController {
             }
 
             if (scene.isMoving && scene.selectedInWorld) {
-                if (scene.isPositionValid(gridPosSnap.x, gridPosSnap.y, scene.selectedInWorld.type, scene.selectedInWorld.id)) {
+                // Calculate centered position for the building being moved
+                const info = BUILDINGS[scene.selectedInWorld.type];
+                const targetX = Math.round(gridPosFloat.x - info.width / 2);
+                const targetY = Math.round(gridPosFloat.y - info.height / 2);
+
+                if (scene.isPositionValid(targetX, targetY, scene.selectedInWorld.type, scene.selectedInWorld.id)) {
                     // Clear any obstacles at the new position
-                    const info = BUILDINGS[scene.selectedInWorld.type];
-                    scene.removeOverlappingObstacles(gridPosSnap.x, gridPosSnap.y, info.width, info.height);
+                    scene.removeOverlappingObstacles(targetX, targetY, info.width, info.height);
 
                     // Store old position before updating (needed for wall neighbor refresh)
                     const oldGridX = scene.selectedInWorld.gridX;
                     const oldGridY = scene.selectedInWorld.gridY;
                     const isWall = scene.selectedInWorld.type === 'wall';
 
-                    scene.selectedInWorld.gridX = gridPosSnap.x;
-                    scene.selectedInWorld.gridY = gridPosSnap.y;
+                    scene.selectedInWorld.gridX = targetX;
+                    scene.selectedInWorld.gridY = targetY;
                     scene.selectedInWorld.graphics.clear();
                     if (scene.selectedInWorld.baseGraphics) {
                         scene.selectedInWorld.baseGraphics.clear();
                     }
                     scene.drawBuildingVisuals(
                         scene.selectedInWorld.graphics,
-                        gridPosSnap.x,
-                        gridPosSnap.y,
+                        targetX,
+                        targetY,
                         scene.selectedInWorld.type,
                         1,
                         null,
@@ -281,7 +285,7 @@ export class SceneInputController {
                         scene.selectedInWorld.baseGraphics,
                         true  // skipBase=true since base is baked to ground texture
                     );
-                    const depth = depthForBuilding(gridPosSnap.x, gridPosSnap.y, scene.selectedInWorld.type as BuildingType);
+                    const depth = depthForBuilding(targetX, targetY, scene.selectedInWorld.type as BuildingType);
                     scene.selectedInWorld.graphics.setDepth(depth);
                     if (scene.selectedInWorld.baseGraphics) {
                         scene.selectedInWorld.baseGraphics.setDepth(depthForGroundPlane());
@@ -299,13 +303,13 @@ export class SceneInputController {
                     // Update wall neighbor connections at both old and new positions
                     if (isWall) {
                         scene.refreshWallNeighbors(oldGridX, oldGridY, scene.selectedInWorld.owner);
-                        scene.refreshWallNeighbors(gridPosSnap.x, gridPosSnap.y, scene.selectedInWorld.owner);
+                        scene.refreshWallNeighbors(targetX, targetY, scene.selectedInWorld.owner);
                     }
 
                     scene.isMoving = false;
                     scene.ghostBuilding.setVisible(false);
                     if (scene.selectedInWorld.owner === 'PLAYER') {
-                        await Backend.moveBuilding(scene.userId, scene.selectedInWorld.id, gridPosSnap.x, gridPosSnap.y);
+                        await Backend.moveBuilding(scene.userId, scene.selectedInWorld.id, targetX, targetY);
                     }
                 }
                 return;
@@ -317,13 +321,17 @@ export class SceneInputController {
             }
 
             if (scene.selectedBuildingType) {
-                if (scene.isPositionValid(gridPosSnap.x, gridPosSnap.y, scene.selectedBuildingType)) {
+                // Calculate centered position for new placement
+                const info = BUILDINGS[scene.selectedBuildingType];
+                const targetX = Math.round(gridPosFloat.x - info.width / 2);
+                const targetY = Math.round(gridPosFloat.y - info.height / 2);
+
+                if (scene.isPositionValid(targetX, targetY, scene.selectedBuildingType)) {
                     const type = scene.selectedBuildingType;
-                    const success = await scene.placeBuilding(gridPosSnap.x, gridPosSnap.y, type, 'PLAYER');
+                    const success = await scene.placeBuilding(targetX, targetY, type, 'PLAYER');
 
                     if (success) {
-                        const info = BUILDINGS[type];
-                        const pos = IsoUtils.cartToIso(gridPosSnap.x + info.width / 2, gridPosSnap.y + info.height / 2);
+                        const pos = IsoUtils.cartToIso(targetX + info.width / 2, targetY + info.height / 2);
                         scene.createSmokeEffect(pos.x, pos.y, 8);
 
                         if (type !== 'wall') {
@@ -467,8 +475,10 @@ export class SceneInputController {
 
         // Drag to build walls
         if (pointer.isDown && scene.selectedBuildingType === 'wall') {
-            if (scene.isPositionValid(gridPosSnap.x, gridPosSnap.y, scene.selectedBuildingType)) {
-                scene.placeBuilding(gridPosSnap.x, gridPosSnap.y, scene.selectedBuildingType, 'PLAYER');
+            const targetX = Math.round(gridPosFloat.x - 0.5); // Wall width 1, offset 0.5
+            const targetY = Math.round(gridPosFloat.y - 0.5);
+            if (scene.isPositionValid(targetX, targetY, scene.selectedBuildingType)) {
+                scene.placeBuilding(targetX, targetY, scene.selectedBuildingType, 'PLAYER');
             }
         }
 
@@ -510,24 +520,31 @@ export class SceneInputController {
         scene.ghostBuilding.clear();
         if (scene.selectedBuildingType || (scene.isMoving && scene.selectedInWorld)) {
             const type = scene.selectedBuildingType || scene.selectedInWorld?.type;
-            if (type && gridPosSnap.x >= 0 && gridPosSnap.x < scene.mapSize && gridPosSnap.y >= 0 && gridPosSnap.y < scene.mapSize) {
-                scene.ghostBuilding.setVisible(true);
+            if (type) {
+                const info = BUILDINGS[type];
+                // Calculate ghost position centered on cursor
+                const ghostX = Math.round(gridPosFloat.x - info.width / 2);
+                const ghostY = Math.round(gridPosFloat.y - info.height / 2);
 
-                // Determine Ghost Level for accurate preview
-                let level = 1;
-                if (scene.selectedInWorld) {
-                    level = scene.selectedInWorld.level || 1;
-                } else if (type === 'wall') {
-                    const walls = scene.buildings.filter(b => b.type === 'wall');
-                    if (walls.length > 0) level = Math.max(...walls.map(w => w.level || 1));
-                }
+                if (ghostX >= 0 && ghostX < scene.mapSize && ghostY >= 0 && ghostY < scene.mapSize) {
+                    scene.ghostBuilding.setVisible(true);
 
-                const ghostObj = { type: type as BuildingType, level: level, gridX: gridPosSnap.x, gridY: gridPosSnap.y };
-                scene.drawBuildingVisuals(scene.ghostBuilding, gridPosSnap.x, gridPosSnap.y, type, 0.5, null, ghostObj as any);
+                    // Determine Ghost Level for accurate preview
+                    let level = 1;
+                    if (scene.selectedInWorld) {
+                        level = scene.selectedInWorld.level || 1;
+                    } else if (type === 'wall') {
+                        const walls = scene.buildings.filter(b => b.type === 'wall');
+                        if (walls.length > 0) level = Math.max(...walls.map(w => w.level || 1));
+                    }
 
-                // Ghost depth should be on top of everything for visibility
-                scene.ghostBuilding.setDepth(200000);
-            } else { scene.ghostBuilding.setVisible(false); }
+                    const ghostObj = { type: type as BuildingType, level: level, gridX: ghostX, gridY: ghostY };
+                    scene.drawBuildingVisuals(scene.ghostBuilding, ghostX, ghostY, type, 0.5, null, ghostObj as any);
+
+                    // Ghost depth should be on top of everything for visibility
+                    scene.ghostBuilding.setDepth(200000);
+                } else { scene.ghostBuilding.setVisible(false); }
+            }
         }
     }
 }

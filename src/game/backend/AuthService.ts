@@ -4,6 +4,7 @@ export interface UserProfile {
     username: string;
     email?: string;
     lastLogin: number;
+    sessionToken?: string;
 }
 
 // API base URL - auto-detect based on environment
@@ -60,6 +61,10 @@ export class AuthService {
         return this.currentUser;
     }
 
+    public getSessionToken(): string | null {
+        return this.currentUser?.sessionToken ?? null;
+    }
+
     public isOnlineMode(): boolean {
         return this.isOnline;
     }
@@ -87,7 +92,10 @@ export class AuthService {
                 return { success: false, error: errorMsg };
             }
 
-            this.currentUser = data.user;
+            this.currentUser = {
+                ...data.user,
+                sessionToken: data.user?.sessionToken ?? data.sessionToken
+            };
             this.isOnline = true;
             this.saveSession();
 
@@ -113,7 +121,10 @@ export class AuthService {
                 return { success: false, error: data.error || 'Login failed' };
             }
 
-            this.currentUser = data.user;
+            this.currentUser = {
+                ...data.user,
+                sessionToken: data.user?.sessionToken ?? data.sessionToken
+            };
             this.isOnline = true;
             this.saveSession();
 
@@ -158,7 +169,8 @@ export class AuthService {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     userId: this.currentUser.id,
-                    password
+                    password,
+                    sessionToken: this.currentUser.sessionToken
                 })
             });
 

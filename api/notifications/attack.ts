@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, getBody, getQueryParam, jsonError, jsonOk } from '../_lib/http.js';
 import { getStorage } from '../_lib/storage/index.js';
 import { applyResourceDelta, clampLootAmount, findResourceTx } from '../_lib/resources.js';
+import { readSessionToken, verifySession } from '../_lib/sessions.js';
 import { sanitizeDisplayName } from '../_lib/validators.js';
 import { clampNumber, randomId, toInt } from '../_lib/utils.js';
 
@@ -34,6 +35,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const legacyElixir = clampNumber(toInt(body.elixirLooted, 0), 0, 1_000_000_000);
       const totalSol = Number.isFinite(solLooted) ? solLooted : clampNumber(legacyGold + legacyElixir, 0, 1_000_000_000);
       const destruction = clampNumber(toInt(body.destruction, 0), 0, 100);
+
+      const sessionToken = readSessionToken((body as Record<string, unknown>).sessionToken);
+      if (attackerId && attackerId !== 'unknown' && !attackerId.startsWith('bot_') && !attackerId.startsWith('enemy_')) {
+        const sessionCheck = await verifySession(storage, attackerId, sessionToken);
+        if (!sessionCheck.ok) {
+          return jsonError(res, sessionCheck.status || 401, sessionCheck.message || 'Session invalid', sessionCheck.details);
+        }
+      }
 
       const victimBase = await storage.getBase(victimId);
       const attackerBase = attackerId && attackerId !== 'unknown'
@@ -139,9 +148,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'PUT') {
     try {
-      const body = getBody<{ userId?: string }>(req);
+      const body = getBody<{ userId?: string; sessionToken?: string }>(req);
       if (!body.userId) {
         return jsonError(res, 400, 'User ID required');
+      }
+
+      const sessionToken = readSessionToken(body.sessionToken);
+      const sessionCheck = await verifySession(storage, body.userId, sessionToken);
+      if (!sessionCheck.ok) {
+        return jsonError(res, sessionCheck.status || 401, sessionCheck.message || 'Session invalid', sessionCheck.details);
       }
 
       await storage.markNotificationsRead(body.userId);
