@@ -776,7 +776,7 @@ function App() {
 
       {/* Notifications and Leaderboard - only show when in HOME mode and online */}
       {view === 'HOME' && isOnline && (
-        <div style={{ position: 'fixed', top: '16px', right: '60px', zIndex: 100, display: 'flex', gap: '8px' }}>
+        <div style={{ position: 'fixed', top: '16px', right: '80px', zIndex: 100, display: 'flex', gap: '8px' }}>
           <LeaderboardPanel
             currentUserId={user.id}
             isOnline={isOnline}

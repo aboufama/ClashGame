@@ -712,11 +712,25 @@ export class GameBackend {
             else if (roll > 0.25) defType = 'tesla';
             else defType = 'mortar';
 
-            const b = await this.placeBuilding(id, defType, tx, ty);
-            if (b) b.level = getRandomLevel(defType);
+            const defInfo = BUILDING_DEFINITIONS[defType];
 
-            const collector = await this.placeBuilding(id, 'solana_collector', tx + 1, ty + 1);
-            if (collector) collector.level = getRandomLevel('solana_collector');
+            // Smart Placement for 4x4 internal area (tx-1 to tx+2)
+            // If defense is small (<=2x2), we can fit both.
+            // If defense is large, we center it and skip collector.
+            if (defInfo.width <= 2 && defInfo.height <= 2) {
+                // Place Defense at Top-Left of comp (tx-1, ty-1)
+                const b = await this.placeBuilding(id, defType, tx - 1, ty - 1);
+                if (b) b.level = getRandomLevel(defType);
+
+                // Place Collector at Bottom-Right of comp (tx+1, ty+1)
+                const collector = await this.placeBuilding(id, 'solana_collector', tx + 1, ty + 1);
+                if (collector) collector.level = getRandomLevel('solana_collector');
+            } else {
+                // Large Defense: Place centered-ish (tx-1, ty-1 covers 3x3 or 4x4 well in 4x4 space)
+                const b = await this.placeBuilding(id, defType, tx - 1, ty - 1);
+                if (b) b.level = getRandomLevel(defType);
+                // Skip collector to avoid overlap
+            }
 
             await this.generateRectWall(id, tx - 2, ty - 2, 5, 5, wallLevel);
         }

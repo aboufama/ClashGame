@@ -14,8 +14,15 @@
 
 :root {
     /* Fantasy Color Palette */
-    --fantasy-gold: #14F195;
-    --fantasy-gold-dark: #9945FF;
+    --ui-gold: #FFD700;
+    /* Classic Gold for UI */
+    --solana-green: #14F195;
+    /* Neon Green for SOL */
+
+    --fantasy-gold: var(--ui-gold);
+    /* Default "Gold" is now Yellow-Gold */
+    --fantasy-gold-dark: #B8860B;
+    /* Darker Gold */
     --fantasy-silver: #C0C0C0;
     --fantasy-bronze: #CD7F32;
     --fantasy-red: #8B0000;
@@ -138,7 +145,7 @@
 }
 
 .res-item.sol {
-    color: #14F195;
+    color: var(--solana-green);
     border-color: var(--panel-border);
 }
 
