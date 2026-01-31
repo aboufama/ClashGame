@@ -79,6 +79,7 @@ export class SceneInputController {
                 // Convert screen delta to world delta using current zoom
                 camera.scrollX += panDeltaX / camera.zoom;
                 camera.scrollY += panDeltaY / camera.zoom;
+                this.scene.hasUserMovedCamera = true;
             }
 
             // Handle zooming
@@ -94,6 +95,7 @@ export class SceneInputController {
             const oldZoom = camera.zoom;
 
             if (newZoom !== oldZoom) {
+                this.scene.hasUserMovedCamera = true;
                 // In Phaser, camera.scrollX/Y is where the CENTER of the camera view is in world space
                 const viewportCenterX = camera.width / 2;
                 const viewportCenterY = camera.height / 2;
@@ -461,6 +463,7 @@ export class SceneInputController {
 
                     scene.cameras.main.scrollX = scene.dragStartCam.x + diffX / scene.cameras.main.zoom;
                     scene.cameras.main.scrollY = scene.dragStartCam.y + diffY / scene.cameras.main.zoom;
+                    scene.hasUserMovedCamera = true;
                 }
             }
 

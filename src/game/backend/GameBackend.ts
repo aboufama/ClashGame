@@ -169,8 +169,8 @@ export class GameBackend {
                     return;
                 }
                 if (response.status === 409) {
-                    // Stale revision; refresh from cloud on next access
-                    this.worlds.delete(world.id);
+                    // Stale revision; keep cache but refresh from cloud in background
+                    void this.refreshWorldFromCloud(world.id);
                 }
                 const errorData = await response.json().catch(() => ({}));
                 console.error('Cloud sync failed with status:', response.status, errorData);

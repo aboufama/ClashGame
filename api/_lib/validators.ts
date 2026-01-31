@@ -206,6 +206,24 @@ export function ensureTownHall(base: StoredBase): StoredBase {
   return base;
 }
 
+export function sanitizeBaseForOutput(base: StoredBase): StoredBase {
+  const sanitized = ensureTownHall({
+    ...base,
+    buildings: sanitizeBuildings((base as unknown as Record<string, unknown>).buildings),
+    obstacles: sanitizeObstacles((base as unknown as Record<string, unknown>).obstacles),
+    resources: sanitizeResources((base as unknown as Record<string, unknown>).resources),
+    army: sanitizeArmy((base as unknown as Record<string, unknown>).army),
+  });
+
+  if (base.revision !== undefined) sanitized.revision = base.revision;
+  if (base.schemaVersion !== undefined) sanitized.schemaVersion = base.schemaVersion;
+  if (base.resourceLedger) sanitized.resourceLedger = base.resourceLedger;
+  if (base.lastSaveTime) sanitized.lastSaveTime = base.lastSaveTime;
+  if (base.username) sanitized.username = base.username;
+
+  return sanitized;
+}
+
 export function sanitizeBasePayload(payload: Record<string, unknown>): StoredBase {
   const ownerId = typeof payload.userId === 'string' && payload.userId.trim() ? payload.userId : '';
   const username = sanitizeDisplayName(payload.username, 'Unknown');

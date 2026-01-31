@@ -168,6 +168,7 @@ export class MainScene extends Phaser.Scene {
     public selectionGraphics!: Phaser.GameObjects.Graphics;
 
     public cameraSensitivity = 1.0;
+    public hasUserMovedCamera = false;
 
 
     constructor() {
@@ -207,6 +208,12 @@ export class MainScene extends Phaser.Scene {
         // Set default zoom based on device
         const defaultZoom = MobileUtils.getDefaultZoom();
         this.cameras.main.setZoom(defaultZoom);
+
+        this.scale.on('resize', () => {
+            if (!this.hasUserMovedCamera) {
+                this.centerCamera();
+            }
+        });
 
         // Register and apply pixelation pipeline
         const renderer = this.game.renderer as Phaser.Renderer.WebGL.WebGLRenderer;
@@ -248,6 +255,7 @@ export class MainScene extends Phaser.Scene {
             const newZoom = Phaser.Math.Clamp(oldZoom - deltaY * 0.002, minZoom, maxZoom);
 
             if (newZoom === oldZoom) return;
+            this.hasUserMovedCamera = true;
 
             // Pointer position on screen (relative to canvas)
             const screenX = pointer.x;
@@ -337,6 +345,7 @@ export class MainScene extends Phaser.Scene {
         const centerGrid = this.mapSize / 2;
         const pos = IsoUtils.cartToIso(centerGrid, centerGrid);
         this.cameras.main.centerOn(pos.x, pos.y);
+        this.hasUserMovedCamera = false;
     }
 
     public cancelPlacement() {
@@ -5167,10 +5176,15 @@ export class MainScene extends Phaser.Scene {
     private handleCameraMovement(delta: number) {
         if (!this.cursorKeys) return;
         const speed = 0.5 * delta * this.cameraSensitivity;
+        const movedX = this.cursorKeys.left?.isDown || this.cursorKeys.right?.isDown;
+        const movedY = this.cursorKeys.up?.isDown || this.cursorKeys.down?.isDown;
         if (this.cursorKeys.left?.isDown) this.cameras.main.scrollX -= speed;
         else if (this.cursorKeys.right?.isDown) this.cameras.main.scrollX += speed;
         if (this.cursorKeys.up?.isDown) this.cameras.main.scrollY -= speed;
         else if (this.cursorKeys.down?.isDown) this.cameras.main.scrollY += speed;
+        if (movedX || movedY) {
+            this.hasUserMovedCamera = true;
+        }
     }
 
     private updateSelectionHighlight() {

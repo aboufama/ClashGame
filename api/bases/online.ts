@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { generateBotBase } from '../_lib/bots.js';
 import { handleOptions, getQueryParam, jsonError, jsonOk, requireMethod } from '../_lib/http.js';
 import { getStorage } from '../_lib/storage/index.js';
-import { ensureTownHall, sanitizeArmy, sanitizeBuildings, sanitizeObstacles, sanitizeResources } from '../_lib/validators.js';
+import { sanitizeBaseForOutput } from '../_lib/validators.js';
 import { pickRandom } from '../_lib/utils.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -36,23 +36,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return jsonError(res, 500, 'Failed to select base');
     }
 
-    let normalized = ensureTownHall({
-      ...selected,
-      buildings: sanitizeBuildings((selected as unknown as Record<string, unknown>).buildings),
-      obstacles: sanitizeObstacles((selected as unknown as Record<string, unknown>).obstacles),
-      resources: sanitizeResources((selected as unknown as Record<string, unknown>).resources),
-      army: sanitizeArmy((selected as unknown as Record<string, unknown>).army),
-    });
+    let normalized = sanitizeBaseForOutput(selected);
 
     if (!normalized.buildings.length) {
       const fallback = generateBotBase(0);
-      normalized = ensureTownHall({
-        ...fallback,
-        buildings: sanitizeBuildings((fallback as unknown as Record<string, unknown>).buildings),
-        obstacles: sanitizeObstacles((fallback as unknown as Record<string, unknown>).obstacles),
-        resources: sanitizeResources((fallback as unknown as Record<string, unknown>).resources),
-        army: sanitizeArmy((fallback as unknown as Record<string, unknown>).army),
-      });
+      normalized = sanitizeBaseForOutput(fallback);
     }
 
     const candidate = {
