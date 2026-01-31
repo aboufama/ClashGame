@@ -1,37 +1,54 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { handleOptions, getBody, jsonError, jsonOk, requireMethod } from '../_lib/http.js';
-import { createInitialBase } from '../_lib/bases.js';
-import { readSessionToken, verifySession } from '../_lib/sessions.js';
-import { getStorage } from '../_lib/storage/index.js';
-import { sanitizeBaseForOutput } from '../_lib/validators.js';
+import { handleOptions, sendError, sendJson } from '../_lib/http';
+import { readJson, writeJson } from '../_lib/blob';
+import { requireAuth } from '../_lib/auth';
+import { buildStarterWorld, type SerializedWorld, type WalletRecord } from '../_lib/models';
+import { upsertUserIndex } from '../_lib/indexes';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleOptions(req, res)) return;
-  if (!requireMethod(req, res, 'POST')) return;
+  if (req.method !== 'POST') {
+    sendError(res, 405, 'Method not allowed');
+    return;
+  }
 
   try {
-    const body = getBody<Record<string, unknown>>(req);
-    const userId = typeof body.userId === 'string' ? body.userId.trim() : '';
-    if (!userId) return jsonError(res, 400, 'User ID required');
+    const auth = await requireAuth(req, res);
+    if (!auth) return;
 
-    const storage = getStorage();
-    const sessionToken = readSessionToken((body as Record<string, unknown>).sessionToken);
-    const sessionCheck = await verifySession(storage, userId, sessionToken);
-    if (!sessionCheck.ok) {
-      return jsonError(res, sessionCheck.status || 401, sessionCheck.message || 'Session invalid', sessionCheck.details);
+    const { user } = auth;
+    const now = Date.now();
+
+    const walletPath = `wallets/${user.id}.json`;
+    const existingWallet = await readJson<WalletRecord>(walletPath);
+    const wallet: WalletRecord = existingWallet ?? { balance: 1000, updatedAt: now };
+    if (!existingWallet) {
+      await writeJson(walletPath, wallet);
     }
 
-    let base = await storage.getBase(userId);
-    if (!base || !base.buildings || base.buildings.length === 0) {
-      const username = sessionCheck.user?.username || base?.username || 'Unknown';
-      base = createInitialBase(userId, username);
-      await storage.saveBase(base);
+    const basePath = `bases/${user.id}.json`;
+    let world = await readJson<SerializedWorld>(basePath);
+
+    if (!world || !world.buildings || world.buildings.length === 0) {
+      world = buildStarterWorld(user.id, user.username);
+      world.resources.sol = wallet.balance;
+      await writeJson(basePath, world);
+    } else {
+      world.username = user.username;
+      world.resources.sol = wallet.balance;
     }
 
-    const normalized = sanitizeBaseForOutput(base);
-    return jsonOk(res, { success: true, base: normalized });
+    await upsertUserIndex({
+      id: user.id,
+      username: user.username,
+      buildingCount: world.buildings.length,
+      lastSeen: now,
+      trophies: user.trophies ?? 0
+    });
+
+    sendJson(res, 200, { world });
   } catch (error) {
-    console.error('Bootstrap base error:', error);
-    return jsonError(res, 500, 'Internal server error');
+    console.error('bootstrap error', error);
+    sendError(res, 500, 'Failed to bootstrap base');
   }
 }

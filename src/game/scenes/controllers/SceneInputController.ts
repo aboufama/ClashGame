@@ -180,7 +180,7 @@ export class SceneInputController {
             scene.dragStartScreen.set(pointer.position.x, pointer.position.y);
 
             // Start deployment timer and spawn first troop immediately for responsiveness
-            if (scene.mode === 'ATTACK') {
+            if (scene.mode === 'ATTACK' && !scene.isScouting) {
                 scene.deployStartTime = scene.time.now;
                 const worldPoint = scene.cameras.main.getWorldPoint(pointer.x, pointer.y);
                 const gridPosFloat = IsoUtils.isoToCart(worldPoint.x, worldPoint.y);
@@ -485,7 +485,7 @@ export class SceneInputController {
             }
         }
 
-        if (scene.mode === 'ATTACK' && pointer.isDown) {
+        if (scene.mode === 'ATTACK' && !scene.isScouting && pointer.isDown) {
             const now = scene.time.now;
             const holdDuration = now - scene.deployStartTime;
 

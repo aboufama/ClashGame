@@ -14,7 +14,7 @@ import { TargetingSystem } from '../systems/TargetingSystem';
 import { depthForBuilding, depthForGroundPlane, depthForObstacle, depthForRubble, depthForTroop } from '../systems/DepthSystem';
 import { IsoUtils } from '../utils/IsoUtils';
 import { MobileUtils } from '../utils/MobileUtils';
-import { Auth } from '../backend/AuthService';
+import { Auth } from '../backend/Auth';
 import { gameManager } from '../GameManager';
 import { particleManager } from '../systems/ParticleManager';
 import type { GameMode } from '../types/GameMode';
@@ -126,6 +126,7 @@ export class MainScene extends Phaser.Scene {
     public hoverGrid: Phaser.Math.Vector2 = new Phaser.Math.Vector2(-100, -100);
 
     public mode: GameMode = 'HOME';
+    public isScouting = false;
 
     // Combat stuff
     public resourceInterval = 2000;
@@ -231,7 +232,7 @@ export class MainScene extends Phaser.Scene {
             setSensitivity: (val: number) => {
                 this.cameraSensitivity = val;
             },
-            loadBase: () => this.loadSavedBase()
+            loadBase: () => this.loadSavedBase(false, { preferCache: true, refreshOnline: true })
         });
 
         // Initialize at 1.5
@@ -333,7 +334,7 @@ export class MainScene extends Phaser.Scene {
         });
 
         // Try to load saved base, otherwise place default if needed
-        this.loadSavedBase().then(async success => {
+        this.loadSavedBase(false, { preferCache: true, refreshOnline: true }).then(async success => {
             if (!success && this.needsDefaultBase) {
                 await this.placeDefaultVillage();
             }
@@ -4887,7 +4888,7 @@ export class MainScene extends Phaser.Scene {
         this.deploymentGraphics.clear();
         this.forbiddenGraphics.clear();
 
-        if (this.mode !== 'ATTACK') {
+        if (this.mode !== 'ATTACK' || this.isScouting) {
             this.deploymentGraphics.setVisible(false);
             this.forbiddenGraphics.setVisible(false);
             return;
@@ -5298,6 +5299,7 @@ export class MainScene extends Phaser.Scene {
                     // Set UI immediately
                     gameManager.setGameMode('ATTACK');
                     this.mode = 'ATTACK';
+                    this.isScouting = false;
 
                     this.clearScene();
                     await this.generateEnemyVillage();
@@ -5315,6 +5317,7 @@ export class MainScene extends Phaser.Scene {
                     // Set UI immediately
                     gameManager.setGameMode('ATTACK');
                     this.mode = 'ATTACK';
+                    this.isScouting = false;
 
                     this.clearScene();
                     // Load player's own base as the enemy
@@ -5358,6 +5361,7 @@ export class MainScene extends Phaser.Scene {
                     // Set UI immediately
                     gameManager.setGameMode('ATTACK');
                     this.mode = 'ATTACK';
+                    this.isScouting = false;
 
                     this.clearScene();
                     // Load a random online player's base
@@ -5376,6 +5380,7 @@ export class MainScene extends Phaser.Scene {
                     // Set UI immediately
                     gameManager.setGameMode('ATTACK');
                     this.mode = 'ATTACK';
+                    this.isScouting = false;
 
                     this.clearScene();
                     // Load the specific user's base
@@ -5386,6 +5391,25 @@ export class MainScene extends Phaser.Scene {
                     }
                     this.centerCamera();
                     // Initialize battle stats
+                    this.initialEnemyBuildings = this.getAttackEnemyBuildings().length;
+                    this.destroyedBuildings = 0;
+                    this.solLooted = 0;
+                    this.raidEndScheduled = false;
+                    this.updateBattleStats();
+                });
+            },
+            startScoutOnUser: (userId: string, username: string) => {
+                this.showCloudTransition(async () => {
+                    gameManager.setGameMode('ATTACK');
+                    this.mode = 'ATTACK';
+                    this.isScouting = true;
+
+                    this.clearScene();
+                    const success = await this.generateEnemyVillageFromUser(userId, username);
+                    if (!success) {
+                        await this.generateOnlineEnemyVillage();
+                    }
+                    this.centerCamera();
                     this.initialEnemyBuildings = this.getAttackEnemyBuildings().length;
                     this.destroyedBuildings = 0;
                     this.solLooted = 0;
@@ -5478,6 +5502,7 @@ export class MainScene extends Phaser.Scene {
         this.cancelPlacement();
         gameManager.setGameMode('HOME');
         this.mode = 'HOME';
+        this.isScouting = false;
         this.hasDeployed = false;
         const success = await this.loadSavedBase(false, { preferCache: true, refreshOnline: true });
         if (!success && this.needsDefaultBase) {

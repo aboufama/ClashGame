@@ -26,6 +26,7 @@ type SceneCommands = {
     startPracticeAttack: () => void;
     startOnlineAttack: () => void;
     startAttackOnUser: (userId: string, username: string) => void;
+    startScoutOnUser: (userId: string, username: string) => void;
     findNewMap: () => void;
     deleteSelectedBuilding: () => void;
     moveSelectedBuilding: () => void;
@@ -129,6 +130,10 @@ class GameManager {
 
     startAttackOnUser(userId: string, username: string) {
         this.sceneCommands.startAttackOnUser?.(userId, username);
+    }
+
+    startScoutOnUser(userId: string, username: string) {
+        this.sceneCommands.startScoutOnUser?.(userId, username);
     }
 
     findNewMap() {

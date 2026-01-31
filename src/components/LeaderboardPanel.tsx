@@ -10,9 +10,10 @@ interface LeaderboardPanelProps {
     currentUserId: string;
     isOnline: boolean;
     onAttackUser: (userId: string, username: string) => void;
+    onScoutUser: (userId: string, username: string) => void;
 }
 
-export function LeaderboardPanel({ currentUserId, isOnline, onAttackUser }: LeaderboardPanelProps) {
+export function LeaderboardPanel({ currentUserId, isOnline, onAttackUser, onScoutUser }: LeaderboardPanelProps) {
     const [users, setUsers] = useState<LeaderboardUser[]>([]);
     const [isOpen, setIsOpen] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -76,15 +77,28 @@ export function LeaderboardPanel({ currentUserId, isOnline, onAttackUser }: Lead
                                             <span className="buildings">{user.buildingCount} buildings</span>
                                         </div>
                                         {user.id !== currentUserId && (
-                                            <button
-                                                className="attack-btn"
-                                                onClick={() => {
-                                                    handleClose();
-                                                    onAttackUser(user.id, user.username);
-                                                }}
-                                            >
-                                                ⚔️
-                                            </button>
+                                            <div className="leaderboard-actions">
+                                                <button
+                                                    className="scout-btn"
+                                                    onClick={() => {
+                                                        handleClose();
+                                                        onScoutUser(user.id, user.username);
+                                                    }}
+                                                    title="Scout"
+                                                >
+                                                    👁️
+                                                </button>
+                                                <button
+                                                    className="attack-btn"
+                                                    onClick={() => {
+                                                        handleClose();
+                                                        onAttackUser(user.id, user.username);
+                                                    }}
+                                                    title="Attack"
+                                                >
+                                                    ⚔️
+                                                </button>
+                                            </div>
                                         )}
                                         {user.id === currentUserId && (
                                             <span className="you-badge">YOU</span>

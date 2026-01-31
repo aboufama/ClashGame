@@ -1,72 +1,74 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { handleOptions, getBody, jsonError, jsonOk, requireMethod } from '../_lib/http.js';
-import { getStorage } from '../_lib/storage/index.js';
-import { sanitizeBasePayload } from '../_lib/validators.js';
-import { readSessionToken, verifySession } from '../_lib/sessions.js';
+import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http';
+import { readJson, writeJson } from '../_lib/blob';
+import { requireAuth } from '../_lib/auth';
+import { normalizeWorld, type SerializedWorld, type WalletRecord } from '../_lib/models';
+import { upsertUserIndex } from '../_lib/indexes';
+
+interface SaveBody {
+  world: SerializedWorld;
+  ifMatchRevision?: number;
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleOptions(req, res)) return;
-  if (!requireMethod(req, res, 'POST')) return;
+  if (req.method !== 'POST') {
+    sendError(res, 405, 'Method not allowed');
+    return;
+  }
 
   try {
-    const body = getBody<Record<string, unknown>>(req);
-    const userId = typeof body.userId === 'string' ? body.userId : '';
-    if (!userId.trim()) {
-      return jsonError(res, 400, 'User ID required');
+    const auth = await requireAuth(req, res);
+    if (!auth) return;
+
+    const body = await readJsonBody<SaveBody>(req);
+    if (!body?.world) {
+      sendError(res, 400, 'Missing world payload');
+      return;
     }
 
-    const storage = getStorage();
-    const sessionToken = readSessionToken((body as Record<string, unknown>).sessionToken);
-    const sessionCheck = await verifySession(storage, userId, sessionToken);
-    if (!sessionCheck.ok) {
-      return jsonError(res, sessionCheck.status || 401, sessionCheck.message || 'Session invalid', sessionCheck.details);
+    const { user } = auth;
+    const basePath = `bases/${user.id}.json`;
+    const stored = await readJson<SerializedWorld>(basePath);
+    if (!stored) {
+      sendError(res, 404, 'Base not found');
+      return;
     }
 
-    const base = sanitizeBasePayload({ ...body, userId });
-    const existing = await storage.getBase(userId);
-    const incomingRevision = typeof body.revision === 'number' && Number.isFinite(body.revision)
-      ? Math.trunc(body.revision)
-      : undefined;
-
-    if (existing) {
-      const existingRevision = typeof existing.revision === 'number' ? existing.revision : 0;
-      if (incomingRevision === undefined) {
-        return jsonError(res, 409, 'Revision required', `currentRevision:${existingRevision}`);
-      }
-      if (incomingRevision !== existingRevision) {
-        return jsonError(res, 409, 'Stale base revision', `currentRevision:${existingRevision}`);
-      }
-      if (existing.buildings.length > 0 && base.buildings.length === 0) {
-        return jsonOk(res, {
-          success: true,
-          ignored: true,
-          lastSaveTime: existing.lastSaveTime,
-          revision: existingRevision,
-        });
-      }
-      base.resources = existing.resources;
-      if (existing.resourceLedger) {
-        base.resourceLedger = existing.resourceLedger;
-      }
-      base.revision = existingRevision + 1;
-    } else {
-      base.revision = 1;
+    const currentRevision = stored.revision ?? 0;
+    const expected = body.ifMatchRevision ?? currentRevision;
+    if (expected !== currentRevision) {
+      const wallet = await readJson<WalletRecord>(`wallets/${user.id}.json`);
+      if (wallet) stored.resources.sol = wallet.balance;
+      sendJson(res, 409, { conflict: true, world: stored });
+      return;
     }
 
-    if (!base.username || base.username === 'Unknown') {
-      const user = await storage.getUser(userId);
-      if (user) base.username = user.username;
-    }
+    const wallet = await readJson<WalletRecord>(`wallets/${user.id}.json`);
+    const now = Date.now();
+    const normalized = normalizeWorld(body.world, user.username, stored.resources);
+    const nextWorld: SerializedWorld = {
+      ...normalized,
+      ownerId: user.id,
+      username: user.username,
+      resources: { sol: wallet?.balance ?? normalized.resources.sol },
+      lastSaveTime: now,
+      revision: currentRevision + 1
+    };
 
-    await storage.saveBase(base);
+    await writeJson(basePath, nextWorld);
 
-    return jsonOk(res, {
-      success: true,
-      lastSaveTime: base.lastSaveTime,
-      revision: base.revision ?? 0,
+    await upsertUserIndex({
+      id: user.id,
+      username: user.username,
+      buildingCount: nextWorld.buildings.length,
+      lastSeen: now,
+      trophies: user.trophies ?? 0
     });
+
+    sendJson(res, 200, { ok: true, world: nextWorld });
   } catch (error) {
-    console.error('Save base error:', error);
-    return jsonError(res, 500, 'Internal server error');
+    console.error('save error', error);
+    sendError(res, 500, 'Failed to save base');
   }
 }

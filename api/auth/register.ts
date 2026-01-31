@@ -1,62 +1,89 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { handleOptions, getBody, jsonError, jsonOk, requireMethod } from '../_lib/http.js';
-import { createInitialBase } from '../_lib/bases.js';
-import { hashPassword } from '../_lib/passwords.js';
-import { getStorage } from '../_lib/storage/index.js';
-import { validatePassword, validateUsername } from '../_lib/validators.js';
-import { randomId } from '../_lib/utils.js';
+import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http';
+import { readJson, writeJson } from '../_lib/blob';
+import { createSession, hashSecret, randomId, sanitizeId } from '../_lib/auth';
+import { sanitizeUsername, type UserRecord, type WalletRecord, type LedgerRecord, type NotificationStore } from '../_lib/models';
+import { upsertUserIndex } from '../_lib/indexes';
+
+interface RegisterBody {
+  username?: string;
+  playerId?: string;
+  deviceSecret?: string;
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleOptions(req, res)) return;
-  if (!requireMethod(req, res, 'POST')) return;
+  if (req.method !== 'POST') {
+    sendError(res, 405, 'Method not allowed');
+    return;
+  }
 
   try {
-    const body = getBody<{ username?: string; password?: string }>(req);
-    const username = validateUsername(body.username);
-    const password = validatePassword(body.password);
-
-    if (!username || !password) {
-      return jsonError(res, 400, 'Username and password required');
+    const body = await readJsonBody<RegisterBody>(req);
+    const deviceSecret = body.deviceSecret?.trim();
+    if (!deviceSecret) {
+      sendError(res, 400, 'deviceSecret required');
+      return;
     }
 
-    const storage = getStorage();
-    const existing = await storage.getUserByUsername(username);
-    if (existing) {
-      return jsonError(res, 409, 'Username already taken');
-    }
-
-    const userId = `user_${Date.now()}_${randomId().slice(0, 8)}`;
+    const username = sanitizeUsername(body.username);
+    const playerId = body.playerId ? sanitizeId(body.playerId) : randomId('p_');
+    const secretHash = hashSecret(deviceSecret);
     const now = Date.now();
 
-    const sessionToken = `sess_${randomId()}`;
-    const user = {
-      id: userId,
-      username,
-      passwordHash: hashPassword(password),
-      createdAt: now,
-      lastLogin: now,
-      sessionToken,
-      sessionIssuedAt: now,
+    const existing = await readJson<UserRecord>(`users/${playerId}.json`);
+    let user: UserRecord;
+
+    if (existing) {
+      if (existing.secretHash !== secretHash) {
+        sendError(res, 403, 'Invalid credentials');
+        return;
+      }
+      user = { ...existing, lastSeen: now };
+    } else {
+      user = {
+        id: playerId,
+        username,
+        createdAt: now,
+        lastSeen: now,
+        secretHash,
+        trophies: 0
+      };
+    }
+
+    const session = await createSession(user.id);
+    user.activeSessionId = session.token;
+    user.sessionExpiresAt = session.expiresAt;
+
+    await writeJson(`users/${user.id}.json`, user);
+
+    const wallet: WalletRecord = (await readJson<WalletRecord>(`wallets/${user.id}.json`)) ?? {
+      balance: 1000,
+      updatedAt: now
     };
+    await writeJson(`wallets/${user.id}.json`, wallet);
 
-    await storage.createUser(user);
-    await storage.saveBase(createInitialBase(userId, username));
+    const ledger: LedgerRecord = (await readJson<LedgerRecord>(`ledger/${user.id}.json`)) ?? { events: [] };
+    await writeJson(`ledger/${user.id}.json`, ledger);
 
-    return jsonOk(res, {
-      success: true,
-      user: {
-        id: userId,
-        username: user.username,
-        lastLogin: user.lastLogin,
-        sessionToken,
-      },
-    }, 201);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    return res.status(500).json({
-      error: 'Registration failed',
-      details: message,
-      hint: 'Check if BLOB_READ_WRITE_TOKEN is configured in Vercel',
+    const notifications: NotificationStore = (await readJson<NotificationStore>(`notifications/${user.id}.json`)) ?? { items: [] };
+    await writeJson(`notifications/${user.id}.json`, notifications);
+
+    await upsertUserIndex({
+      id: user.id,
+      username: user.username,
+      buildingCount: 0,
+      lastSeen: now,
+      trophies: user.trophies ?? 0
     });
+
+    sendJson(res, 200, {
+      user: { id: user.id, username: user.username },
+      token: session.token,
+      expiresAt: session.expiresAt
+    });
+  } catch (error) {
+    console.error('register error', error);
+    sendError(res, 500, 'Registration failed');
   }
 }

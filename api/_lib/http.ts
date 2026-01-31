@@ -1,44 +1,53 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-export function setCors(res: VercelResponse): void {
+export function allowCors(res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 }
 
-export function handleOptions(req: VercelRequest, res: VercelResponse): boolean {
+export function handleOptions(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {
-    setCors(res);
-    res.status(200).end();
+    allowCors(res);
+    res.status(204).end();
     return true;
   }
   return false;
 }
 
-export function requireMethod(req: VercelRequest, res: VercelResponse, method: string): boolean {
-  if (req.method !== method) {
-    res.status(405).json({ error: 'Method not allowed' });
-    return false;
+export function sendJson(res: VercelResponse, status: number, data: unknown) {
+  allowCors(res);
+  res.status(status).json(data);
+}
+
+export function sendError(res: VercelResponse, status: number, message: string) {
+  sendJson(res, status, { error: message });
+}
+
+export async function readJsonBody<T>(req: VercelRequest): Promise<T> {
+  if (req.body !== undefined) {
+    if (typeof req.body === 'string') {
+      return JSON.parse(req.body) as T;
+    }
+    return req.body as T;
   }
-  return true;
-}
 
-export function getBody<T extends Record<string, unknown>>(req: VercelRequest): T {
-  if (req.body && typeof req.body === 'object') return req.body as T;
-  return {} as T;
-}
-
-export function getQueryParam(req: VercelRequest, key: string): string | null {
-  const raw = req.query[key];
-  if (Array.isArray(raw)) return raw[0] ?? null;
-  if (typeof raw === 'string') return raw;
-  return null;
-}
-
-export function jsonOk(res: VercelResponse, payload: unknown, status: number = 200): void {
-  res.status(status).json(payload);
-}
-
-export function jsonError(res: VercelResponse, status: number, message: string, details?: string): void {
-  res.status(status).json({ error: message, ...(details ? { details } : {}) });
+  return await new Promise((resolve, reject) => {
+    let data = '';
+    req.on('data', chunk => {
+      data += chunk;
+    });
+    req.on('end', () => {
+      if (!data) {
+        resolve({} as T);
+        return;
+      }
+      try {
+        resolve(JSON.parse(data) as T);
+      } catch (error) {
+        reject(error);
+      }
+    });
+    req.on('error', reject);
+  });
 }

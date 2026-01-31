@@ -1,63 +1,69 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { handleOptions, getBody, jsonError, jsonOk, requireMethod } from '../_lib/http.js';
-import { applyResourceDelta } from '../_lib/resources.js';
-import { getStorage } from '../_lib/storage/index.js';
-import { createInitialBase } from '../_lib/bases.js';
-import { clampNumber, randomId, toInt } from '../_lib/utils.js';
-import { readSessionToken, verifySession } from '../_lib/sessions.js';
+import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http';
+import { readJson, writeJson } from '../_lib/blob';
+import { requireAuth } from '../_lib/auth';
+import { clamp, randomId, type LedgerRecord, type WalletRecord, type SerializedWorld } from '../_lib/models';
 
-const SOL_MAX = 1_000_000_000;
+interface ApplyBody {
+  delta: number;
+  reason?: string;
+  refId?: string;
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleOptions(req, res)) return;
-  if (!requireMethod(req, res, 'POST')) return;
+  if (req.method !== 'POST') {
+    sendError(res, 405, 'Method not allowed');
+    return;
+  }
 
   try {
-    const body = getBody<Record<string, unknown>>(req);
-    const userId = typeof body.userId === 'string' ? body.userId.trim() : '';
-    if (!userId) return jsonError(res, 400, 'User ID required');
+    const auth = await requireAuth(req, res);
+    if (!auth) return;
 
-    const rawDelta = toInt(body.delta, NaN);
-    if (!Number.isFinite(rawDelta)) return jsonError(res, 400, 'Delta required');
-    const delta = clampNumber(rawDelta, -SOL_MAX, SOL_MAX);
-
-    const reason = typeof body.reason === 'string' ? body.reason.trim() : undefined;
-    const refId = typeof body.refId === 'string' && body.refId.trim()
-      ? body.refId.trim()
-      : randomId('tx_');
-
-    const storage = getStorage();
-    const sessionToken = readSessionToken((body as Record<string, unknown>).sessionToken);
-    const sessionCheck = await verifySession(storage, userId, sessionToken);
-    if (!sessionCheck.ok) {
-      return jsonError(res, sessionCheck.status || 401, sessionCheck.message || 'Session invalid', sessionCheck.details);
+    const body = await readJsonBody<ApplyBody>(req);
+    const delta = Number(body?.delta ?? 0);
+    if (!Number.isFinite(delta)) {
+      sendError(res, 400, 'Invalid delta');
+      return;
     }
 
-    let base = await storage.getBase(userId);
-    if (!base) {
-      const user = sessionCheck.user;
-      if (!user) return jsonError(res, 404, 'User not found');
-      base = createInitialBase(userId, user.username || 'Unknown');
-    }
+    const { user } = auth;
+    const now = Date.now();
 
-    const result = applyResourceDelta(base, delta, refId, reason);
-    if (result.insufficient) {
-      return jsonError(res, 400, 'Insufficient resources');
-    }
+    const walletPath = `wallets/${user.id}.json`;
+    const existingWallet = await readJson<WalletRecord>(walletPath);
+    const wallet: WalletRecord = existingWallet ?? { balance: 1000, updatedAt: now };
 
-    if (result.applied) {
-      await storage.saveBase(base);
-    }
+    const nextBalance = clamp(wallet.balance + delta, 0, 1_000_000_000);
+    wallet.balance = nextBalance;
+    wallet.updatedAt = now;
+    await writeJson(walletPath, wallet);
 
-    return jsonOk(res, {
-      success: true,
-      applied: result.applied,
-      sol: result.balance,
-      txId: refId,
-      deltaApplied: result.applied ? delta : (result.tx?.delta ?? 0),
+    const ledgerPath = `ledger/${user.id}.json`;
+    const ledger = (await readJson<LedgerRecord>(ledgerPath)) ?? { events: [] };
+    ledger.events.push({
+      id: randomId('evt_'),
+      delta,
+      reason: body?.reason ?? 'update',
+      refId: body?.refId,
+      time: now
     });
+    if (ledger.events.length > 200) {
+      ledger.events = ledger.events.slice(-200);
+    }
+    await writeJson(ledgerPath, ledger);
+
+    const basePath = `bases/${user.id}.json`;
+    const world = await readJson<SerializedWorld>(basePath);
+    if (world) {
+      world.resources.sol = nextBalance;
+      await writeJson(basePath, world);
+    }
+
+    sendJson(res, 200, { applied: true, sol: nextBalance });
   } catch (error) {
-    console.error('Apply resource delta error:', error);
-    return jsonError(res, 500, 'Internal server error');
+    console.error('apply resource error', error);
+    sendError(res, 500, 'Failed to apply resources');
   }
 }

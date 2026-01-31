@@ -5,17 +5,15 @@ import { GameConfig } from './game/GameConfig';
 import type { GameMode } from './game/types/GameMode';
 import { BUILDING_DEFINITIONS, TROOP_DEFINITIONS, type BuildingType, getBuildingStats } from './game/config/GameDefinitions';
 import { Backend } from './game/backend/GameBackend';
-import { Auth, type UserProfile } from './game/backend/AuthService';
+import { Auth } from './game/backend/Auth';
 import { gameManager } from './game/GameManager';
 import { MobileUtils } from './game/utils/MobileUtils';
 import { CloudOverlay } from './components/CloudOverlay';
 import { TrainingModal } from './components/TrainingModal';
 import { BuildingShopModal } from './components/BuildingShopModal';
-import { SettingsModal } from './components/SettingsModal';
 import { BattleResultsModal } from './components/BattleResultsModal';
 import { Hud } from './components/Hud';
 import { DebugMenu } from './components/DebugMenu';
-import { LoginScreen } from './components/LoginScreen';
 import { NotificationsPanel } from './components/NotificationsPanel';
 import { LeaderboardPanel } from './components/LeaderboardPanel';
 import './App.css';
@@ -29,9 +27,8 @@ MobileUtils.preventDefaultTouchBehaviors();
 function App() {
   const gameRef = useRef<Phaser.Game | null>(null);
 
-  // Initialize user - start with null and set it in useEffect to ensure DOM is ready
+  type UserProfile = { id: string; username: string; lastLogin: number };
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [showLogin, setShowLogin] = useState(true);
   const [isOnline, setIsOnline] = useState(false);
 
   const [loading, setLoading] = useState(true);
@@ -39,6 +36,26 @@ function App() {
   const resourcesRef = useRef(resources);
   const [army, setArmy] = useState({ warrior: 0, archer: 0, giant: 0, ward: 0, recursion: 0, ram: 0, stormmage: 0, golem: 0, sharpshooter: 0, mobilemortar: 0, davincitank: 0, phalanx: 0 });
   const [isMobile] = useState(() => MobileUtils.isMobile());
+
+  useEffect(() => {
+    let cancelled = false;
+    Auth.ensureUser()
+      .then(({ user: authUser, online }) => {
+        if (cancelled) return;
+        setUser({ id: authUser.id, username: authUser.username, lastLogin: Date.now() });
+        setIsOnline(online);
+      })
+      .catch(error => {
+        console.warn('Auth init failed:', error);
+        if (!cancelled) {
+          setUser({ id: 'offline_player', username: 'Commander', lastLogin: Date.now() });
+          setIsOnline(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const applySolDelta = useCallback(async (delta: number, reason: string, refId?: string) => {
     if (!user) return { applied: false, sol: resourcesRef.current.sol };
@@ -59,42 +76,6 @@ function App() {
     return { applied: false, sol: resourcesRef.current.sol };
   }, [user, isOnline]);
 
-  // Check for existing session on mount
-  useEffect(() => {
-    const existingUser = Auth.getCurrentUser();
-    if (existingUser) {
-      setUser(existingUser);
-      setIsOnline(Auth.isOnlineMode());
-      setShowLogin(false);
-    } else {
-      setLoading(false);
-    }
-  }, []);
-
-  const handleLogin = async (loggedInUser: UserProfile, cloudBase?: any) => {
-    setUser(loggedInUser);
-    setIsOnline(Auth.isOnlineMode());
-    setShowLogin(false);
-
-    // If we got a base from login, load it
-    if (cloudBase && cloudBase.buildings) {
-      // The world will be loaded via Backend.getWorld in the init effect
-    }
-  };
-
-  const handleLogout = () => {
-    Auth.logout();
-    setUser(null);
-    setIsOnline(false);
-    setShowLogin(true);
-    setLoading(true);
-
-    // Destroy game
-    if (gameRef.current) {
-      gameRef.current.destroy(true);
-      gameRef.current = null;
-    }
-  };
 
   useEffect(() => {
     return () => {
@@ -104,7 +85,7 @@ function App() {
 
   // Load World & Resources once user is known
   useEffect(() => {
-    if (!user || showLogin) return;
+    if (!user) return;
 
     const init = async () => {
       try {
@@ -113,7 +94,7 @@ function App() {
         let world = await Backend.getWorld(userId);
         const needsBootstrap = !world || !world.buildings || world.buildings.length === 0;
         if (needsBootstrap) {
-          if (Auth.isOnlineMode()) {
+          if (isOnline) {
             const bootstrapped = await Backend.bootstrapBase(userId);
             if (bootstrapped) {
               world = bootstrapped;
@@ -174,11 +155,11 @@ function App() {
     };
 
     init();
-  }, [user, showLogin]);
+  }, [user, isOnline]);
 
   // Persist resources & army
   useEffect(() => {
-    if (user && !loading && !showLogin) {
+    if (user && !loading) {
       try {
         const userId = user.id || 'default_player';
         Backend.updateResources(userId, resources.sol);
@@ -187,7 +168,7 @@ function App() {
         console.error('Error saving game state:', error);
       }
     }
-  }, [resources, army, user, loading, showLogin]);
+  }, [resources, army, user, loading]);
   const [capacity, setCapacity] = useState({ current: 0, max: 20 });
   const [selectedTroopType, setSelectedTroopType] = useState<'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'ram' | 'stormmage' | 'golem' | 'sharpshooter' | 'mobilemortar' | 'davincitank' | 'phalanx'>('warrior');
   const [visibleTroops, setVisibleTroops] = useState<string[]>([]);
@@ -200,13 +181,11 @@ function App() {
   const [showCloudOverlay, setShowCloudOverlay] = useState(false);
   const [battleStarted, setBattleStarted] = useState(false); // Track if first troop deployed
   const [isExiting, setIsExiting] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showBattleResults, setShowBattleResults] = useState(false);
-  const [pixelationEnabled, setPixelationEnabled] = useState(true);
-  const [sensitivity, setSensitivity] = useState(1.0);
   const [buildingCounts, setBuildingCounts] = useState<Record<BuildingType, number>>({} as Record<BuildingType, number>);
   const [shopWallLevel, setShopWallLevel] = useState(1);
   const [isDebugOpen, setIsDebugOpen] = useState(false);
+  const [scoutTarget, setScoutTarget] = useState<{ userId: string; username: string } | null>(null);
   const selectedInMapRef = useRef<string | null>(null);
   const armyRef = useRef(army);
   const selectedTroopTypeRef = useRef(selectedTroopType);
@@ -223,8 +202,8 @@ function App() {
   const [cloudOpening, setCloudOpening] = useState(false);
 
   useEffect(() => {
-    // If no user or showing login, ensure game is destroyed to clean up state
-    if (!user || showLogin) {
+    // Ensure game is destroyed to clean up state
+    if (!user) {
       gameManager.clearUI();
       if (gameRef.current) {
         try {
@@ -272,6 +251,9 @@ function App() {
       },
       setGameMode: (mode: GameMode) => {
         setView(mode);
+        if (mode === 'HOME') {
+          setScoutTarget(null);
+        }
         if (mode === 'ATTACK') {
           setBattleStats({ destruction: 0, solLooted: 0 });
           setBattleStarted(false); // Reset when entering attack mode
@@ -378,7 +360,6 @@ function App() {
       closeMenus: () => {
         setIsTrainingOpen(false);
         setIsBuildingOpen(false);
-        setIsSettingsOpen(false);
         setSelectedInMap(null);
         setSelectedBuildingInfo(null);
       }
@@ -408,7 +389,7 @@ function App() {
         gameRef.current = null;
       }
     };
-  }, [user, showLogin, isOnline, applySolDelta]);
+  }, [user, isOnline, applySolDelta]);
 
 
   const refreshBuildingCounts = useCallback(async () => {
@@ -450,7 +431,7 @@ function App() {
   }, [isBuildingOpen, user]);
 
   useEffect(() => {
-    if (!user || showLogin) return;
+    if (!user) return;
 
     gameManager.registerUI({
       onBuildingPlaced: async (type: string, isFree: boolean = false) => {
@@ -480,7 +461,7 @@ function App() {
         refreshBuildingCounts();
       }
     });
-  }, [user, showLogin, refreshBuildingCounts, applySolDelta]);
+  }, [user, refreshBuildingCounts, applySolDelta]);
 
   const handleSelect = (type: string) => {
     gameManager.selectBuilding(type);
@@ -554,11 +535,13 @@ function App() {
       scene.showCloudTransition(() => {
         setView('HOME');
         setSelectedInMap(null);
+        setScoutTarget(null);
         scene.goHome();
       });
     } else {
       setView('HOME');
       setSelectedInMap(null);
+      setScoutTarget(null);
     }
   }, []);
 
@@ -571,6 +554,11 @@ function App() {
 
   const handleGoHome = () => {
     transitionHome();
+  };
+
+  const handleNextMap = () => {
+    if (scoutTarget) return;
+    gameManager.findNewMap();
   };
 
   const handleRaidNow = () => {
@@ -603,38 +591,32 @@ function App() {
     }
     // Close any open modals
     setIsTrainingOpen(false);
+    setScoutTarget(null);
     // Start attack on specific user
+    void Backend.flushPendingSave().finally(() => gameManager.startAttackOnUser(userId, username));
+  };
+
+  const handleScoutUser = (userId: string, username: string) => {
+    // Close any open modals
+    setIsTrainingOpen(false);
+    setScoutTarget({ userId, username });
+    void Backend.flushPendingSave().finally(() => gameManager.startScoutOnUser(userId, username));
+  };
+
+  const handleAttackScouted = () => {
+    if (!scoutTarget) return;
+    if (capacity.current === 0) {
+      alert('Train some troops first!');
+      return;
+    }
+    const { userId, username } = scoutTarget;
+    setScoutTarget(null);
     void Backend.flushPendingSave().finally(() => gameManager.startAttackOnUser(userId, username));
   };
 
   const handleBattleResultsGoHome = () => {
     setShowBattleResults(false);
     transitionHome();
-  };
-
-  const handleTogglePixelation = () => {
-    const newState = !pixelationEnabled;
-    setPixelationEnabled(newState);
-    gameManager.setPixelation(newState ? 1.5 : 1.0);
-  };
-
-  const handleSensitivityChange = (val: number) => {
-    setSensitivity(val);
-    gameManager.setSensitivity(val);
-  };
-
-  const handleResetGame = async () => {
-    const confirmName = prompt('PERMANENTLY DELETE ALL DATA? This will erase all buildings, resources, and game data. Type "DELETE" to confirm.');
-    if (confirmName === 'DELETE') {
-      try {
-        await Backend.deleteWorld(user?.id || 'default_player');
-        localStorage.clear();
-        window.location.reload();
-      } catch (error) {
-        console.error('Error deleting world:', error);
-        alert('Error resetting game. Please refresh the page.');
-      }
-    }
   };
 
 
@@ -729,15 +711,6 @@ function App() {
     calcWallCost();
   }, [selectedBuildingInfo, view]);
 
-  // Show login screen if no user
-  if (showLogin) {
-    return (
-      <div className="app-container">
-        <LoginScreen onLogin={handleLogin} />
-      </div>
-    );
-  }
-
   // Don't render until user is set
   if (!user) {
     return (
@@ -774,25 +747,35 @@ function App() {
         wallUpgradeCostOverride={wallUpgradeCostOverride}
         showCloudOverlay={showCloudOverlay}
         isMobile={isMobile}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenSettings={() => setIsDebugOpen(true)}
         onOpenBuild={() => setIsBuildingOpen(true)}
         onOpenTrain={() => setIsTrainingOpen(true)}
         onStartAttack={handleStartAttack}
         onSelectTroop={(type) => setSelectedTroopType(type as typeof selectedTroopType)}
-        onNextMap={() => gameManager.findNewMap()}
+        onNextMap={handleNextMap}
         onGoHome={handleGoHome}
         onDeleteBuilding={handleDeleteBuilding}
         onUpgradeBuilding={handleUpgradeBuilding}
         onMoveBuilding={() => gameManager.moveSelectedBuilding()}
       />
 
+      {view === 'ATTACK' && scoutTarget && (
+        <div className="scout-action-panel">
+          <div className="scout-label">SCOUTING {scoutTarget.username.toUpperCase()}</div>
+          <button className="action-btn scout-attack" onClick={handleAttackScouted}>
+            ATTACK
+          </button>
+        </div>
+      )}
+
       {/* Notifications and Leaderboard - only show when in HOME mode and online */}
-      {view === 'HOME' && isOnline && (
+      {view === 'HOME' && isOnline && user && (
         <div style={{ position: 'fixed', top: '16px', right: '80px', zIndex: 100, display: 'flex', gap: '8px' }}>
           <LeaderboardPanel
             currentUserId={user.id}
             isOnline={isOnline}
             onAttackUser={handleAttackUser}
+            onScoutUser={handleScoutUser}
           />
           <NotificationsPanel userId={user.id} isOnline={isOnline} />
         </div>
@@ -828,19 +811,6 @@ function App() {
       />
 
       <CloudOverlay show={showCloudOverlay} opening={cloudOpening} />
-
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        pixelationEnabled={pixelationEnabled}
-        sensitivity={sensitivity}
-        onTogglePixelation={handleTogglePixelation}
-        onSensitivityChange={handleSensitivityChange}
-        onResetGame={handleResetGame}
-        onLogout={handleLogout}
-        isOnline={isOnline}
-        username={user.username}
-        onClose={() => setIsSettingsOpen(false)}
-      />
 
       <BattleResultsModal
         isOpen={showBattleResults}

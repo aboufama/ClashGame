@@ -1,172 +1,46 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { handleOptions, getBody, getQueryParam, jsonError, jsonOk } from '../_lib/http.js';
-import { getStorage } from '../_lib/storage/index.js';
-import { applyResourceDelta, clampLootAmount, findResourceTx } from '../_lib/resources.js';
-import { readSessionToken, verifySession } from '../_lib/sessions.js';
-import { sanitizeDisplayName } from '../_lib/validators.js';
-import { clampNumber, randomId, toInt } from '../_lib/utils.js';
-import type { AttackNotification } from '../_lib/types.js';
+import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http';
+import { readJson, writeJson } from '../_lib/blob';
+import { requireAuth } from '../_lib/auth';
+import type { NotificationStore } from '../_lib/models';
 
-const MAX_LOOT_PCT = 0.2;
+interface NotificationsBody {
+  action?: 'list' | 'markRead' | 'unreadCount';
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleOptions(req, res)) return;
-
-  const storage = getStorage();
-
-  if (req.method === 'POST') {
-    try {
-      const body = getBody<Record<string, unknown>>(req);
-      const victimId = typeof body.victimId === 'string' ? body.victimId : '';
-      if (!victimId.trim()) {
-        return jsonError(res, 400, 'Victim ID required');
-      }
-
-      if (victimId.startsWith('bot_')) {
-        return jsonOk(res, { success: true, skipped: true });
-      }
-
-      const attackerId = typeof body.attackerId === 'string' ? body.attackerId : 'unknown';
-      const attackerName = sanitizeDisplayName(body.attackerName, 'Unknown Attacker');
-      const attackId = typeof body.attackId === 'string' && body.attackId.trim()
-        ? body.attackId.trim().slice(0, 64)
-        : `attack_${randomId()}`;
-      const solLooted = clampNumber(toInt(body.solLooted, NaN), 0, 1_000_000_000);
-      const legacyGold = clampNumber(toInt(body.goldLooted, 0), 0, 1_000_000_000);
-      const legacyElixir = clampNumber(toInt(body.elixirLooted, 0), 0, 1_000_000_000);
-      const totalSol = Number.isFinite(solLooted) ? solLooted : clampNumber(legacyGold + legacyElixir, 0, 1_000_000_000);
-      const destruction = clampNumber(toInt(body.destruction, 0), 0, 100);
-
-      const sessionToken = readSessionToken((body as Record<string, unknown>).sessionToken);
-      if (attackerId && attackerId !== 'unknown' && !attackerId.startsWith('bot_') && !attackerId.startsWith('enemy_')) {
-        const sessionCheck = await verifySession(storage, attackerId, sessionToken);
-        if (!sessionCheck.ok) {
-          return jsonError(res, sessionCheck.status || 401, sessionCheck.message || 'Session invalid', sessionCheck.details);
-        }
-      }
-
-      const victimBase = await storage.getBase(victimId);
-      const attackerBase = attackerId && attackerId !== 'unknown'
-        ? await storage.getBase(attackerId)
-        : null;
-
-      let actualLoot = 0;
-      let existingNotification: AttackNotification | null = null;
-
-      if (attackId) {
-        const existing = await storage.getNotifications(victimId);
-        existingNotification = existing.find((notif) => notif.attackId === attackId) || null;
-      }
-
-      if (victimBase && attackerBase) {
-        const victimTxId = `attack:${attackId}:victim`;
-        const attackerTxId = `attack:${attackId}:attacker`;
-        const existingVictimTx = findResourceTx(victimBase, victimTxId);
-        const existingAttackerTx = findResourceTx(attackerBase, attackerTxId);
-        const existingAmount = existingVictimTx
-          ? Math.abs(existingVictimTx.delta)
-          : existingAttackerTx
-            ? Math.abs(existingAttackerTx.delta)
-            : null;
-
-        if (existingAmount !== null) {
-          actualLoot = existingAmount;
-        } else if (existingNotification && typeof existingNotification.solLost === 'number') {
-          actualLoot = existingNotification.solLost;
-        } else {
-          actualLoot = clampLootAmount(victimBase.resources.sol, totalSol, MAX_LOOT_PCT);
-        }
-
-        const victimResult = applyResourceDelta(victimBase, -actualLoot, victimTxId, 'battle_loss');
-        if (victimResult.insufficient) {
-          actualLoot = 0;
-        }
-        const attackerResult = applyResourceDelta(attackerBase, actualLoot, attackerTxId, 'battle_loot');
-
-        if (victimResult.applied) {
-          await storage.saveBase(victimBase);
-        }
-        if (attackerResult.applied) {
-          await storage.saveBase(attackerBase);
-        }
-      }
-
-      const notification = existingNotification || {
-        id: `notif_${randomId()}`,
-        victimId,
-        attackerId,
-        attackerName,
-        solLost: actualLoot,
-        destruction,
-        ...(attackId ? { attackId } : {}),
-        timestamp: Date.now(),
-        read: false,
-      };
-
-      if (!existingNotification) {
-        await storage.addNotification(notification);
-      }
-
-      return jsonOk(res, {
-        success: true,
-        notification,
-        lootApplied: actualLoot,
-        attackerBalance: attackerBase?.resources.sol ?? null,
-        victimBalance: victimBase?.resources.sol ?? null,
-      });
-    } catch (error) {
-      console.error('Record attack error:', error);
-      return jsonError(res, 500, 'Internal server error');
-    }
+  if (req.method !== 'POST') {
+    sendError(res, 405, 'Method not allowed');
+    return;
   }
 
-  if (req.method === 'GET') {
-    try {
-      const userId = getQueryParam(req, 'userId');
-      if (!userId) {
-        return jsonError(res, 400, 'User ID required');
-      }
+  try {
+    const auth = await requireAuth(req, res);
+    if (!auth) return;
 
-      const notifications = await storage.getNotifications(userId);
-      const normalized = notifications.map((notif) => {
-        const solLost = typeof notif.solLost === 'number'
-          ? notif.solLost
-          : clampNumber(toInt((notif as unknown as Record<string, unknown>).goldLost, 0), 0, 1_000_000_000)
-            + clampNumber(toInt((notif as unknown as Record<string, unknown>).elixirLost, 0), 0, 1_000_000_000);
-        return {
-          ...notif,
-          solLost,
-        };
-      });
-      const unreadCount = await storage.getUnreadCount(userId);
+    const body = await readJsonBody<NotificationsBody>(req);
+    const action = body?.action ?? 'list';
 
-      return jsonOk(res, { success: true, notifications: normalized, unreadCount });
-    } catch (error) {
-      console.error('Get notifications error:', error);
-      return jsonError(res, 500, 'Internal server error');
+    const notifPath = `notifications/${auth.user.id}.json`;
+    const store = (await readJson<NotificationStore>(notifPath)) ?? { items: [] };
+
+    if (action === 'markRead') {
+      store.items = store.items.map(item => ({ ...item, read: true }));
+      await writeJson(notifPath, store);
+      sendJson(res, 200, { ok: true });
+      return;
     }
-  }
 
-  if (req.method === 'PUT') {
-    try {
-      const body = getBody<{ userId?: string; sessionToken?: string }>(req);
-      if (!body.userId) {
-        return jsonError(res, 400, 'User ID required');
-      }
-
-      const sessionToken = readSessionToken(body.sessionToken);
-      const sessionCheck = await verifySession(storage, body.userId, sessionToken);
-      if (!sessionCheck.ok) {
-        return jsonError(res, sessionCheck.status || 401, sessionCheck.message || 'Session invalid', sessionCheck.details);
-      }
-
-      await storage.markNotificationsRead(body.userId);
-      return jsonOk(res, { success: true });
-    } catch (error) {
-      console.error('Mark read error:', error);
-      return jsonError(res, 500, 'Internal server error');
+    if (action === 'unreadCount') {
+      const unread = store.items.filter(item => !item.read).length;
+      sendJson(res, 200, { unread });
+      return;
     }
-  }
 
-  return jsonError(res, 405, 'Method not allowed');
+    sendJson(res, 200, { items: store.items });
+  } catch (error) {
+    console.error('notifications error', error);
+    sendError(res, 500, 'Failed to load notifications');
+  }
 }

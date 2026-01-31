@@ -1,64 +1,68 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { handleOptions, getBody, jsonError, jsonOk, requireMethod } from '../_lib/http.js';
-import { createInitialBase } from '../_lib/bases.js';
-import { verifyPassword } from '../_lib/passwords.js';
-import { getStorage } from '../_lib/storage/index.js';
-import { sanitizeBaseForOutput, validatePassword, validateUsername } from '../_lib/validators.js';
-import { randomId } from '../_lib/utils.js';
+import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http';
+import { readJson, writeJson } from '../_lib/blob';
+import { createSession, hashSecret, sanitizeId } from '../_lib/auth';
+import type { UserRecord } from '../_lib/models';
+import { upsertUserIndex } from '../_lib/indexes';
+
+interface LoginBody {
+  playerId: string;
+  deviceSecret: string;
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleOptions(req, res)) return;
-  if (!requireMethod(req, res, 'POST')) return;
+  if (req.method !== 'POST') {
+    sendError(res, 405, 'Method not allowed');
+    return;
+  }
 
   try {
-    const body = getBody<{ username?: string; password?: string }>(req);
-    const username = validateUsername(body.username);
-    const password = validatePassword(body.password);
-
-    if (!username || !password) {
-      return jsonError(res, 400, 'Username and password required');
+    const body = await readJsonBody<LoginBody>(req);
+    const playerId = body.playerId ? sanitizeId(body.playerId) : '';
+    const deviceSecret = body.deviceSecret?.trim();
+    if (!playerId || !deviceSecret) {
+      sendError(res, 400, 'playerId and deviceSecret required');
+      return;
     }
 
-    const storage = getStorage();
-    const user = await storage.getUserByUsername(username);
+    const user = await readJson<UserRecord>(`users/${playerId}.json`);
     if (!user) {
-      return jsonError(res, 401, 'Invalid username or password');
+      sendError(res, 404, 'User not found');
+      return;
     }
 
-    const { valid, upgradedHash } = verifyPassword(password, user.passwordHash);
-    if (!valid) {
-      return jsonError(res, 401, 'Invalid username or password');
+    const secretHash = hashSecret(deviceSecret);
+    if (user.secretHash !== secretHash) {
+      sendError(res, 403, 'Invalid credentials');
+      return;
     }
 
+    const session = await createSession(user.id);
     const now = Date.now();
-    const sessionToken = `sess_${randomId()}`;
-    user.lastLogin = now;
-    user.sessionToken = sessionToken;
-    user.sessionIssuedAt = now;
-    if (upgradedHash) {
-      user.passwordHash = upgradedHash;
-    }
-    await storage.updateUser(user);
+    const updated: UserRecord = {
+      ...user,
+      lastSeen: now,
+      activeSessionId: session.token,
+      sessionExpiresAt: session.expiresAt
+    };
+    await writeJson(`users/${user.id}.json`, updated);
 
-    let base = await storage.getBase(user.id);
-    if (!base) {
-      base = createInitialBase(user.id, user.username);
-      await storage.saveBase(base);
-    }
-    const normalizedBase = sanitizeBaseForOutput(base);
+    await upsertUserIndex({
+      id: updated.id,
+      username: updated.username,
+      buildingCount: 0,
+      lastSeen: now,
+      trophies: updated.trophies ?? 0
+    });
 
-    return jsonOk(res, {
-      success: true,
-      user: {
-        id: user.id,
-        username: user.username,
-        lastLogin: now,
-        sessionToken,
-      },
-      base: normalizedBase,
+    sendJson(res, 200, {
+      user: { id: updated.id, username: updated.username },
+      token: session.token,
+      expiresAt: session.expiresAt
     });
   } catch (error) {
-    console.error('Login error:', error);
-    return jsonError(res, 500, 'Internal server error');
+    console.error('login error', error);
+    sendError(res, 500, 'Login failed');
   }
 }

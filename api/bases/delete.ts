@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, sendError, sendJson } from '../_lib/http';
-import { readJson, writeJson } from '../_lib/blob';
+import { deleteJson } from '../_lib/blob';
 import { requireAuth } from '../_lib/auth';
-import type { WalletRecord } from '../_lib/models';
+import { upsertUserIndex } from '../_lib/indexes';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleOptions(req, res)) return;
@@ -16,16 +16,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!auth) return;
 
     const { user } = auth;
-    const walletPath = `wallets/${user.id}.json`;
-    let wallet = await readJson<WalletRecord>(walletPath);
-    if (!wallet) {
-      wallet = { balance: 1000, updatedAt: Date.now() };
-      await writeJson(walletPath, wallet);
-    }
+    await deleteJson(`bases/${user.id}.json`);
 
-    sendJson(res, 200, { wallet });
+    await upsertUserIndex({
+      id: user.id,
+      username: user.username,
+      buildingCount: 0,
+      lastSeen: Date.now(),
+      trophies: user.trophies ?? 0
+    });
+
+    sendJson(res, 200, { ok: true });
   } catch (error) {
-    console.error('balance error', error);
-    sendError(res, 500, 'Failed to get balance');
+    console.error('delete base error', error);
+    sendError(res, 500, 'Failed to delete base');
   }
 }

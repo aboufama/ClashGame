@@ -1,29 +1,37 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { handleOptions, getQueryParam, jsonError, jsonOk, requireMethod } from '../_lib/http.js';
-import { getStorage } from '../_lib/storage/index.js';
-import { sanitizeBaseForOutput } from '../_lib/validators.js';
+import { handleOptions, sendError, sendJson } from '../_lib/http';
+import { readJson } from '../_lib/blob';
+import { requireAuth } from '../_lib/auth';
+import type { SerializedWorld, WalletRecord } from '../_lib/models';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleOptions(req, res)) return;
-  if (!requireMethod(req, res, 'GET')) return;
+  if (req.method !== 'POST') {
+    sendError(res, 405, 'Method not allowed');
+    return;
+  }
 
   try {
-    const userId = getQueryParam(req, 'userId');
-    if (!userId) {
-      return jsonError(res, 400, 'User ID required');
+    const auth = await requireAuth(req, res);
+    if (!auth) return;
+
+    const { user } = auth;
+    const basePath = `bases/${user.id}.json`;
+    const world = await readJson<SerializedWorld>(basePath);
+    if (!world) {
+      sendJson(res, 200, { world: null });
+      return;
     }
 
-    const storage = getStorage();
-    const base = await storage.getBase(userId);
-    if (!base) {
-      return jsonError(res, 404, 'Base not found');
+    const wallet = await readJson<WalletRecord>(`wallets/${user.id}.json`);
+    if (wallet) {
+      world.resources.sol = wallet.balance;
     }
+    world.username = user.username;
 
-    const normalized = sanitizeBaseForOutput(base);
-
-    return jsonOk(res, { success: true, base: normalized });
+    sendJson(res, 200, { world });
   } catch (error) {
-    console.error('Load base error:', error);
-    return jsonError(res, 500, 'Internal server error');
+    console.error('load error', error);
+    sendError(res, 500, 'Failed to load base');
   }
 }
