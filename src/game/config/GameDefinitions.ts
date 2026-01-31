@@ -116,20 +116,17 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         name: 'Solana Collector',
         cost: 300,
         desc: 'Harvests SOL from the grid.',
-        width: 1,
-        height: 1,
+        width: 2,
+        height: 2,
         maxHealth: 700,
         category: 'resource',
         maxCount: 16,
         color: 0x14f195,
         productionRate: 5.0,
-        maxLevel: 5,
+        maxLevel: 2,
         levels: [
-            { hp: 700, productionRate: 5.0, cost: 300 },    // Level 1 - Basic
-            { hp: 820, productionRate: 6.4, cost: 550 },    // Level 2 - Reinforced
-            { hp: 950, productionRate: 8.0, cost: 850 },    // Level 3 - Advanced
-            { hp: 1100, productionRate: 10.0, cost: 1300 }, // Level 4 - Masterwork
-            { hp: 1300, productionRate: 14.0, cost: 2000 }  // Level 5 - Validator-grade
+            { hp: 700, productionRate: 5.0, cost: 300 },     // Level 1 - Wooden drill rig
+            { hp: 900, productionRate: 8.0, cost: 600 }      // Level 2 - Metal-reinforced, Solana veins
         ]
     },
     mortar: {

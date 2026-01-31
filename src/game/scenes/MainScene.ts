@@ -748,6 +748,17 @@ export class MainScene extends Phaser.Scene {
                 // If baseGraphics is missing (baked), skipBase=true. If present (moving), skipBase=false.
                 this.drawBuildingVisuals(b.graphics, b.gridX, b.gridY, b.type, alpha, null, b, b.baseGraphics, !b.baseGraphics);
 
+                // SOLANA COLLECTOR: Particle burst during shake phase
+                if (b.type === 'solana_collector') {
+                    const cycleLength = 8000;
+                    const cycleTime = this.time.now % cycleLength;
+                    const isShaking = cycleTime >= 2000 && cycleTime < 3000;
+                    if (isShaking && (this.time.now % 180 < 20)) { // Spawn coin every ~180ms during shake
+                        const pos = IsoUtils.cartToIso(b.gridX + 1, b.gridY + 1);
+                        this.spawnSolCoinBurst(pos.x, pos.y, 1);
+                    }
+                }
+
                 // MAGMA VENT: Constant thin black smoke trail
                 if (b.type === 'magmavent') {
                     if (this.time.now > (b.lastTrailTime || 0) + 150) {
@@ -898,7 +909,7 @@ export class MainScene extends Phaser.Scene {
         this.villageNameLabel.setText(`${name.toUpperCase()}'S VILLAGE`);
     }
 
-    private drawIsoTile(graphics: Phaser.GameObjects.Graphics, x: number, y: number) {
+    private drawIsoTile(graphics: Phaser.GameObjects.Graphics, x: number, y: number, fillOnly: boolean = false) {
         const pos = IsoUtils.cartToIso(x, y);
         const halfW = this.tileWidth / 2;
         const halfH = this.tileHeight / 2;
@@ -924,21 +935,23 @@ export class MainScene extends Phaser.Scene {
         graphics.fillStyle(tileColor, 1);
         graphics.fillPoints(points, true);
 
-        // Top-left highlight edge (sun direction)
-        graphics.lineStyle(1, 0xffffff, 0.15);
-        graphics.lineBetween(points[3].x, points[3].y, points[0].x, points[0].y);
-        graphics.lineBetween(points[0].x, points[0].y, points[1].x, points[1].y);
+        if (!fillOnly) {
+            // Top-left highlight edge (sun direction)
+            graphics.lineStyle(1, 0xffffff, 0.15);
+            graphics.lineBetween(points[3].x, points[3].y, points[0].x, points[0].y);
+            graphics.lineBetween(points[0].x, points[0].y, points[1].x, points[1].y);
 
-        // Bottom-right shadow edge
-        graphics.lineStyle(1, 0x000000, 0.12);
-        graphics.lineBetween(points[1].x, points[1].y, points[2].x, points[2].y);
-        graphics.lineBetween(points[2].x, points[2].y, points[3].x, points[3].y);
+            // Bottom-right shadow edge
+            graphics.lineStyle(1, 0x000000, 0.12);
+            graphics.lineBetween(points[1].x, points[1].y, points[2].x, points[2].y);
+            graphics.lineBetween(points[2].x, points[2].y, points[3].x, points[3].y);
 
-        // Occasional grass detail (small darker spots)
-        if ((x * 3 + y * 5) % 7 === 0) {
-            const detailColor = Phaser.Display.Color.IntegerToColor(baseColor).darken(15).color;
-            graphics.fillStyle(detailColor, 0.4);
-            graphics.fillCircle(pos.x + (Math.sin(x * y) * 5), pos.y + halfH + (Math.cos(x * y) * 3), 2);
+            // Occasional grass detail (small darker spots)
+            if ((x * 3 + y * 5) % 7 === 0) {
+                const detailColor = Phaser.Display.Color.IntegerToColor(baseColor).darken(15).color;
+                graphics.fillStyle(detailColor, 0.4);
+                graphics.fillCircle(pos.x + (Math.sin(x * y) * 5), pos.y + halfH + (Math.cos(x * y) * 3), 2);
+            }
         }
     }
 
@@ -1074,16 +1087,38 @@ export class MainScene extends Phaser.Scene {
         if (!this.groundRenderTexture || !this.tempGraphics) return;
 
         const info = BUILDINGS[b.type];
-        // Redraw grass over the building's footprint PLUS 1 tile margin for border cleanup
+        // Margin tiles use fillOnly to cover border stroke bleed without introducing
+        // semi-transparent edge highlights that would composite on top of neighboring
+        // tiles and create a visible seam.
         const margin = 1;
-        for (let x = b.gridX - margin; x < b.gridX + info.width + margin; x++) {
-            for (let y = b.gridY - margin; y < b.gridY + info.height + margin; y++) {
-                // Only draw if within map bounds
+        const clearMinX = b.gridX - margin;
+        const clearMinY = b.gridY - margin;
+        const clearMaxX = b.gridX + info.width + margin;
+        const clearMaxY = b.gridY + info.height + margin;
+
+        for (let x = clearMinX; x < clearMaxX; x++) {
+            for (let y = clearMinY; y < clearMaxY; y++) {
                 if (x >= 0 && x < this.mapSize && y >= 0 && y < this.mapSize) {
+                    // Margin tiles: fill only (no edge highlights that bleed into neighbors)
+                    // Footprint tiles: full redraw with edges
+                    const isMargin = x < b.gridX || x >= b.gridX + info.width ||
+                                     y < b.gridY || y >= b.gridY + info.height;
                     this.tempGraphics.clear();
-                    this.drawIsoTile(this.tempGraphics, x, y);
+                    this.drawIsoTile(this.tempGraphics, x, y, isMargin);
                     this.groundRenderTexture.draw(this.tempGraphics, this.RT_OFFSET_X, this.RT_OFFSET_Y);
                 }
+            }
+        }
+
+        // Re-bake bases of any neighboring buildings whose footprints overlap the cleared area
+        for (const other of this.buildings) {
+            if (other === b) continue;
+            const oi = BUILDINGS[other.type];
+            const otherMaxX = other.gridX + oi.width;
+            const otherMaxY = other.gridY + oi.height;
+            if (other.gridX < clearMaxX && otherMaxX > clearMinX &&
+                other.gridY < clearMaxY && otherMaxY > clearMinY) {
+                this.bakeBuildingToGround(other);
             }
         }
     }
@@ -4649,7 +4684,6 @@ export class MainScene extends Phaser.Scene {
 
         const intervalSeconds = this.resourceInterval / 1000;
         let solPerSecond = 0;
-        const collectorPositions: Phaser.Math.Vector2[] = [];
 
         this.buildings.forEach(b => {
             if (b.owner !== 'PLAYER') return;
@@ -4658,44 +4692,13 @@ export class MainScene extends Phaser.Scene {
             const stats = getBuildingStats(statsType as BuildingType, b.level || 1);
             const rate = stats.productionRate || 0;
             solPerSecond += rate;
-            collectorPositions.push(IsoUtils.cartToIso(b.gridX, b.gridY));
         });
 
         const solToAdd = Math.floor(solPerSecond * intervalSeconds);
 
         if (solToAdd > 0) {
             gameManager.addSol(solToAdd);
-            collectorPositions.forEach(pos => {
-                const burstCount = 2 + (Math.random() < 0.5 ? 1 : 0);
-                for (let i = 0; i < burstCount; i++) {
-                    const jitterX = (Math.random() - 0.5) * 8;
-                    const jitterY = (Math.random() - 0.5) * 4;
-                    this.spawnSolCoinRise(pos.x + jitterX, pos.y - 18 + jitterY);
-                }
-            });
         }
-    }
-
-    private spawnSolCoinRise(x: number, y: number) {
-        if (!this.textures.exists('solanaCoin')) return;
-        const coin = this.add.image(x, y, 'solanaCoin');
-        coin.setDepth(30000);
-        coin.setDisplaySize(14, 14);
-        coin.setAlpha(0.9);
-        coin.setAngle((Math.random() - 0.5) * 12);
-
-        const drift = (Math.random() - 0.5) * 10;
-        const rise = 16 + Math.random() * 10;
-
-        this.tweens.add({
-            targets: coin,
-            x: x + drift,
-            y: y - rise,
-            alpha: 0,
-            duration: 750,
-            ease: 'Sine.easeOut',
-            onComplete: () => coin.destroy()
-        });
     }
 
     private spawnSolCoinBurst(x: number, y: number, count: number = 14) {

@@ -58,11 +58,18 @@ export class GameBackend {
                 else if (typeof raw.instanceId === 'string') id = raw.instanceId;
             }
 
-            const level = typeof building.level === 'number' && Number.isFinite(building.level)
+            let level = typeof building.level === 'number' && Number.isFinite(building.level)
                 ? building.level
                 : typeof raw.level === 'number' && Number.isFinite(raw.level)
-                    ? raw.level
-                    : (typeof raw.lvl === 'number' && Number.isFinite(raw.lvl) ? raw.lvl : 1);
+                    ? raw.level as number
+                    : (typeof raw.lvl === 'number' && Number.isFinite(raw.lvl) ? raw.lvl as number : 1);
+
+            // Clamp level to valid range [1, maxLevel]
+            const def = BUILDING_DEFINITIONS[normalizedType as BuildingType];
+            if (def) {
+                const maxLvl = def.maxLevel ?? 1;
+                level = Math.max(1, Math.min(level, maxLvl));
+            }
 
             return {
                 ...building,
@@ -528,15 +535,20 @@ export class GameBackend {
         const b = world.buildings.find(b => b.id === buildingId);
         if (!b) return false;
 
+        const def = BUILDING_DEFINITIONS[b.type];
+        const maxLevel = def?.maxLevel ?? 1;
+
         if (b.type === 'wall') {
             const currentLevel = b.level || 1;
+            if (currentLevel >= maxLevel) return false;
             world.buildings.forEach(wb => {
                 if (wb.type === 'wall' && (wb.level || 1) === currentLevel) {
                     wb.level = currentLevel + 1;
                 }
             });
         } else {
-            b.level += 1;
+            if ((b.level || 1) >= maxLevel) return false;
+            b.level = (b.level || 1) + 1;
         }
 
         await this.saveWorld(world, true); // Immediate sync for upgrade
@@ -623,12 +635,10 @@ export class GameBackend {
         let totalSol = 0;
 
         world.buildings.forEach(b => {
-            const type = b.type as string;
-            const statsType = type === 'mine' || type === 'elixir_collector' ? 'solana_collector' : b.type;
-            const stats = getBuildingStats(statsType, b.level || 1);
+            const stats = getBuildingStats(b.type, b.level || 1);
             if (stats.productionRate && stats.productionRate > 0) {
                 const amount = Math.floor(stats.productionRate * diffSeconds * offlineFactor);
-                if (type === 'solana_collector' || type === 'mine' || type === 'elixir_collector') totalSol += amount;
+                totalSol += amount;
             }
         });
 
@@ -664,8 +674,9 @@ export class GameBackend {
             return 1 + Math.floor(Math.random() * maxLevel);
         };
 
-        // Random wall level for this base (1-3)
-        const wallLevel = 1 + Math.floor(Math.random() * 3);
+        // Random wall level for this base
+        const wallMaxLevel = BUILDING_DEFINITIONS.wall.maxLevel ?? 1;
+        const wallLevel = 1 + Math.floor(Math.random() * wallMaxLevel);
 
         await this.placeBuilding(id, 'town_hall', cx, cy);
 

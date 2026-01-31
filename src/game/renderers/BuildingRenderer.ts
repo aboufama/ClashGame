@@ -1342,8 +1342,319 @@ export class BuildingRenderer {
     }
 
     static drawSolanaCollector(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, time: number = 0, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
-        // Reuse the gold mine renderer with SOL-like tinting for now.
-        this.drawGoldMine(graphics, c1, c2, c3, c4, center, alpha, tint ?? 0x14f195, building, time, baseGraphics, skipBase, onlyBase);
+        const g = baseGraphics || graphics;
+        const level = building?.level ?? 1;
+
+        const isL2 = level >= 2;
+
+        // Sequence: Move up, move down (slam), shake, move back up, pause
+        const cycleLength = 8000;
+        const cycleTime = time % cycleLength;
+        let drillBobCurrent = 0;
+
+        if (cycleTime < 1500) {
+            const t = cycleTime / 1500;
+            drillBobCurrent = -10 - 15 * t;
+        } else if (cycleTime < 2000) {
+            const t = (cycleTime - 1500) / 500;
+            const bounce = Math.sin(t * Math.PI);
+            drillBobCurrent = -25 + 25 * t + bounce * 2;
+        } else if (cycleTime < 3000) {
+            drillBobCurrent = 0 + Math.sin(time / 25) * 2;
+        } else if (cycleTime < 4500) {
+            const t = (cycleTime - 3000) / 1500;
+            drillBobCurrent = 0 - 10 * t;
+        } else {
+            drillBobCurrent = -10 + Math.sin(time / 1200) * 1.5;
+        }
+
+        const drillBob = drillBobCurrent;
+        const drillSpin = cycleTime < 3000 && cycleTime > 1500 ? time / 150 : time / 800;
+        const rubbleSeed = time / 300;
+
+        // Wood palette
+        const woodDark = 0x3a2a1a;
+        const woodMid = 0x5a4030;
+        const woodLight = 0x6a5040;
+        const woodHighlight = 0x7a6050;
+
+        // Metal palette (used more in L2)
+        const metalDark = 0x4a4a4a;
+        const metalMid = 0x707070;
+        const metalLight = 0x9d9d9d;
+        const metalHighlight = 0xc0c0c0;
+
+        // Solana accent
+        const solGreen = 0x14f195;
+
+        if (!skipBase) {
+            // === FLAT GROUND ===
+            // Ground surface — earthy brown
+            g.fillStyle(tint ?? 0x5a4a38, alpha);
+            g.fillPoints([c1, c2, c3, c4], true);
+
+            // Dirt patches
+            g.fillStyle(0x4a3a28, alpha * 0.7);
+            g.fillCircle(center.x - 18, center.y + 6, 7);
+            g.fillCircle(center.x + 20, center.y + 3, 6);
+            g.fillCircle(center.x + 5, center.y + 14, 5);
+            g.fillCircle(center.x - 8, center.y - 4, 5);
+
+            // Border
+            g.lineStyle(2, 0x3a2a1a, alpha * 0.6);
+            g.strokePoints([c1, c2, c3, c4], true, true);
+
+            // === JAGGED ROCKS in the center ===
+            // L2 rocks are darker and denser
+            const rockDark = isL2 ? 0x2a2a2a : 0x4a4a4a;
+            const rockMid = isL2 ? 0x3a3a3a : 0x5a5a5a;
+            const rockLight = isL2 ? 0x4a4a4a : 0x6a6a6a;
+
+            // Large base rocks
+            g.fillStyle(rockDark, alpha);
+            g.fillCircle(center.x - 8, center.y + 1, 9);
+            g.fillCircle(center.x + 7, center.y - 1, 8);
+            g.fillCircle(center.x, center.y + 6, 7);
+            g.fillCircle(center.x - 4, center.y - 5, 6);
+            g.fillCircle(center.x + 10, center.y + 5, 6);
+            // Extra rocks for density
+            g.fillCircle(center.x - 14, center.y - 2, 6);
+            g.fillCircle(center.x + 14, center.y - 3, 5);
+            g.fillCircle(center.x + 5, center.y - 7, 5);
+            g.fillCircle(center.x - 6, center.y + 8, 5);
+
+            // Medium rocks
+            g.fillStyle(rockMid, alpha);
+            g.fillCircle(center.x - 12, center.y + 4, 5);
+            g.fillCircle(center.x + 13, center.y + 2, 5);
+            g.fillCircle(center.x + 3, center.y - 4, 5);
+            g.fillCircle(center.x - 16, center.y + 1, 4);
+            g.fillCircle(center.x + 16, center.y + 1, 4);
+            g.fillCircle(center.x - 2, center.y - 8, 4);
+
+            // Rock highlights (lighter tops)
+            g.fillStyle(rockLight, alpha * 0.7);
+            g.fillCircle(center.x - 8, center.y - 1, 4);
+            g.fillCircle(center.x + 7, center.y - 3, 4);
+            g.fillCircle(center.x - 1, center.y + 3, 3);
+            g.fillCircle(center.x - 14, center.y - 4, 3);
+            g.fillCircle(center.x + 13, center.y - 1, 3);
+
+            // Jagged sharp edges (small triangular shapes via tiny circles)
+            g.fillStyle(isL2 ? 0x353535 : 0x555555, alpha * 0.9);
+            g.fillCircle(center.x - 10, center.y - 4, 2);
+            g.fillCircle(center.x + 11, center.y - 3, 2);
+            g.fillCircle(center.x - 5, center.y + 9, 2);
+            g.fillCircle(center.x + 7, center.y + 7, 2);
+            g.fillCircle(center.x - 17, center.y + 3, 2);
+            g.fillCircle(center.x + 17, center.y + 3, 2);
+
+            // Dark crevices between rocks
+            g.fillStyle(0x1a1a1a, alpha * 0.8);
+            g.fillCircle(center.x, center.y + 1, 3);
+            g.fillCircle(center.x - 4, center.y + 3, 2);
+            g.fillCircle(center.x + 4, center.y - 1, 2);
+            g.fillCircle(center.x - 10, center.y + 2, 2);
+            g.fillCircle(center.x + 11, center.y + 3, 2);
+
+            // L2: Tiny bright Solana-colored dots in the rocks
+            if (isL2) {
+                const gPulse = 0.5 + Math.sin(time / 800) * 0.3;
+                g.fillStyle(solGreen, alpha * gPulse * 0.8);
+                g.fillCircle(center.x - 6, center.y, 1.5);
+                g.fillCircle(center.x + 9, center.y - 2, 1);
+                g.fillCircle(center.x + 2, center.y + 5, 1);
+            }
+        }
+
+        if (!onlyBase) {
+            // === A-FRAME (wood for L1, wood+metal for L2) ===
+            const legColor = isL2 ? metalDark : woodDark;
+            const legHighlight = isL2 ? metalLight : woodHighlight;
+
+            // Left leg
+            graphics.fillStyle(legColor, alpha);
+            graphics.fillRect(center.x - 26, center.y - 50, 5, 54);
+            graphics.fillStyle(legHighlight, alpha * 0.4);
+            graphics.fillRect(center.x - 25, center.y - 50, 2, 54);
+
+            // Right leg
+            graphics.fillStyle(legColor, alpha);
+            graphics.fillRect(center.x + 21, center.y - 50, 5, 54);
+            graphics.fillStyle(legHighlight, alpha * 0.4);
+            graphics.fillRect(center.x + 22, center.y - 50, 2, 54);
+
+            // L2: Metal reinforcement bands on legs
+            if (isL2) {
+                graphics.fillStyle(metalHighlight, alpha * 0.5);
+                graphics.fillRect(center.x - 26, center.y - 42, 5, 2);
+                graphics.fillRect(center.x - 26, center.y - 20, 5, 2);
+                graphics.fillRect(center.x + 21, center.y - 42, 5, 2);
+                graphics.fillRect(center.x + 21, center.y - 20, 5, 2);
+            }
+
+            // Top crossbeam
+            const beamColor = isL2 ? metalMid : woodMid;
+            const beamHighlight = isL2 ? metalLight : woodLight;
+            graphics.fillStyle(beamColor, alpha);
+            graphics.fillRect(center.x - 26, center.y - 54, 52, 6);
+            graphics.fillStyle(beamHighlight, alpha * 0.6);
+            graphics.fillRect(center.x - 24, center.y - 53, 48, 2);
+
+            // Mid crossbeam
+            graphics.fillStyle(beamColor, alpha);
+            graphics.fillRect(center.x - 24, center.y - 30, 48, 4);
+
+            // L2: Rivets on crossbeams
+            if (isL2) {
+                graphics.fillStyle(metalHighlight, alpha * 0.7);
+                graphics.fillCircle(center.x - 22, center.y - 51, 1.5);
+                graphics.fillCircle(center.x + 22, center.y - 51, 1.5);
+                graphics.fillCircle(center.x - 20, center.y - 28, 1.5);
+                graphics.fillCircle(center.x + 20, center.y - 28, 1.5);
+            }
+
+            // === ROPE (L1) or CHAIN (L2) from top beam ===
+            if (isL2) {
+                // Chain — alternating links
+                const chainTop = center.y - 48;
+                const chainBot = center.y - 22 + drillBob;
+                const chainLen = chainBot - chainTop;
+                const linkCount = Math.max(4, Math.floor(chainLen / 4));
+                for (let i = 0; i < linkCount; i++) {
+                    const ly = chainTop + (i / linkCount) * chainLen;
+                    const lx = center.x + (i % 2 === 0 ? -1 : 1);
+                    graphics.fillStyle(metalLight, alpha * 0.8);
+                    graphics.fillRect(lx - 1, ly, 3, 3);
+                }
+            } else {
+                graphics.lineStyle(2, 0x8b7355, alpha * 0.8);
+                graphics.lineBetween(center.x, center.y - 48, center.x, center.y - 22 + drillBob);
+            }
+
+            // === DRILL ASSEMBLY — hangs from rope/chain ===
+            const drillAnchorY = center.y - 20 + drillBob;
+
+            // Housing block (wood L1, metal L2)
+            graphics.fillStyle(isL2 ? metalMid : woodMid, alpha);
+            graphics.fillRect(center.x - 10, drillAnchorY - 6, 20, 10);
+            graphics.fillStyle(isL2 ? metalLight : woodLight, alpha * 0.5);
+            graphics.fillRect(center.x - 8, drillAnchorY - 5, 16, 3);
+
+            // Iron band around housing
+            graphics.fillStyle(isL2 ? metalHighlight : 0x555555, alpha);
+            graphics.fillRect(center.x - 11, drillAnchorY - 1, 22, 2);
+
+            // === DRILL BIT — tapered post ===
+            const bitTopY = drillAnchorY + 4;
+            const bitW = 10;
+            const bitLen = 22;
+
+            // Main shaft (tapered)
+            graphics.fillStyle(metalMid, alpha);
+            graphics.beginPath();
+            graphics.moveTo(center.x - bitW, bitTopY);
+            graphics.lineTo(center.x + bitW, bitTopY);
+            graphics.lineTo(center.x + 3, bitTopY + bitLen);
+            graphics.lineTo(center.x - 3, bitTopY + bitLen);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Light highlight
+            graphics.fillStyle(metalLight, alpha * 0.6);
+            graphics.beginPath();
+            graphics.moveTo(center.x - bitW + 2, bitTopY);
+            graphics.lineTo(center.x - bitW + 5, bitTopY);
+            graphics.lineTo(center.x - 1, bitTopY + bitLen);
+            graphics.lineTo(center.x - 2, bitTopY + bitLen);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Spiral groove marks (slow spin)
+            graphics.lineStyle(2, metalDark, alpha * 0.8);
+            for (let i = 0; i < 4; i++) {
+                const gt = (i / 4 + (drillSpin % 1) * 0.25) % 1;
+                const gy = bitTopY + gt * bitLen;
+                const wAtY = bitW * (1 - gt * 0.7);
+                const ox = Math.sin(drillSpin * 2 + i * 1.8) * wAtY * 0.35;
+                graphics.lineBetween(
+                    center.x - wAtY + ox, gy,
+                    center.x + wAtY + ox, gy
+                );
+            }
+
+            // Hardened tip
+            graphics.fillStyle(isL2 ? 0x222222 : 0x333333, alpha);
+            graphics.beginPath();
+            graphics.moveTo(center.x - 4, bitTopY + bitLen - 2);
+            graphics.lineTo(center.x + 4, bitTopY + bitLen - 2);
+            graphics.lineTo(center.x, bitTopY + bitLen + 6);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Tip highlight
+            graphics.fillStyle(metalHighlight, alpha * 0.8);
+            graphics.beginPath();
+            graphics.moveTo(center.x - 1, bitTopY + bitLen);
+            graphics.lineTo(center.x + 1, bitTopY + bitLen);
+            graphics.lineTo(center.x, bitTopY + bitLen + 4);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // === FRONT ROCKS — drawn over the drill to hide the bottom ===
+            const fRockDark = isL2 ? 0x2a2a2a : 0x4a4a4a;
+            const fRockMid = isL2 ? 0x3a3a3a : 0x5a5a5a;
+            const fRockLight = isL2 ? 0x4a4a4a : 0x6a6a6a;
+
+            graphics.fillStyle(fRockDark, alpha);
+            graphics.fillCircle(center.x - 10, center.y + 5, 8);
+            graphics.fillCircle(center.x + 9, center.y + 4, 7);
+            graphics.fillCircle(center.x, center.y + 8, 6);
+            graphics.fillCircle(center.x - 15, center.y + 3, 5);
+            graphics.fillCircle(center.x + 14, center.y + 3, 5);
+
+            // Rock highlights on front rocks
+            graphics.fillStyle(fRockMid, alpha);
+            graphics.fillCircle(center.x - 10, center.y + 3, 5);
+            graphics.fillCircle(center.x + 9, center.y + 2, 4);
+            graphics.fillCircle(center.x - 14, center.y + 1, 3);
+
+            graphics.fillStyle(fRockLight, alpha * 0.6);
+            graphics.fillCircle(center.x - 9, center.y + 1, 3);
+            graphics.fillCircle(center.x + 8, center.y + 1, 3);
+
+            // L2: Tiny bright Solana dots on front rocks
+            if (isL2) {
+                const gPulse = 0.5 + Math.sin(time / 800) * 0.3;
+                graphics.fillStyle(solGreen, alpha * gPulse * 0.8);
+                graphics.fillCircle(center.x - 8, center.y + 4, 1);
+                graphics.fillCircle(center.x + 7, center.y + 3, 1);
+            }
+
+            // === RUBBLE flying up — only while actively drilling ===
+            const isDrilling = cycleTime >= 1500 && cycleTime < 3000;
+            if (isDrilling) {
+                const rubbleColors = [0x6b5a4a, 0x5a4a3a, 0x7a6a5a, 0x4a4a4a, 0x5a5a5a, 0x6b5a4a];
+                for (let i = 0; i < 6; i++) {
+                    const seed = rubbleSeed + i * 41.3;
+                    const life = (seed * 0.5 + i * 0.17) % 1;
+                    const rx = center.x + Math.sin(seed * 2.7 + i * 1.9) * (10 + i * 3);
+                    const ry = center.y + 2 - life * 35;
+                    const ra = life < 0.15 ? life / 0.15 : (life > 0.6 ? (1 - life) / 0.4 : 1);
+                    const rs = 1.5 + Math.sin(i * 2.1) * 1;
+
+                    graphics.fillStyle(rubbleColors[i % rubbleColors.length], alpha * ra * 0.7);
+                    graphics.fillCircle(rx, ry, rs);
+                }
+            }
+
+            // === SOLANA GREEN ACCENT — small lantern on left leg ===
+            const flicker = 0.6 + Math.sin(time / 400) * 0.4;
+            graphics.fillStyle(solGreen, alpha * flicker * 0.6);
+            graphics.fillCircle(center.x - 23, center.y - 40, 3);
+            graphics.fillStyle(solGreen, alpha * flicker * 0.2);
+            graphics.fillCircle(center.x - 23, center.y - 40, 6);
+        }
     }
 
     static drawElixirCollector(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, time: number = 0, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
