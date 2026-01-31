@@ -5,6 +5,7 @@ import { applyResourceDelta, clampLootAmount, findResourceTx } from '../_lib/res
 import { readSessionToken, verifySession } from '../_lib/sessions.js';
 import { sanitizeDisplayName } from '../_lib/validators.js';
 import { clampNumber, randomId, toInt } from '../_lib/utils.js';
+import type { AttackNotification } from '../_lib/types.js';
 
 const MAX_LOOT_PCT = 0.2;
 
@@ -50,7 +51,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         : null;
 
       let actualLoot = 0;
-      let existingNotification = null as null | Record<string, unknown>;
+      let existingNotification: AttackNotification | null = null;
 
       if (attackId) {
         const existing = await storage.getNotifications(victimId);
@@ -127,11 +128,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const notifications = await storage.getNotifications(userId);
-      const normalized = notifications.map((notif: Record<string, unknown>) => {
+      const normalized = notifications.map((notif) => {
         const solLost = typeof notif.solLost === 'number'
           ? notif.solLost
-          : clampNumber(toInt((notif as Record<string, unknown>).goldLost, 0), 0, 1_000_000_000)
-            + clampNumber(toInt((notif as Record<string, unknown>).elixirLost, 0), 0, 1_000_000_000);
+          : clampNumber(toInt((notif as unknown as Record<string, unknown>).goldLost, 0), 0, 1_000_000_000)
+            + clampNumber(toInt((notif as unknown as Record<string, unknown>).elixirLost, 0), 0, 1_000_000_000);
         return {
           ...notif,
           solLost,
