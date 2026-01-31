@@ -166,8 +166,21 @@ export class GameBackend {
      * Force a fresh load from the cloud, bypassing memory cache
      */
     public async forceLoadFromCloud(userId: string): Promise<SerializedWorld | null> {
+        const previous = this.worlds.get(userId) || null;
         this.worlds.delete(userId);
-        return this.loadFromCloud(userId);
+        const loaded = await this.loadFromCloud(userId);
+        if (loaded) {
+            const hasTownHall = loaded.buildings.some(b => b.type === 'town_hall');
+            if (loaded.buildings.length > 0 && hasTownHall) {
+                return loaded;
+            }
+            // Reject empty/invalid loads in favor of last known good base.
+        }
+        if (previous) {
+            this.worlds.set(userId, previous);
+            return previous;
+        }
+        return null;
     }
 
     public async getOnlineBase(excludeUserId: string): Promise<SerializedWorld | null> {
