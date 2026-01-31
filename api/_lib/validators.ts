@@ -1,6 +1,7 @@
 import type { StoredBase, StoredBuilding, StoredObstacle } from './types.js';
 import { isValidObstacleType, isValidTroopType, normalizeBuildingType } from './game-defs.js';
 import { clampNumber, randomId, toInt } from './utils.js';
+import { createStarterBuildings } from './bases.js';
 
 const USERNAME_MIN = 3;
 const USERNAME_MAX = 20;
@@ -194,7 +195,8 @@ export function sanitizeObstacles(value: unknown): StoredObstacle[] {
 
 export function ensureTownHall(base: StoredBase): StoredBase {
   if (!base.buildings || base.buildings.length === 0) {
-    base.buildings = [];
+    base.buildings = createStarterBuildings();
+    return base;
   }
   const hasTownHall = base.buildings.some((b) => b.type === 'town_hall');
   if (hasTownHall) return base;
