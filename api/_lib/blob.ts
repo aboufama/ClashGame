@@ -14,13 +14,14 @@ export async function readJson<T>(pathname: string): Promise<T | null> {
   }
 }
 
-export async function writeJson<T>(pathname: string, data: T, cacheSeconds = 1): Promise<void> {
+export async function writeJson<T>(pathname: string, data: T, cacheSeconds = 60): Promise<void> {
+  const safeCacheSeconds = Math.max(60, cacheSeconds);
   await put(pathname, JSON.stringify(data), {
     access: 'public',
     addRandomSuffix: false,
     allowOverwrite: true,
     contentType: JSON_CONTENT_TYPE,
-    cacheControlMaxAge: cacheSeconds
+    cacheControlMaxAge: safeCacheSeconds
   });
 }
 
