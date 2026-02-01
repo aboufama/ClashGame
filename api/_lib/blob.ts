@@ -1,5 +1,3 @@
-import { BlobNotFoundError, head, put, del } from '@vercel/blob';
-
 const JSON_CONTENT_TYPE = 'application/json';
 
 function ensureBlobToken() {
@@ -8,15 +6,31 @@ function ensureBlobToken() {
   }
 }
 
+type BlobModule = typeof import('@vercel/blob');
+
+async function getBlobModule(): Promise<BlobModule> {
+  try {
+    return await import('@vercel/blob');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    throw new Error(`Blob module load failed: ${message}`);
+  }
+}
+
+function isBlobNotFound(error: unknown) {
+  return typeof error === 'object' && error !== null && (error as { name?: string }).name === 'BlobNotFoundError';
+}
+
 export async function readJson<T>(pathname: string): Promise<T | null> {
   try {
     ensureBlobToken();
+    const { head } = await getBlobModule();
     const meta = await head(pathname);
     const response = await fetch(meta.url, { cache: 'no-store' });
     if (!response.ok) return null;
     return (await response.json()) as T;
   } catch (error) {
-    if (error instanceof BlobNotFoundError) return null;
+    if (isBlobNotFound(error)) return null;
     throw error;
   }
 }
@@ -24,6 +38,7 @@ export async function readJson<T>(pathname: string): Promise<T | null> {
 export async function writeJson<T>(pathname: string, data: T, cacheSeconds = 60): Promise<void> {
   ensureBlobToken();
   const safeCacheSeconds = Math.max(60, cacheSeconds);
+  const { put } = await getBlobModule();
   await put(pathname, JSON.stringify(data), {
     access: 'public',
     addRandomSuffix: false,
@@ -35,5 +50,6 @@ export async function writeJson<T>(pathname: string, data: T, cacheSeconds = 60)
 
 export async function deleteJson(pathname: string): Promise<void> {
   ensureBlobToken();
+  const { del } = await getBlobModule();
   await del(pathname);
 }
