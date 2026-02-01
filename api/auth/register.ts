@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http.js';
 import { readJson, writeJson } from '../_lib/blob.js';
 import { createSession, hashSecret, randomId, sanitizeId } from '../_lib/auth.js';
-import { sanitizeUsername, type UserRecord, type WalletRecord, type LedgerRecord, type NotificationStore } from '../_lib/models.js';
+import { buildStarterWorld, sanitizeUsername, type UserRecord, type WalletRecord, type LedgerRecord, type NotificationStore, type SerializedWorld } from '../_lib/models.js';
 import { upsertUserIndex } from '../_lib/indexes.js';
 
 interface RegisterBody {
@@ -63,6 +63,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
     await writeJson(`wallets/${user.id}.json`, wallet);
 
+    const basePath = `bases/${user.id}.json`;
+    let base = await readJson<SerializedWorld>(basePath);
+    if (!base || !base.buildings || base.buildings.length === 0) {
+      base = buildStarterWorld(user.id, user.username);
+      base.resources.sol = wallet.balance;
+      await writeJson(basePath, base);
+    }
+
     const ledger: LedgerRecord = (await readJson<LedgerRecord>(`ledger/${user.id}.json`)) ?? { events: [] };
     await writeJson(`ledger/${user.id}.json`, ledger);
 
@@ -72,7 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await upsertUserIndex({
       id: user.id,
       username: user.username,
-      buildingCount: 0,
+      buildingCount: base?.buildings?.length ?? 0,
       lastSeen: now,
       trophies: user.trophies ?? 0
     });

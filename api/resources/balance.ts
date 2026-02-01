@@ -3,6 +3,7 @@ import { handleOptions, sendError, sendJson } from '../_lib/http.js';
 import { readJson, writeJson } from '../_lib/blob.js';
 import { requireAuth } from '../_lib/auth.js';
 import type { WalletRecord } from '../_lib/models.js';
+import { applyProduction } from '../_lib/production.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleOptions(req, res)) return;
@@ -23,7 +24,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await writeJson(walletPath, wallet);
     }
 
-    sendJson(res, 200, { wallet });
+    const production = await applyProduction(user.id);
+    const nextWallet = production.wallet ?? wallet;
+
+    sendJson(res, 200, { wallet: nextWallet, added: production.added });
   } catch (error) {
     console.error('balance error', error);
     sendError(res, 500, 'Failed to get balance');

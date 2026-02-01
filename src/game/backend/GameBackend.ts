@@ -1,4 +1,4 @@
-import { BUILDING_DEFINITIONS, getBuildingStats, type BuildingType, type ObstacleType } from '../config/GameDefinitions';
+import { BUILDING_DEFINITIONS, type BuildingType, type ObstacleType } from '../config/GameDefinitions';
 import type { SerializedBuilding, SerializedObstacle, SerializedWorld } from '../data/Models';
 import { Auth } from './Auth';
 
@@ -200,26 +200,15 @@ export class Backend {
   }
 
   static async calculateOfflineProduction(userId: string): Promise<{ sol: number }> {
-    const world = await Backend.getWorld(userId);
-    if (!world) return { sol: 0 };
     if (!Auth.isOnlineMode()) return { sol: 0 };
-
     try {
-      const response = await Backend.apiPost<{ wallet: { balance: number; updatedAt: number } }>('/api/resources/balance', {});
-      const last = response.wallet.updatedAt ?? world.lastSaveTime ?? Date.now();
-      const elapsedSec = Math.max(0, (Date.now() - last) / 1000);
-
-      let rate = 0;
-      for (const b of world.buildings) {
-        const stats = getBuildingStats(b.type as BuildingType, b.level ?? 1);
-        if (stats?.productionRate) rate += stats.productionRate;
+      const response = await Backend.apiPost<{ wallet: { balance: number; updatedAt: number }; added?: number }>('/api/resources/balance', {});
+      const world = Backend.getCachedWorld(userId);
+      if (world && response.wallet) {
+        world.resources.sol = response.wallet.balance ?? world.resources.sol;
+        Backend.setCachedWorld(userId, world);
       }
-
-      const produced = Math.floor(rate * elapsedSec);
-      if (produced > 0) {
-        await Backend.applyResourceDelta(userId, produced, 'offline_production');
-      }
-      return { sol: produced };
+      return { sol: response.added ?? 0 };
     } catch (error) {
       console.warn('Offline production skipped:', error);
       return { sol: 0 };

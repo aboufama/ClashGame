@@ -3,6 +3,7 @@ import { handleOptions, sendError, sendJson } from '../_lib/http.js';
 import { readJson } from '../_lib/blob.js';
 import { requireAuth } from '../_lib/auth.js';
 import type { SerializedWorld, WalletRecord } from '../_lib/models.js';
+import { applyProduction } from '../_lib/production.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleOptions(req, res)) return;
@@ -16,6 +17,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!auth) return;
 
     const { user } = auth;
+    await applyProduction(user.id);
     const basePath = `bases/${user.id}.json`;
     const world = await readJson<SerializedWorld>(basePath);
     if (!world) {

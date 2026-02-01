@@ -3,6 +3,7 @@ import { handleOptions, sendError, sendJson } from '../_lib/http.js';
 import { readJson, writeJson } from '../_lib/blob.js';
 import { requireAuth } from '../_lib/auth.js';
 import { buildStarterWorld, type SerializedWorld, type WalletRecord } from '../_lib/models.js';
+import { applyProduction } from '../_lib/production.js';
 import { upsertUserIndex } from '../_lib/indexes.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -37,6 +38,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       world.username = user.username;
       world.resources.sol = wallet.balance;
     }
+
+    await applyProduction(user.id);
+    world = (await readJson<SerializedWorld>(basePath)) ?? world;
 
     await upsertUserIndex({
       id: user.id,

@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http.js';
 import { readJson, writeJson } from '../_lib/blob.js';
 import { createSession, hashSecret, sanitizeId } from '../_lib/auth.js';
-import type { UserRecord } from '../_lib/models.js';
+import { buildStarterWorld, type SerializedWorld, type UserRecord } from '../_lib/models.js';
 import { upsertUserIndex } from '../_lib/indexes.js';
 
 interface LoginBody {
@@ -48,10 +48,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
     await writeJson(`users/${user.id}.json`, updated);
 
+    const basePath = `bases/${user.id}.json`;
+    let base = await readJson<SerializedWorld>(basePath);
+    if (!base || !base.buildings || base.buildings.length === 0) {
+      base = buildStarterWorld(user.id, updated.username);
+      await writeJson(basePath, base);
+    }
+
     await upsertUserIndex({
       id: updated.id,
       username: updated.username,
-      buildingCount: 0,
+      buildingCount: base?.buildings?.length ?? 0,
       lastSeen: now,
       trophies: updated.trophies ?? 0
     });
