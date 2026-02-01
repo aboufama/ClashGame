@@ -52,7 +52,15 @@ async function postJson<T>(path: string, body: unknown, token?: string): Promise
     body: JSON.stringify(body)
   });
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
+    const raw = await response.text();
+    let message = `Request failed: ${response.status}`;
+    try {
+      const parsed = JSON.parse(raw) as { error?: string };
+      if (parsed?.error) message = parsed.error;
+    } catch {
+      if (raw) message = raw;
+    }
+    throw new Error(message);
   }
   return (await response.json()) as T;
 }

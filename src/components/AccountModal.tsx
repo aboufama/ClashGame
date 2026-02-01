@@ -57,8 +57,9 @@ export function AccountModal({
       setLoginId('');
       setLoginSecret('');
       setMode('current');
-    } catch {
-      setError('Login failed. Check ID and secret.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Login failed.';
+      setError(message.includes('Invalid credentials') ? 'Account exists. Use the correct secret or create a new account.' : message);
     } finally {
       setBusy(false);
     }
@@ -74,8 +75,9 @@ export function AccountModal({
       setRegisterId('');
       setRegisterSecret('');
       setMode('current');
-    } catch {
-      setError('Registration failed. Try a different ID.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Registration failed.';
+      setError(message.includes('Invalid credentials') ? 'Account already exists. Use Login instead.' : message);
     } finally {
       setBusy(false);
     }
