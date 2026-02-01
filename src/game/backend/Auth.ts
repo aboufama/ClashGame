@@ -43,10 +43,12 @@ function saveStoredUser(user: AuthUser) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
 }
 
-async function postJson<T>(path: string, body: unknown): Promise<T> {
+async function postJson<T>(path: string, body: unknown, token?: string): Promise<T> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
   const response = await fetch(path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(body)
   });
   if (!response.ok) {
@@ -115,5 +117,60 @@ export class Auth {
 
     Auth.current = user;
     return { user, online: Auth.online };
+  }
+
+  static async login(playerId: string, deviceSecret: string): Promise<AuthUser> {
+    const login = await postJson<AuthResponse>('/api/auth/login', {
+      playerId,
+      deviceSecret
+    });
+    const user: AuthUser = {
+      id: login.user.id,
+      username: login.user.username,
+      deviceSecret,
+      token: login.token,
+      tokenExpiresAt: login.expiresAt
+    };
+    saveStoredUser(user);
+    Auth.current = user;
+    Auth.online = true;
+    return user;
+  }
+
+  static async register(username: string, playerId?: string, deviceSecret?: string): Promise<AuthUser> {
+    const secret = deviceSecret && deviceSecret.trim().length > 0 ? deviceSecret.trim() : randomHex(16);
+    const payload: { playerId?: string; username: string; deviceSecret: string } = {
+      username,
+      deviceSecret: secret
+    };
+    if (playerId) payload.playerId = playerId;
+    const registered = await postJson<AuthResponse>('/api/auth/register', payload);
+    const user: AuthUser = {
+      id: registered.user.id,
+      username: registered.user.username,
+      deviceSecret: secret,
+      token: registered.token,
+      tokenExpiresAt: registered.expiresAt
+    };
+    saveStoredUser(user);
+    Auth.current = user;
+    Auth.online = true;
+    return user;
+  }
+
+  static async logout(): Promise<void> {
+    const token = Auth.current?.token;
+    if (token) {
+      try {
+        await postJson('/api/auth/logout', {}, token);
+      } catch (error) {
+        console.warn('Logout request failed:', error);
+      }
+    }
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+    Auth.current = null;
+    Auth.online = false;
   }
 }

@@ -16,6 +16,7 @@ import { Hud } from './components/Hud';
 import { DebugMenu } from './components/DebugMenu';
 import { NotificationsPanel } from './components/NotificationsPanel';
 import { LeaderboardPanel } from './components/LeaderboardPanel';
+import { AccountModal } from './components/AccountModal';
 import './App.css';
 
 // Initialize mobile support
@@ -27,9 +28,10 @@ MobileUtils.preventDefaultTouchBehaviors();
 function App() {
   const gameRef = useRef<Phaser.Game | null>(null);
 
-  type UserProfile = { id: string; username: string; lastLogin: number };
+  type UserProfile = { id: string; username: string; lastLogin: number; deviceSecret?: string };
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isOnline, setIsOnline] = useState(false);
+  const [isAccountOpen, setIsAccountOpen] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [resources, setResources] = useState({ sol: 0 });
@@ -42,7 +44,7 @@ function App() {
     Auth.ensureUser()
       .then(({ user: authUser, online }) => {
         if (cancelled) return;
-        setUser({ id: authUser.id, username: authUser.username, lastLogin: Date.now() });
+        setUser({ id: authUser.id, username: authUser.username, lastLogin: Date.now(), deviceSecret: authUser.deviceSecret });
         setIsOnline(online);
       })
       .catch(error => {
@@ -85,7 +87,10 @@ function App() {
 
   // Load World & Resources once user is known
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
 
     const init = async () => {
       try {
@@ -200,6 +205,59 @@ function App() {
   }, [selectedInMap, army, selectedTroopType, battleStats, resources]);
 
   const [cloudOpening, setCloudOpening] = useState(false);
+
+  const handleLoginAccount = async (playerId: string, deviceSecret: string) => {
+    setLoading(true);
+    try {
+      const existingId = user?.id;
+      if (existingId) {
+        await Backend.flushPendingSave();
+        Backend.clearCacheForUser(existingId);
+      }
+      const authUser = await Auth.login(playerId, deviceSecret);
+      setUser({ id: authUser.id, username: authUser.username, lastLogin: Date.now(), deviceSecret: authUser.deviceSecret });
+      setIsOnline(true);
+      setIsAccountOpen(false);
+    } catch (error) {
+      setLoading(false);
+      throw error;
+    }
+  };
+
+  const handleRegisterAccount = async (username: string, playerId?: string, deviceSecret?: string) => {
+    setLoading(true);
+    try {
+      const existingId = user?.id;
+      if (existingId) {
+        await Backend.flushPendingSave();
+        Backend.clearCacheForUser(existingId);
+      }
+      const authUser = await Auth.register(username, playerId, deviceSecret);
+      setUser({ id: authUser.id, username: authUser.username, lastLogin: Date.now(), deviceSecret: authUser.deviceSecret });
+      setIsOnline(true);
+      setIsAccountOpen(true);
+      return authUser.deviceSecret ?? '';
+    } catch (error) {
+      setLoading(false);
+      throw error;
+    }
+  };
+
+  const handleLogoutAccount = async () => {
+    setLoading(true);
+    try {
+      if (user?.id) {
+        await Backend.flushPendingSave();
+        Backend.clearCacheForUser(user.id);
+      }
+      await Auth.logout();
+      setUser(null);
+      setIsOnline(false);
+      setIsAccountOpen(true);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     // Ensure game is destroyed to clean up state
@@ -747,7 +805,7 @@ function App() {
         wallUpgradeCostOverride={wallUpgradeCostOverride}
         showCloudOverlay={showCloudOverlay}
         isMobile={isMobile}
-        onOpenSettings={() => setIsDebugOpen(true)}
+        onOpenSettings={() => setIsAccountOpen(true)}
         onOpenBuild={() => setIsBuildingOpen(true)}
         onOpenTrain={() => setIsTrainingOpen(true)}
         onStartAttack={handleStartAttack}
@@ -782,6 +840,16 @@ function App() {
       )}
 
       <DebugMenu isOpen={isDebugOpen} />
+
+      <AccountModal
+        isOpen={isAccountOpen || !user}
+        currentUser={user}
+        isOnline={isOnline}
+        onClose={() => setIsAccountOpen(false)}
+        onLogin={handleLoginAccount}
+        onRegister={handleRegisterAccount}
+        onLogout={handleLogoutAccount}
+      />
 
       <TrainingModal
         isOpen={isTrainingOpen}

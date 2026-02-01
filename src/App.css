@@ -2386,3 +2386,165 @@ body.is-touch {
     padding: 2px 6px;
     border: 1px solid var(--fantasy-green);
 }
+
+/* ============================================
+   ACCOUNT MODAL
+   ============================================ */
+
+.account-modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 220;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.account-modal {
+    width: min(420px, 92vw);
+    background: var(--panel-bg);
+    border: 3px solid var(--panel-border);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+    padding: 16px;
+    color: var(--text-primary);
+}
+
+.account-modal-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.account-modal-header h3 {
+    flex: 1;
+    font-size: 12px;
+    color: var(--fantasy-gold);
+}
+
+.account-close {
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.status-pill {
+    font-size: 7px;
+    padding: 4px 6px;
+    border: 1px solid var(--panel-border-light);
+}
+
+.status-pill.online {
+    color: var(--fantasy-green);
+}
+
+.status-pill.offline {
+    color: var(--fantasy-red);
+}
+
+.account-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.tab-btn {
+    background: var(--panel-accent);
+    border: 2px solid var(--panel-border);
+    color: var(--text-primary);
+    padding: 6px;
+    font-size: 8px;
+    cursor: pointer;
+}
+
+.tab-btn.active {
+    border-color: var(--fantasy-gold);
+    color: var(--fantasy-gold);
+}
+
+.account-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.account-panel label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 8px;
+}
+
+.account-panel input {
+    background: #120c08;
+    border: 2px solid var(--panel-border-dark);
+    color: var(--text-primary);
+    padding: 6px;
+    font-size: 9px;
+}
+
+.account-field span {
+    font-size: 8px;
+    color: var(--text-secondary);
+}
+
+.account-field code {
+    font-size: 9px;
+    background: #120c08;
+    padding: 4px 6px;
+    border: 1px solid var(--panel-border-dark);
+}
+
+.field-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.copy-btn {
+    background: var(--panel-accent);
+    border: 2px solid var(--panel-border);
+    color: var(--text-primary);
+    font-size: 7px;
+    padding: 4px 6px;
+    cursor: pointer;
+}
+
+.logout-btn,
+.account-panel .action-btn {
+    background: var(--fantasy-blue);
+    border: 2px solid #1e3f9a;
+    color: #fff;
+    padding: 6px 10px;
+    font-size: 9px;
+    cursor: pointer;
+    box-shadow: 2px 2px 0 #000;
+}
+
+.logout-btn {
+    background: var(--fantasy-red);
+    border-color: #A52A2A;
+}
+
+.account-error {
+    background: rgba(139, 0, 0, 0.2);
+    border: 1px solid #A52A2A;
+    padding: 6px 8px;
+    font-size: 8px;
+    margin-bottom: 8px;
+}
+
+.account-warning {
+    background: rgba(255, 215, 0, 0.15);
+    border: 1px solid var(--fantasy-gold-dark);
+    padding: 6px 8px;
+    font-size: 8px;
+}

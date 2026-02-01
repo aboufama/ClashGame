@@ -22,6 +22,7 @@ export class Backend {
   private static memoryCache = new Map<string, SerializedWorld>();
   private static saveTimers = new Map<string, number>();
   private static inFlightSaves = new Map<string, Promise<void>>();
+  private static cacheKeyPrefix = CACHE_PREFIX;
 
   private static async apiPost<T>(path: string, body: unknown, auth = true): Promise<T> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -105,6 +106,31 @@ export class Backend {
     const user = Auth.getCurrentUser();
     if (user) {
       await Backend.saveWorld(user.id);
+    }
+  }
+
+  static clearCacheForUser(userId: string) {
+    Backend.memoryCache.delete(userId);
+    const timer = Backend.saveTimers.get(userId);
+    if (timer) {
+      window.clearTimeout(timer);
+      Backend.saveTimers.delete(userId);
+    }
+    Backend.inFlightSaves.delete(userId);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(getCacheKey(userId));
+    }
+  }
+
+  static clearAllCaches() {
+    Backend.memoryCache.clear();
+    Backend.saveTimers.forEach(timer => window.clearTimeout(timer));
+    Backend.saveTimers.clear();
+    Backend.inFlightSaves.clear();
+    if (typeof window !== 'undefined') {
+      Object.keys(localStorage)
+        .filter(key => key.startsWith(Backend.cacheKeyPrefix))
+        .forEach(key => localStorage.removeItem(key));
     }
   }
 
