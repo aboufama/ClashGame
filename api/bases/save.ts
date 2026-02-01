@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http';
-import { readJson, writeJson } from '../_lib/blob';
-import { requireAuth } from '../_lib/auth';
-import { normalizeWorld, type SerializedWorld, type WalletRecord } from '../_lib/models';
-import { upsertUserIndex } from '../_lib/indexes';
+import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http.js';
+import { readJson, writeJson } from '../_lib/blob.js';
+import { requireAuth } from '../_lib/auth.js';
+import { normalizeWorld, type SerializedWorld, type WalletRecord } from '../_lib/models.js';
+import { upsertUserIndex } from '../_lib/indexes.js';
 
 interface SaveBody {
   world: SerializedWorld;

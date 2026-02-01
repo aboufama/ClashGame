@@ -1,5 +1,5 @@
-import { readJson, writeJson } from './blob';
-import type { UsersIndex, UserIndexEntry } from './models';
+import { readJson, writeJson } from './blob.js';
+import type { UsersIndex, UserIndexEntry } from './models.js';
 
 const INDEX_PATH = 'indexes/users.json';
 

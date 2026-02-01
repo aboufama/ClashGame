@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http';
-import { readJson, writeJson } from '../_lib/blob';
-import { createSession, hashSecret, randomId, sanitizeId } from '../_lib/auth';
-import { sanitizeUsername, type UserRecord, type WalletRecord, type LedgerRecord, type NotificationStore } from '../_lib/models';
-import { upsertUserIndex } from '../_lib/indexes';
+import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http.js';
+import { readJson, writeJson } from '../_lib/blob.js';
+import { createSession, hashSecret, randomId, sanitizeId } from '../_lib/auth.js';
+import { sanitizeUsername, type UserRecord, type WalletRecord, type LedgerRecord, type NotificationStore } from '../_lib/models.js';
+import { upsertUserIndex } from '../_lib/indexes.js';
 
 interface RegisterBody {
   username?: string;

@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { handleOptions, sendError, sendJson } from '../_lib/http';
-import { deleteJson, writeJson } from '../_lib/blob';
-import { requireAuth } from '../_lib/auth';
-import type { UserRecord } from '../_lib/models';
+import { handleOptions, sendError, sendJson } from '../_lib/http.js';
+import { deleteJson, writeJson } from '../_lib/blob.js';
+import { requireAuth } from '../_lib/auth.js';
+import type { UserRecord } from '../_lib/models.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleOptions(req, res)) return;

@@ -1,8 +1,8 @@
 import crypto from 'crypto';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { readJson, writeJson } from './blob';
-import { sendError } from './http';
-import type { SessionRecord, UserRecord } from './models';
+import { readJson, writeJson } from './blob.js';
+import { sendError } from './http.js';
+import type { SessionRecord, UserRecord } from './models.js';
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
 

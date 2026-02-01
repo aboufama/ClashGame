@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { handleOptions, sendError, sendJson } from '../_lib/http';
-import { readJson } from '../_lib/blob';
-import { requireAuth } from '../_lib/auth';
-import type { SerializedWorld, WalletRecord, UserRecord } from '../_lib/models';
-import { readUsersIndex } from '../_lib/indexes';
+import { handleOptions, sendError, sendJson } from '../_lib/http.js';
+import { readJson } from '../_lib/blob.js';
+import { requireAuth } from '../_lib/auth.js';
+import type { SerializedWorld, WalletRecord, UserRecord } from '../_lib/models.js';
+import { readUsersIndex } from '../_lib/indexes.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleOptions(req, res)) return;

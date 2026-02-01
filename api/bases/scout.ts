@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http';
-import { readJson } from '../_lib/blob';
-import { requireAuth, sanitizeId } from '../_lib/auth';
-import type { SerializedWorld, WalletRecord, UserRecord } from '../_lib/models';
+import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http.js';
+import { readJson } from '../_lib/blob.js';
+import { requireAuth, sanitizeId } from '../_lib/auth.js';
+import type { SerializedWorld, WalletRecord, UserRecord } from '../_lib/models.js';
 
 interface ScoutBody {
   targetId: string;

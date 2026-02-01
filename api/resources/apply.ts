@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http';
-import { readJson, writeJson } from '../_lib/blob';
-import { requireAuth } from '../_lib/auth';
-import { clamp, randomId, type LedgerRecord, type WalletRecord, type SerializedWorld } from '../_lib/models';
+import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http.js';
+import { readJson, writeJson } from '../_lib/blob.js';
+import { requireAuth } from '../_lib/auth.js';
+import { clamp, randomId, type LedgerRecord, type WalletRecord, type SerializedWorld } from '../_lib/models.js';
 
 interface ApplyBody {
   delta: number;
