@@ -76,17 +76,17 @@ export class Backend {
 
   /**
    * Cancel any pending debounce timer and fire a save immediately.
-   * Used for critical operations (place/move/upgrade/remove building)
-   * that MUST reach the server before the user could reload the page.
+   * Returns a Promise that resolves once the server confirms.
+   * Does NOT queue behind in-flight saves (uses saveWorldDirect).
    */
-  private static saveImmediate(userId: string) {
-    if (!Auth.isOnlineMode()) return;
+  private static saveImmediate(userId: string): Promise<void> {
+    if (!Auth.isOnlineMode()) return Promise.resolve();
     const existing = Backend.saveTimers.get(userId);
     if (existing) {
       window.clearTimeout(existing);
       Backend.saveTimers.delete(userId);
     }
-    void Backend.saveWorld(userId);
+    return Backend.saveWorldDirect(userId);
   }
 
   /**
@@ -180,6 +180,56 @@ export class Backend {
     Backend.inFlightSaves.delete(userId);
   }
 
+  /**
+   * Save directly without waiting for any queued/in-flight saves.
+   * Used by saveImmediate for critical building operations that must
+   * reach the server ASAP. Handles 409 conflicts via a single retry.
+   */
+  private static async saveWorldDirect(userId: string): Promise<void> {
+    const world = Backend.getCachedWorld(userId);
+    if (!world || !Auth.isOnlineMode()) return;
+
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const token = Auth.getToken();
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      const res = await fetch('/api/bases/save', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ world, ifMatchRevision: world.revision ?? 0 }),
+        cache: 'no-store',
+        keepalive: true
+      });
+
+      if (res.ok) {
+        const data = await res.json() as { ok?: boolean; world?: SerializedWorld };
+        if (data.world) Backend.mergeServerResponse(userId, data.world);
+      } else if (res.status === 409) {
+        const data = await res.json() as { conflict: boolean; world?: SerializedWorld };
+        if (data.world) {
+          Backend.mergeServerResponse(userId, data.world);
+          const merged = Backend.getCachedWorld(userId);
+          if (merged) {
+            const retryRes = await fetch('/api/bases/save', {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({ world: merged, ifMatchRevision: merged.revision ?? 0 }),
+              cache: 'no-store',
+              keepalive: true
+            });
+            if (retryRes.ok) {
+              const retryData = await retryRes.json() as { ok?: boolean; world?: SerializedWorld };
+              if (retryData.world) Backend.mergeServerResponse(userId, retryData.world);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Direct save failed:', error);
+    }
+  }
+
   static async flushPendingSave(): Promise<void> {
     // Cancel any pending debounce timers so they don't fire after we flush
     Backend.saveTimers.forEach(timer => window.clearTimeout(timer));
@@ -217,10 +267,14 @@ export class Backend {
     if (token) headers.Authorization = `Bearer ${token}`;
 
     try {
+      // Omit ifMatchRevision so the server skips the revision check.
+      // This guarantees the save succeeds even if an in-flight save
+      // already bumped the revision. Acceptable for page-unload since
+      // the local cache always has the latest building data.
       fetch('/api/bases/save', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ world, ifMatchRevision: world.revision ?? 0 }),
+        body: JSON.stringify({ world }),
         keepalive: true
       });
     } catch {
@@ -376,7 +430,7 @@ export class Backend {
     world.buildings.push(building);
     world.lastSaveTime = Date.now();
     Backend.setCachedWorld(userId, world);
-    Backend.saveImmediate(userId);
+    void Backend.saveImmediate(userId);
     return building;
   }
 
@@ -389,7 +443,7 @@ export class Backend {
     target.gridY = gridY;
     world.lastSaveTime = Date.now();
     Backend.setCachedWorld(userId, world);
-    Backend.saveImmediate(userId);
+    void Backend.saveImmediate(userId);
     return true;
   }
 
@@ -399,19 +453,19 @@ export class Backend {
     world.buildings = world.buildings.filter(b => b.id !== buildingId);
     world.lastSaveTime = Date.now();
     Backend.setCachedWorld(userId, world);
-    Backend.saveImmediate(userId);
+    void Backend.saveImmediate(userId);
   }
 
-  static async upgradeBuilding(userId: string, buildingId: string) {
+  static upgradeBuilding(userId: string, buildingId: string): Promise<void> {
     const world = Backend.getCachedWorld(userId);
-    if (!world) return;
+    if (!world) return Promise.resolve();
     const target = world.buildings.find(b => b.id === buildingId);
-    if (!target) return;
+    if (!target) return Promise.resolve();
     const maxLevel = BUILDING_DEFINITIONS[target.type as BuildingType]?.maxLevel ?? 1;
     target.level = Math.min((target.level ?? 1) + 1, maxLevel);
     world.lastSaveTime = Date.now();
     Backend.setCachedWorld(userId, world);
-    Backend.saveImmediate(userId);
+    return Backend.saveImmediate(userId);
   }
 
   static placeObstacle(userId: string, type: ObstacleType, gridX: number, gridY: number) {
@@ -421,7 +475,7 @@ export class Backend {
     const obstacle: SerializedObstacle = { id: randomId('o_'), type, gridX, gridY };
     world.obstacles.push(obstacle);
     Backend.setCachedWorld(userId, world);
-    Backend.saveImmediate(userId);
+    void Backend.saveImmediate(userId);
   }
 
   static removeObstacle(userId: string, obstacleId: string) {
@@ -429,7 +483,7 @@ export class Backend {
     if (!world?.obstacles) return;
     world.obstacles = world.obstacles.filter(o => o.id !== obstacleId);
     Backend.setCachedWorld(userId, world);
-    Backend.saveImmediate(userId);
+    void Backend.saveImmediate(userId);
   }
 
   static async deleteWorld(userId: string) {

@@ -757,16 +757,20 @@ function App() {
               }));
             }
 
-            // Sync with backend
-            await Backend.upgradeBuilding(user?.id || 'default_player', selectedInMap);
+            // Start the save immediately (returns a promise).
+            // upgradeBuilding updates the cache synchronously, then fires
+            // saveWorldDirect which sends the fetch without queuing.
+            const savePromise = Backend.upgradeBuilding(user?.id || 'default_player', selectedInMap);
 
-            // Sync with Phaser
+            // Visual update happens instantly — don't wait for network
             const newLevel = gameManager.upgradeSelectedBuilding();
-
-            // Update local state to refresh InfoPanel
             if (newLevel) {
               setSelectedBuildingInfo(prev => prev ? { ...prev, level: newLevel } : null);
             }
+
+            // Wait for server confirmation before releasing the upgrade lock.
+            // This prevents another upgrade click before the server has the data.
+            await savePromise;
           }
         } finally {
           upgradeInProgressRef.current = false;
