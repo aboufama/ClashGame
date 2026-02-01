@@ -3,6 +3,7 @@ import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http.j
 import { readJson, writeJson } from '../_lib/blob.js';
 import { requireAuth } from '../_lib/auth.js';
 import { clamp, randomId, type LedgerRecord, type WalletRecord } from '../_lib/models.js';
+import { applyProduction } from '../_lib/production.js';
 
 interface ApplyBody {
   delta: number;
@@ -30,6 +31,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { user } = auth;
     const now = Date.now();
+
+    // Apply any pending production first so the wallet is up-to-date
+    // before processing the delta (e.g., spending on upgrades).
+    await applyProduction(user.id);
 
     const walletPath = `wallets/${user.id}.json`;
     const existingWallet = await readJson<WalletRecord>(walletPath);

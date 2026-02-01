@@ -315,7 +315,11 @@ function App() {
         }, 600); // Match CSS animation duration
       },
       addSol: (amount: number) => {
-        void applySolDelta(amount, 'production');
+        // Update display locally only — no server call.
+        // Server tracks production independently via applyProduction on load.
+        // Sending production ticks to the server caused race conditions with
+        // spend calls, making the balance bounce back to pre-spend values.
+        setResources(prev => ({ ...prev, sol: Math.max(0, prev.sol + amount) }));
       },
       setGameMode: (mode: GameMode) => {
         setView(mode);
@@ -703,50 +707,59 @@ function App() {
     }
   };
 
+  const upgradeInProgressRef = useRef(false);
+
   const handleUpgradeBuilding = async () => {
+    // Prevent concurrent upgrades from fast clicks
+    if (upgradeInProgressRef.current) return;
     if (selectedInMap && selectedBuildingInfo) {
       const def = BUILDING_DEFINITIONS[selectedBuildingInfo.type];
       const maxLevel = def.maxLevel || 1;
 
       if (selectedBuildingInfo.level < maxLevel) {
-        const nextLevelStats = getBuildingStats(selectedBuildingInfo.type, selectedBuildingInfo.level + 1);
-        let upgradeCost = nextLevelStats.cost;
+        upgradeInProgressRef.current = true;
+        try {
+          const nextLevelStats = getBuildingStats(selectedBuildingInfo.type, selectedBuildingInfo.level + 1);
+          let upgradeCost = nextLevelStats.cost;
 
-        // Wall Logic: Cost is multiplied by the number of walls being upgraded
-        if (selectedBuildingInfo.type === 'wall') {
-          try {
-            const world = await Backend.getWorld(user?.id || 'default_player');
-            if (world) {
-              const count = world.buildings.filter((b: any) => b.type === 'wall' && (b.level || 1) === selectedBuildingInfo.level).length;
-              upgradeCost = nextLevelStats.cost * count;
+          // Wall Logic: Cost is multiplied by the number of walls being upgraded
+          if (selectedBuildingInfo.type === 'wall') {
+            try {
+              const world = await Backend.getWorld(user?.id || 'default_player');
+              if (world) {
+                const count = world.buildings.filter((b: any) => b.type === 'wall' && (b.level || 1) === selectedBuildingInfo.level).length;
+                upgradeCost = nextLevelStats.cost * count;
+              }
+            } catch (error) {
+              console.error('Error calculating wall upgrade cost:', error);
             }
-          } catch (error) {
-            console.error('Error calculating wall upgrade cost:', error);
-          }
-        }
-
-        if (resources.sol >= upgradeCost) {
-          if (isOnline) {
-            const result = await applySolDelta(-upgradeCost, 'upgrade_building');
-            if (!result.applied) return;
-          } else {
-            // Subtract cost locally
-            setResources(prev => ({
-              ...prev,
-              sol: Math.max(0, prev.sol - upgradeCost)
-            }));
           }
 
-          // Sync with backend
-          await Backend.upgradeBuilding(user?.id || 'default_player', selectedInMap);
+          if (resources.sol >= upgradeCost) {
+            if (isOnline) {
+              const result = await applySolDelta(-upgradeCost, 'upgrade_building');
+              if (!result.applied) return;
+            } else {
+              // Subtract cost locally
+              setResources(prev => ({
+                ...prev,
+                sol: Math.max(0, prev.sol - upgradeCost)
+              }));
+            }
 
-          // Sync with Phaser
-          const newLevel = gameManager.upgradeSelectedBuilding();
+            // Sync with backend
+            await Backend.upgradeBuilding(user?.id || 'default_player', selectedInMap);
 
-          // Update local state to refresh InfoPanel
-          if (newLevel) {
-            setSelectedBuildingInfo(prev => prev ? { ...prev, level: newLevel } : null);
+            // Sync with Phaser
+            const newLevel = gameManager.upgradeSelectedBuilding();
+
+            // Update local state to refresh InfoPanel
+            if (newLevel) {
+              setSelectedBuildingInfo(prev => prev ? { ...prev, level: newLevel } : null);
+            }
           }
+        } finally {
+          upgradeInProgressRef.current = false;
         }
       }
     }

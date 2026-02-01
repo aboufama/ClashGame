@@ -5454,6 +5454,8 @@ export class MainScene extends Phaser.Scene {
             upgradeSelectedBuilding: () => {
                 if (this.selectedInWorld) {
                     const prevLevel = this.selectedInWorld.level || 1;
+                    const maxLvl = BUILDINGS[this.selectedInWorld.type]?.maxLevel ?? 1;
+                    if (prevLevel >= maxLvl) return null;
                     this.selectedInWorld.level = prevLevel + 1;
                     const stats = getBuildingStats(this.selectedInWorld.type as BuildingType, this.selectedInWorld.level);
                     this.selectedInWorld.maxHealth = stats.maxHealth;
@@ -5488,8 +5490,10 @@ export class MainScene extends Phaser.Scene {
                         gameManager.refreshCampCapacity(campLevels);
                     }
 
-                    // Persist upgrade to backend
-                    Backend.upgradeBuilding(this.userId, this.selectedInWorld.id);
+                    // NOTE: Do NOT call Backend.upgradeBuilding here.
+                    // App.tsx handleUpgradeBuilding already calls it before
+                    // invoking this scene command. Calling it twice would
+                    // double-increment the building level in the cached world.
 
                     return this.selectedInWorld.level;
                 }
