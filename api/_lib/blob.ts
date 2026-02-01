@@ -18,7 +18,12 @@ async function getBlobModule(): Promise<BlobModule> {
 }
 
 function isBlobNotFound(error: unknown) {
-  return typeof error === 'object' && error !== null && (error as { name?: string }).name === 'BlobNotFoundError';
+  if (!error || typeof error !== 'object') return false;
+  const err = error as { name?: string; message?: string; code?: string };
+  if (err.name === 'BlobNotFoundError') return true;
+  if (err.code === 'BlobNotFoundError') return true;
+  if (err.message && /does not exist|not found/i.test(err.message)) return true;
+  return false;
 }
 
 export async function readJson<T>(pathname: string): Promise<T | null> {
