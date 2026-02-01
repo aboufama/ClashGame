@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http.js';
 import { readJson, writeJson } from '../_lib/blob.js';
 import { requireAuth } from '../_lib/auth.js';
-import { clamp, randomId, type LedgerRecord, type WalletRecord, type SerializedWorld } from '../_lib/models.js';
+import { clamp, randomId, type LedgerRecord, type WalletRecord } from '../_lib/models.js';
 
 interface ApplyBody {
   delta: number;
@@ -54,12 +54,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     await writeJson(ledgerPath, ledger);
 
-    const basePath = `bases/${user.id}.json`;
-    const world = await readJson<SerializedWorld>(basePath);
-    if (world) {
-      world.resources.sol = nextBalance;
-      await writeJson(basePath, world);
-    }
+    // NOTE: We intentionally do NOT read/write the base blob here.
+    // The wallet is the source of truth for balance. Writing the whole
+    // base just to update resources.sol creates a race condition that
+    // can overwrite building positions/levels saved by the client.
+    // The base's resources.sol is synced from the wallet on load and save.
 
     sendJson(res, 200, { applied: true, sol: nextBalance });
   } catch (error) {

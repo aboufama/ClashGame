@@ -83,12 +83,54 @@ export class Backend {
 
     const task = (async () => {
       try {
-        const response = await Backend.apiPost<{ ok?: boolean; conflict?: boolean; world?: SerializedWorld }>(
-          '/api/bases/save',
-          { world, ifMatchRevision: world.revision ?? 0 }
-        );
-        if (response.world) {
-          Backend.setCachedWorld(userId, response.world);
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        const token = Auth.getToken();
+        if (token) headers.Authorization = `Bearer ${token}`;
+
+        const res = await fetch('/api/bases/save', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ world, ifMatchRevision: world.revision ?? 0 }),
+          cache: 'no-store'
+        });
+
+        if (res.ok) {
+          const data = await res.json() as { ok?: boolean; world?: SerializedWorld };
+          if (data.world) {
+            Backend.setCachedWorld(userId, data.world);
+          }
+        } else if (res.status === 409) {
+          // Conflict: server has a newer revision. Adopt server's revision
+          // but keep our local building layout, then retry once.
+          const data = await res.json() as { conflict: boolean; world?: SerializedWorld };
+          if (data.world) {
+            const serverRevision = data.world.revision ?? 0;
+            const current = Backend.getCachedWorld(userId);
+            if (current) {
+              current.revision = serverRevision;
+              current.resources = data.world.resources;
+              Backend.setCachedWorld(userId, current);
+              // Retry save with the corrected revision
+              const retryRes = await fetch('/api/bases/save', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ world: current, ifMatchRevision: serverRevision }),
+                cache: 'no-store'
+              });
+              if (retryRes.ok) {
+                const retryData = await retryRes.json() as { ok?: boolean; world?: SerializedWorld };
+                if (retryData.world) {
+                  Backend.setCachedWorld(userId, retryData.world);
+                }
+              } else {
+                console.warn('Save retry failed:', retryRes.status);
+              }
+            }
+          }
+        } else if (res.status === 401) {
+          console.warn('Save rejected: session expired or superseded');
+        } else {
+          console.warn('Save failed:', res.status);
         }
       } catch (error) {
         console.warn('Save failed:', error);

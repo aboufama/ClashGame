@@ -97,7 +97,11 @@ function App() {
       try {
         setLoading(true);
         const userId = user.id || 'default_player';
-        let world = await Backend.getWorld(userId);
+        // Always fetch fresh from server when online to avoid stale localStorage data.
+        // This prevents showing outdated building positions/levels after switching browsers.
+        let world = isOnline
+          ? await Backend.forceLoadFromCloud(userId)
+          : Backend.getCachedWorld(userId);
         const needsBootstrap = !world || !world.buildings || world.buildings.length === 0;
         if (needsBootstrap) {
           if (isOnline) {
@@ -114,7 +118,8 @@ function App() {
         }
 
         const offline = await Backend.calculateOfflineProduction(userId);
-        const latestWorld = await Backend.getWorld(userId);
+        // Re-read from cache which now has updated wallet balance from production
+        const latestWorld = Backend.getCachedWorld(userId);
         if (latestWorld) {
           world = latestWorld;
         }
@@ -216,6 +221,8 @@ function App() {
         Backend.clearCacheForUser(existingId);
       }
       const authUser = await Auth.login(playerId, deviceSecret);
+      // Clear any stale cache for the NEW user from a previous session on this browser
+      Backend.clearCacheForUser(authUser.id);
       setUser({ id: authUser.id, username: authUser.username, lastLogin: Date.now(), deviceSecret: authUser.deviceSecret });
       setIsOnline(true);
       setIsAccountOpen(false);
@@ -234,6 +241,8 @@ function App() {
         Backend.clearCacheForUser(existingId);
       }
       const authUser = await Auth.register(username, playerId, deviceSecret);
+      // Clear any stale cache for the NEW user from a previous session on this browser
+      Backend.clearCacheForUser(authUser.id);
       setUser({ id: authUser.id, username: authUser.username, lastLogin: Date.now(), deviceSecret: authUser.deviceSecret });
       setIsOnline(true);
       setIsAccountOpen(true);

@@ -44,10 +44,6 @@ export async function applyProduction(userId: string): Promise<{ wallet: WalletR
     wallet.balance = clamp(wallet.balance + added, 0, 1_000_000_000);
     wallet.updatedAt = now;
     await writeJson(walletPath, wallet);
-
-    world.resources = { sol: wallet.balance };
-    world.lastSaveTime = now;
-    await writeJson(basePath, world);
   } else if (!wallet.updatedAt) {
     wallet.updatedAt = now;
     await writeJson(walletPath, wallet);
