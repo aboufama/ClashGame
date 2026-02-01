@@ -86,6 +86,16 @@ function App() {
     };
   }, []);
 
+  // Safety net: flush any pending save when the user navigates away or reloads.
+  // Uses keepalive fetch so the request survives page unload.
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      Backend.flushBeforeUnload();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
   // Load World & Resources once user is known
   useEffect(() => {
     if (!user || !isOnline) {

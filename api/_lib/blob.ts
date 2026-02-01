@@ -31,7 +31,11 @@ export async function readJson<T>(pathname: string): Promise<T | null> {
     ensureBlobToken();
     const { head } = await getBlobModule();
     const meta = await head(pathname);
-    const response = await fetch(meta.url, { cache: 'no-store' });
+    // Add a cache-busting query parameter to bypass CDN edge caches.
+    // Without this, stale data can be served for up to cacheControlMaxAge seconds.
+    const url = new URL(meta.url);
+    url.searchParams.set('_t', String(Date.now()));
+    const response = await fetch(url.toString(), { cache: 'no-store' });
     if (!response.ok) return null;
     return (await response.json()) as T;
   } catch (error) {
@@ -40,16 +44,15 @@ export async function readJson<T>(pathname: string): Promise<T | null> {
   }
 }
 
-export async function writeJson<T>(pathname: string, data: T, cacheSeconds = 60): Promise<void> {
+export async function writeJson<T>(pathname: string, data: T, cacheSeconds = 0): Promise<void> {
   ensureBlobToken();
-  const safeCacheSeconds = Math.max(60, cacheSeconds);
   const { put } = await getBlobModule();
   await put(pathname, JSON.stringify(data), {
     access: 'public',
     addRandomSuffix: false,
     allowOverwrite: true,
     contentType: JSON_CONTENT_TYPE,
-    cacheControlMaxAge: safeCacheSeconds
+    cacheControlMaxAge: cacheSeconds
   });
 }
 

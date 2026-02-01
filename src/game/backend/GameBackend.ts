@@ -75,6 +75,21 @@ export class Backend {
   }
 
   /**
+   * Cancel any pending debounce timer and fire a save immediately.
+   * Used for critical operations (place/move/upgrade/remove building)
+   * that MUST reach the server before the user could reload the page.
+   */
+  private static saveImmediate(userId: string) {
+    if (!Auth.isOnlineMode()) return;
+    const existing = Backend.saveTimers.get(userId);
+    if (existing) {
+      window.clearTimeout(existing);
+      Backend.saveTimers.delete(userId);
+    }
+    void Backend.saveWorld(userId);
+  }
+
+  /**
    * Merge server metadata (revision, resources, lastSaveTime) into the
    * current local cache WITHOUT overwriting buildings/obstacles/army.
    * The local cache is always the authority for building data.
@@ -112,7 +127,8 @@ export class Backend {
           method: 'POST',
           headers,
           body: JSON.stringify({ world, ifMatchRevision: world.revision ?? 0 }),
-          cache: 'no-store'
+          cache: 'no-store',
+          keepalive: true
         });
 
         if (res.ok) {
@@ -136,7 +152,8 @@ export class Backend {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({ world: merged, ifMatchRevision: merged.revision ?? 0 }),
-                cache: 'no-store'
+                cache: 'no-store',
+                keepalive: true
               });
               if (retryRes.ok) {
                 const retryData = await retryRes.json() as { ok?: boolean; world?: SerializedWorld };
@@ -164,11 +181,50 @@ export class Backend {
   }
 
   static async flushPendingSave(): Promise<void> {
+    // Cancel any pending debounce timers so they don't fire after we flush
+    Backend.saveTimers.forEach(timer => window.clearTimeout(timer));
+    Backend.saveTimers.clear();
+
     const tasks = Array.from(Backend.inFlightSaves.values());
     await Promise.all(tasks);
     const user = Auth.getCurrentUser();
     if (user) {
       await Backend.saveWorld(user.id);
+    }
+  }
+
+  /**
+   * Fire-and-forget save for use in `beforeunload`.
+   * Uses `keepalive: true` so the request survives page navigation.
+   */
+  static flushBeforeUnload() {
+    const user = Auth.getCurrentUser();
+    if (!user || !Auth.isOnlineMode()) return;
+    const userId = user.id;
+
+    // Cancel any pending debounce timer
+    const existing = Backend.saveTimers.get(userId);
+    if (existing) {
+      window.clearTimeout(existing);
+      Backend.saveTimers.delete(userId);
+    }
+
+    const world = Backend.getCachedWorld(userId);
+    if (!world) return;
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const token = Auth.getToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    try {
+      fetch('/api/bases/save', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ world, ifMatchRevision: world.revision ?? 0 }),
+        keepalive: true
+      });
+    } catch {
+      // Nothing to do — page is unloading
     }
   }
 
@@ -320,7 +376,7 @@ export class Backend {
     world.buildings.push(building);
     world.lastSaveTime = Date.now();
     Backend.setCachedWorld(userId, world);
-    Backend.scheduleSave(userId);
+    Backend.saveImmediate(userId);
     return building;
   }
 
@@ -333,7 +389,7 @@ export class Backend {
     target.gridY = gridY;
     world.lastSaveTime = Date.now();
     Backend.setCachedWorld(userId, world);
-    Backend.scheduleSave(userId);
+    Backend.saveImmediate(userId);
     return true;
   }
 
@@ -343,7 +399,7 @@ export class Backend {
     world.buildings = world.buildings.filter(b => b.id !== buildingId);
     world.lastSaveTime = Date.now();
     Backend.setCachedWorld(userId, world);
-    Backend.scheduleSave(userId);
+    Backend.saveImmediate(userId);
   }
 
   static async upgradeBuilding(userId: string, buildingId: string) {
@@ -355,7 +411,7 @@ export class Backend {
     target.level = Math.min((target.level ?? 1) + 1, maxLevel);
     world.lastSaveTime = Date.now();
     Backend.setCachedWorld(userId, world);
-    Backend.scheduleSave(userId);
+    Backend.saveImmediate(userId);
   }
 
   static placeObstacle(userId: string, type: ObstacleType, gridX: number, gridY: number) {
@@ -365,7 +421,7 @@ export class Backend {
     const obstacle: SerializedObstacle = { id: randomId('o_'), type, gridX, gridY };
     world.obstacles.push(obstacle);
     Backend.setCachedWorld(userId, world);
-    Backend.scheduleSave(userId);
+    Backend.saveImmediate(userId);
   }
 
   static removeObstacle(userId: string, obstacleId: string) {
@@ -373,7 +429,7 @@ export class Backend {
     if (!world?.obstacles) return;
     world.obstacles = world.obstacles.filter(o => o.id !== obstacleId);
     Backend.setCachedWorld(userId, world);
-    Backend.scheduleSave(userId);
+    Backend.saveImmediate(userId);
   }
 
   static async deleteWorld(userId: string) {
