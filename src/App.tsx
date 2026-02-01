@@ -32,6 +32,7 @@ function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isOnline, setIsOnline] = useState(false);
   const [isAccountOpen, setIsAccountOpen] = useState(false);
+  const isLockedOut = !user || !isOnline;
 
   const [loading, setLoading] = useState(true);
   const [resources, setResources] = useState({ sol: 0 });
@@ -87,7 +88,7 @@ function App() {
 
   // Load World & Resources once user is known
   useEffect(() => {
-    if (!user) {
+    if (!user || !isOnline) {
       setLoading(false);
       return;
     }
@@ -261,7 +262,7 @@ function App() {
 
   useEffect(() => {
     // Ensure game is destroyed to clean up state
-    if (!user) {
+    if (!user || !isOnline) {
       gameManager.clearUI();
       if (gameRef.current) {
         try {
@@ -789,7 +790,7 @@ function App() {
           <p>STABILIZING BASE COORDS...</p>
         </div>
       )}
-      <div id="game-container" />
+      <div id="game-container" style={{ display: isLockedOut ? 'none' : 'block' }} />
 
       <Hud
         view={view}
@@ -842,7 +843,7 @@ function App() {
       <DebugMenu isOpen={isDebugOpen} />
 
       <AccountModal
-        isOpen={isAccountOpen || !user}
+        isOpen={isAccountOpen || isLockedOut}
         currentUser={user}
         isOnline={isOnline}
         onClose={() => setIsAccountOpen(false)}
@@ -850,6 +851,18 @@ function App() {
         onRegister={handleRegisterAccount}
         onLogout={handleLogoutAccount}
       />
+
+      {isLockedOut && (
+        <div className="auth-lock-overlay">
+          <div className="auth-lock-panel">
+            <h2>LOGIN REQUIRED</h2>
+            <p>Sign in to access your base and play online.</p>
+            <button className="action-btn" onClick={() => setIsAccountOpen(true)}>
+              OPEN LOGIN
+            </button>
+          </div>
+        </div>
+      )}
 
       <TrainingModal
         isOpen={isTrainingOpen}

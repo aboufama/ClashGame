@@ -35,12 +35,12 @@ export function AccountModal({
     if (!isOpen) return;
     setError(null);
     setCreatedSecret(null);
-    if (currentUser) {
+    if (currentUser && isOnline) {
       setMode('current');
     } else {
       setMode('login');
     }
-  }, [isOpen, currentUser]);
+  }, [isOpen, currentUser, isOnline]);
 
   const copyText = (value?: string) => {
     if (!value) return;
@@ -134,6 +134,7 @@ export function AccountModal({
         </div>
 
         {error && <div className="account-error">{error}</div>}
+        {busy && !error && <div className="account-warning">Signing in... please wait.</div>}
 
         {mode === 'current' && currentUser && (
           <div className="account-panel">
