@@ -74,12 +74,33 @@ export class Backend {
     Backend.saveTimers.set(userId, handle);
   }
 
-  private static async saveWorld(userId: string) {
-    const world = Backend.getCachedWorld(userId);
-    if (!world || !Auth.isOnlineMode()) return;
+  /**
+   * Merge server metadata (revision, resources, lastSaveTime) into the
+   * current local cache WITHOUT overwriting buildings/obstacles/army.
+   * The local cache is always the authority for building data.
+   */
+  private static mergeServerResponse(userId: string, serverWorld: SerializedWorld) {
+    const current = Backend.getCachedWorld(userId);
+    if (!current) {
+      Backend.setCachedWorld(userId, serverWorld);
+      return;
+    }
+    current.revision = serverWorld.revision;
+    current.resources = serverWorld.resources;
+    current.lastSaveTime = serverWorld.lastSaveTime;
+    Backend.setCachedWorld(userId, current);
+  }
 
+  private static async saveWorld(userId: string) {
+    // Wait for any in-flight save to finish BEFORE reading the cache.
+    // This ensures we have the latest revision number.
     const previous = Backend.inFlightSaves.get(userId);
     if (previous) await previous;
+
+    // Read the cache AFTER the previous save settled so we get the
+    // up-to-date revision and the latest local building changes.
+    const world = Backend.getCachedWorld(userId);
+    if (!world || !Auth.isOnlineMode()) return;
 
     const task = (async () => {
       try {
@@ -97,30 +118,30 @@ export class Backend {
         if (res.ok) {
           const data = await res.json() as { ok?: boolean; world?: SerializedWorld };
           if (data.world) {
-            Backend.setCachedWorld(userId, data.world);
+            // Only adopt revision/resources/timestamp — never overwrite
+            // local buildings/obstacles/army which may have been modified
+            // while this save was in-flight.
+            Backend.mergeServerResponse(userId, data.world);
           }
         } else if (res.status === 409) {
-          // Conflict: server has a newer revision. Adopt server's revision
-          // but keep our local building layout, then retry once.
+          // Conflict: server has a newer revision. Adopt the server's
+          // revision into our latest local cache and retry once.
           const data = await res.json() as { conflict: boolean; world?: SerializedWorld };
           if (data.world) {
-            const serverRevision = data.world.revision ?? 0;
-            const current = Backend.getCachedWorld(userId);
-            if (current) {
-              current.revision = serverRevision;
-              current.resources = data.world.resources;
-              Backend.setCachedWorld(userId, current);
-              // Retry save with the corrected revision
+            Backend.mergeServerResponse(userId, data.world);
+            // Re-read the cache (now with correct revision but local buildings intact)
+            const merged = Backend.getCachedWorld(userId);
+            if (merged) {
               const retryRes = await fetch('/api/bases/save', {
                 method: 'POST',
                 headers,
-                body: JSON.stringify({ world: current, ifMatchRevision: serverRevision }),
+                body: JSON.stringify({ world: merged, ifMatchRevision: merged.revision ?? 0 }),
                 cache: 'no-store'
               });
               if (retryRes.ok) {
                 const retryData = await retryRes.json() as { ok?: boolean; world?: SerializedWorld };
                 if (retryData.world) {
-                  Backend.setCachedWorld(userId, retryData.world);
+                  Backend.mergeServerResponse(userId, retryData.world);
                 }
               } else {
                 console.warn('Save retry failed:', retryRes.status);
