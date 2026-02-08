@@ -290,6 +290,8 @@ export class MainScene extends Phaser.Scene {
 
         this.tempGraphics = this.add.graphics().setVisible(false);
         this.createIsoGrid();
+        // Center immediately so the first rendered frame is in the village center.
+        this.centerCamera();
         this.createUI();
 
         this.selectionGraphics = this.add.graphics();

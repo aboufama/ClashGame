@@ -1,10 +1,21 @@
 interface CloudOverlayProps {
   show: boolean;
   opening: boolean;
+  loading?: boolean;
+  loadingText?: string;
+  loadingProgress?: number;
 }
 
-export function CloudOverlay({ show, opening }: CloudOverlayProps) {
+export function CloudOverlay({
+  show,
+  opening,
+  loading = false,
+  loadingText = 'Loading village...',
+  loadingProgress = 0
+}: CloudOverlayProps) {
   if (!show) return null;
+
+  const clampedProgress = Math.max(0, Math.min(100, Math.round(loadingProgress)));
 
   return (
     <div className={`cloud-overlay ${opening ? 'opening' : ''}`}>
@@ -21,6 +32,15 @@ export function CloudOverlay({ show, opening }: CloudOverlayProps) {
           }}
         />
       ))}
+      {loading && (
+        <div className="cloud-loading-panel">
+          <div className="cloud-loading-title">{loadingText}</div>
+          <div className="cloud-loading-track">
+            <div className="cloud-loading-fill" style={{ width: `${clampedProgress}%` }} />
+          </div>
+          <div className="cloud-loading-percent">{clampedProgress}%</div>
+        </div>
+      )}
     </div>
   );
 }

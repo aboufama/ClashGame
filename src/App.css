@@ -1203,9 +1203,57 @@ button:disabled {
     left: 0;
     width: 100vw;
     height: 100vh;
-    z-index: 5000;
+    z-index: 2147483000;
     pointer-events: all;
     overflow: hidden;
+}
+
+.cloud-loading-panel {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(560px, 84vw);
+    padding: 20px 22px;
+    background: rgba(14, 24, 40, 0.88);
+    border: 3px solid #d9e8ff;
+    box-shadow:
+        0 10px 30px rgba(0, 0, 0, 0.35),
+        inset 0 0 20px rgba(255, 255, 255, 0.16);
+    z-index: 3;
+    text-align: center;
+    pointer-events: none;
+}
+
+.cloud-loading-title {
+    font-size: 10px;
+    color: #f6fbff;
+    text-transform: uppercase;
+    letter-spacing: 1.3px;
+    text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.8);
+}
+
+.cloud-loading-track {
+    margin-top: 14px;
+    height: 18px;
+    background: rgba(6, 10, 22, 0.9);
+    border: 2px solid #d9e8ff;
+    overflow: hidden;
+}
+
+.cloud-loading-fill {
+    height: 100%;
+    width: 0;
+    background: linear-gradient(90deg, #a3d3ff 0%, #f4fbff 100%);
+    box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.5);
+    transition: width 220ms ease;
+}
+
+.cloud-loading-percent {
+    margin-top: 8px;
+    font-size: 9px;
+    color: #e7f2ff;
+    letter-spacing: 1px;
 }
 
 /* Left cloud - solid white square */

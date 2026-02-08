@@ -35,6 +35,13 @@ function App() {
   const isLockedOut = !user || !isOnline;
 
   const [loading, setLoading] = useState(true);
+  const [showCloudOverlay, setShowCloudOverlay] = useState(true);
+  const [cloudOpening, setCloudOpening] = useState(false);
+  const [cloudOverlayLoading, setCloudOverlayLoading] = useState(true);
+  const [cloudLoadingText, setCloudLoadingText] = useState('SYNCING VILLAGE DATA...');
+  const [cloudLoadingProgress, setCloudLoadingProgress] = useState(4);
+  const cloudOpenTimerRef = useRef<number | null>(null);
+  const cloudHideTimerRef = useRef<number | null>(null);
   const [resources, setResources] = useState({ sol: 0 });
   const resourcesRef = useRef(resources);
   const [army, setArmy] = useState({ warrior: 0, archer: 0, giant: 0, ward: 0, recursion: 0, ram: 0, stormmage: 0, golem: 0, sharpshooter: 0, mobilemortar: 0, davincitank: 0, phalanx: 0 });
@@ -127,24 +134,80 @@ function App() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, []);
 
+  const clearCloudTimers = useCallback(() => {
+    if (cloudOpenTimerRef.current) {
+      window.clearTimeout(cloudOpenTimerRef.current);
+      cloudOpenTimerRef.current = null;
+    }
+    if (cloudHideTimerRef.current) {
+      window.clearTimeout(cloudHideTimerRef.current);
+      cloudHideTimerRef.current = null;
+    }
+  }, []);
+
+  const beginVillageLoadCloud = useCallback((message: string, progress: number) => {
+    clearCloudTimers();
+    setCloudOpening(false);
+    setCloudOverlayLoading(true);
+    setCloudLoadingText(message);
+    setCloudLoadingProgress(Math.max(0, Math.min(100, Math.floor(progress))));
+    setShowCloudOverlay(true);
+  }, [clearCloudTimers]);
+
+  const updateVillageLoadCloud = useCallback((message: string, progress: number) => {
+    setCloudLoadingText(message);
+    setCloudLoadingProgress(Math.max(0, Math.min(100, Math.floor(progress))));
+  }, []);
+
+  const revealVillageFromCloud = useCallback((message: string = 'VILLAGE READY') => {
+    clearCloudTimers();
+    setCloudLoadingText(message);
+    setCloudLoadingProgress(100);
+
+    cloudOpenTimerRef.current = window.setTimeout(() => {
+      setCloudOverlayLoading(false);
+      setCloudOpening(true);
+      cloudHideTimerRef.current = window.setTimeout(() => {
+        setShowCloudOverlay(false);
+        setCloudOpening(false);
+      }, 650);
+    }, 220);
+  }, [clearCloudTimers]);
+
+  useEffect(() => {
+    return () => {
+      clearCloudTimers();
+    };
+  }, [clearCloudTimers]);
+
   // Load World & Resources once user is known
   useEffect(() => {
     if (!user || !isOnline) {
+      clearCloudTimers();
       setLoading(false);
+      setCloudOverlayLoading(false);
+      setShowCloudOverlay(false);
+      setCloudOpening(false);
       return;
     }
 
     const init = async () => {
+      let loaded = false;
       try {
         setLoading(true);
+        beginVillageLoadCloud('CONTACTING COMMAND LINK...', 8);
         const userId = user.id || 'default_player';
+
         // Always fetch fresh from server when online to avoid stale localStorage data.
         // This prevents showing outdated building positions/levels after switching browsers.
+        updateVillageLoadCloud('FETCHING VILLAGE SNAPSHOT...', 24);
         let world = isOnline
           ? await Backend.forceLoadFromCloud(userId)
           : Backend.getCachedWorld(userId);
+
         const needsBootstrap = !world || !world.buildings || world.buildings.length === 0;
         if (needsBootstrap) {
+          updateVillageLoadCloud('BOOTSTRAPPING COMMAND CENTER...', 40);
           if (isOnline) {
             const bootstrapped = await Backend.bootstrapBase(userId);
             if (bootstrapped) {
@@ -158,7 +221,9 @@ function App() {
           }
         }
 
+        updateVillageLoadCloud('RECONCILING OFFLINE PRODUCTION...', 58);
         const offline = await Backend.calculateOfflineProduction(userId);
+
         // Re-read from cache which now has updated wallet balance from production
         const latestWorld = Backend.getCachedWorld(userId);
         if (latestWorld) {
@@ -169,6 +234,7 @@ function App() {
           return;
         }
 
+        updateVillageLoadCloud('SYNCING RESOURCES & ARMY...', 72);
         setResources({
           sol: Math.max(0, world.resources.sol)
         });
@@ -186,6 +252,7 @@ function App() {
         }
 
         // Force scene to update username now that we have user and world
+        updateVillageLoadCloud('ALIGNING CAMERA & VILLAGE VIEW...', 88);
         const scene = gameRef.current?.scene.getScene('MainScene') as any;
         if (scene && scene.updateUsername) {
           scene.updateUsername(user.username);
@@ -193,21 +260,22 @@ function App() {
 
         // IMPORTANT: Trigger Phaser to reload the base using the now-known userId
         await gameManager.loadBase();
+        updateVillageLoadCloud('VILLAGE READY', 98);
+        loaded = true;
 
         if (offline.sol > 0) {
           console.log(`Welcome back ${user.username}! Offline Production: ${offline.sol} SOL`);
         }
       } catch (error) {
         console.error('Error initializing game:', error);
-        // CRITICAL: If initialization fails, don't just proceed or it might overwrite cloud data
-        setLoading(false);
       } finally {
         setLoading(false);
+        revealVillageFromCloud(loaded ? 'VILLAGE READY' : 'LOAD ERROR - RETRY');
       }
     };
 
     init();
-  }, [user, isOnline]);
+  }, [user, isOnline, beginVillageLoadCloud, updateVillageLoadCloud, revealVillageFromCloud, clearCloudTimers]);
 
   // Persist resources & army
   useEffect(() => {
@@ -230,7 +298,6 @@ function App() {
   const [selectedInMap, setSelectedInMap] = useState<string | null>(null);
   const [selectedBuildingInfo, setSelectedBuildingInfo] = useState<{ id: string; type: BuildingType; level: number } | null>(null);
   const [battleStats, setBattleStats] = useState({ destruction: 0, solLooted: 0 });
-  const [showCloudOverlay, setShowCloudOverlay] = useState(false);
   const [battleStarted, setBattleStarted] = useState(false); // Track if first troop deployed
   const [isExiting, setIsExiting] = useState(false);
   const [showBattleResults, setShowBattleResults] = useState(false);
@@ -250,8 +317,6 @@ function App() {
     battleStatsRef.current = battleStats;
     resourcesRef.current = resources;
   }, [selectedInMap, army, selectedTroopType, battleStats, resources]);
-
-  const [cloudOpening, setCloudOpening] = useState(false);
 
   const handleLoginAccount = async (playerId: string, deviceSecret: string) => {
     setLoading(true);
@@ -345,12 +410,17 @@ function App() {
 
     gameManager.registerUI({
       showCloudOverlay: () => {
+        clearCloudTimers();
+        setCloudOverlayLoading(false);
+        setCloudLoadingProgress(0);
         setCloudOpening(false);
         setShowCloudOverlay(true);
       },
       hideCloudOverlay: () => {
+        clearCloudTimers();
+        setCloudOverlayLoading(false);
         setCloudOpening(true); // Start opening animation
-        setTimeout(() => {
+        cloudHideTimerRef.current = window.setTimeout(() => {
           setShowCloudOverlay(false);
           setCloudOpening(false);
         }, 600); // Match CSS animation duration
@@ -502,7 +572,7 @@ function App() {
         gameRef.current = null;
       }
     };
-  }, [user, isOnline, applySolDelta]);
+  }, [user, isOnline, applySolDelta, clearCloudTimers]);
 
 
   const refreshBuildingCounts = useCallback(async () => {
@@ -841,22 +911,19 @@ function App() {
   if (!user) {
     return (
       <div className="app-container">
-        <div className="loading-spinner-overlay">
-          <div className="spinner"></div>
-          <p>INITIALIZING...</p>
-        </div>
+        <CloudOverlay
+          show={true}
+          opening={false}
+          loading={true}
+          loadingText="INITIALIZING COMMAND..."
+          loadingProgress={20}
+        />
       </div>
     );
   }
 
   return (
     <div className="app-container">
-      {loading && (
-        <div className="loading-spinner-overlay">
-          <div className="spinner"></div>
-          <p>STABILIZING BASE COORDS...</p>
-        </div>
-      )}
       <div id="game-container" style={{ display: isLockedOut ? 'none' : 'block' }} />
 
       <Hud
@@ -958,7 +1025,13 @@ function App() {
         onSelect={handleSelect}
       />
 
-      <CloudOverlay show={showCloudOverlay} opening={cloudOpening} />
+      <CloudOverlay
+        show={showCloudOverlay}
+        opening={cloudOpening}
+        loading={cloudOverlayLoading}
+        loadingText={cloudLoadingText}
+        loadingProgress={cloudLoadingProgress}
+      />
 
       <BattleResultsModal
         isOpen={showBattleResults}
