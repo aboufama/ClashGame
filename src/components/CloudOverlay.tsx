@@ -16,9 +16,12 @@ export function CloudOverlay({
   if (!show) return null;
 
   const clampedProgress = Math.max(0, Math.min(100, Math.round(loadingProgress)));
+  const classes = ['cloud-overlay'];
+  if (opening) classes.push('opening');
+  if (loading) classes.push('loading');
 
   return (
-    <div className={`cloud-overlay ${opening ? 'opening' : ''}`}>
+    <div className={classes.join(' ')}>
       {[...Array(20)].map((_, i) => (
         <div
           key={i}
