@@ -2,7 +2,6 @@ interface CloudOverlayProps {
   show: boolean;
   opening: boolean;
   loading?: boolean;
-  loadingText?: string;
   loadingProgress?: number;
 }
 
@@ -10,7 +9,6 @@ export function CloudOverlay({
   show,
   opening,
   loading = false,
-  loadingText = 'Loading village...',
   loadingProgress = 0
 }: CloudOverlayProps) {
   if (!show) return null;
@@ -37,7 +35,6 @@ export function CloudOverlay({
       ))}
       {loading && (
         <div className="cloud-loading-panel">
-          <div className="cloud-loading-title">{loadingText}</div>
           <div className="cloud-loading-track">
             <div className="cloud-loading-fill" style={{ width: `${clampedProgress}%` }} />
           </div>

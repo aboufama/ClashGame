@@ -38,7 +38,6 @@ function App() {
   const [showCloudOverlay, setShowCloudOverlay] = useState(true);
   const [cloudOpening, setCloudOpening] = useState(false);
   const [cloudOverlayLoading, setCloudOverlayLoading] = useState(true);
-  const [cloudLoadingText, setCloudLoadingText] = useState('SYNCING VILLAGE DATA...');
   const [cloudLoadingProgress, setCloudLoadingProgress] = useState(4);
   const cloudOpenTimerRef = useRef<number | null>(null);
   const cloudHideTimerRef = useRef<number | null>(null);
@@ -145,23 +144,20 @@ function App() {
     }
   }, []);
 
-  const beginVillageLoadCloud = useCallback((message: string, progress: number) => {
+  const beginVillageLoadCloud = useCallback((progress: number) => {
     clearCloudTimers();
     setCloudOpening(false);
     setCloudOverlayLoading(true);
-    setCloudLoadingText(message);
     setCloudLoadingProgress(Math.max(0, Math.min(100, Math.floor(progress))));
     setShowCloudOverlay(true);
   }, [clearCloudTimers]);
 
-  const updateVillageLoadCloud = useCallback((message: string, progress: number) => {
-    setCloudLoadingText(message);
+  const updateVillageLoadCloud = useCallback((progress: number) => {
     setCloudLoadingProgress(Math.max(0, Math.min(100, Math.floor(progress))));
   }, []);
 
-  const revealVillageFromCloud = useCallback((message: string = 'VILLAGE READY') => {
+  const revealVillageFromCloud = useCallback(() => {
     clearCloudTimers();
-    setCloudLoadingText(message);
     setCloudLoadingProgress(100);
 
     cloudOpenTimerRef.current = window.setTimeout(() => {
@@ -195,19 +191,19 @@ function App() {
       let loaded = false;
       try {
         setLoading(true);
-        beginVillageLoadCloud('CONTACTING COMMAND LINK...', 8);
+        beginVillageLoadCloud(8);
         const userId = user.id || 'default_player';
 
         // Always fetch fresh from server when online to avoid stale localStorage data.
         // This prevents showing outdated building positions/levels after switching browsers.
-        updateVillageLoadCloud('FETCHING VILLAGE SNAPSHOT...', 24);
+        updateVillageLoadCloud(24);
         let world = isOnline
           ? await Backend.forceLoadFromCloud(userId)
           : Backend.getCachedWorld(userId);
 
         const needsBootstrap = !world || !world.buildings || world.buildings.length === 0;
         if (needsBootstrap) {
-          updateVillageLoadCloud('BOOTSTRAPPING COMMAND CENTER...', 40);
+          updateVillageLoadCloud(40);
           if (isOnline) {
             const bootstrapped = await Backend.bootstrapBase(userId);
             if (bootstrapped) {
@@ -221,7 +217,7 @@ function App() {
           }
         }
 
-        updateVillageLoadCloud('RECONCILING OFFLINE PRODUCTION...', 58);
+        updateVillageLoadCloud(58);
         const offline = await Backend.calculateOfflineProduction(userId);
 
         // Re-read from cache which now has updated wallet balance from production
@@ -234,7 +230,7 @@ function App() {
           return;
         }
 
-        updateVillageLoadCloud('SYNCING RESOURCES & ARMY...', 72);
+        updateVillageLoadCloud(72);
         setResources({
           sol: Math.max(0, world.resources.sol)
         });
@@ -252,7 +248,7 @@ function App() {
         }
 
         // Force scene to update username now that we have user and world
-        updateVillageLoadCloud('ALIGNING CAMERA & VILLAGE VIEW...', 88);
+        updateVillageLoadCloud(88);
         const scene = gameRef.current?.scene.getScene('MainScene') as any;
         if (scene && scene.updateUsername) {
           scene.updateUsername(user.username);
@@ -260,7 +256,7 @@ function App() {
 
         // IMPORTANT: Trigger Phaser to reload the base using the now-known userId
         await gameManager.loadBase();
-        updateVillageLoadCloud('VILLAGE READY', 98);
+        updateVillageLoadCloud(98);
         loaded = true;
 
         if (offline.sol > 0) {
@@ -270,7 +266,10 @@ function App() {
         console.error('Error initializing game:', error);
       } finally {
         setLoading(false);
-        revealVillageFromCloud(loaded ? 'VILLAGE READY' : 'LOAD ERROR - RETRY');
+        if (!loaded) {
+          setCloudLoadingProgress(100);
+        }
+        revealVillageFromCloud();
       }
     };
 
@@ -915,7 +914,6 @@ function App() {
           show={true}
           opening={false}
           loading={true}
-          loadingText="INITIALIZING COMMAND..."
           loadingProgress={20}
         />
       </div>
@@ -1029,7 +1027,6 @@ function App() {
         show={showCloudOverlay}
         opening={cloudOpening}
         loading={cloudOverlayLoading}
-        loadingText={cloudLoadingText}
         loadingProgress={cloudLoadingProgress}
       />
 
