@@ -3,19 +3,16 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { readJson, writeJson } from './blob.js';
 import { sendError } from './http.js';
 import type { SessionRecord, UserRecord } from './models.js';
+import { randomId } from './models.js';
 
-const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
+const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 
 export function hashSecret(secret: string) {
   return crypto.createHash('sha256').update(secret).digest('hex');
 }
 
-export function randomId(prefix = '') {
-  return `${prefix}${crypto.randomBytes(12).toString('hex')}`;
-}
-
 export function sanitizeId(input: string, fallbackPrefix = 'p_') {
-  const cleaned = input.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48);
+  const cleaned = String(input || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
   return cleaned.length > 0 ? cleaned : randomId(fallbackPrefix);
 }
 
@@ -30,14 +27,15 @@ function getBearerToken(req: VercelRequest) {
 export async function createSession(userId: string): Promise<SessionRecord> {
   const token = randomId('sess_');
   const now = Date.now();
-  const record: SessionRecord = {
+  const session: SessionRecord = {
     token,
     userId,
     createdAt: now,
     expiresAt: now + SESSION_TTL_MS
   };
-  await writeJson(`sessions/${token}.json`, record);
-  return record;
+
+  await writeJson(`sessions/${token}.json`, session);
+  return session;
 }
 
 export async function requireAuth(req: VercelRequest, res: VercelResponse): Promise<{ user: UserRecord; token: string } | null> {
@@ -48,7 +46,7 @@ export async function requireAuth(req: VercelRequest, res: VercelResponse): Prom
   }
 
   const session = await readJson<SessionRecord>(`sessions/${token}.json`);
-  if (!session || session.expiresAt < Date.now()) {
+  if (!session || session.expiresAt <= Date.now()) {
     sendError(res, 401, 'Session expired');
     return null;
   }
@@ -59,7 +57,7 @@ export async function requireAuth(req: VercelRequest, res: VercelResponse): Prom
     return null;
   }
 
-  if (user.activeSessionId !== token || (user.sessionExpiresAt ?? 0) < Date.now()) {
+  if (user.activeSessionId !== token || (user.sessionExpiresAt ?? 0) <= Date.now()) {
     sendError(res, 401, 'Session superseded');
     return null;
   }

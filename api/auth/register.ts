@@ -1,8 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http.js';
 import { readJson, writeJson } from '../_lib/blob.js';
-import { createSession, hashSecret, randomId, sanitizeId } from '../_lib/auth.js';
-import { buildStarterWorld, sanitizeUsername, type UserRecord, type WalletRecord, type LedgerRecord, type NotificationStore, type SerializedWorld } from '../_lib/models.js';
+import { createSession, hashSecret, sanitizeId } from '../_lib/auth.js';
+import { ensurePlayerState, materializeState } from '../_lib/game_state.js';
+import { randomId, sanitizeUsername, type UserRecord } from '../_lib/models.js';
 import { upsertUserIndex } from '../_lib/indexes.js';
 
 interface RegisterBody {
@@ -26,20 +27,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const username = sanitizeUsername(body.username);
-    const playerId = body.playerId ? sanitizeId(body.playerId) : randomId('p_');
-    const secretHash = hashSecret(deviceSecret);
     const now = Date.now();
+    const playerId = body.playerId ? sanitizeId(body.playerId) : randomId('p_');
+    const username = sanitizeUsername(body.username);
+    const secretHash = hashSecret(deviceSecret);
 
     const existing = await readJson<UserRecord>(`users/${playerId}.json`);
-    let user: UserRecord;
 
+    let user: UserRecord;
     if (existing) {
       if (existing.secretHash !== secretHash) {
         sendError(res, 403, 'Invalid credentials');
         return;
       }
-      user = { ...existing, lastSeen: now };
+      user = {
+        ...existing,
+        username: existing.username || username,
+        lastSeen: now
+      };
     } else {
       user = {
         id: playerId,
@@ -57,30 +62,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     await writeJson(`users/${user.id}.json`, user);
 
-    const wallet: WalletRecord = (await readJson<WalletRecord>(`wallets/${user.id}.json`)) ?? {
-      balance: 1000,
-      updatedAt: now
-    };
-    await writeJson(`wallets/${user.id}.json`, wallet);
-
-    const basePath = `bases/${user.id}.json`;
-    let base = await readJson<SerializedWorld>(basePath);
-    if (!base || !base.buildings || base.buildings.length === 0) {
-      base = buildStarterWorld(user.id, user.username);
-      base.resources.sol = wallet.balance;
-      await writeJson(basePath, base);
-    }
-
-    const ledger: LedgerRecord = (await readJson<LedgerRecord>(`ledger/${user.id}.json`)) ?? { events: [] };
-    await writeJson(`ledger/${user.id}.json`, ledger);
-
-    const notifications: NotificationStore = (await readJson<NotificationStore>(`notifications/${user.id}.json`)) ?? { items: [] };
-    await writeJson(`notifications/${user.id}.json`, notifications);
+    await ensurePlayerState(user.id, user.username);
+    const state = await materializeState(user.id, user.username, now);
 
     await upsertUserIndex({
       id: user.id,
       username: user.username,
-      buildingCount: base?.buildings?.length ?? 0,
+      buildingCount: state.world.buildings.length,
       lastSeen: now,
       trophies: user.trophies ?? 0
     });

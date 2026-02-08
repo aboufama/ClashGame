@@ -388,7 +388,7 @@ export class Backend {
     }
   }
 
-  static async applyResourceDelta(userId: string, delta: number, reason: string, refId?: string): Promise<ResourceDeltaResult> {
+  static async applyResourceDelta(userId: string, delta: number, reason: string, refId?: string, requestId?: string): Promise<ResourceDeltaResult> {
     if (!Auth.isOnlineMode()) {
       const world = Backend.getCachedWorld(userId);
       if (world) {
@@ -398,7 +398,7 @@ export class Backend {
       return { applied: true, sol: world?.resources.sol ?? 0 };
     }
 
-    const response = await Backend.apiPost<{ applied: boolean; sol: number }>('/api/resources/apply', { delta, reason, refId });
+    const response = await Backend.apiPost<{ applied: boolean; sol: number }>('/api/resources/apply', { delta, reason, refId, requestId });
     const world = Backend.getCachedWorld(userId);
     if (world && typeof response.sol === 'number') {
       world.resources.sol = response.sol;

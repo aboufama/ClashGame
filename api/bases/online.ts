@@ -1,9 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, sendError, sendJson } from '../_lib/http.js';
-import { readJson } from '../_lib/blob.js';
 import { requireAuth } from '../_lib/auth.js';
-import type { SerializedWorld, WalletRecord, UserRecord } from '../_lib/models.js';
 import { readUsersIndex } from '../_lib/indexes.js';
+import { readJson } from '../_lib/blob.js';
+import { ensurePlayerState, materializeState } from '../_lib/game_state.js';
+import type { UserRecord } from '../_lib/models.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleOptions(req, res)) return;
@@ -26,18 +27,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const pick = candidates[Math.floor(Math.random() * candidates.length)];
-    const world = await readJson<SerializedWorld>(`bases/${pick.id}.json`);
-    if (!world) {
-      sendJson(res, 200, { world: null });
-      return;
-    }
-
     const targetUser = await readJson<UserRecord>(`users/${pick.id}.json`);
-    const wallet = await readJson<WalletRecord>(`wallets/${pick.id}.json`);
-    if (wallet) world.resources.sol = wallet.balance;
-    if (targetUser) world.username = targetUser.username;
+    const username = targetUser?.username || pick.username;
 
-    sendJson(res, 200, { world });
+    await ensurePlayerState(pick.id, username);
+    const targetState = await materializeState(pick.id, username, Date.now());
+
+    sendJson(res, 200, { world: targetState.world });
   } catch (error) {
     console.error('online error', error);
     sendError(res, 500, 'Failed to find online base');

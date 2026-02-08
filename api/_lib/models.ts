@@ -1,5 +1,8 @@
 import crypto from 'crypto';
 
+export const STARTING_BALANCE = 1000;
+export const MAX_BALANCE = 1_000_000_000;
+
 export interface PlayerResources {
   sol: number;
 }
@@ -54,18 +57,6 @@ export interface WalletRecord {
   updatedAt: number;
 }
 
-export interface LedgerEvent {
-  id: string;
-  delta: number;
-  reason: string;
-  refId?: string;
-  time: number;
-}
-
-export interface LedgerRecord {
-  events: LedgerEvent[];
-}
-
 export interface NotificationRecord {
   id: string;
   attackerId: string;
@@ -93,6 +84,52 @@ export interface UsersIndex {
   updatedAt: number;
 }
 
+export interface GameSnapshot {
+  schemaVersion: 1;
+  createdAt: number;
+  world: SerializedWorld;
+  baseBalance: number;
+}
+
+export interface WorldPatch {
+  upsertBuildings: SerializedBuilding[];
+  removeBuildingIds: string[];
+  upsertObstacles: SerializedObstacle[];
+  removeObstacleIds: string[];
+  army?: Record<string, number>;
+}
+
+export interface WorldPatchEventPayload {
+  patch: WorldPatch;
+}
+
+export interface ResourceDeltaEventPayload {
+  delta: number;
+  reason: string;
+  refId?: string;
+}
+
+export type GameEventPayload = WorldPatchEventPayload | ResourceDeltaEventPayload;
+
+export type GameEventKind = 'world_patch' | 'resource_delta';
+
+export interface GameEvent {
+  id: string;
+  kind: GameEventKind;
+  at: number;
+  requestKey?: string;
+  payload: GameEventPayload;
+}
+
+export interface MaterializedState {
+  world: SerializedWorld;
+  balance: number;
+  revision: number;
+  lastMutationAt: number;
+  productionSinceLastMutation: number;
+  requestKeys: Set<string>;
+}
+
 export function randomId(prefix = '') {
   return `${prefix}${crypto.randomBytes(8).toString('hex')}`;
 }
@@ -107,10 +144,68 @@ export function sanitizeUsername(username?: string) {
   return `Player-${crypto.randomBytes(2).toString('hex')}`;
 }
 
+function toFiniteInt(value: unknown, fallback: number) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.floor(n);
+}
+
+export function sanitizeBuilding(input: SerializedBuilding): SerializedBuilding {
+  return {
+    id: String(input.id || randomId('b_')).slice(0, 80),
+    type: String(input.type || 'town_hall').slice(0, 64),
+    gridX: toFiniteInt(input.gridX, 0),
+    gridY: toFiniteInt(input.gridY, 0),
+    level: Math.max(1, toFiniteInt(input.level, 1))
+  };
+}
+
+export function sanitizeObstacle(input: SerializedObstacle): SerializedObstacle {
+  return {
+    id: String(input.id || randomId('o_')).slice(0, 80),
+    type: String(input.type || 'rock_small').slice(0, 64),
+    gridX: toFiniteInt(input.gridX, 0),
+    gridY: toFiniteInt(input.gridY, 0)
+  };
+}
+
+export function sanitizeArmy(input: Record<string, number> | undefined): Record<string, number> {
+  if (!input || typeof input !== 'object') return {};
+  const entries = Object.entries(input)
+    .map(([type, count]) => [String(type), Math.max(0, toFiniteInt(count, 0))] as const)
+    .filter(([, count]) => count > 0)
+    .sort((a, b) => a[0].localeCompare(b[0]));
+
+  const normalized: Record<string, number> = {};
+  for (const [type, count] of entries) normalized[type] = count;
+  return normalized;
+}
+
+export function normalizeWorldInput(input: SerializedWorld, ownerId: string, username: string): SerializedWorld {
+  const buildings = Array.isArray(input.buildings) ? input.buildings.map(sanitizeBuilding) : [];
+  const obstacles = Array.isArray(input.obstacles) ? input.obstacles.map(sanitizeObstacle) : [];
+
+  return {
+    id: String(input.id || `world_${ownerId}`).slice(0, 120),
+    ownerId,
+    username,
+    buildings,
+    obstacles,
+    resources: { sol: 0 },
+    army: sanitizeArmy(input.army),
+    lastSaveTime: toFiniteInt(input.lastSaveTime, Date.now())
+  };
+}
+
+export function worldHasTownHall(world: SerializedWorld) {
+  return world.buildings.some(b => b.type === 'town_hall');
+}
+
 export function buildStarterWorld(userId: string, username: string): SerializedWorld {
   const now = Date.now();
   const cx = 11;
   const cy = 11;
+
   return {
     id: `world_${userId}`,
     ownerId: userId,
@@ -123,23 +218,20 @@ export function buildStarterWorld(userId: string, username: string): SerializedW
       { id: randomId('b_'), type: 'solana_collector', gridX: cx + 3, gridY: cy + 3, level: 1 }
     ],
     obstacles: [],
-    resources: { sol: 1000 },
+    resources: { sol: STARTING_BALANCE },
     army: {},
     lastSaveTime: now,
     revision: 1
   };
 }
 
-export function normalizeWorld(input: SerializedWorld, username: string, fallbackResources: PlayerResources): SerializedWorld {
-  return {
-    ...input,
-    username,
-    buildings: Array.isArray(input.buildings) ? input.buildings : [],
-    obstacles: Array.isArray(input.obstacles) ? input.obstacles : [],
-    resources: input.resources ?? fallbackResources
-  };
-}
-
-export function computeBuildingCount(world: SerializedWorld): number {
-  return Array.isArray(world.buildings) ? world.buildings.length : 0;
+export function isWorldPatchEmpty(patch: WorldPatch): boolean {
+  const hasArmy = typeof patch.army !== 'undefined';
+  return (
+    patch.upsertBuildings.length === 0 &&
+    patch.removeBuildingIds.length === 0 &&
+    patch.upsertObstacles.length === 0 &&
+    patch.removeObstacleIds.length === 0 &&
+    !hasArmy
+  );
 }

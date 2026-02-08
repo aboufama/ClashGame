@@ -1,9 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, sendError, sendJson } from '../_lib/http.js';
-import { readJson, writeJson } from '../_lib/blob.js';
 import { requireAuth } from '../_lib/auth.js';
-import type { WalletRecord } from '../_lib/models.js';
-import { applyProduction } from '../_lib/production.js';
+import { ensurePlayerState, materializeState } from '../_lib/game_state.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleOptions(req, res)) return;
@@ -16,18 +14,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const auth = await requireAuth(req, res);
     if (!auth) return;
 
+    const now = Date.now();
     const { user } = auth;
-    const walletPath = `wallets/${user.id}.json`;
-    let wallet = await readJson<WalletRecord>(walletPath);
-    if (!wallet) {
-      wallet = { balance: 1000, updatedAt: Date.now() };
-      await writeJson(walletPath, wallet);
-    }
 
-    const production = await applyProduction(user.id);
-    const nextWallet = production.wallet ?? wallet;
+    await ensurePlayerState(user.id, user.username);
+    const state = await materializeState(user.id, user.username, now);
 
-    sendJson(res, 200, { wallet: nextWallet, added: production.added });
+    sendJson(res, 200, {
+      wallet: {
+        balance: state.balance,
+        updatedAt: now
+      },
+      added: state.productionSinceLastMutation
+    });
   } catch (error) {
     console.error('balance error', error);
     sendError(res, 500, 'Failed to get balance');

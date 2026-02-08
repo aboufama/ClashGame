@@ -1,9 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, sendError, sendJson } from '../_lib/http.js';
-import { readJson, writeJson } from '../_lib/blob.js';
 import { requireAuth } from '../_lib/auth.js';
-import { buildStarterWorld, type SerializedWorld, type WalletRecord } from '../_lib/models.js';
-import { applyProduction } from '../_lib/production.js';
+import { ensurePlayerState, materializeState } from '../_lib/game_state.js';
 import { upsertUserIndex } from '../_lib/indexes.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -17,40 +15,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const auth = await requireAuth(req, res);
     if (!auth) return;
 
-    const { user } = auth;
     const now = Date.now();
+    const { user } = auth;
 
-    const walletPath = `wallets/${user.id}.json`;
-    const existingWallet = await readJson<WalletRecord>(walletPath);
-    const wallet: WalletRecord = existingWallet ?? { balance: 1000, updatedAt: now };
-    if (!existingWallet) {
-      await writeJson(walletPath, wallet);
-    }
-
-    const basePath = `bases/${user.id}.json`;
-    let world = await readJson<SerializedWorld>(basePath);
-
-    if (!world || !world.buildings || world.buildings.length === 0) {
-      world = buildStarterWorld(user.id, user.username);
-      world.resources.sol = wallet.balance;
-      await writeJson(basePath, world);
-    } else {
-      world.username = user.username;
-      world.resources.sol = wallet.balance;
-    }
-
-    await applyProduction(user.id);
-    world = (await readJson<SerializedWorld>(basePath)) ?? world;
+    await ensurePlayerState(user.id, user.username);
+    const state = await materializeState(user.id, user.username, now);
 
     await upsertUserIndex({
       id: user.id,
       username: user.username,
-      buildingCount: world.buildings.length,
+      buildingCount: state.world.buildings.length,
       lastSeen: now,
       trophies: user.trophies ?? 0
     });
 
-    sendJson(res, 200, { world });
+    sendJson(res, 200, { world: state.world });
   } catch (error) {
     console.error('bootstrap error', error);
     sendError(res, 500, 'Failed to bootstrap base');

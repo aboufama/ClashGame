@@ -1,9 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, sendError, sendJson } from '../_lib/http.js';
-import { readJson } from '../_lib/blob.js';
 import { requireAuth } from '../_lib/auth.js';
-import type { SerializedWorld, WalletRecord } from '../_lib/models.js';
-import { applyProduction } from '../_lib/production.js';
+import { ensurePlayerState, materializeState } from '../_lib/game_state.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleOptions(req, res)) return;
@@ -17,21 +15,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!auth) return;
 
     const { user } = auth;
-    await applyProduction(user.id);
-    const basePath = `bases/${user.id}.json`;
-    const world = await readJson<SerializedWorld>(basePath);
-    if (!world) {
-      sendJson(res, 200, { world: null });
-      return;
-    }
+    await ensurePlayerState(user.id, user.username);
+    const state = await materializeState(user.id, user.username, Date.now());
 
-    const wallet = await readJson<WalletRecord>(`wallets/${user.id}.json`);
-    if (wallet) {
-      world.resources.sol = wallet.balance;
-    }
-    world.username = user.username;
-
-    sendJson(res, 200, { world });
+    sendJson(res, 200, { world: state.world });
   } catch (error) {
     console.error('load error', error);
     sendError(res, 500, 'Failed to load base');

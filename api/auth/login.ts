@@ -2,12 +2,13 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http.js';
 import { readJson, writeJson } from '../_lib/blob.js';
 import { createSession, hashSecret, sanitizeId } from '../_lib/auth.js';
-import { buildStarterWorld, type SerializedWorld, type UserRecord } from '../_lib/models.js';
+import { ensurePlayerState, materializeState } from '../_lib/game_state.js';
+import type { UserRecord } from '../_lib/models.js';
 import { upsertUserIndex } from '../_lib/indexes.js';
 
 interface LoginBody {
-  playerId: string;
-  deviceSecret: string;
+  playerId?: string;
+  deviceSecret?: string;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -21,6 +22,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const body = await readJsonBody<LoginBody>(req);
     const playerId = body.playerId ? sanitizeId(body.playerId) : '';
     const deviceSecret = body.deviceSecret?.trim();
+
     if (!playerId || !deviceSecret) {
       sendError(res, 400, 'playerId and deviceSecret required');
       return;
@@ -32,33 +34,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const secretHash = hashSecret(deviceSecret);
-    if (user.secretHash !== secretHash) {
+    if (user.secretHash !== hashSecret(deviceSecret)) {
       sendError(res, 403, 'Invalid credentials');
       return;
     }
 
     const session = await createSession(user.id);
     const now = Date.now();
+
     const updated: UserRecord = {
       ...user,
       lastSeen: now,
       activeSessionId: session.token,
       sessionExpiresAt: session.expiresAt
     };
-    await writeJson(`users/${user.id}.json`, updated);
 
-    const basePath = `bases/${user.id}.json`;
-    let base = await readJson<SerializedWorld>(basePath);
-    if (!base || !base.buildings || base.buildings.length === 0) {
-      base = buildStarterWorld(user.id, updated.username);
-      await writeJson(basePath, base);
-    }
+    await writeJson(`users/${updated.id}.json`, updated);
+
+    await ensurePlayerState(updated.id, updated.username);
+    const state = await materializeState(updated.id, updated.username, now);
 
     await upsertUserIndex({
       id: updated.id,
       username: updated.username,
-      buildingCount: base?.buildings?.length ?? 0,
+      buildingCount: state.world.buildings.length,
       lastSeen: now,
       trophies: updated.trophies ?? 0
     });

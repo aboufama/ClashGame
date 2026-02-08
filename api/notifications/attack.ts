@@ -22,12 +22,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const body = await readJsonBody<NotificationsBody>(req);
     const action = body?.action ?? 'list';
 
-    const notifPath = `notifications/${auth.user.id}.json`;
-    const store = (await readJson<NotificationStore>(notifPath)) ?? { items: [] };
+    const path = `notifications/${auth.user.id}.json`;
+    const store = (await readJson<NotificationStore>(path)) ?? { items: [] };
 
     if (action === 'markRead') {
       store.items = store.items.map(item => ({ ...item, read: true }));
-      await writeJson(notifPath, store);
+      await writeJson(path, store);
       sendJson(res, 200, { ok: true });
       return;
     }

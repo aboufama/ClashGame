@@ -62,21 +62,52 @@ function App() {
 
   const applySolDelta = useCallback(async (delta: number, reason: string, refId?: string) => {
     if (!user) return { applied: false, sol: resourcesRef.current.sol };
-    if (!isOnline) {
-      let nextSol = resourcesRef.current.sol;
-      setResources(prev => {
-        nextSol = Math.max(0, prev.sol + delta);
-        return { ...prev, sol: nextSol };
-      });
-      return { applied: true, sol: nextSol };
+
+    const userId = user.id || 'default_player';
+    const currentSol = resourcesRef.current.sol;
+    if (delta < 0 && currentSol + delta < 0) {
+      return { applied: false, sol: currentSol };
     }
 
-    const result = await Backend.applyResourceDelta(user.id || 'default_player', delta, reason, refId);
-    if (result && typeof result.sol === 'number') {
-      setResources({ sol: Math.max(0, result.sol) });
-      return { applied: !!result.applied, sol: result.sol };
+    const optimisticSol = Math.max(0, currentSol + delta);
+    resourcesRef.current = { sol: optimisticSol };
+    setResources({ sol: optimisticSol });
+
+    if (!isOnline) {
+      return { applied: true, sol: optimisticSol };
     }
-    return { applied: false, sol: resourcesRef.current.sol };
+
+    const requestId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+
+    void Backend.applyResourceDelta(userId, delta, reason, refId, requestId)
+      .then(server => {
+        if (!server || typeof server.sol !== 'number') return;
+        const reconciledSol = Math.max(0, server.sol);
+        resourcesRef.current = { sol: reconciledSol };
+        setResources({ sol: reconciledSol });
+      })
+      .catch(async error => {
+        console.warn('Resource sync failed, reconciling from server:', error);
+        try {
+          await Backend.calculateOfflineProduction(userId);
+          const cached = Backend.getCachedWorld(userId);
+          if (cached) {
+            const reconciledSol = Math.max(0, cached.resources.sol);
+            resourcesRef.current = { sol: reconciledSol };
+            setResources({ sol: reconciledSol });
+            return;
+          }
+        } catch (reconcileError) {
+          console.warn('Resource reconcile failed:', reconcileError);
+        }
+
+        resourcesRef.current = { sol: currentSol };
+        setResources({ sol: currentSol });
+      });
+
+    return { applied: true, sol: optimisticSol };
   }, [user, isOnline]);
 
 

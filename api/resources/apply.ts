@@ -1,14 +1,21 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http.js';
-import { readJson, writeJson } from '../_lib/blob.js';
 import { requireAuth } from '../_lib/auth.js';
-import { clamp, randomId, type LedgerRecord, type WalletRecord } from '../_lib/models.js';
-import { applyProduction } from '../_lib/production.js';
+import { appendResourceDeltaEvent, ensurePlayerState, materializeState } from '../_lib/game_state.js';
 
 interface ApplyBody {
-  delta: number;
+  delta?: number;
   reason?: string;
   refId?: string;
+  requestId?: string;
+}
+
+function normalizedRequestKey(body: ApplyBody) {
+  const requestId = body.requestId?.trim();
+  if (requestId) return requestId.slice(0, 160);
+  const refId = body.refId?.trim();
+  if (refId) return `ref:${refId.slice(0, 140)}`;
+  return undefined;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -23,49 +30,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!auth) return;
 
     const body = await readJsonBody<ApplyBody>(req);
-    const delta = Number(body?.delta ?? 0);
-    if (!Number.isFinite(delta)) {
+    const deltaRaw = Number(body.delta ?? 0);
+    if (!Number.isFinite(deltaRaw)) {
       sendError(res, 400, 'Invalid delta');
       return;
     }
 
+    const delta = Math.floor(deltaRaw);
+    const reason = (body.reason || 'update').slice(0, 64);
+
     const { user } = auth;
     const now = Date.now();
 
-    // Apply any pending production first so the wallet is up-to-date
-    // before processing the delta (e.g., spending on upgrades).
-    await applyProduction(user.id);
+    await ensurePlayerState(user.id, user.username);
+    const current = await materializeState(user.id, user.username, now);
 
-    const walletPath = `wallets/${user.id}.json`;
-    const existingWallet = await readJson<WalletRecord>(walletPath);
-    const wallet: WalletRecord = existingWallet ?? { balance: 1000, updatedAt: now };
-
-    const nextBalance = clamp(wallet.balance + delta, 0, 1_000_000_000);
-    wallet.balance = nextBalance;
-    wallet.updatedAt = now;
-    await writeJson(walletPath, wallet);
-
-    const ledgerPath = `ledger/${user.id}.json`;
-    const ledger = (await readJson<LedgerRecord>(ledgerPath)) ?? { events: [] };
-    ledger.events.push({
-      id: randomId('evt_'),
-      delta,
-      reason: body?.reason ?? 'update',
-      refId: body?.refId,
-      time: now
-    });
-    if (ledger.events.length > 200) {
-      ledger.events = ledger.events.slice(-200);
+    const requestKey = normalizedRequestKey(body);
+    if (requestKey && current.requestKeys.has(requestKey)) {
+      sendJson(res, 200, { applied: true, sol: current.balance });
+      return;
     }
-    await writeJson(ledgerPath, ledger);
 
-    // NOTE: We intentionally do NOT read/write the base blob here.
-    // The wallet is the source of truth for balance. Writing the whole
-    // base just to update resources.sol creates a race condition that
-    // can overwrite building positions/levels saved by the client.
-    // The base's resources.sol is synced from the wallet on load and save.
+    if (delta < 0 && current.balance + delta < 0) {
+      sendJson(res, 200, { applied: false, sol: current.balance });
+      return;
+    }
 
-    sendJson(res, 200, { applied: true, sol: nextBalance });
+    if (delta !== 0) {
+      await appendResourceDeltaEvent(user.id, delta, reason, body.refId, requestKey);
+    }
+
+    const updated = await materializeState(user.id, user.username, Date.now());
+    sendJson(res, 200, { applied: true, sol: updated.balance });
   } catch (error) {
     console.error('apply resource error', error);
     sendError(res, 500, 'Failed to apply resources');

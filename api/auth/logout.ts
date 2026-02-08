@@ -17,13 +17,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { user, token } = auth;
 
-    try {
-      await deleteJson(`sessions/${token}.json`);
-    } catch (error) {
-      console.warn('Session delete failed:', error);
-    }
+    await deleteJson(`sessions/${token}.json`).catch(() => undefined);
 
-    const updated: UserRecord = { ...user, activeSessionId: undefined, sessionExpiresAt: 0 };
+    const updated: UserRecord = {
+      ...user,
+      activeSessionId: undefined,
+      sessionExpiresAt: 0
+    };
+
     await writeJson(`users/${user.id}.json`, updated);
 
     sendJson(res, 200, { ok: true });

@@ -1,13 +1,18 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http.js';
-import { readJson, writeJson } from '../_lib/blob.js';
 import { requireAuth } from '../_lib/auth.js';
-import { normalizeWorld, type SerializedWorld, type WalletRecord } from '../_lib/models.js';
+import { appendWorldPatchEvent, buildPatchFromClientState, ensurePlayerState, materializeState } from '../_lib/game_state.js';
+import type { SerializedWorld } from '../_lib/models.js';
 import { upsertUserIndex } from '../_lib/indexes.js';
 
 interface SaveBody {
-  world: SerializedWorld;
+  world?: SerializedWorld;
   ifMatchRevision?: number;
+  requestId?: string;
+}
+
+function hasRevisionCheck(value: unknown): value is number {
+  return Number.isFinite(Number(value));
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -27,46 +32,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const { user } = auth;
-    const basePath = `bases/${user.id}.json`;
-    const stored = await readJson<SerializedWorld>(basePath);
-    if (!stored) {
-      sendError(res, 404, 'Base not found');
-      return;
-    }
-
-    const currentRevision = stored.revision ?? 0;
-    const expected = body.ifMatchRevision ?? currentRevision;
-    if (expected !== currentRevision) {
-      const wallet = await readJson<WalletRecord>(`wallets/${user.id}.json`);
-      if (wallet) stored.resources.sol = wallet.balance;
-      sendJson(res, 409, { conflict: true, world: stored });
-      return;
-    }
-
-    const wallet = await readJson<WalletRecord>(`wallets/${user.id}.json`);
     const now = Date.now();
-    const normalized = normalizeWorld(body.world, user.username, stored.resources);
-    const nextWorld: SerializedWorld = {
-      ...normalized,
-      ownerId: user.id,
-      username: user.username,
-      resources: { sol: wallet?.balance ?? normalized.resources.sol },
-      lastSaveTime: now,
-      revision: currentRevision + 1
-    };
+    const { user } = auth;
 
-    await writeJson(basePath, nextWorld);
+    await ensurePlayerState(user.id, user.username);
+    const current = await materializeState(user.id, user.username, now);
+
+    if (hasRevisionCheck(body.ifMatchRevision) && Number(body.ifMatchRevision) !== current.revision) {
+      sendJson(res, 409, { conflict: true, world: current.world });
+      return;
+    }
+
+    const patch = buildPatchFromClientState(current.world, body.world, user.id, user.username);
+    const requestKey = body.requestId?.trim() || undefined;
+    await appendWorldPatchEvent(user.id, patch, requestKey);
+
+    const updated = await materializeState(user.id, user.username, Date.now());
 
     await upsertUserIndex({
       id: user.id,
       username: user.username,
-      buildingCount: nextWorld.buildings.length,
+      buildingCount: updated.world.buildings.length,
       lastSeen: now,
       trophies: user.trophies ?? 0
     });
 
-    sendJson(res, 200, { ok: true, world: nextWorld });
+    sendJson(res, 200, { ok: true, world: updated.world });
   } catch (error) {
     console.error('save error', error);
     sendError(res, 500, 'Failed to save base');
