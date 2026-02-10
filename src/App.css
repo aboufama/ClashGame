@@ -1230,8 +1230,8 @@ button:disabled {
 .cloud-loading-track {
     margin-top: 0;
     height: 18px;
-    background: #1d222b;
-    border: 2px solid #11151b;
+    background: #d9e1ec;
+    border: 2px solid #1b2430;
     border-radius: 7px;
     overflow: hidden;
 }
@@ -1240,7 +1240,8 @@ button:disabled {
     height: 100%;
     width: 0;
     border-radius: 5px;
-    background: linear-gradient(90deg, #2f3743 0%, #1b212a 100%);
+    background: linear-gradient(90deg, #101820 0%, #27374d 55%, #35557a 100%);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
     transition: width 180ms linear;
 }
 

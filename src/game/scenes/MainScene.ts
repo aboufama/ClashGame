@@ -5223,6 +5223,14 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
+    private async flushPendingSaveForTransition() {
+        try {
+            await Backend.flushPendingSave();
+        } catch (error) {
+            console.warn('Failed to flush pending save before transition:', error);
+        }
+    }
+
     private showCloudTransition(onMidpoint: () => void) {
         // Show React overlay to cover UI - CSS animation handles timing
         gameManager.showCloudOverlay();
@@ -5298,6 +5306,7 @@ export class MainScene extends Phaser.Scene {
             },
             startAttack: () => {
                 this.showCloudTransition(async () => {
+                    await this.flushPendingSaveForTransition();
                     // Set UI immediately
                     gameManager.setGameMode('ATTACK');
                     this.mode = 'ATTACK';
@@ -5316,6 +5325,7 @@ export class MainScene extends Phaser.Scene {
             },
             startPracticeAttack: () => {
                 this.showCloudTransition(async () => {
+                    await this.flushPendingSaveForTransition();
                     // Set UI immediately
                     gameManager.setGameMode('ATTACK');
                     this.mode = 'ATTACK';
@@ -5360,6 +5370,7 @@ export class MainScene extends Phaser.Scene {
             },
             startOnlineAttack: () => {
                 this.showCloudTransition(async () => {
+                    await this.flushPendingSaveForTransition();
                     // Set UI immediately
                     gameManager.setGameMode('ATTACK');
                     this.mode = 'ATTACK';
@@ -5379,6 +5390,7 @@ export class MainScene extends Phaser.Scene {
             },
             startAttackOnUser: (userId: string, username: string) => {
                 this.showCloudTransition(async () => {
+                    await this.flushPendingSaveForTransition();
                     // Set UI immediately
                     gameManager.setGameMode('ATTACK');
                     this.mode = 'ATTACK';
@@ -5402,6 +5414,7 @@ export class MainScene extends Phaser.Scene {
             },
             startScoutOnUser: (userId: string, username: string) => {
                 this.showCloudTransition(async () => {
+                    await this.flushPendingSaveForTransition();
                     gameManager.setGameMode('ATTACK');
                     this.mode = 'ATTACK';
                     this.isScouting = true;

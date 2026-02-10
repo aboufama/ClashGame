@@ -730,7 +730,7 @@ function App() {
   const handleStartAttack = () => {
     if (capacity.current === 0) return;
     // Don't set view here - the game will call setGameMode when transition is complete
-    void Backend.flushPendingSave().finally(() => gameManager.startAttack());
+    gameManager.startAttack();
   };
 
 
@@ -750,19 +750,19 @@ function App() {
 
   const handleStartPractice = () => {
     if (capacity.current === 0) return;
-    void Backend.flushPendingSave().finally(() => gameManager.startPracticeAttack());
+    gameManager.startPracticeAttack();
     setIsTrainingOpen(false);
   };
 
   const handleFindMatch = () => {
     if (capacity.current === 0) return;
-    void Backend.flushPendingSave().finally(() => handleRaidNow());
+    handleRaidNow();
     setIsTrainingOpen(false);
   };
 
   const handleAttackOnline = () => {
     if (capacity.current === 0) return;
-    void Backend.flushPendingSave().finally(() => gameManager.startOnlineAttack());
+    gameManager.startOnlineAttack();
     setIsTrainingOpen(false);
   };
 
@@ -775,14 +775,14 @@ function App() {
     setIsTrainingOpen(false);
     setScoutTarget(null);
     // Start attack on specific user
-    void Backend.flushPendingSave().finally(() => gameManager.startAttackOnUser(userId, username));
+    gameManager.startAttackOnUser(userId, username);
   };
 
   const handleScoutUser = (userId: string, username: string) => {
     // Close any open modals
     setIsTrainingOpen(false);
     setScoutTarget({ userId, username });
-    void Backend.flushPendingSave().finally(() => gameManager.startScoutOnUser(userId, username));
+    gameManager.startScoutOnUser(userId, username);
   };
 
   const handleAttackScouted = () => {
@@ -793,7 +793,7 @@ function App() {
     }
     const { userId, username } = scoutTarget;
     setScoutTarget(null);
-    void Backend.flushPendingSave().finally(() => gameManager.startAttackOnUser(userId, username));
+    gameManager.startAttackOnUser(userId, username);
   };
 
   const handleBattleResultsGoHome = () => {

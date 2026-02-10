@@ -462,7 +462,20 @@ export class Backend {
     const target = world.buildings.find(b => b.id === buildingId);
     if (!target) return Promise.resolve();
     const maxLevel = BUILDING_DEFINITIONS[target.type as BuildingType]?.maxLevel ?? 1;
-    target.level = Math.min((target.level ?? 1) + 1, maxLevel);
+    const currentLevel = target.level ?? 1;
+    const nextLevel = Math.min(currentLevel + 1, maxLevel);
+
+    if (target.type === 'wall') {
+      // Wall upgrades are coherent/bulk: upgrade every wall segment at the same level.
+      world.buildings.forEach(building => {
+        if (building.type === 'wall' && (building.level ?? 1) === currentLevel) {
+          building.level = nextLevel;
+        }
+      });
+    } else {
+      target.level = nextLevel;
+    }
+
     world.lastSaveTime = Date.now();
     Backend.setCachedWorld(userId, world);
     return Backend.saveImmediate(userId);
