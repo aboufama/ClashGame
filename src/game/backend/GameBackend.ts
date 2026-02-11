@@ -24,6 +24,13 @@ export class Backend {
   private static inFlightSaves = new Map<string, Promise<void>>();
   private static cacheKeyPrefix = CACHE_PREFIX;
 
+  static hasPendingSave(userId?: string): boolean {
+    if (userId) {
+      return Backend.saveTimers.has(userId) || Backend.inFlightSaves.has(userId);
+    }
+    return Backend.saveTimers.size > 0 || Backend.inFlightSaves.size > 0;
+  }
+
   private static async apiPost<T>(path: string, body: unknown): Promise<T> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     const response = await fetch(path, {
@@ -228,16 +235,24 @@ export class Backend {
   }
 
   static async flushPendingSave(): Promise<void> {
+    const pendingUserIds = new Set<string>([
+      ...Backend.saveTimers.keys(),
+      ...Backend.inFlightSaves.keys()
+    ]);
+
     // Cancel any pending debounce timers so they don't fire after we flush
     Backend.saveTimers.forEach(timer => window.clearTimeout(timer));
     Backend.saveTimers.clear();
 
     const tasks = Array.from(Backend.inFlightSaves.values());
     await Promise.all(tasks);
-    const user = Auth.getCurrentUser();
-    if (user) {
-      await Backend.saveWorld(user.id);
+
+    // If no timer or in-flight save existed, there's nothing new to flush.
+    if (pendingUserIds.size === 0) {
+      return;
     }
+
+    await Promise.all(Array.from(pendingUserIds).map(userId => Backend.saveWorld(userId)));
   }
 
   /**

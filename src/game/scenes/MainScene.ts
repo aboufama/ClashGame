@@ -5245,8 +5245,30 @@ export class MainScene extends Phaser.Scene {
     }
 
     private async flushPendingSaveForTransition() {
+        const userId = this.userId;
+        if (!Backend.hasPendingSave(userId)) return;
+
+        const maxWaitMs = 1200;
+        let timeoutHandle: number | null = null;
+        const flushPromise = Backend.flushPendingSave();
+        const timeoutPromise = new Promise<'timeout'>(resolve => {
+            timeoutHandle = window.setTimeout(() => resolve('timeout'), maxWaitMs);
+        });
+
         try {
-            await Backend.flushPendingSave();
+            const result = await Promise.race([
+                flushPromise.then(() => 'flushed' as const),
+                timeoutPromise
+            ]);
+            if (timeoutHandle !== null) {
+                window.clearTimeout(timeoutHandle);
+            }
+            if (result === 'timeout') {
+                console.warn(`flushPendingSaveForTransition: continuing after ${maxWaitMs}ms budget`);
+                void flushPromise.catch(error => {
+                    console.warn('flushPendingSaveForTransition: background flush failed:', error);
+                });
+            }
         } catch (error) {
             console.warn('Failed to flush pending save before transition:', error);
         }
@@ -5543,19 +5565,6 @@ export class MainScene extends Phaser.Scene {
         // Clear all troops
         this.troops.forEach(t => { t.gameObject.destroy(); t.healthBar.destroy(); });
         this.troops = [];
-
-        // Clear the ground render texture (redraw fresh grass)
-        if (this.groundRenderTexture) {
-            this.groundRenderTexture.clear();
-            // Redraw grass
-            for (let x = 0; x < this.mapSize; x++) {
-                for (let y = 0; y < this.mapSize; y++) {
-                    this.tempGraphics.clear();
-                    this.drawIsoTile(this.tempGraphics, x, y);
-                    this.groundRenderTexture.draw(this.tempGraphics, this.RT_OFFSET_X, this.RT_OFFSET_Y);
-                }
-            }
-        }
 
         // Clear spike zones
         this.spikeZones.forEach(zone => zone.graphics.destroy());
