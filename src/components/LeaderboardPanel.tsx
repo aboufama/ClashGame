@@ -38,13 +38,26 @@ function isLeaderboardUser(value: unknown): value is LeaderboardUser {
 
 function normalizeUsers(input: unknown): LeaderboardUser[] {
   if (!Array.isArray(input)) return [];
-  return input
+  const deduped = new Map<string, LeaderboardUser>();
+  input
     .filter(isLeaderboardUser)
     .map(user => ({
       id: user.id,
       username: user.username,
       buildingCount: Math.max(0, Math.floor(Number(user.buildingCount)))
-    }));
+    }))
+    .forEach(user => {
+      const key = user.username.trim().toLowerCase() || `id:${user.id}`;
+      const existing = deduped.get(key);
+      if (!existing) {
+        deduped.set(key, user);
+        return;
+      }
+      if (user.buildingCount > existing.buildingCount) {
+        deduped.set(key, user);
+      }
+    });
+  return Array.from(deduped.values());
 }
 
 function readCache(): LeaderboardCacheRecord | null {

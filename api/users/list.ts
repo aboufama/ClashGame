@@ -29,9 +29,31 @@ function sanitizeListedUser(user: ListedUser): ListedUser {
   };
 }
 
+function normalizeUsernameKey(username: string) {
+  return username.trim().toLowerCase();
+}
+
+function dedupeUsers(users: ListedUser[]): ListedUser[] {
+  const deduped = new Map<string, ListedUser>();
+  for (const candidate of users) {
+    const user = sanitizeListedUser(candidate);
+    if (!user.id || !user.username) continue;
+    const key = normalizeUsernameKey(user.username) || `id:${user.id}`;
+    const existing = deduped.get(key);
+    if (!existing) {
+      deduped.set(key, user);
+      continue;
+    }
+    if (user.buildingCount > existing.buildingCount) {
+      existing.buildingCount = user.buildingCount;
+    }
+  }
+  return Array.from(deduped.values()).slice(0, MAX_USERS);
+}
+
 async function readUsersFromIndex(): Promise<ListedUser[]> {
   const index = await readUsersIndex();
-  return index.users
+  const listed = index.users
     .filter(entry => entry.buildingCount > 0)
     .slice(0, MAX_USERS)
     .map(entry => sanitizeListedUser({
@@ -39,6 +61,7 @@ async function readUsersFromIndex(): Promise<ListedUser[]> {
       username: entry.username,
       buildingCount: entry.buildingCount
     }));
+  return dedupeUsers(listed);
 }
 
 async function readUsersFromFallback(): Promise<ListedUser[]> {
@@ -48,7 +71,7 @@ async function readUsersFromFallback(): Promise<ListedUser[]> {
     .slice(0, FALLBACK_SAMPLE_SIZE);
 
   const records = await Promise.all(sample.map(pathname => readJson<UserRecord>(pathname).catch(() => null)));
-  return records
+  const listed = records
     .filter((record): record is UserRecord => !!record && typeof record.id === 'string' && typeof record.username === 'string')
     .map(record => sanitizeListedUser({
       id: record.id,
@@ -56,6 +79,7 @@ async function readUsersFromFallback(): Promise<ListedUser[]> {
       buildingCount: 1
     }))
     .slice(0, MAX_USERS);
+  return dedupeUsers(listed);
 }
 
 function writeResponseHeaders(res: VercelResponse) {

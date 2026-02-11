@@ -1,16 +1,17 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http.js';
-import { writeJson } from '../_lib/blob.js';
+import { deleteJson, writeJson } from '../_lib/blob.js';
 import {
   createSession,
   createSessionCookie,
-  findUserIdByEmail,
-  findUserIdByUsername,
+  findUserByIdentifier,
   hashPassword,
   isValidEmail,
   isValidUsername,
   normalizeEmail,
-  upsertUserAuthLookups
+  normalizeUsernameKey,
+  releaseReservedAuthLookups,
+  reserveUserAuthLookups
 } from '../_lib/auth.js';
 import { ensurePlayerState, materializeState } from '../_lib/game_state.js';
 import { randomId, type UserRecord } from '../_lib/models.js';
@@ -51,18 +52,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const email = normalizeEmail(emailInput);
+    const normalizedUsername = normalizeUsernameKey(username);
 
     const [emailOwner, usernameOwner] = await Promise.all([
-      findUserIdByEmail(email),
-      findUserIdByUsername(username)
+      findUserByIdentifier(email),
+      findUserByIdentifier(username)
     ]);
 
-    if (emailOwner) {
+    if (emailOwner && normalizeEmail(emailOwner.email) === email) {
       sendError(res, 409, 'Email already in use');
       return;
     }
 
-    if (usernameOwner) {
+    if (usernameOwner && normalizeUsernameKey(usernameOwner.username) === normalizedUsername) {
       sendError(res, 409, 'Username already in use');
       return;
     }
@@ -78,35 +80,50 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       trophies: 0
     };
 
-    const session = await createSession(user.id);
-    user.activeSessionId = session.token;
-    user.sessionExpiresAt = session.expiresAt;
+    const lookupReservation = await reserveUserAuthLookups(user);
+    if (!lookupReservation.ok) {
+      sendError(res, 409, lookupReservation.conflict === 'email' ? 'Email already in use' : 'Username already in use');
+      return;
+    }
 
-    await writeJson(`users/${user.id}.json`, user);
-    await upsertUserAuthLookups(user);
+    let sessionToken: string | null = null;
+    try {
+      const session = await createSession(user.id);
+      sessionToken = session.token;
+      user.activeSessionId = session.token;
+      user.sessionExpiresAt = session.expiresAt;
 
-    res.setHeader('Set-Cookie', createSessionCookie(session.token));
-    sendJson(res, 200, {
-      user: { id: user.id, email: user.email, username: user.username },
-      expiresAt: session.expiresAt
-    });
+      await writeJson(`users/${user.id}.json`, user);
 
-    // Best-effort state/index repair; registration success should not fail because of this.
-    void (async () => {
-      try {
-        await ensurePlayerState(user.id, user.username);
-        const state = await materializeState(user.id, user.username, now);
-        await upsertUserIndex({
-          id: user.id,
-          username: user.username,
-          buildingCount: state.world.buildings.length,
-          lastSeen: now,
-          trophies: user.trophies ?? 0
-        });
-      } catch (error) {
-        console.warn('register post-auth state sync failed', { userId: user.id, error });
+      res.setHeader('Set-Cookie', createSessionCookie(session.token));
+      sendJson(res, 200, {
+        user: { id: user.id, email: user.email, username: user.username },
+        expiresAt: session.expiresAt
+      });
+
+      // Best-effort state/index repair; registration success should not fail because of this.
+      void (async () => {
+        try {
+          await ensurePlayerState(user.id, user.username);
+          const state = await materializeState(user.id, user.username, now);
+          await upsertUserIndex({
+            id: user.id,
+            username: user.username,
+            buildingCount: state.world.buildings.length,
+            lastSeen: now,
+            trophies: user.trophies ?? 0
+          });
+        } catch (error) {
+          console.warn('register post-auth state sync failed', { userId: user.id, error });
+        }
+      })();
+    } catch (createError) {
+      await releaseReservedAuthLookups(lookupReservation.reservedPathnames);
+      if (sessionToken) {
+        await deleteJson(`sessions/${sessionToken}.json`).catch(() => undefined);
       }
-    })();
+      throw createError;
+    }
   } catch (error) {
     console.error('register error', error);
     sendError(res, 500, 'Registration failed');

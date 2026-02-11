@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface AccountModalProps {
   isOpen: boolean;
@@ -30,6 +30,7 @@ export function AccountModal({
   const [registerConfirmPassword, setRegisterConfirmPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submitLockRef = useRef(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -49,6 +50,8 @@ export function AccountModal({
   };
 
   const handleLogin = async () => {
+    if (submitLockRef.current || busy) return;
+    submitLockRef.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -60,16 +63,19 @@ export function AccountModal({
       const message = err instanceof Error ? err.message : 'Login failed.';
       setError(message);
     } finally {
+      submitLockRef.current = false;
       setBusy(false);
     }
   };
 
   const handleRegister = async () => {
+    if (submitLockRef.current || busy) return;
     if (registerPassword !== registerConfirmPassword) {
       setError('Passwords do not match.');
       return;
     }
 
+    submitLockRef.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -83,11 +89,14 @@ export function AccountModal({
       const message = err instanceof Error ? err.message : 'Registration failed.';
       setError(message);
     } finally {
+      submitLockRef.current = false;
       setBusy(false);
     }
   };
 
   const handleLogout = async () => {
+    if (submitLockRef.current || busy) return;
+    submitLockRef.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -96,6 +105,7 @@ export function AccountModal({
     } catch {
       setError('Logout failed.');
     } finally {
+      submitLockRef.current = false;
       setBusy(false);
     }
   };

@@ -113,7 +113,9 @@ export class Auth {
       const expectedUnauthenticated = error instanceof Error && (
         error.message.includes('401') ||
         error.message.includes('Missing auth session') ||
-        error.message.includes('Session expired')
+        error.message.includes('Session expired') ||
+        error.message.includes('Session superseded') ||
+        error.message.includes('Invalid session')
       );
       if (!expectedUnauthenticated && error instanceof Error) {
         console.warn('Auth offline mode:', error.message);

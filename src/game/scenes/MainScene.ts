@@ -163,6 +163,7 @@ export class MainScene extends Phaser.Scene {
     // Online attack tracking
     public currentEnemyWorld: { id: string; username: string; isBot?: boolean; attackId?: string } | null = null;
     private needsDefaultBase = false;
+    private sceneReadyForBaseLoad = false;
 
     public get userId(): string {
         try {
@@ -219,6 +220,11 @@ export class MainScene extends Phaser.Scene {
         return { remaining, totalKnown };
     }
 
+    public getHomePlayableBuildingCount() {
+        if (this.mode !== 'HOME') return 0;
+        return this.buildings.filter(b => b.owner === 'PLAYER' && b.type !== 'wall').length;
+    }
+
     preload() {
         this.load.image('solanaCoin', solanaCoin);
     }
@@ -253,7 +259,9 @@ export class MainScene extends Phaser.Scene {
                 this.cameraSensitivity = val;
             },
             // Startup path: App already fetched cloud state and cached it, so avoid a second cloud refresh here.
-            loadBase: () => this.reloadHomeBase({ refreshOnline: false })
+            loadBase: () => this.sceneReadyForBaseLoad
+                ? this.reloadHomeBase({ refreshOnline: false })
+                : Promise.resolve(false)
         });
 
         // Initialize at 1.5
@@ -303,6 +311,7 @@ export class MainScene extends Phaser.Scene {
         });
 
         this.events.once('shutdown', () => {
+            this.sceneReadyForBaseLoad = false;
             gameManager.clearScene();
             particleManager.clearAll();
         });
@@ -355,6 +364,8 @@ export class MainScene extends Phaser.Scene {
                 }
             }
         });
+
+        this.sceneReadyForBaseLoad = true;
 
         // Base load is commanded by App once auth/session initialization is complete.
     }

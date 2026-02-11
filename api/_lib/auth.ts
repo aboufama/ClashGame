@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { listPathnames, readJson, writeJson } from './blob.js';
+import { deleteJson, listPathnames, readJson, writeJson } from './blob.js';
 import { sendError } from './http.js';
 import { readUsersIndex } from './indexes.js';
 import type { SessionRecord, UserRecord } from './models.js';
@@ -94,6 +94,10 @@ function getSessionToken(req: VercelRequest) {
   return getCookieValue(req, SESSION_COOKIE_NAME) ?? getBearerToken(req);
 }
 
+export function getAuthSessionToken(req: VercelRequest) {
+  return getSessionToken(req);
+}
+
 function secureCookieSuffix() {
   return process.env.NODE_ENV === 'production' ? '; Secure' : '';
 }
@@ -136,6 +140,15 @@ async function readLookup(pathname: string): Promise<string | null> {
   const record = await readJson<UserLookupRecord>(pathname);
   if (!record || typeof record.userId !== 'string' || !record.userId) return null;
   return record.userId;
+}
+
+function isBlobAlreadyExistsError(error: unknown) {
+  if (!error || typeof error !== 'object') return false;
+  const err = error as { name?: string; message?: string; code?: string };
+  if (err.name === 'BlobAlreadyExistsError') return true;
+  if (err.code === 'BlobAlreadyExistsError') return true;
+  if (typeof err.message === 'string' && /already exists|exists already|overwrite/i.test(err.message)) return true;
+  return false;
 }
 
 async function readLookupFromPaths(pathnames: string[]): Promise<string | null> {
@@ -258,6 +271,67 @@ export async function upsertUserAuthLookups(user: UserRecord): Promise<void> {
   ]);
 }
 
+type LookupReservationResult = {
+  ok: boolean;
+  reservedPathnames: string[];
+  conflict?: 'email' | 'username';
+};
+
+async function reserveLookupPath(pathname: string, userId: string) {
+  const record: UserLookupRecord = {
+    userId,
+    version: LOOKUP_RECORD_VERSION,
+    updatedAt: Date.now()
+  };
+
+  try {
+    await writeJson(pathname, record, { allowOverwrite: false });
+    return { status: 'reserved' as const };
+  } catch (error) {
+    if (!isBlobAlreadyExistsError(error)) {
+      throw error;
+    }
+  }
+
+  const existingUserId = await readLookup(pathname);
+  if (!existingUserId || existingUserId !== userId) {
+    return { status: 'conflict' as const };
+  }
+  return { status: 'already_owned' as const };
+}
+
+export async function reserveUserAuthLookups(user: Pick<UserRecord, 'id' | 'email' | 'username'>): Promise<LookupReservationResult> {
+  const reservedPathnames: string[] = [];
+  const emailPath = emailLookupPath(user.email);
+  const usernamePath = usernameLookupPath(user.username);
+
+  const emailReservation = await reserveLookupPath(emailPath, user.id);
+  if (emailReservation.status === 'conflict') {
+    return { ok: false, conflict: 'email', reservedPathnames };
+  }
+  if (emailReservation.status === 'reserved') {
+    reservedPathnames.push(emailPath);
+  }
+
+  const usernameReservation = await reserveLookupPath(usernamePath, user.id);
+  if (usernameReservation.status === 'conflict') {
+    if (reservedPathnames.length > 0) {
+      await Promise.all(reservedPathnames.map(pathname => deleteJson(pathname).catch(() => undefined)));
+    }
+    return { ok: false, conflict: 'username', reservedPathnames: [] };
+  }
+  if (usernameReservation.status === 'reserved') {
+    reservedPathnames.push(usernamePath);
+  }
+
+  return { ok: true, reservedPathnames };
+}
+
+export async function releaseReservedAuthLookups(pathnames: string[]): Promise<void> {
+  if (!Array.isArray(pathnames) || pathnames.length === 0) return;
+  await Promise.all(pathnames.map(pathname => deleteJson(pathname).catch(() => undefined)));
+}
+
 export async function createSession(userId: string): Promise<SessionRecord> {
   const token = randomId('sess_');
   const now = Date.now();
@@ -302,8 +376,18 @@ export async function requireAuth(req: VercelRequest, res: VercelResponse): Prom
       Number(activeSession.expiresAt) > now;
 
     if (activeStillValid) {
-      sendError(res, 401, 'Session superseded');
-      return null;
+      const currentCreatedAt = Number(session.createdAt ?? 0);
+      const activeCreatedAt = Number(activeSession.createdAt ?? 0);
+      const currentSessionIsNewer = Number.isFinite(currentCreatedAt) &&
+        Number.isFinite(activeCreatedAt) &&
+        currentCreatedAt >= activeCreatedAt;
+
+      // Eventual consistency guard:
+      // if the presented token is newer than the stale active pointer, accept and repair.
+      if (!currentSessionIsNewer) {
+        sendError(res, 401, 'Session superseded');
+        return null;
+      }
     }
   }
 

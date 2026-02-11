@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http.js';
-import { writeJson } from '../_lib/blob.js';
-import { createSession, createSessionCookie, findUserByIdentifier, hashPassword, upsertUserAuthLookups, verifyPassword } from '../_lib/auth.js';
+import { readJson, writeJson } from '../_lib/blob.js';
+import { createSession, createSessionCookie, findUserByIdentifier, getAuthSessionToken, hashPassword, upsertUserAuthLookups, verifyPassword } from '../_lib/auth.js';
 import { ensurePlayerState, materializeState } from '../_lib/game_state.js';
-import type { UserRecord } from '../_lib/models.js';
+import type { SessionRecord, UserRecord } from '../_lib/models.js';
 import { upsertUserIndex } from '../_lib/indexes.js';
 
 interface LoginBody {
@@ -30,7 +30,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const user = await findUserByIdentifier(identifier);
     if (!user) {
-      sendError(res, 404, 'User not found');
+      sendError(res, 404, 'No account found for that username or email');
       return;
     }
 
@@ -51,12 +51,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (!verified) {
-      sendError(res, 403, 'Invalid credentials');
+      sendError(res, 403, 'Incorrect password');
       return;
     }
 
-    const session = await createSession(user.id);
     const now = Date.now();
+    const incomingToken = getAuthSessionToken(req);
+    const activeSessionId = typeof user.activeSessionId === 'string' ? user.activeSessionId : '';
+    if (activeSessionId && activeSessionId !== incomingToken) {
+      const activeSession = await readJson<SessionRecord>(`sessions/${activeSessionId}.json`).catch(() => null);
+      const activeStillValid = !!activeSession &&
+        activeSession.userId === user.id &&
+        Number(activeSession.expiresAt) > now;
+
+      if (activeStillValid) {
+        sendError(res, 409, 'This account is already logged in on another session');
+        return;
+      }
+    }
+
+    const session = await createSession(user.id);
 
     const updated: UserRecord = {
       ...user,
@@ -96,6 +110,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   } catch (error) {
     console.error('login error', error);
-    sendError(res, 500, 'Login failed');
+    sendError(res, 500, 'Unable to log in right now');
   }
 }

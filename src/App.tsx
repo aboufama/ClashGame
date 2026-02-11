@@ -203,11 +203,22 @@ function App() {
     const sceneReady = await waitForMainSceneReady();
     if (!sceneReady) return false;
 
-    const maxAttempts = 8;
+    const maxAttempts = 12;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      const ok = await gameManager.loadBase();
-      if (ok) return true;
-      await wait(100);
+      try {
+        const ok = await gameManager.loadBase();
+        if (ok) {
+          const scene = gameRef.current?.scene.getScene('MainScene') as { getHomePlayableBuildingCount?: () => number } | undefined;
+          const playableCount = Number(scene?.getHomePlayableBuildingCount?.() ?? 0);
+          if (playableCount > 0) {
+            return true;
+          }
+          console.warn('Scene reported successful load but rendered no playable buildings. Retrying.', { attempt, playableCount });
+        }
+      } catch (error) {
+        console.warn('Scene base load attempt failed', { attempt, error });
+      }
+      await wait(150);
     }
     return false;
   }, [wait, waitForMainSceneReady]);

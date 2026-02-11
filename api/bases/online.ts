@@ -6,6 +6,10 @@ import { readJson } from '../_lib/blob.js';
 import { ensurePlayerState, materializeState } from '../_lib/game_state.js';
 import type { UserRecord } from '../_lib/models.js';
 
+function normalizeUsernameKey(username: string) {
+  return username.trim().toLowerCase();
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleOptions(req, res)) return;
   if (req.method !== 'POST') {
@@ -19,7 +23,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { user } = auth;
     const index = await readUsersIndex();
-    const candidates = index.users.filter(entry => entry.id !== user.id && entry.buildingCount > 0);
+    const dedupedByUsername = new Map<string, (typeof index.users)[number]>();
+    index.users.forEach(entry => {
+      if (!entry || entry.id === user.id || entry.buildingCount <= 0) return;
+      const key = normalizeUsernameKey(entry.username) || `id:${entry.id}`;
+      const existing = dedupedByUsername.get(key);
+      if (!existing) {
+        dedupedByUsername.set(key, entry);
+        return;
+      }
+      const existingLastSeen = Number(existing.lastSeen || 0);
+      const entryLastSeen = Number(entry.lastSeen || 0);
+      if (entryLastSeen > existingLastSeen) {
+        dedupedByUsername.set(key, entry);
+      }
+    });
+
+    const candidates = Array.from(dedupedByUsername.values());
 
     if (candidates.length === 0) {
       sendJson(res, 200, { world: null });
