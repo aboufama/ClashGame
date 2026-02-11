@@ -5,6 +5,20 @@ import { Auth } from './Auth';
 const CACHE_PREFIX = 'clash.base.';
 
 type ResourceDeltaResult = { applied: boolean; sol: number };
+type AttackNotification = {
+  id: string;
+  attackerName: string;
+  solLost?: number;
+  goldLost?: number;
+  elixirLost?: number;
+  destruction: number;
+  timestamp: number;
+  read: boolean;
+};
+
+type NotificationListItem = Record<string, unknown> & Partial<AttackNotification> & {
+  time?: number;
+};
 
 function getCacheKey(userId: string) {
   return `${CACHE_PREFIX}${userId}`;
@@ -54,18 +68,41 @@ export class Backend {
     return Math.max(1, Math.min(maxWallLevel, Math.floor(level)));
   }
 
+  private static getMaxPlacedWallLevel(world: SerializedWorld): number {
+    if (!Array.isArray(world.buildings) || world.buildings.length === 0) return 0;
+    let maxLevel = 0;
+    for (const building of world.buildings) {
+      if (building.type !== 'wall') continue;
+      const level = Math.max(1, Math.floor(Number(building.level) || 1));
+      if (level > maxLevel) maxLevel = level;
+    }
+    return maxLevel;
+  }
+
   private static resolveWallPlacementLevel(world: SerializedWorld): number {
+    const inferred = Backend.getMaxPlacedWallLevel(world);
+    if (inferred > 0) {
+      return Backend.clampWallLevel(inferred);
+    }
+
     const stored = Number(world.wallLevel ?? 0);
     if (Number.isFinite(stored) && stored > 0) {
       return Backend.clampWallLevel(stored);
     }
 
-    let inferred = 1;
-    for (const building of world.buildings) {
-      if (building.type !== 'wall') continue;
-      inferred = Math.max(inferred, building.level ?? 1);
+    return 1;
+  }
+
+  private static normalizeWallLevel(world: SerializedWorld) {
+    const inferred = Backend.getMaxPlacedWallLevel(world);
+    if (inferred > 0) {
+      world.wallLevel = Backend.clampWallLevel(inferred);
+      return;
     }
-    return Backend.clampWallLevel(inferred);
+    const stored = Number(world.wallLevel ?? 0);
+    world.wallLevel = Number.isFinite(stored) && stored > 0
+      ? Backend.clampWallLevel(stored)
+      : 1;
   }
 
   private static normalizeTypeKey(type: unknown): string {
@@ -167,6 +204,7 @@ export class Backend {
   }
 
   private static setCachedWorld(userId: string, world: SerializedWorld, persist = true) {
+    Backend.normalizeWallLevel(world);
     Backend.memoryCache.set(userId, world);
     if (persist && typeof window !== 'undefined') {
       localStorage.setItem(getCacheKey(userId), JSON.stringify(world));
@@ -223,6 +261,7 @@ export class Backend {
     if (typeof serverWorld.wallLevel === 'number') {
       current.wallLevel = Backend.clampWallLevel(serverWorld.wallLevel);
     }
+    Backend.normalizeWallLevel(current);
     Backend.setCachedWorld(userId, current);
   }
 
@@ -1155,14 +1194,23 @@ export class Backend {
     return response.unread ?? 0;
   }
 
-  static async getNotifications(userId: string) {
+  static async getNotifications(userId: string): Promise<AttackNotification[]> {
     void userId;
     if (!Auth.isOnlineMode()) return [];
-    const response = await Backend.apiPost<{ items: any[] }>('/api/notifications/attack', { action: 'list' });
-    return (response.items ?? []).map(item => ({
-      ...item,
-      timestamp: item.timestamp ?? item.time ?? Date.now()
-    }));
+    const response = await Backend.apiPost<{ items: NotificationListItem[] }>('/api/notifications/attack', { action: 'list' });
+    return (response.items ?? []).map(item => {
+      const timestamp = Math.max(0, Math.floor(Number(item.timestamp ?? item.time ?? Date.now()) || Date.now()));
+      return {
+        id: typeof item.id === 'string' && item.id ? item.id : makeRequestId('notif'),
+        attackerName: typeof item.attackerName === 'string' && item.attackerName ? item.attackerName : 'Unknown',
+        solLost: typeof item.solLost === 'number' ? item.solLost : undefined,
+        goldLost: typeof item.goldLost === 'number' ? item.goldLost : undefined,
+        elixirLost: typeof item.elixirLost === 'number' ? item.elixirLost : undefined,
+        destruction: Math.max(0, Math.floor(Number(item.destruction) || 0)),
+        timestamp,
+        read: Boolean(item.read)
+      };
+    });
   }
 
   static async markNotificationsRead(userId: string) {

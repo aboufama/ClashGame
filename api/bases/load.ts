@@ -8,7 +8,54 @@ import { readJsonHistory } from '../_lib/blob.js';
 
 interface StoredStateSnapshot {
   world?: SerializedWorld;
-  updatedAt?: number;
+}
+
+function buildingCount(world: SerializedWorld | null | undefined) {
+  if (!world || !Array.isArray(world.buildings)) return 0;
+  return world.buildings.length;
+}
+
+function isRenderableWorld(world: SerializedWorld | null | undefined) {
+  return buildingCount(world) > 0;
+}
+
+function pickBestHistoryWorld(history: StoredStateSnapshot[], userId: string, username: string): SerializedWorld | null {
+  let best: SerializedWorld | null = null;
+  for (const entry of history) {
+    const candidate = entry?.world;
+    if (!candidate || !Array.isArray(candidate.buildings) || candidate.buildings.length === 0) continue;
+    const normalizedCandidate: SerializedWorld = {
+      ...candidate,
+      ownerId: userId,
+      username
+    };
+    if (!best) {
+      best = normalizedCandidate;
+      continue;
+    }
+    const candidateCount = buildingCount(normalizedCandidate);
+    const bestCount = buildingCount(best);
+    const candidateHasTownHall = worldHasTownHall(normalizedCandidate);
+    const bestHasTownHall = worldHasTownHall(best);
+    if (
+      candidateCount > bestCount ||
+      (candidateCount === bestCount && candidateHasTownHall && !bestHasTownHall)
+    ) {
+      best = normalizedCandidate;
+    }
+  }
+  return best;
+}
+
+function shouldRestoreFromHistory(current: SerializedWorld, historical: SerializedWorld) {
+  const currentCount = buildingCount(current);
+  const historicalCount = buildingCount(historical);
+  if (historicalCount <= 0) return false;
+  if (currentCount <= 0) return true;
+  if (currentCount <= 1 && historicalCount >= 5) return true;
+  if (historicalCount >= 20 && currentCount <= Math.floor(historicalCount * 0.2)) return true;
+  if (!worldHasTownHall(current) && worldHasTownHall(historical)) return true;
+  return false;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -27,57 +74,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await ensurePlayerState(user.id, user.username);
     let world: SerializedWorld = (await materializeState(user.id, user.username, now)).world;
 
-    const isRenderableWorld = (candidate: SerializedWorld | null | undefined) =>
-      !!candidate && Array.isArray(candidate.buildings) && candidate.buildings.length > 0;
-
     for (let attempt = 1; attempt <= 8; attempt++) {
       if (isRenderableWorld(world)) break;
       await new Promise(resolve => setTimeout(resolve, 120 * attempt));
       world = (await materializeState(user.id, user.username, Date.now())).world;
     }
 
-    let hasBuildings = Array.isArray(world.buildings) && world.buildings.length > 0;
-    let hasTownHall = hasBuildings && worldHasTownHall(world);
-
-    if (!hasBuildings) {
+    let recoveredFromHistory = false;
+    const currentCount = buildingCount(world);
+    if (!isRenderableWorld(world) || currentCount <= 1) {
       const history = await readJsonHistory<StoredStateSnapshot>(`game/${user.id}/state.json`, 10).catch(error => {
         console.warn('load history lookup failed', { userId: user.id, error });
         return [] as StoredStateSnapshot[];
       });
-      const candidates = history
-        .map(entry => entry?.world)
-        .filter((entry): entry is SerializedWorld => !!entry && Array.isArray(entry.buildings));
-
-      let best: SerializedWorld | null = null;
-      for (const candidate of candidates) {
-        const candidateCount = candidate.buildings.length;
-        const bestCount = best?.buildings?.length ?? -1;
-        const candidateHasTownHall = worldHasTownHall(candidate);
-        const bestHasTownHall = best ? worldHasTownHall(best) : false;
-        if (
-          !best ||
-          candidateCount > bestCount ||
-          (candidateCount === bestCount && candidateHasTownHall && !bestHasTownHall)
-        ) {
-          best = candidate;
-        }
-      }
-
-      if (best && best.buildings.length > 0) {
-        world = {
-          ...best,
-          ownerId: user.id,
-          username: user.username
-        };
-        hasBuildings = true;
-        hasTownHall = worldHasTownHall(world);
+      const bestHistoryWorld = pickBestHistoryWorld(history, user.id, user.username);
+      if (bestHistoryWorld && shouldRestoreFromHistory(world, bestHistoryWorld)) {
+        world = bestHistoryWorld;
+        recoveredFromHistory = true;
         console.warn('load base recovered state from history snapshot', {
           userId: user.id,
-          recoveredBuildingCount: world.buildings.length,
-          recoveredHasTownHall: hasTownHall
+          recoveredBuildingCount: buildingCount(world),
+          recoveredHasTownHall: worldHasTownHall(world)
         });
       }
     }
+
+    const hasBuildings = Array.isArray(world.buildings) && world.buildings.length > 0;
+    const hasTownHall = hasBuildings && worldHasTownHall(world);
 
     if (!hasBuildings || !hasTownHall) {
       const starter = buildStarterWorld(user.id, user.username);
@@ -111,6 +134,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       world = await saveWorldState(user.id, user.username, repaired, `repair_load_${now}`).catch(error => {
         console.warn('load repair save failed; returning in-memory repaired world', { userId: user.id, error });
         return repaired;
+      });
+    } else if (recoveredFromHistory) {
+      world = await saveWorldState(user.id, user.username, world, `recover_load_${now}`).catch(error => {
+        console.warn('load history recovery save failed; returning in-memory recovered world', { userId: user.id, error });
+        return world;
       });
     }
 

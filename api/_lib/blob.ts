@@ -80,40 +80,6 @@ async function fetchJsonFromBlobUrl<T>(urlString: string): Promise<T | null> {
   return (await response.json()) as T;
 }
 
-async function readVersionedJson<T>(pathname: string): Promise<T | null> {
-  ensureBlobToken();
-  const { list } = await getBlobModule();
-  const prefix = historyPrefix(pathname);
-
-  let cursor: string | undefined;
-  let latest: { pathname: string; url: string; uploadedAtMs: number } | null = null;
-
-  for (;;) {
-    const page = await list({ prefix, limit: 1000, cursor });
-    for (const blob of page.blobs) {
-      const blobPathname = pathnameFromBlobItem(blob);
-      if (!blobPathname || typeof blob.url !== 'string' || !blob.url) continue;
-      const uploadedAtMs = blobUploadedAtMs((blob as { uploadedAt?: unknown }).uploadedAt);
-      if (
-        !latest ||
-        uploadedAtMs > latest.uploadedAtMs ||
-        (uploadedAtMs === latest.uploadedAtMs && blobPathname > latest.pathname)
-      ) {
-        latest = {
-          pathname: blobPathname,
-          url: blob.url,
-          uploadedAtMs
-        };
-      }
-    }
-    if (!page.hasMore || !page.cursor) break;
-    cursor = page.cursor;
-  }
-
-  if (!latest) return null;
-  return await fetchJsonFromBlobUrl<T>(latest.url);
-}
-
 type VersionedJsonEntry<T> = {
   pathname: string;
   uploadedAtMs: number;
@@ -207,8 +173,8 @@ async function deleteHistory(pathname: string): Promise<void> {
 
 export async function readJson<T>(pathname: string): Promise<T | null> {
   try {
-    const versioned = await readVersionedJson<T>(pathname);
-    if (versioned !== null) return versioned;
+    const entries = await readVersionedJsonEntries<T>(pathname, 1);
+    if (entries.length > 0) return entries[0].value;
 
     ensureBlobToken();
     const { head } = await getBlobModule();
