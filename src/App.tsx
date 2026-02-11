@@ -967,7 +967,6 @@ function App() {
         selectedBuildingInfo={selectedBuildingInfo}
         isExiting={isExiting}
         wallUpgradeCostOverride={wallUpgradeCostOverride}
-        showCloudOverlay={showCloudOverlay}
         isMobile={isMobile}
         isScouting={Boolean(scoutTarget)}
         pendingLoot={cloudTransitionReward}

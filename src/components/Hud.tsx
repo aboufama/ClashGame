@@ -22,7 +22,6 @@ interface HudProps {
   selectedBuildingInfo: { id: string; type: BuildingType; level: number } | null;
   isExiting: boolean;
   wallUpgradeCostOverride?: number;
-  showCloudOverlay: boolean;
   isMobile: boolean;
   isScouting: boolean;
   pendingLoot: number | null;
@@ -52,7 +51,6 @@ export function Hud({
   selectedBuildingInfo,
   isExiting,
   wallUpgradeCostOverride,
-  showCloudOverlay: _showCloudOverlay,
   isMobile,
   isScouting,
   pendingLoot,
@@ -72,7 +70,6 @@ export function Hud({
   // Unused props (kept for interface compatibility):
   void _capacity;
   void _onStartAttack;
-  void _showCloudOverlay;
   // Get troop name for mobile display
   const getTroopName = (type: string): string => {
     const def = TROOP_DEFINITIONS[type as TroopType];
