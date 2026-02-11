@@ -85,22 +85,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await writeJson(`users/${user.id}.json`, user);
     await upsertUserAuthLookups(user);
 
-    await ensurePlayerState(user.id, user.username);
-    const state = await materializeState(user.id, user.username, now);
-
-    await upsertUserIndex({
-      id: user.id,
-      username: user.username,
-      buildingCount: state.world.buildings.length,
-      lastSeen: now,
-      trophies: user.trophies ?? 0
-    });
-
     res.setHeader('Set-Cookie', createSessionCookie(session.token));
     sendJson(res, 200, {
       user: { id: user.id, email: user.email, username: user.username },
       expiresAt: session.expiresAt
     });
+
+    // Best-effort state/index repair; registration success should not fail because of this.
+    void (async () => {
+      try {
+        await ensurePlayerState(user.id, user.username);
+        const state = await materializeState(user.id, user.username, now);
+        await upsertUserIndex({
+          id: user.id,
+          username: user.username,
+          buildingCount: state.world.buildings.length,
+          lastSeen: now,
+          trophies: user.trophies ?? 0
+        });
+      } catch (error) {
+        console.warn('register post-auth state sync failed', { userId: user.id, error });
+      }
+    })();
   } catch (error) {
     console.error('register error', error);
     sendError(res, 500, 'Registration failed');

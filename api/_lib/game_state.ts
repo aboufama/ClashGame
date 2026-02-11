@@ -153,6 +153,9 @@ function applyWorldPatch(world: SerializedWorld, patch: WorldPatch) {
   if (typeof patch.army !== 'undefined') {
     world.army = sanitizeArmy(patch.army);
   }
+  if (typeof patch.wallLevel !== 'undefined') {
+    world.wallLevel = Math.max(1, toFiniteInt(patch.wallLevel, 1));
+  }
 }
 
 function applyEvent(world: SerializedWorld, balance: number, event: GameEvent): number {
@@ -165,7 +168,8 @@ function applyEvent(world: SerializedWorld, balance: number, event: GameEvent): 
         removeBuildingIds: Array.isArray(patch.removeBuildingIds) ? patch.removeBuildingIds.map(String) : [],
         upsertObstacles: Array.isArray(patch.upsertObstacles) ? patch.upsertObstacles.map(sanitizeObstacle) : [],
         removeObstacleIds: Array.isArray(patch.removeObstacleIds) ? patch.removeObstacleIds.map(String) : [],
-        army: typeof patch.army === 'undefined' ? undefined : sanitizeArmy(patch.army)
+        army: typeof patch.army === 'undefined' ? undefined : sanitizeArmy(patch.army),
+        wallLevel: typeof patch.wallLevel === 'undefined' ? undefined : Math.max(1, toFiniteInt(patch.wallLevel, 1))
       });
     }
     return balance;
@@ -320,6 +324,11 @@ function createPatch(current: SerializedWorld, incoming: SerializedWorld): World
 
   if (!sameArmy(current.army, incoming.army)) {
     patch.army = sanitizeArmy(incoming.army);
+  }
+  const currentWallLevel = Math.max(1, toFiniteInt(current.wallLevel, 1));
+  const incomingWallLevel = Math.max(1, toFiniteInt(incoming.wallLevel, 1));
+  if (incomingWallLevel !== currentWallLevel) {
+    patch.wallLevel = incomingWallLevel;
   }
 
   return patch;

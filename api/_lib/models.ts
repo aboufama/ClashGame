@@ -30,6 +30,7 @@ export interface SerializedWorld {
   obstacles?: SerializedObstacle[];
   resources: PlayerResources;
   army?: Record<string, number>;
+  wallLevel?: number;
   lastSaveTime: number;
   revision?: number;
 }
@@ -98,6 +99,7 @@ export interface WorldPatch {
   upsertObstacles: SerializedObstacle[];
   removeObstacleIds: string[];
   army?: Record<string, number>;
+  wallLevel?: number;
 }
 
 export interface WorldPatchEventPayload {
@@ -185,6 +187,12 @@ export function sanitizeArmy(input: Record<string, number> | undefined): Record<
 export function normalizeWorldInput(input: SerializedWorld, ownerId: string, username: string): SerializedWorld {
   const buildings = Array.isArray(input.buildings) ? input.buildings.map(sanitizeBuilding) : [];
   const obstacles = Array.isArray(input.obstacles) ? input.obstacles.map(sanitizeObstacle) : [];
+  const maxPlacedWallLevel = buildings.reduce((max, building) => {
+    if (building.type !== 'wall') return max;
+    return Math.max(max, building.level ?? 1);
+  }, 1);
+  const storedWallLevel = toFiniteInt(input.wallLevel, maxPlacedWallLevel);
+  const wallLevel = Math.max(1, storedWallLevel);
 
   return {
     id: String(input.id || `world_${ownerId}`).slice(0, 120),
@@ -194,6 +202,7 @@ export function normalizeWorldInput(input: SerializedWorld, ownerId: string, use
     obstacles,
     resources: { sol: 0 },
     army: sanitizeArmy(input.army),
+    wallLevel,
     lastSaveTime: toFiniteInt(input.lastSaveTime, Date.now())
   };
 }
@@ -221,6 +230,7 @@ export function buildStarterWorld(userId: string, username: string): SerializedW
     obstacles: [],
     resources: { sol: STARTING_BALANCE },
     army: {},
+    wallLevel: 1,
     lastSaveTime: now,
     revision: 1
   };
@@ -228,11 +238,13 @@ export function buildStarterWorld(userId: string, username: string): SerializedW
 
 export function isWorldPatchEmpty(patch: WorldPatch): boolean {
   const hasArmy = typeof patch.army !== 'undefined';
+  const hasWallLevel = typeof patch.wallLevel !== 'undefined';
   return (
     patch.upsertBuildings.length === 0 &&
     patch.removeBuildingIds.length === 0 &&
     patch.upsertObstacles.length === 0 &&
     patch.removeObstacleIds.length === 0 &&
-    !hasArmy
+    !hasArmy &&
+    !hasWallLevel
   );
 }

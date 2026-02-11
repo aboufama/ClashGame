@@ -3968,8 +3968,8 @@ export class BuildingRenderer {
 
     // === LEVEL 1: WOODEN PALISADE ===
     private static drawWallLevel1(graphics: Phaser.GameObjects.Graphics, gridX: number, gridY: number, alpha: number, tint: number | null, _owner: string, neighbors: { nN: boolean, nS: boolean, nE: boolean, nW: boolean }) {
-        const wallHeight = 20;
-        const wallThickness = 0.32;
+        const wallHeight = 19;
+        const wallThickness = 0.35;
 
         // Wooden colors - warm browns
         const woodTop = tint ?? 0x8b6b4a;
@@ -4082,8 +4082,8 @@ export class BuildingRenderer {
 
     // === LEVEL 2: STONE WALL ===
     private static drawWallLevel2(graphics: Phaser.GameObjects.Graphics, gridX: number, gridY: number, alpha: number, tint: number | null, _owner: string, neighbors: { nN: boolean, nS: boolean, nE: boolean, nW: boolean }) {
-        const wallHeight = 18;
-        const wallThickness = 0.34;
+        const wallHeight = 17;
+        const wallThickness = 0.37;
 
         // Stone colors - classic grey
         const stoneTop = tint ?? 0xd4c4a8;
@@ -4173,8 +4173,8 @@ export class BuildingRenderer {
 
     // === LEVEL 3: FORTIFIED DARK STONE ===
     private static drawWallLevel3(graphics: Phaser.GameObjects.Graphics, gridX: number, gridY: number, alpha: number, tint: number | null, _owner: string, neighbors: { nN: boolean, nS: boolean, nE: boolean, nW: boolean }) {
-        const wallHeight = 23;
-        const wallThickness = 0.42;
+        const wallHeight = 22;
+        const wallThickness = 0.45;
 
         // Dark obsidian fortress colors
         const stoneTop = tint ?? 0x4a4a5a;

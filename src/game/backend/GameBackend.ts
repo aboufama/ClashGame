@@ -1,4 +1,4 @@
-import { BUILDING_DEFINITIONS, type BuildingType, type ObstacleType } from '../config/GameDefinitions';
+import { BUILDING_DEFINITIONS, MAP_SIZE, type BuildingType, type ObstacleType } from '../config/GameDefinitions';
 import type { SerializedBuilding, SerializedObstacle, SerializedWorld } from '../data/Models';
 import { Auth } from './Auth';
 
@@ -40,6 +40,25 @@ export class Backend {
       }
     }
     throw lastError instanceof Error ? lastError : new Error(`API ${path} failed`);
+  }
+
+  private static clampWallLevel(level: number): number {
+    const maxWallLevel = BUILDING_DEFINITIONS.wall.maxLevel ?? 1;
+    return Math.max(1, Math.min(maxWallLevel, Math.floor(level)));
+  }
+
+  private static resolveWallPlacementLevel(world: SerializedWorld): number {
+    const stored = Number(world.wallLevel ?? 0);
+    if (Number.isFinite(stored) && stored > 0) {
+      return Backend.clampWallLevel(stored);
+    }
+
+    let inferred = 1;
+    for (const building of world.buildings) {
+      if (building.type !== 'wall') continue;
+      inferred = Math.max(inferred, building.level ?? 1);
+    }
+    return Backend.clampWallLevel(inferred);
   }
 
   static hasPendingSave(userId?: string): boolean {
@@ -125,6 +144,9 @@ export class Backend {
     current.revision = serverWorld.revision;
     current.resources = serverWorld.resources;
     current.lastSaveTime = serverWorld.lastSaveTime;
+    if (typeof serverWorld.wallLevel === 'number') {
+      current.wallLevel = Backend.clampWallLevel(serverWorld.wallLevel);
+    }
     Backend.setCachedWorld(userId, current);
   }
 
@@ -390,6 +412,7 @@ export class Backend {
       obstacles: [],
       resources: { sol: 1000 },
       army: {},
+      wallLevel: 1,
       lastSaveTime: Date.now(),
       revision: 1
     };
@@ -455,8 +478,26 @@ export class Backend {
   static async placeBuilding(userId: string, type: BuildingType, gridX: number, gridY: number): Promise<SerializedBuilding | null> {
     const world = Backend.getCachedWorld(userId);
     if (!world) return null;
-    const building: SerializedBuilding = { id: randomId(), type, gridX, gridY, level: 1 };
+    const definition = BUILDING_DEFINITIONS[type];
+    if (!definition) return null;
+    if (gridX < 0 || gridY < 0 || gridX + definition.width > MAP_SIZE || gridY + definition.height > MAP_SIZE) {
+      return null;
+    }
+    for (const existing of world.buildings) {
+      const existingDef = BUILDING_DEFINITIONS[existing.type as BuildingType];
+      if (!existingDef) continue;
+      const overlapX = Math.max(0, Math.min(gridX + definition.width, existing.gridX + existingDef.width) - Math.max(gridX, existing.gridX));
+      const overlapY = Math.max(0, Math.min(gridY + definition.height, existing.gridY + existingDef.height) - Math.max(gridY, existing.gridY));
+      if (overlapX > 0 && overlapY > 0) {
+        return null;
+      }
+    }
+    const level = type === 'wall' ? Backend.resolveWallPlacementLevel(world) : 1;
+    const building: SerializedBuilding = { id: randomId(), type, gridX, gridY, level };
     world.buildings.push(building);
+    if (type === 'wall') {
+      world.wallLevel = level;
+    }
     world.lastSaveTime = Date.now();
     Backend.setCachedWorld(userId, world);
     void Backend.saveImmediate(userId);
@@ -501,6 +542,7 @@ export class Backend {
           building.level = nextLevel;
         }
       });
+      world.wallLevel = Backend.clampWallLevel(nextLevel);
     } else {
       target.level = nextLevel;
     }

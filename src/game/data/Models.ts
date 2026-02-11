@@ -29,6 +29,7 @@ export interface SerializedWorld {
     obstacles?: SerializedObstacle[]; // Optional for backward compat
     resources: PlayerResources;
     army?: Record<string, number>; // Persisted army state
+    wallLevel?: number; // Preferred level for new wall placements
     lastSaveTime: number;
     revision?: number;
 }

@@ -134,6 +134,7 @@ export class MainScene extends Phaser.Scene {
     public dragStartCam: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
     public dragStartScreen: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
     public hoverGrid: Phaser.Math.Vector2 = new Phaser.Math.Vector2(-100, -100);
+    public preferredWallLevel = 1;
 
     public mode: GameMode = 'HOME';
     public isScouting = false;
@@ -826,6 +827,11 @@ export class MainScene extends Phaser.Scene {
     private applyWorldToScene(world: SerializedWorld) {
         // Clear existing graphics and state before instantiation
         this.clearScene();
+        const maxWallFromWorld = world.buildings.reduce((max, building) => {
+            if (building.type !== 'wall') return max;
+            return Math.max(max, building.level || 1);
+        }, 1);
+        this.preferredWallLevel = Math.max(1, Math.max(world.wallLevel || 1, maxWallFromWorld));
 
         // Load buildings
         world.buildings.forEach(b => {
@@ -1067,6 +1073,10 @@ export class MainScene extends Phaser.Scene {
         if (normalizedType === 'army_camp') {
             const campLevels = this.buildings.filter(b => b.type === 'army_camp').map(b => b.level ?? 1);
             gameManager.refreshCampCapacity(campLevels);
+        }
+
+        if (normalizedType === 'wall') {
+            this.preferredWallLevel = Math.max(this.preferredWallLevel, level || 1);
         }
 
         // Update neighbor wall connections when a new wall is placed
@@ -5509,16 +5519,6 @@ export class MainScene extends Phaser.Scene {
         });
     }
 
-    private runTransitionWithoutCloud(onMidpoint: () => void | Promise<void>) {
-        void Promise.resolve()
-            .then(() => onMidpoint())
-            .catch(error => {
-                console.error('Transition without cloud failed:', error);
-            });
-    }
-
-
-
     private createUI() {
         gameManager.registerScene({
             selectBuilding: (type: string | null) => {
@@ -5627,7 +5627,7 @@ export class MainScene extends Phaser.Scene {
                 });
             },
             startAttackOnUser: (userId: string, username: string) => {
-                this.runTransitionWithoutCloud(async () => {
+                this.showCloudTransition(async () => {
                     await this.flushPendingSaveForTransition();
                     // Set UI immediately
                     gameManager.setGameMode('ATTACK');
@@ -5651,7 +5651,7 @@ export class MainScene extends Phaser.Scene {
                 });
             },
             startScoutOnUser: (userId: string, username: string) => {
-                this.runTransitionWithoutCloud(async () => {
+                this.showCloudTransition(async () => {
                     await this.flushPendingSaveForTransition();
                     gameManager.setGameMode('ATTACK');
                     this.mode = 'ATTACK';
@@ -5723,6 +5723,7 @@ export class MainScene extends Phaser.Scene {
 
                     // COHERENT UPDATE: If Wall, upgrade ALL other walls of the previous level
                     if (this.selectedInWorld.type === 'wall') {
+                        this.preferredWallLevel = Math.max(this.preferredWallLevel, this.selectedInWorld.level || 1);
                         this.buildings.forEach(b => {
                             if (b.type === 'wall' && b.id !== this.selectedInWorld!.id && (b.level || 1) === prevLevel) {
                                 b.level = this.selectedInWorld!.level;

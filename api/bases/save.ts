@@ -55,6 +55,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       buildingCount: updated.world.buildings.length,
       lastSeen: now,
       trophies: user.trophies ?? 0
+    }).catch(error => {
+      console.warn('save index sync failed', { userId: user.id, error });
     });
 
     sendJson(res, 200, { ok: true, world: updated.world });

@@ -47,7 +47,7 @@ export interface BuildingDef {
 }
 
 export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
-    town_hall: { id: 'town_hall', name: 'Town Hall', cost: 500, desc: 'The heart of your village.', width: 3, height: 3, maxHealth: 2000, category: 'other', maxCount: 1, color: 0x3366ff, maxLevel: 1, capacity: 10 },
+    town_hall: { id: 'town_hall', name: 'Town Hall', cost: 500, desc: 'The heart of your village.', width: 3, height: 3, maxHealth: 2000, category: 'other', maxCount: 1, color: 0x3366ff, maxLevel: 1, capacity: 30 },
     barracks: { id: 'barracks', name: 'Barracks', cost: 200, desc: 'Trains brave troops.', width: 2, height: 2, maxHealth: 800, category: 'military', maxCount: 4, color: 0xff3333, maxLevel: 1 },
     cannon: {
         id: 'cannon',

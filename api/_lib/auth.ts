@@ -53,6 +53,14 @@ function usernameLookupPath(username: string) {
   return `indexes/auth/username/${hashLookupKey(normalizeUsernameKey(username))}.json`;
 }
 
+function legacyEmailLookupPath(email: string) {
+  return `indexes/auth/email/${encodeURIComponent(normalizeEmail(email))}.json`;
+}
+
+function legacyUsernameLookupPath(username: string) {
+  return `indexes/auth/username/${encodeURIComponent(normalizeUsernameKey(username))}.json`;
+}
+
 function getCookieValue(req: VercelRequest, key: string) {
   const header = req.headers.cookie;
   if (!header || typeof header !== 'string') return null;
@@ -130,14 +138,31 @@ async function readLookup(pathname: string): Promise<string | null> {
   return record.userId;
 }
 
+async function readLookupFromPaths(pathnames: string[]): Promise<string | null> {
+  const seen = new Set<string>();
+  for (const pathname of pathnames) {
+    if (!pathname || seen.has(pathname)) continue;
+    seen.add(pathname);
+    const found = await readLookup(pathname);
+    if (found) return found;
+  }
+  return null;
+}
+
 export async function findUserIdByEmail(email: string): Promise<string | null> {
   if (!isValidEmail(email)) return null;
-  return await readLookup(emailLookupPath(email));
+  return await readLookupFromPaths([
+    emailLookupPath(email),
+    legacyEmailLookupPath(email)
+  ]);
 }
 
 export async function findUserIdByUsername(username: string): Promise<string | null> {
   if (!username.trim()) return null;
-  return await readLookup(usernameLookupPath(username));
+  return await readLookupFromPaths([
+    usernameLookupPath(username),
+    legacyUsernameLookupPath(username)
+  ]);
 }
 
 export async function findUserByIdentifier(identifier: string): Promise<UserRecord | null> {
@@ -176,9 +201,9 @@ export async function findUserByIdentifier(identifier: string): Promise<UserReco
 
   // Legacy/stale fallback: recover by scanning users index when auth lookups are missing.
   const usersIndex = await readUsersIndex().catch(() => null);
-  if (!usersIndex || !Array.isArray(usersIndex.users)) return null;
+  const indexUsers = usersIndex && Array.isArray(usersIndex.users) ? usersIndex.users : [];
 
-  const matchingUsernameEntries = usersIndex.users.filter(entry =>
+  const matchingUsernameEntries = indexUsers.filter(entry =>
     normalizeUsernameKey(entry.username) === normalizedUsername
   );
   for (const entry of matchingUsernameEntries) {
@@ -192,7 +217,7 @@ export async function findUserByIdentifier(identifier: string): Promise<UserReco
   }
 
   if (normalized.includes('@')) {
-    for (const entry of usersIndex.users) {
+    for (const entry of indexUsers) {
       if (!entry?.id || seenIds.has(entry.id)) continue;
       seenIds.add(entry.id);
       const user = await readJson<UserRecord>(`users/${entry.id}.json`);
@@ -255,7 +280,8 @@ export async function requireAuth(req: VercelRequest, res: VercelResponse): Prom
   }
 
   const session = await readJson<SessionRecord>(`sessions/${token}.json`);
-  if (!session || session.expiresAt <= Date.now()) {
+  const now = Date.now();
+  if (!session || session.expiresAt <= now) {
     sendError(res, 401, 'Session expired');
     return null;
   }
@@ -266,9 +292,37 @@ export async function requireAuth(req: VercelRequest, res: VercelResponse): Prom
     return null;
   }
 
-  if (user.activeSessionId !== token || (user.sessionExpiresAt ?? 0) <= Date.now()) {
-    sendError(res, 401, 'Session superseded');
-    return null;
+  const activeSessionId = typeof user.activeSessionId === 'string' ? user.activeSessionId : '';
+  const sessionExpiresAt = Number(user.sessionExpiresAt ?? 0);
+
+  if (activeSessionId && activeSessionId !== token) {
+    const activeSession = await readJson<SessionRecord>(`sessions/${activeSessionId}.json`).catch(() => null);
+    const activeStillValid = !!activeSession &&
+      activeSession.userId === user.id &&
+      Number(activeSession.expiresAt) > now;
+
+    if (activeStillValid) {
+      sendError(res, 401, 'Session superseded');
+      return null;
+    }
+  }
+
+  const needsRepair =
+    activeSessionId !== token ||
+    !Number.isFinite(sessionExpiresAt) ||
+    sessionExpiresAt < now;
+
+  if (needsRepair) {
+    const repaired: UserRecord = {
+      ...user,
+      activeSessionId: token,
+      sessionExpiresAt: session.expiresAt,
+      lastSeen: Math.max(now, Number(user.lastSeen || 0))
+    };
+    await writeJson(`users/${user.id}.json`, repaired).catch(error => {
+      console.warn('requireAuth session repair failed', { userId: user.id, error });
+    });
+    return { user: repaired, token };
   }
 
   return { user, token };

@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http.js';
 import { writeJson } from '../_lib/blob.js';
-import { createSession, createSessionCookie, findUserByIdentifier, upsertUserAuthLookups, verifyPassword } from '../_lib/auth.js';
+import { createSession, createSessionCookie, findUserByIdentifier, hashPassword, upsertUserAuthLookups, verifyPassword } from '../_lib/auth.js';
 import { ensurePlayerState, materializeState } from '../_lib/game_state.js';
 import type { UserRecord } from '../_lib/models.js';
 import { upsertUserIndex } from '../_lib/indexes.js';
@@ -34,12 +34,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    if (typeof user.passwordHash !== 'string' || !user.passwordHash) {
-      sendError(res, 403, 'Invalid credentials');
-      return;
+    const legacyPassword = typeof (user as any).password === 'string' ? String((user as any).password) : '';
+    const storedHash = typeof user.passwordHash === 'string' ? user.passwordHash : '';
+
+    let verified = false;
+    let migratedHash = storedHash;
+    if (storedHash) {
+      verified = verifyPassword(password, storedHash);
+    } else if (legacyPassword) {
+      verified = legacyPassword.startsWith('scrypt:')
+        ? verifyPassword(password, legacyPassword)
+        : legacyPassword === password;
+      if (verified) {
+        migratedHash = hashPassword(password);
+      }
     }
 
-    if (!verifyPassword(password, user.passwordHash)) {
+    if (!verified) {
       sendError(res, 403, 'Invalid credentials');
       return;
     }
@@ -51,7 +62,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ...user,
       lastSeen: now,
       activeSessionId: session.token,
-      sessionExpiresAt: session.expiresAt
+      sessionExpiresAt: session.expiresAt,
+      passwordHash: migratedHash
     };
 
     await writeJson(`users/${updated.id}.json`, updated);

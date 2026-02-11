@@ -303,7 +303,7 @@ function App() {
       }
     }
   }, [resources, army, user, loading]);
-  const [capacity, setCapacity] = useState({ current: 0, max: 20 });
+  const [capacity, setCapacity] = useState({ current: 0, max: 30 });
   const [selectedTroopType, setSelectedTroopType] = useState<'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'ram' | 'stormmage' | 'golem' | 'sharpshooter' | 'mobilemortar' | 'davincitank' | 'phalanx'>('warrior');
   const [visibleTroops, setVisibleTroops] = useState<string[]>([]);
   const [isTrainingOpen, setIsTrainingOpen] = useState(false);
@@ -559,13 +559,14 @@ function App() {
         });
       },
       refreshCampCapacity: (campLevels: number[]) => {
-        // L1 = 20 space, L2 = 25 space, L3+ = 30 space per camp
-        const totalCapacity = 10 + campLevels.reduce((sum, level) => {
+        // Base cap = 30. L1 = 20, L2 = 25, L3+ = 30 per camp.
+        // With 4 L3 camps this reaches the intended player cap of 150.
+        const totalCapacity = 30 + campLevels.reduce((sum, level) => {
           if (level >= 3) return sum + 30;
           if (level >= 2) return sum + 25;
           return sum + 20;
         }, 0);
-        setCapacity(prev => ({ ...prev, max: totalCapacity }));
+        setCapacity(prev => ({ ...prev, max: Math.min(150, totalCapacity) }));
       },
       closeMenus: () => {
         setIsTrainingOpen(false);
@@ -662,7 +663,11 @@ function App() {
         const world = await Backend.getWorld(user.id || 'default_player');
         if (!world || cancelled) return;
         const walls = world.buildings.filter((w: any) => w.type === 'wall');
-        const level = walls.length > 0 ? Math.max(...walls.map((w: any) => w.level || 1)) : 1;
+        const maxPlacedLevel = walls.length > 0 ? Math.max(...walls.map((w: any) => w.level || 1)) : 1;
+        const storedWallLevel = Number((world as any).wallLevel ?? 0);
+        const level = Number.isFinite(storedWallLevel) && storedWallLevel > 0
+          ? Math.max(maxPlacedLevel, Math.floor(storedWallLevel))
+          : maxPlacedLevel;
         if (!cancelled) setShopWallLevel(level);
       } catch (error) {
         console.error('Error checking wall level:', error);
@@ -692,10 +697,12 @@ function App() {
               const world = await Backend.getWorld(user.id || 'default_player');
               if (world) {
                 const walls = world.buildings.filter((b: any) => b.type === 'wall');
-                if (walls.length > 0) {
-                  const maxLevel = Math.max(...walls.map((w: any) => w.level || 1));
-                  cost = def.cost * maxLevel;
-                }
+                const maxPlacedLevel = walls.length > 0 ? Math.max(...walls.map((w: any) => w.level || 1)) : 1;
+                const storedWallLevel = Number((world as any).wallLevel ?? 0);
+                const wallLevel = Number.isFinite(storedWallLevel) && storedWallLevel > 0
+                  ? Math.max(maxPlacedLevel, Math.floor(storedWallLevel))
+                  : maxPlacedLevel;
+                cost = def.cost * wallLevel;
               }
             } catch (error) {
               console.error('Error calculating wall cost:', error);

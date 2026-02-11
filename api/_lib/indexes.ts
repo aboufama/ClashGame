@@ -4,12 +4,16 @@ import type { UserIndexEntry, UsersIndex } from './models.js';
 const INDEX_PATH = 'indexes/users.json';
 
 export async function readUsersIndex(): Promise<UsersIndex> {
-  const existing = await readJson<UsersIndex>(INDEX_PATH);
-  if (existing && Array.isArray(existing.users)) {
-    return {
-      users: existing.users,
-      updatedAt: Number(existing.updatedAt || Date.now())
-    };
+  try {
+    const existing = await readJson<UsersIndex>(INDEX_PATH);
+    if (existing && Array.isArray(existing.users)) {
+      return {
+        users: existing.users,
+        updatedAt: Number(existing.updatedAt || Date.now())
+      };
+    }
+  } catch (error) {
+    console.warn('readUsersIndex failed, using empty fallback', error);
   }
   return { users: [], updatedAt: Date.now() };
 }

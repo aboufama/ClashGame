@@ -11,6 +11,7 @@ const BUILDINGS = BUILDING_DEFINITIONS as any;
 
 export class SceneInputController {
     private scene: MainScene;
+    private lastWallDragTile: { x: number; y: number } | null = null;
 
     // Touch/pinch state
     private isPinching: boolean = false;
@@ -156,11 +157,109 @@ export class SceneInputController {
         return this.isPinching;
     }
 
+    private getWallPlacementTile(pointer: Phaser.Input.Pointer): { x: number; y: number } {
+        const worldPoint = this.scene.cameras.main.getWorldPoint(pointer.x, pointer.y);
+        const cart = IsoUtils.isoToCart(worldPoint.x, worldPoint.y);
+        return {
+            x: Math.round(cart.x - 0.5),
+            y: Math.round(cart.y - 0.5)
+        };
+    }
+
+    private getWallOccupantAt(scene: MainScene, x: number, y: number): 'EMPTY' | 'WALL' | 'BLOCKED' {
+        for (const building of scene.buildings) {
+            const info = BUILDINGS[building.type];
+            if (!info) continue;
+            const inside = x >= building.gridX && x < building.gridX + info.width &&
+                y >= building.gridY && y < building.gridY + info.height;
+            if (!inside) continue;
+            if (building.type === 'wall') return 'WALL';
+            return 'BLOCKED';
+        }
+        return 'EMPTY';
+    }
+
+    private buildWallPath(from: { x: number; y: number }, to: { x: number; y: number }): Array<{ x: number; y: number }> {
+        const points: Array<{ x: number; y: number }> = [];
+        let x = from.x;
+        let y = from.y;
+
+        while (x !== to.x || y !== to.y) {
+            const dx = to.x - x;
+            const dy = to.y - y;
+            const stepX = dx === 0 ? 0 : (dx > 0 ? 1 : -1);
+            const stepY = dy === 0 ? 0 : (dy > 0 ? 1 : -1);
+
+            if (stepX !== 0 && stepY !== 0) {
+                if (Math.abs(dx) >= Math.abs(dy)) {
+                    x += stepX;
+                    points.push({ x, y });
+                    y += stepY;
+                    points.push({ x, y });
+                } else {
+                    y += stepY;
+                    points.push({ x, y });
+                    x += stepX;
+                    points.push({ x, y });
+                }
+                continue;
+            }
+
+            if (stepX !== 0) x += stepX;
+            if (stepY !== 0) y += stepY;
+            points.push({ x, y });
+        }
+
+        return points;
+    }
+
+    private paintWallPath(scene: MainScene, from: { x: number; y: number }, to: { x: number; y: number }) {
+        const path = this.buildWallPath(from, to);
+        let lastReachable = from;
+
+        for (const tile of path) {
+            const status = this.getWallOccupantAt(scene, tile.x, tile.y);
+            if (status === 'BLOCKED') {
+                break;
+            }
+            if (status === 'WALL') {
+                lastReachable = tile;
+                continue;
+            }
+            if (!scene.isPositionValid(tile.x, tile.y, 'wall')) {
+                break;
+            }
+            void scene.placeBuilding(tile.x, tile.y, 'wall', 'PLAYER');
+            lastReachable = tile;
+        }
+
+        this.lastWallDragTile = lastReachable;
+    }
+
+    private handleWallDragPaint(pointer: Phaser.Input.Pointer) {
+        const scene = this.scene;
+        if (!pointer.isDown || scene.selectedBuildingType !== 'wall') return;
+        const target = this.getWallPlacementTile(pointer);
+        const start = this.lastWallDragTile ?? target;
+        this.paintWallPath(scene, start, target);
+    }
+
     onPointerDown(pointer: Phaser.Input.Pointer) {
         // Skip if pinching
         if (this.isPinching) return;
 
         const scene = this.scene;
+        if (pointer.button === 0 && scene.selectedBuildingType === 'wall') {
+            this.lastWallDragTile = this.getWallPlacementTile(pointer);
+            if (this.lastWallDragTile) {
+                const startStatus = this.getWallOccupantAt(scene, this.lastWallDragTile.x, this.lastWallDragTile.y);
+                if (startStatus === 'EMPTY' && scene.isPositionValid(this.lastWallDragTile.x, this.lastWallDragTile.y, 'wall')) {
+                    void scene.placeBuilding(this.lastWallDragTile.x, this.lastWallDragTile.y, 'wall', 'PLAYER');
+                }
+            }
+        } else if (pointer.button === 0) {
+            this.lastWallDragTile = null;
+        }
         if (pointer.button === 0) {
             scene.isManualFiring = false; // Reset firing on interaction start
 
@@ -208,6 +307,8 @@ export class SceneInputController {
     async onPointerUp(pointer: Phaser.Input.Pointer) {
         // Skip if pinching
         if (this.isPinching) return;
+
+        this.lastWallDragTile = null;
 
         const scene = this.scene;
         // Calculate drag distance
@@ -477,13 +578,7 @@ export class SceneInputController {
         }
 
         // Drag to build walls
-        if (pointer.isDown && scene.selectedBuildingType === 'wall') {
-            const targetX = Math.round(gridPosFloat.x - 0.5); // Wall width 1, offset 0.5
-            const targetY = Math.round(gridPosFloat.y - 0.5);
-            if (scene.isPositionValid(targetX, targetY, scene.selectedBuildingType)) {
-                scene.placeBuilding(targetX, targetY, scene.selectedBuildingType, 'PLAYER');
-            }
-        }
+        this.handleWallDragPaint(pointer);
 
         if (scene.mode === 'ATTACK' && !scene.isScouting && pointer.isDown) {
             const now = scene.time.now;
@@ -537,8 +632,7 @@ export class SceneInputController {
                     if (scene.selectedInWorld) {
                         level = scene.selectedInWorld.level || 1;
                     } else if (type === 'wall') {
-                        const walls = scene.buildings.filter(b => b.type === 'wall');
-                        if (walls.length > 0) level = Math.max(...walls.map(w => w.level || 1));
+                        level = Math.max(1, scene.preferredWallLevel || 1);
                     }
 
                     const ghostObj = { type: type as BuildingType, level: level, gridX: ghostX, gridY: ghostY };
