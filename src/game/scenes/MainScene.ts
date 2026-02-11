@@ -423,9 +423,9 @@ export class MainScene extends Phaser.Scene {
                     console.error('onRaidEnded handler failed:', error);
                 }
                 if (!handled) {
-                    this.showCloudTransition(() => {
+                    this.showCloudTransition(async () => {
                         gameManager.setGameMode('HOME');
-                        this.goHome();
+                        await this.goHome();
                         // We also need to tell React to switch view if possible, but goHome handles internal state
                     });
                 }
@@ -5231,60 +5231,26 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
-    private showCloudTransition(onMidpoint: () => void) {
-        // Show React overlay to cover UI - CSS animation handles timing
+    private showCloudTransition(onMidpoint: () => void | Promise<void>) {
+        // Show React overlay to cover UI.
         gameManager.showCloudOverlay();
 
-        const cloudSprites: Phaser.GameObjects.Arc[] = [];
+        // CSS cloud close animation is 600ms; add a small cushion before swapping scenes.
+        const cloudCloseMs = 620;
+        // Keep this short to reduce cloud time while still allowing one frame for draw completion.
+        const readyBufferMs = 90;
 
-        // for (let i = 0; i < cloudCount; i++) {
-        //     const row = Math.floor(i / 7);
-        //     const col = i % 7;
-        //     const x = (col / 6) * width + (Math.random() - 0.5) * 100;
-        //     const y = (row / 7) * height + (Math.random() - 0.5) * 100;
-        //     const r = 100 + Math.random() * 100;
-        //
-        //     const cloud = this.add.circle(x, y, 0, 0xffffff, 1);
-        //     cloud.setScrollFactor(0);
-        //     cloud.setDepth(1000000);
-        //     cloudSprites.push(cloud);
-        //
-        //     this.tweens.add({
-        //         targets: cloud,
-        //         radius: r,
-        //         duration: 400 + Math.random() * 200,
-        //         delay: (row + col) * 40,
-        //         ease: 'Quad.easeOut'
-        //     });
-        // });
-
-
-        // Wait for screen to be fully obscured (approximately after most tweens finish)
-        this.time.delayedCall(750, () => {
-            onMidpoint();
-
-            // Hold for a moment to ensure state swap happens behind cover
-            this.time.delayedCall(1700, () => {
-                if (cloudSprites.length === 0) {
-                    gameManager.hideCloudOverlay();
-                } else {
-                    cloudSprites.forEach((c, idx) => {
-                        this.tweens.add({
-                            targets: c,
-                            radius: 0,
-                            alpha: 0,
-                            duration: 500,
-                            delay: idx * 10,
-                            onComplete: () => {
-                                c.destroy();
-                                if (idx === cloudSprites.length - 1) {
-                                    gameManager.hideCloudOverlay();
-                                }
-                            }
-                        });
+        this.time.delayedCall(cloudCloseMs, () => {
+            void Promise.resolve()
+                .then(() => onMidpoint())
+                .catch(error => {
+                    console.error('Cloud transition midpoint failed:', error);
+                })
+                .finally(() => {
+                    this.time.delayedCall(readyBufferMs, () => {
+                        gameManager.hideCloudOverlay();
                     });
-                }
-            });
+                });
         });
     }
 

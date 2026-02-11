@@ -714,11 +714,11 @@ function App() {
   const transitionHome = useCallback(() => {
     const scene = gameRef.current?.scene.getScene('MainScene') as any;
     if (scene) {
-      scene.showCloudTransition(() => {
+      scene.showCloudTransition(async () => {
         setView('HOME');
         setSelectedInMap(null);
         setScoutTarget(null);
-        scene.goHome();
+        await scene.goHome();
       });
     } else {
       setView('HOME');
