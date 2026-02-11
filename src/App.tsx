@@ -327,9 +327,15 @@ function App() {
 
         // IMPORTANT: Trigger Phaser to reload the base using the now-known userId.
         // Retry to avoid races where scene commands are not ready yet.
-        const sceneLoaded = await ensureSceneBaseLoaded();
+        let sceneLoaded = await ensureSceneBaseLoaded();
         if (!sceneLoaded) {
-          console.warn('Scene base load did not confirm success after retries.');
+          console.warn('Scene base load did not confirm success after retries. Forcing one hard refresh path.');
+          Backend.clearCacheForUser(userId);
+          await loadCloudWorldWithRetry(userId);
+          sceneLoaded = await ensureSceneBaseLoaded();
+        }
+        if (!sceneLoaded) {
+          console.warn('Scene base load failed after hard refresh retry.');
           setWorldReady(false);
         }
         updateVillageLoadCloud(98);

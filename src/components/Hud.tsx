@@ -77,6 +77,28 @@ export function Hud({
   };
   const showAttackTroopBar = !(isScouting && visibleTroops.length === 0);
 
+  // Number keys (1-9, 0) select troops in the battle bar
+  useEffect(() => {
+    if (view !== 'ATTACK' || !showAttackTroopBar || isMobile) return;
+    const handler = (e: KeyboardEvent) => {
+      // Ignore if typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const key = e.key;
+      if (key >= '1' && key <= '9') {
+        const idx = parseInt(key) - 1;
+        if (idx < visibleTroops.length) {
+          const t = visibleTroops[idx];
+          if (army[t] > 0) onSelectTroop(t);
+        }
+      } else if (key === '0' && visibleTroops.length >= 10) {
+        const t = visibleTroops[9];
+        if (army[t] > 0) onSelectTroop(t);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [view, showAttackTroopBar, isMobile, visibleTroops, army, onSelectTroop]);
+
   // Whether we're showing loot (either pending on clouds or counting up)
   const showingLoot = pendingLoot !== null || lootAnimating !== null;
   const lootAmount = lootAnimating?.amount ?? pendingLoot ?? 0;
@@ -232,6 +254,9 @@ export function Hud({
                   );
                 })}
               </div>
+              {!isMobile && visibleTroops.length > 0 && (
+                <div className="troop-hotkey-hint">Use number keys to switch troops</div>
+              )}
             </div>
           )}
         </div>
