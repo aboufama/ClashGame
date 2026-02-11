@@ -818,14 +818,22 @@ export class Backend {
 
     if (difficulty === 'easy') {
       // Easy: no walls, simple starter-style base under 10 buildings.
-      placeBuilding('town_hall', townHallX, townHallY, 1);
-      placeMany('cannon', 2, 1, innerZones, midZones);
-      if (chance(0.55)) placeMany('mortar', 1, 1, innerZones, midZones);
-      if (chance(0.40)) placeMany('tesla', 1, 1, innerZones, midZones);
+      const easyCompactRect: Rect = {
+        minX: centerX - 4,
+        minY: centerY - 4,
+        maxX: centerX + 4,
+        maxY: centerY + 4
+      };
+      const easyCompactZones: Zone[] = [{ ...easyCompactRect, maxRadius: 6.8 }];
 
-      placeMany('army_camp', 1, 1, outerZones, midZones);
-      placeMany('barracks', 1, 1, outerZones, midZones);
-      placeMany('solana_collector', 2, 1, midZones, outerZones);
+      placeBuilding('town_hall', townHallX, townHallY, 1);
+      placeMany('cannon', 2, 1, easyCompactZones, easyCompactZones);
+      if (chance(0.55)) placeMany('mortar', 1, 1, easyCompactZones, easyCompactZones);
+      if (chance(0.40)) placeMany('tesla', 1, 1, easyCompactZones, easyCompactZones);
+
+      placeMany('army_camp', 1, 1, easyCompactZones, easyCompactZones);
+      placeMany('barracks', 1, 1, easyCompactZones, easyCompactZones);
+      placeMany('solana_collector', 2, 1, easyCompactZones, easyCompactZones);
     } else if (difficulty === 'intermediate') {
       // Intermediate: one outer wall ring and level 2 where available.
       wallLevel = 2;
@@ -843,7 +851,7 @@ export class Backend {
 
       placeMany('army_camp', 2, 2, supportZones, midZones);
       placeMany('barracks', 2, 2, supportZones, midZones);
-      placeMany('solana_collector', 6, 2, supportZones, fullZones);
+      placeMany('solana_collector', 4, 2, supportZones, fullZones);
     } else if (difficulty === 'hard') {
       // Hard: layered walls, compartment defenses, stronger/high-tier mix.
       wallLevel = chance(0.45) ? 3 : 2;
@@ -884,7 +892,7 @@ export class Backend {
 
       placeMany('army_camp', 3, 3, hardSupportZones, midZones);
       placeMany('barracks', 3, 1, hardSupportZones, midZones);
-      placeMany('solana_collector', randInt(9, 12), 2, hardSupportZones, outerZones);
+      placeMany('solana_collector', randInt(6, 8), 2, hardSupportZones, outerZones);
 
       fillWallsTo(randInt(88, 96), [{ ...midRect, minRadius: 4.5, maxRadius: 12.5 }]);
     } else {
@@ -938,7 +946,7 @@ export class Backend {
       placeMany('ballista', BUILDING_DEFINITIONS.ballista.maxCount, maxLevelFor('ballista'), crazyDefenseZones, fullZones);
       placeMany('mortar', BUILDING_DEFINITIONS.mortar.maxCount, maxLevelFor('mortar'), crazyDefenseZones, fullZones);
       placeMany('army_camp', BUILDING_DEFINITIONS.army_camp.maxCount, maxLevelFor('army_camp'), crazySupportZones, fullZones);
-      placeMany('solana_collector', BUILDING_DEFINITIONS.solana_collector.maxCount, maxLevelFor('solana_collector'), crazySupportZones, fullZones);
+      placeMany('solana_collector', 10, maxLevelFor('solana_collector'), crazySupportZones, fullZones);
       placeMany('barracks', BUILDING_DEFINITIONS.barracks.maxCount, maxLevelFor('barracks'), crazySupportZones, fullZones);
       placeMany('cannon', BUILDING_DEFINITIONS.cannon.maxCount, maxLevelFor('cannon'), crazySupportZones, fullZones);
       placeMany('tesla', BUILDING_DEFINITIONS.tesla.maxCount, maxLevelFor('tesla'), crazySupportZones, fullZones);
