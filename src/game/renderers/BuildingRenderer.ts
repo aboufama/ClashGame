@@ -3031,6 +3031,7 @@ export class BuildingRenderer {
         const isCoolingDown = !isCharging && !isCharged && lastFireTime > 0 && timeSinceFire < 600;
         const cooldownProgress = isCoolingDown ? timeSinceFire / 600 : 0;
 
+        const hasEverFired = lastFireTime > 0;
         const isActive = isCharging || isCharged || isCoolingDown;
 
         // Calculate yOffset for subtle dip when idle
@@ -3096,14 +3097,20 @@ export class BuildingRenderer {
                     graphics.lineStyle(1, 0x3a3a3a, alpha);
                     graphics.strokeEllipse(center.x, ringY, ringSize, 4);
                 }
-            } else {
-                // Idle: rings stay lit with cyan glow (charged look)
+            } else if (!hasEverFired) {
+                // Truly idle (never attacked): rings lit with cyan glow
                 graphics.fillStyle(0x7a7a7a, alpha);
                 graphics.fillEllipse(center.x, ringY, ringSize, 4);
                 graphics.lineStyle(1, 0x3a3a3a, alpha);
                 graphics.strokeEllipse(center.x, ringY, ringSize, 4);
                 graphics.lineStyle(isLevel2 ? 2 : 1, 0x00ccff, alpha * 0.45);
                 graphics.strokeEllipse(center.x, ringY, ringSize + 1, 5);
+            } else {
+                // Between attacks: dull rings, no glow
+                graphics.fillStyle(0x5a5a5a, alpha);
+                graphics.fillEllipse(center.x, ringY, ringSize, 4);
+                graphics.lineStyle(1, 0x3a3a3a, alpha);
+                graphics.strokeEllipse(center.x, ringY, ringSize, 4);
             }
         }
 
