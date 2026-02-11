@@ -108,7 +108,7 @@ export function Hud({
 
     setDisplaySol(startSol);
     setIsBouncing(true);
-    setIsFadingLoot(true);
+    setIsFadingLoot(false);
 
     const animate = (timestamp: number) => {
       if (!startTime) startTime = timestamp;
@@ -122,7 +122,8 @@ export function Hud({
         animFrameRef.current = requestAnimationFrame(animate);
       } else {
         setIsBouncing(false);
-        onLootAnimationDone();
+        setIsFadingLoot(true);
+        setTimeout(() => onLootAnimationDone(), 600);
       }
     };
 
