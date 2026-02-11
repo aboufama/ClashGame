@@ -4382,8 +4382,8 @@ export class MainScene extends Phaser.Scene {
                 });
             }
 
-            // Massive lava eruption: 40 lava glob particles
-            for (let i = 0; i < 40; i++) {
+            // Lava eruption: lava glob particles
+            for (let i = 0; i < 18; i++) {
                 const delay = Math.random() * 100;
                 this.time.delayedCall(delay, () => {
                     const globColors = [0xff5500, 0xff7700, 0xffaa00, 0xffdd66];
@@ -4429,7 +4429,7 @@ export class MainScene extends Phaser.Scene {
             }
 
             // Black smoke plumes
-            for (let i = 0; i < 8; i++) {
+            for (let i = 0; i < 4; i++) {
                 this.time.delayedCall(i * 50, () => {
                     const smoke = this.add.graphics();
                     const smokeSize = 10 + Math.random() * 12;

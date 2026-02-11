@@ -3097,11 +3097,13 @@ export class BuildingRenderer {
                     graphics.strokeEllipse(center.x, ringY, ringSize, 4);
                 }
             } else {
-                // Idle: dull gray rings, no glow
-                graphics.fillStyle(0x5a5a5a, alpha);
+                // Idle: rings stay lit with cyan glow (charged look)
+                graphics.fillStyle(0x7a7a7a, alpha);
                 graphics.fillEllipse(center.x, ringY, ringSize, 4);
                 graphics.lineStyle(1, 0x3a3a3a, alpha);
                 graphics.strokeEllipse(center.x, ringY, ringSize, 4);
+                graphics.lineStyle(isLevel2 ? 2 : 1, 0x00ccff, alpha * 0.45);
+                graphics.strokeEllipse(center.x, ringY, ringSize + 1, 5);
             }
         }
 
@@ -3172,6 +3174,26 @@ export class BuildingRenderer {
             // Subtle dull highlight
             graphics.fillStyle(0x778899, 0.3 * alpha);
             graphics.fillCircle(center.x - 2, orbY - 2, 1.5);
+
+            // Occasional idle crackle — small dim arcs to feel alive
+            const idleSeed = Math.floor(time / 300);
+            if (idleSeed % 4 === 0) {
+                const arcAngle = ((idleSeed * 2.618) % 6.28);
+                const arcLen = 8 + (idleSeed % 5);
+                const sx = center.x + Math.cos(arcAngle) * 5;
+                const sy = orbY + Math.sin(arcAngle) * 5;
+                const ex = center.x + Math.cos(arcAngle) * arcLen + Math.sin(time / 30) * 2;
+                const ey = orbY + Math.sin(arcAngle) * arcLen + Math.cos(time / 35) * 1.5;
+
+                graphics.lineStyle(1, 0x6699aa, alpha * 0.4);
+                graphics.beginPath();
+                graphics.moveTo(sx, sy);
+                graphics.lineTo(ex, ey);
+                graphics.strokePath();
+
+                graphics.fillStyle(0x88aacc, alpha * 0.3);
+                graphics.fillCircle(ex, ey, 1);
+            }
         }
     }
     static drawPrismTower(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, _building?: any, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {

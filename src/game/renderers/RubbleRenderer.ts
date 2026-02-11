@@ -210,12 +210,8 @@ export class RubbleRenderer {
         const center = IsoUtils.cartToIso(gridX + width / 2, gridY + height / 2);
         const seed = gridX * 1000 + gridY;
 
-        const poolW = width * 22;
-        const poolH = height * 11;
-
-        // Scorched dark ground base
-        graphics.fillStyle(0x1a1410, 0.7 * intensity);
-        graphics.fillPoints([c1, c2, c3, c4], true);
+        const poolW = width * 44;
+        const poolH = height * 22;
 
         // Faint orange glow halo around edges
         graphics.fillStyle(0xff5500, 0.15 * intensity);
