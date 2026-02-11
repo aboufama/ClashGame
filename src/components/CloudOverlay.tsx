@@ -25,24 +25,6 @@ export function CloudOverlay({
 
   return (
     <div className={classes.join(' ')}>
-      {/* Chunky cloud puffs along the center seam */}
-      {[...Array(8)].map((_, i) => {
-        const sizes = [90, 110, 80, 120, 100, 85, 115, 95];
-        const offsets = [-8, 12, -15, 5, -12, 18, -5, 10];
-        const ySpacing = 12.5; // 100% / 8
-        return (
-          <div
-            key={i}
-            className={`cloud-puff ${i % 2 === 0 ? 'puff-left' : 'puff-right'}`}
-            style={{
-              width: `${sizes[i]}px`,
-              height: `${sizes[i]}px`,
-              top: `${i * ySpacing + offsets[i] * 0.3}%`,
-              animationDelay: `${i * 0.12}s`,
-            }}
-          />
-        );
-      })}
       {loading && (
         <div className="cloud-loading-panel">
           <div className="cloud-loading-track">
