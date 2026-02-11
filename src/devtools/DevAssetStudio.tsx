@@ -408,16 +408,25 @@ ${id}: {
         setLoadedImageSize({ width: image.width, height: image.height });
         setAssetLabel(file.name);
 
-        if (autoFitImageWidth) {
-          const targetWidth = Math.max(ISO_TILE_WIDTH, footprintPixelWidth);
-          const nextScale = clamp(targetWidth / Math.max(1, image.width), 0.05, 16);
-          setImageTransform(prev => ({ ...prev, scale: nextScale }));
-        }
+        // Always fit + center on upload for predictable first placement.
+        const targetWidth = Math.max(ISO_TILE_WIDTH, footprintPixelWidth);
+        const nextScale = clamp(targetWidth / Math.max(1, image.width), 0.05, 16);
+        const bounds = getIsoBoundsFromTiles(footprintTiles.map(parseTileKey));
+        const centerX = (bounds.minX + bounds.maxX) * 0.5;
+        const centerY = (bounds.minY + bounds.maxY) * 0.5;
+        const visualLift = image.height * nextScale * 0.18;
+
+        setImageTransform(prev => ({
+          ...prev,
+          scale: nextScale,
+          isoX: centerX,
+          isoY: centerY - visualLift
+        }));
       };
       image.src = src;
     };
     reader.readAsDataURL(file);
-  }, [autoFitImageWidth, footprintPixelWidth]);
+  }, [footprintPixelWidth, footprintTiles]);
 
   const getImageCanvasView = useCallback((canvasWidth: number, canvasHeight: number) => {
     return {
@@ -982,76 +991,81 @@ ${id}: {
               Asset Label
               <input value={assetLabel} onChange={event => setAssetLabel(event.target.value)} />
             </label>
-            <label className="inline-switch">
-              <input
-                type="checkbox"
-                checked={autoFitImageWidth}
-                onChange={event => setAutoFitImageWidth(event.target.checked)}
-              />
-              Auto-fit width to footprint tiles
-            </label>
-            <div className="grid-two">
-              <label>
-                Iso X
-                <input
-                  type="number"
-                  value={Math.round(imageTransform.isoX)}
-                  onChange={event => setImageTransform(prev => ({ ...prev, isoX: Number(event.target.value) }))}
-                />
-              </label>
-              <label>
-                Iso Y
-                <input
-                  type="number"
-                  value={Math.round(imageTransform.isoY)}
-                  onChange={event => setImageTransform(prev => ({ ...prev, isoY: Number(event.target.value) }))}
-                />
-              </label>
-              <label>
-                Scale
-                <input
-                  type="number"
-                  step="0.01"
-                  value={imageTransform.scale}
-                  onChange={event => setImageTransform(prev => ({ ...prev, scale: Number(event.target.value) }))}
-                />
-              </label>
-              <label>
-                Rotation
-                <input
-                  type="number"
-                  step="1"
-                  value={imageTransform.rotationDeg}
-                  onChange={event => setImageTransform(prev => ({ ...prev, rotationDeg: Number(event.target.value) }))}
-                />
-              </label>
-            </div>
-            <label>
-              Opacity
-              <input
-                type="range"
-                min={0.1}
-                max={1}
-                step={0.05}
-                value={imageTransform.opacity}
-                onChange={event => setImageTransform(prev => ({ ...prev, opacity: Number(event.target.value) }))}
-              />
-            </label>
-            <div className="button-row">
-              <button
-                type="button"
-                onClick={() => fitImageWidthToFootprint(loadedImageRef.current)}
-                disabled={!loadedImageRef.current}
-              >
-                Fit Width Now
-              </button>
-              <button
-                type="button"
-                onClick={centerImageOnFootprint}
-              >
-                Center On Footprint
-              </button>
-            </div>
+            <details className="panel-dropdown">
+              <summary>Placement & Transform</summary>
+              <div className="panel-dropdown-body">
+                <label className="inline-switch">
+                  <input
+                    type="checkbox"
+                    checked={autoFitImageWidth}
+                    onChange={event => setAutoFitImageWidth(event.target.checked)}
+                  />
+                  Auto-fit width when footprint changes
+                </label>
+                <div className="grid-two">
+                  <label>
+                    Iso X
+                    <input
+                      type="number"
+                      value={Math.round(imageTransform.isoX)}
+                      onChange={event => setImageTransform(prev => ({ ...prev, isoX: Number(event.target.value) }))}
+                    />
+                  </label>
+                  <label>
+                    Iso Y
+                    <input
+                      type="number"
+                      value={Math.round(imageTransform.isoY)}
+                      onChange={event => setImageTransform(prev => ({ ...prev, isoY: Number(event.target.value) }))}
+                    />
+                  </label>
+                  <label>
+                    Scale
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={imageTransform.scale}
+                      onChange={event => setImageTransform(prev => ({ ...prev, scale: Number(event.target.value) }))}
+                    />
+                  </label>
+                  <label>
+                    Rotation
+                    <input
+                      type="number"
+                      step="1"
+                      value={imageTransform.rotationDeg}
+                      onChange={event => setImageTransform(prev => ({ ...prev, rotationDeg: Number(event.target.value) }))}
+                    />
+                  </label>
+                </div>
+                <label>
+                  Opacity
+                  <input
+                    type="range"
+                    min={0.1}
+                    max={1}
+                    step={0.05}
+                    value={imageTransform.opacity}
+                    onChange={event => setImageTransform(prev => ({ ...prev, opacity: Number(event.target.value) }))}
+                  />
+                </label>
+                <div className="button-row">
+                  <button
+                    type="button"
+                    onClick={() => fitImageWidthToFootprint(loadedImageRef.current)}
+                    disabled={!loadedImageRef.current}
+                  >
+                    Fit Width Now
+                  </button>
+                  <button
+                    type="button"
+                    onClick={centerImageOnFootprint}
+                  >
+                    Center On Footprint
+                  </button>
+                </div>
+              </div>
+            </details>
             <div className="stat-line">Image size: {loadedImageSize.width} x {loadedImageSize.height}</div>
           </div>
 
