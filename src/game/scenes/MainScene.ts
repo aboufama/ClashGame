@@ -383,6 +383,7 @@ export class MainScene extends Phaser.Scene {
         this.handleCameraMovement(delta);
         this.updateCombat(time);
         this.updateSpikeZones();
+        this.updateLavaZones();
         this.updateTroops(delta);
         this.updateResources(time);
         this.updateSelectionHighlight();
@@ -4310,13 +4311,153 @@ export class MainScene extends Phaser.Scene {
             }
         } else if (b.type === 'solana_collector' || b.type === 'mine' || b.type === 'elixir_collector') {
             this.spawnSolCoinBurst(pos.x, pos.y - 10);
+        } else if (b.type === 'magmavent') {
+            // === VOLCANIC DEATH ===
+
+            // Stronger screen shake
+            this.cameras.main.shake(300, 0.004 * (this.mode === 'HOME' ? 0.2 : 1.0));
+
+            // Bright orange-white flash expanding from center
+            const lavaFlash = this.add.circle(pos.x, pos.y - 15, 15, 0xffcc66, 0.9);
+            lavaFlash.setDepth(30002);
+            this.tweens.add({ targets: lavaFlash, scale: 4, alpha: 0, duration: 250, onComplete: () => lavaFlash.destroy() });
+
+            // Rock crumble: 7 basalt chunks tumbling outward
+            const rockPositions = [
+                { x: -35, y: -10, label: 'back-left' },
+                { x: -25, y: -25, label: 'back-left-top' },
+                { x: 35, y: -5, label: 'back-right' },
+                { x: 25, y: -20, label: 'back-right-top' },
+                { x: 10, y: 18, label: 'front' },
+                { x: -10, y: 15, label: 'front-left' },
+                { x: 0, y: -30, label: 'top' },
+            ];
+            for (const rp of rockPositions) {
+                const chunk = this.add.graphics();
+                const chunkSize = 10 + Math.random() * 8;
+                chunk.fillStyle(0x2a2a32, 1);
+                chunk.beginPath();
+                chunk.moveTo(0, -chunkSize * 0.6);
+                chunk.lineTo(chunkSize * 0.5, -chunkSize * 0.2);
+                chunk.lineTo(chunkSize * 0.3, chunkSize * 0.4);
+                chunk.lineTo(-chunkSize * 0.4, chunkSize * 0.3);
+                chunk.lineTo(-chunkSize * 0.5, -chunkSize * 0.1);
+                chunk.closePath();
+                chunk.fillPath();
+                // Highlight face
+                chunk.fillStyle(0x3a3a45, 0.7);
+                chunk.beginPath();
+                chunk.moveTo(0, -chunkSize * 0.6);
+                chunk.lineTo(chunkSize * 0.5, -chunkSize * 0.2);
+                chunk.lineTo(chunkSize * 0.1, -chunkSize * 0.1);
+                chunk.closePath();
+                chunk.fillPath();
+
+                chunk.setPosition(pos.x + rp.x, pos.y + rp.y);
+                chunk.setDepth(30001);
+
+                const outAngle = Math.atan2(rp.y, rp.x) + (Math.random() - 0.5) * 0.5;
+                const outDist = 40 + Math.random() * 30;
+                const peakY = pos.y + rp.y - 30 - Math.random() * 25;
+
+                this.tweens.add({
+                    targets: chunk,
+                    x: pos.x + rp.x + Math.cos(outAngle) * outDist,
+                    duration: 500 + Math.random() * 200,
+                    ease: 'Quad.easeOut'
+                });
+                this.tweens.add({
+                    targets: chunk,
+                    y: [peakY, pos.y + rp.y + 15],
+                    duration: 500 + Math.random() * 200,
+                    ease: 'Quad.easeIn'
+                });
+                this.tweens.add({
+                    targets: chunk,
+                    rotation: (Math.random() - 0.5) * 3,
+                    alpha: 0,
+                    duration: 700 + Math.random() * 200,
+                    delay: 200,
+                    onComplete: () => chunk.destroy()
+                });
+            }
+
+            // Massive lava eruption: 40 lava glob particles
+            for (let i = 0; i < 40; i++) {
+                const delay = Math.random() * 100;
+                this.time.delayedCall(delay, () => {
+                    const globColors = [0xff5500, 0xff7700, 0xffaa00, 0xffdd66];
+                    const globSize = 3 + Math.random() * 7;
+                    const glob = this.add.graphics();
+                    glob.fillStyle(globColors[Math.floor(Math.random() * 4)], 1);
+                    glob.fillCircle(0, 0, globSize);
+                    // White-hot core on larger globs
+                    if (globSize > 5) {
+                        glob.fillStyle(0xffeecc, 0.8);
+                        glob.fillCircle(0, 0, globSize * 0.4);
+                    }
+                    glob.setPosition(pos.x + (Math.random() - 0.5) * 20, pos.y - 15);
+                    glob.setDepth(30002);
+
+                    const angle = Math.random() * Math.PI * 2;
+                    const dist = 30 + Math.random() * 60;
+                    const peakY = pos.y - 50 - Math.random() * 50;
+
+                    this.tweens.add({
+                        targets: glob,
+                        x: pos.x + Math.cos(angle) * dist,
+                        duration: 500 + Math.random() * 300,
+                        ease: 'Quad.easeOut'
+                    });
+                    this.tweens.add({
+                        targets: glob,
+                        y: [peakY, pos.y + 10 + Math.random() * 15],
+                        duration: 500 + Math.random() * 300,
+                        ease: 'Quad.easeIn',
+                        onComplete: () => {
+                            // Splat effect
+                            const splat = this.add.graphics();
+                            splat.fillStyle(0xff5500, 0.5);
+                            splat.fillCircle(0, 0, globSize * 1.5);
+                            splat.setPosition(glob.x, glob.y);
+                            splat.setDepth(29999);
+                            this.tweens.add({ targets: splat, alpha: 0, duration: 600, onComplete: () => splat.destroy() });
+                            glob.destroy();
+                        }
+                    });
+                });
+            }
+
+            // Black smoke plumes
+            for (let i = 0; i < 8; i++) {
+                this.time.delayedCall(i * 50, () => {
+                    const smoke = this.add.graphics();
+                    const smokeSize = 10 + Math.random() * 12;
+                    smoke.fillStyle(0x222222, 0.6);
+                    smoke.fillRect(-smokeSize / 2, -smokeSize / 2, smokeSize, smokeSize);
+                    smoke.setPosition(pos.x + (Math.random() - 0.5) * 50, pos.y - 10);
+                    smoke.setDepth(30000);
+                    this.tweens.add({
+                        targets: smoke,
+                        y: smoke.y - 60 - Math.random() * 30,
+                        x: smoke.x + (Math.random() - 0.5) * 30,
+                        scale: 2.5, alpha: 0,
+                        duration: 800 + Math.random() * 400,
+                        onComplete: () => smoke.destroy()
+                    });
+                });
+            }
         }
 
         // Create rubble at the building location (attack mode only)
         if (this.mode === 'ATTACK') {
             const info = BUILDINGS[b.type];
             if (info) {
-                this.createRubble(b.gridX, b.gridY, info.width, info.height);
+                if (b.type === 'magmavent') {
+                    this.createLavaPool(b.gridX, b.gridY, info.width, info.height, b.owner);
+                } else {
+                    this.createRubble(b.gridX, b.gridY, info.width, info.height);
+                }
             }
         }
 
@@ -5641,6 +5782,10 @@ export class MainScene extends Phaser.Scene {
         this.spikeZones.forEach(zone => zone.graphics.destroy());
         this.spikeZones = [];
 
+        // Clear lava zones
+        this.lavaZones.forEach(zone => zone.graphics.destroy());
+        this.lavaZones = [];
+
         // Clear rubble and obstacles
         this.clearRubble();
         this.clearObstacles();
@@ -6199,6 +6344,10 @@ export class MainScene extends Phaser.Scene {
     // ===== SPIKE LAUNCHER =====
     public spikeZones: { x: number; y: number; gridX: number; gridY: number; radius: number; damage: number; owner: 'PLAYER' | 'ENEMY'; endTime: number; graphics: Phaser.GameObjects.Graphics; lastTickTime: number }[] = [];
 
+    public lavaZones: { gridX: number; gridY: number; width: number; height: number;
+        damage: number; owner: 'PLAYER' | 'ENEMY'; endTime: number;
+        graphics: Phaser.GameObjects.Graphics; lastTickTime: number; createdAt: number }[] = [];
+
     private shootSpikeLauncherAt(launcher: PlacedBuilding, troop: Troop) {
         const info = BUILDINGS['spike_launcher'];
         const start = IsoUtils.cartToIso(launcher.gridX + info.width / 2, launcher.gridY + info.height / 2);
@@ -6469,6 +6618,97 @@ export class MainScene extends Phaser.Scene {
         // Remove expired zones (reverse order to preserve indices)
         for (let i = toRemove.length - 1; i >= 0; i--) {
             this.spikeZones.splice(toRemove[i], 1);
+        }
+    }
+
+    // ===== LAVA POOL (Magma Vent death zone) =====
+
+    private createLavaPool(gridX: number, gridY: number, width: number, height: number, owner: 'PLAYER' | 'ENEMY') {
+        const duration = 8000;
+        const damage = 40;
+
+        const zoneGraphics = this.add.graphics();
+        zoneGraphics.setDepth(depthForRubble(gridX, gridY, width, height));
+
+        // Initial draw
+        RubbleRenderer.drawLavaPool(zoneGraphics, gridX, gridY, width, height, this.time.now, 1);
+
+        const zone = {
+            gridX, gridY, width, height,
+            damage,
+            owner,
+            endTime: this.time.now + duration,
+            graphics: zoneGraphics,
+            lastTickTime: this.time.now,
+            createdAt: this.time.now
+        };
+
+        this.lavaZones.push(zone);
+    }
+
+    public updateLavaZones() {
+        const now = this.time.now;
+        const toRemove: number[] = [];
+
+        this.lavaZones.forEach((zone, index) => {
+            // Check expiration
+            if (now >= zone.endTime) {
+                zone.graphics.destroy();
+                toRemove.push(index);
+                return;
+            }
+
+            // Damage tick (every 500ms)
+            if (now >= zone.lastTickTime + 500) {
+                zone.lastTickTime = now;
+
+                // Damage troops standing in the building footprint
+                this.troops.forEach(t => {
+                    if (t.owner !== zone.owner && t.health > 0) {
+                        if (t.gridX >= zone.gridX && t.gridX <= zone.gridX + zone.width &&
+                            t.gridY >= zone.gridY && t.gridY <= zone.gridY + zone.height) {
+                            t.health -= zone.damage;
+                            t.hasTakenDamage = true;
+                            this.updateHealthBar(t);
+
+                            // Lava burn effect
+                            const tPos = IsoUtils.cartToIso(t.gridX, t.gridY);
+                            const burn = this.add.graphics();
+                            burn.fillStyle(0xff5500, 0.8);
+                            burn.fillCircle(0, 0, 4);
+                            burn.fillStyle(0xffaa00, 0.6);
+                            burn.fillCircle(0, -2, 2);
+                            burn.setPosition(tPos.x, tPos.y - 8);
+                            burn.setDepth(t.gameObject.depth + 1);
+                            this.tweens.add({
+                                targets: burn,
+                                y: tPos.y - 25,
+                                alpha: 0,
+                                duration: 300,
+                                onComplete: () => burn.destroy()
+                            });
+
+                            if (t.health <= 0) {
+                                this.destroyTroop(t);
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Calculate intensity for fade-out (last 1.5s)
+            const remaining = zone.endTime - now;
+            const intensity = remaining < 1500 ? remaining / 1500 : 1;
+
+            // Redraw every frame for animation
+            zone.graphics.clear();
+            zone.graphics.setAlpha(intensity);
+            RubbleRenderer.drawLavaPool(zone.graphics, zone.gridX, zone.gridY, zone.width, zone.height, now, intensity);
+        });
+
+        // Remove expired zones (reverse order)
+        for (let i = toRemove.length - 1; i >= 0; i--) {
+            this.lavaZones.splice(toRemove[i], 1);
         }
     }
 }
