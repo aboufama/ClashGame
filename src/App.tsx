@@ -821,13 +821,11 @@ function App() {
 
   const handleFindMatch = () => {
     if (capacity.current === 0) return;
-    handleRaidNow();
-    setIsTrainingOpen(false);
-  };
-
-  const handleAttackOnline = () => {
-    if (capacity.current === 0) return;
-    gameManager.startOnlineAttack();
+    if (isOnline) {
+      gameManager.startOnlineAttack();
+    } else {
+      handleRaidNow();
+    }
     setIsTrainingOpen(false);
   };
 
@@ -1072,11 +1070,9 @@ function App() {
         resources={resources}
         army={army}
         troops={troopList}
-        isOnline={isOnline}
         onClose={() => setIsTrainingOpen(false)}
         onStartPractice={handleStartPractice}
         onFindMatch={handleFindMatch}
-        onAttackOnline={handleAttackOnline}
         onTrainTroop={handleTrainTroop}
         onUntrainTroop={handleUntrainTroop}
       />

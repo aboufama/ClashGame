@@ -8,11 +8,9 @@ interface TrainingModalProps {
   resources: { sol: number };
   army: Record<string, number>;
   troops: TroopDef[];
-  isOnline: boolean;
   onClose: () => void;
   onStartPractice: () => void;
   onFindMatch: () => void;
-  onAttackOnline: () => void;
   onTrainTroop: (type: string) => void | Promise<void>;
   onUntrainTroop: (type: string) => void | Promise<void>;
 }
@@ -24,11 +22,9 @@ export function TrainingModal({
   resources,
   army,
   troops,
-  isOnline,
   onClose,
   onStartPractice,
   onFindMatch,
-  onAttackOnline,
   onTrainTroop,
   onUntrainTroop
 }: TrainingModalProps) {
@@ -56,16 +52,6 @@ export function TrainingModal({
               <div className="btn-icon icon findmatch-icon"></div>
               <span className="btn-label">FIND MATCH</span>
             </button>
-            {isOnline && (
-              <button
-                className={`header-btn attack-online ${capacity.current === 0 ? 'disabled' : ''}`}
-                onClick={onAttackOnline}
-                disabled={capacity.current === 0}
-              >
-                <span className="online-indicator"></span>
-                <span className="btn-label">ATTACK ONLINE</span>
-              </button>
-            )}
             <button className="header-btn close" onClick={onClose}>×</button>
           </div>
         </div>
