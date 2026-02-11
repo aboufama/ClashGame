@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { readJson, writeJson } from './blob.js';
 import { sendError } from './http.js';
+import { readUsersIndex } from './indexes.js';
 import type { SessionRecord, UserRecord } from './models.js';
 import { randomId } from './models.js';
 
@@ -143,6 +144,17 @@ export async function findUserByIdentifier(identifier: string): Promise<UserReco
   const normalized = identifier.trim();
   if (!normalized) return null;
 
+  const normalizedEmail = normalizeEmail(normalized);
+  const normalizedUsername = normalizeUsernameKey(normalized);
+
+  const matchesIdentifier = (user: UserRecord) => {
+    if (!user || typeof user.id !== 'string') return false;
+    const userEmail = typeof user.email === 'string' ? normalizeEmail(user.email) : '';
+    const userUsername = typeof user.username === 'string' ? normalizeUsernameKey(user.username) : '';
+    return user.id === normalized || userEmail === normalizedEmail || userUsername === normalizedUsername;
+  };
+
+  const seenIds = new Set<string>();
   const candidates: string[] = [];
   if (normalized.includes('@')) {
     const emailId = await findUserIdByEmail(normalized);
@@ -153,8 +165,42 @@ export async function findUserByIdentifier(identifier: string): Promise<UserReco
   if (usernameId && !candidates.includes(usernameId)) candidates.push(usernameId);
 
   for (const userId of candidates) {
+    if (!userId || seenIds.has(userId)) continue;
+    seenIds.add(userId);
     const user = await readJson<UserRecord>(`users/${userId}.json`);
-    if (user) return user;
+    if (user && matchesIdentifier(user)) {
+      await upsertUserAuthLookups(user).catch(() => undefined);
+      return user;
+    }
+  }
+
+  // Legacy/stale fallback: recover by scanning users index when auth lookups are missing.
+  const usersIndex = await readUsersIndex().catch(() => null);
+  if (!usersIndex || !Array.isArray(usersIndex.users)) return null;
+
+  const matchingUsernameEntries = usersIndex.users.filter(entry =>
+    normalizeUsernameKey(entry.username) === normalizedUsername
+  );
+  for (const entry of matchingUsernameEntries) {
+    if (!entry?.id || seenIds.has(entry.id)) continue;
+    seenIds.add(entry.id);
+    const user = await readJson<UserRecord>(`users/${entry.id}.json`);
+    if (user && matchesIdentifier(user)) {
+      await upsertUserAuthLookups(user).catch(() => undefined);
+      return user;
+    }
+  }
+
+  if (normalized.includes('@')) {
+    for (const entry of usersIndex.users) {
+      if (!entry?.id || seenIds.has(entry.id)) continue;
+      seenIds.add(entry.id);
+      const user = await readJson<UserRecord>(`users/${entry.id}.json`);
+      if (user && matchesIdentifier(user)) {
+        await upsertUserAuthLookups(user).catch(() => undefined);
+        return user;
+      }
+    }
   }
 
   return null;
