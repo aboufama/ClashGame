@@ -41,6 +41,7 @@ function App() {
   const [cloudOverlayLoading, setCloudOverlayLoading] = useState(true);
   const [cloudLoadingProgress, setCloudLoadingProgress] = useState(4);
   const [cloudTransitionReward, setCloudTransitionReward] = useState<number | null>(null);
+  const [lootAnimating, setLootAnimating] = useState<{ amount: number } | null>(null);
   const cloudOpenTimerRef = useRef<number | null>(null);
   const cloudHideTimerRef = useRef<number | null>(null);
   const [resources, setResources] = useState({ sol: 0 });
@@ -435,7 +436,13 @@ function App() {
         cloudHideTimerRef.current = window.setTimeout(() => {
           setShowCloudOverlay(false);
           setCloudOpening(false);
-          setCloudTransitionReward(null);
+          // Trigger fly-in animation if there was a reward
+          setCloudTransitionReward(prev => {
+            if (prev && prev > 0) {
+              setLootAnimating({ amount: prev });
+            }
+            return null;
+          });
         }, 600); // Match CSS animation duration
       },
       addSol: (amount: number) => {
@@ -963,6 +970,8 @@ function App() {
         showCloudOverlay={showCloudOverlay}
         isMobile={isMobile}
         isScouting={Boolean(scoutTarget)}
+        lootAnimating={lootAnimating}
+        onLootAnimationDone={() => setLootAnimating(null)}
         onOpenSettings={() => setIsAccountOpen(true)}
         onOpenBuild={() => setIsBuildingOpen(true)}
         onOpenTrain={() => setIsTrainingOpen(true)}

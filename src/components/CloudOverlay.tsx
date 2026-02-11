@@ -25,19 +25,24 @@ export function CloudOverlay({
 
   return (
     <div className={classes.join(' ')}>
-      {[...Array(20)].map((_, i) => (
-        <div
-          key={i}
-          className="cloud-part"
-          style={{
-            left: `${(i % 5) * 25 - 10}%`,
-            top: `${Math.floor(i / 5) * 30 - 10}%`,
-            width: `${350 + (i % 3) * 50}px`,
-            height: `${280 + (i % 2) * 40}px`,
-            animationDelay: `${(i % 4) * 0.1}s`
-          }}
-        />
-      ))}
+      {/* Chunky cloud puffs along the center seam */}
+      {[...Array(8)].map((_, i) => {
+        const sizes = [90, 110, 80, 120, 100, 85, 115, 95];
+        const offsets = [-8, 12, -15, 5, -12, 18, -5, 10];
+        const ySpacing = 12.5; // 100% / 8
+        return (
+          <div
+            key={i}
+            className={`cloud-puff ${i % 2 === 0 ? 'puff-left' : 'puff-right'}`}
+            style={{
+              width: `${sizes[i]}px`,
+              height: `${sizes[i]}px`,
+              top: `${i * ySpacing + offsets[i] * 0.3}%`,
+              animationDelay: `${i * 0.12}s`,
+            }}
+          />
+        );
+      })}
       {loading && (
         <div className="cloud-loading-panel">
           <div className="cloud-loading-track">
@@ -47,12 +52,8 @@ export function CloudOverlay({
         </div>
       )}
       {!loading && clampedReward !== null && clampedReward > 0 && (
-        <div className="cloud-reward-panel">
-          <div className="cloud-reward-label">LOOT SECURED</div>
-          <div className="cloud-reward-value">
-            <span className="icon sol-icon"></span>
-            <span>+{formatSol(clampedReward, false, false)}</span>
-          </div>
+        <div className="cloud-reward-floating">
+          +{formatSol(clampedReward, false, false)}
         </div>
       )}
     </div>

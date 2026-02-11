@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import type { BuildingType, TroopType } from '../game/config/GameDefinitions';
 import { TROOP_DEFINITIONS } from '../game/config/GameDefinitions';
 import type { GameMode } from '../game/types/GameMode';
@@ -24,6 +25,8 @@ interface HudProps {
   showCloudOverlay: boolean;
   isMobile: boolean;
   isScouting: boolean;
+  lootAnimating: { amount: number } | null;
+  onLootAnimationDone: () => void;
   onOpenSettings: () => void;
   onOpenBuild: () => void;
   onOpenTrain: () => void;
@@ -51,6 +54,8 @@ export function Hud({
   showCloudOverlay,
   isMobile,
   isScouting,
+  lootAnimating,
+  onLootAnimationDone,
   onOpenSettings,
   onOpenBuild,
   onOpenTrain,
@@ -72,15 +77,76 @@ export function Hud({
   };
   const showAttackTroopBar = !(isScouting && visibleTroops.length === 0);
 
+  // Count-up animation for resource display
+  const [displaySol, setDisplaySol] = useState(resources.sol);
+  const [isBouncing, setIsBouncing] = useState(false);
+  const animFrameRef = useRef<number>(0);
+
+  // Keep displaySol in sync when not animating
+  useEffect(() => {
+    if (!lootAnimating) {
+      setDisplaySol(resources.sol);
+    }
+  }, [resources.sol, lootAnimating]);
+
+  // Count-up effect when loot animation is active and view is HOME
+  useEffect(() => {
+    if (!lootAnimating || view !== 'HOME') return;
+
+    const startSol = resources.sol - lootAnimating.amount;
+    const endSol = resources.sol;
+    const duration = 800;
+    let startTime: number | null = null;
+
+    setDisplaySol(startSol);
+    setIsBouncing(true);
+
+    const animate = (timestamp: number) => {
+      if (!startTime) startTime = timestamp;
+      const elapsed = timestamp - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      // Ease-out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplaySol(Math.round(startSol + (endSol - startSol) * eased));
+
+      if (progress < 1) {
+        animFrameRef.current = requestAnimationFrame(animate);
+      } else {
+        setIsBouncing(false);
+      }
+    };
+
+    // Small delay so the fly-in element is visible first
+    const timeout = setTimeout(() => {
+      animFrameRef.current = requestAnimationFrame(animate);
+    }, 200);
+
+    return () => {
+      clearTimeout(timeout);
+      cancelAnimationFrame(animFrameRef.current);
+      setIsBouncing(false);
+    };
+  }, [lootAnimating, view, resources.sol]);
+
   return (
     <div className={`hud ${showCloudOverlay ? 'hidden-ui' : ''} ${isMobile ? 'mobile' : ''}`}>
+      {/* Loot fly-in element */}
+      {lootAnimating && view === 'HOME' && (
+        <div
+          className="loot-fly-in"
+          onAnimationEnd={onLootAnimationDone}
+        >
+          +{formatSol(lootAnimating.amount, false, false)}
+        </div>
+      )}
+
       <div className="hud-top">
         {view === 'HOME' ? (
           <>
             <div className="resources">
-              <div className="res-item sol">
+              <div className={`res-item sol ${isBouncing ? 'bounce' : ''}`}>
                 <span className="icon sol-icon" />
-                <span>{formatSol(resources.sol, isMobile, false)}</span>
+                <span>{formatSol(displaySol, isMobile, false)}</span>
               </div>
             </div>
             <button className="settings-btn" onClick={onOpenSettings}>

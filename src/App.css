@@ -1272,46 +1272,66 @@ button:disabled {
     letter-spacing: 0.8px;
 }
 
-.cloud-reward-panel {
+.cloud-reward-floating {
     position: absolute;
     left: 50%;
     top: 50%;
     transform: translate(-50%, -50%);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
-    padding: 18px 24px;
-    background: rgba(8, 17, 28, 0.82);
-    border: 3px solid #2f445b;
-    box-shadow:
-        4px 4px 0 rgba(0, 0, 0, 0.35),
-        inset 1px 1px 0 rgba(255, 255, 255, 0.2);
+    font-family: 'Press Start 2P', monospace;
+    font-size: 18px;
+    color: #14F195;
+    text-shadow:
+        2px 2px 0 #000,
+        -1px -1px 0 #000,
+        1px -1px 0 #000,
+        -1px 1px 0 #000;
     z-index: 4;
+    pointer-events: none;
 }
 
-.cloud-reward-label {
-    font-size: 10px;
-    letter-spacing: 1px;
-    color: #d7e2ef;
-    text-shadow: 1px 1px 0 #000;
+/* Loot fly-in animation: center → top-left resource corner */
+.loot-fly-in {
+    position: fixed;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 18px;
+    color: #14F195;
+    text-shadow:
+        2px 2px 0 #000,
+        -1px -1px 0 #000,
+        1px -1px 0 #000,
+        -1px 1px 0 #000;
+    z-index: 200;
+    pointer-events: none;
+    animation: lootFlyIn 600ms ease-in forwards;
 }
 
-.cloud-reward-value {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 14px;
-    color: #8ff6ad;
-    text-shadow: 1px 1px 0 #000;
+@keyframes lootFlyIn {
+    0% {
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+    }
+    100% {
+        top: 20px;
+        left: 80px;
+        transform: translate(0, 0) scale(0.7);
+        opacity: 0.4;
+    }
 }
 
-.cloud-reward-value .icon {
-    width: 20px;
-    height: 20px;
+/* Bounce pulse on resource item during count-up */
+.res-item.sol.bounce {
+    animation: resourceBounce 300ms ease-out;
 }
 
-/* Left cloud - solid white square */
+@keyframes resourceBounce {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.15); }
+    100% { transform: scale(1); }
+}
+
+/* Left cloud panel */
 .cloud-overlay::before {
     content: '';
     position: absolute;
@@ -1324,7 +1344,7 @@ button:disabled {
     animation: cloudCloseLeft 0.6s ease-out forwards;
 }
 
-/* Right cloud - solid white square */
+/* Right cloud panel */
 .cloud-overlay::after {
     content: '';
     position: absolute;
@@ -1343,8 +1363,69 @@ button:disabled {
     transform: translateX(0);
 }
 
-/* Hide the cloud-part elements - not needed for simple squares */
-.cloud-part {
+/* Chunky cloud puffs along the center seam */
+.cloud-puff {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #fff;
+    border-radius: 50%;
+    z-index: 3;
+    box-shadow: 0 0 20px 10px rgba(255, 255, 255, 0.8);
+    animation: puffBob 2.4s ease-in-out infinite alternate;
+}
+
+.cloud-puff.puff-left {
+    margin-left: -20px;
+}
+
+.cloud-puff.puff-right {
+    margin-left: 20px;
+}
+
+/* Gentle bobbing while clouds are closed */
+@keyframes puffBob {
+    0% {
+        transform: translateX(-50%) translateY(0) scale(1);
+    }
+    100% {
+        transform: translateX(-50%) translateY(-8px) scale(1.06);
+    }
+}
+
+/* Puffs scatter when opening */
+.cloud-overlay.opening .cloud-puff.puff-left {
+    animation: puffScatterLeft 0.6s ease-in forwards;
+}
+
+.cloud-overlay.opening .cloud-puff.puff-right {
+    animation: puffScatterRight 0.6s ease-in forwards;
+}
+
+@keyframes puffScatterLeft {
+    0% {
+        opacity: 1;
+        transform: translateX(-50%) scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: translateX(calc(-50% - 120px)) scale(0.5);
+    }
+}
+
+@keyframes puffScatterRight {
+    0% {
+        opacity: 1;
+        transform: translateX(-50%) scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: translateX(calc(-50% + 120px)) scale(0.5);
+    }
+}
+
+/* Hide puffs during loading (clean look with progress bar) */
+.cloud-overlay.loading .cloud-puff {
     display: none;
 }
 
@@ -1398,53 +1479,6 @@ button:disabled {
     }
 }
 
-@keyframes cloudPuffLeft {
-    0% {
-        transform: translateX(-200px);
-        opacity: 0;
-    }
-
-    100% {
-        transform: translateX(0);
-        opacity: 0.9;
-    }
-}
-
-@keyframes cloudPuffRight {
-    0% {
-        transform: translateX(200px);
-        opacity: 0;
-    }
-
-    100% {
-        transform: translateX(0);
-        opacity: 0.9;
-    }
-}
-
-@keyframes cloudPuffOpenLeft {
-    0% {
-        transform: translateX(0);
-        opacity: 0.9;
-    }
-
-    100% {
-        transform: translateX(-300px);
-        opacity: 0;
-    }
-}
-
-@keyframes cloudPuffOpenRight {
-    0% {
-        transform: translateX(0);
-        opacity: 0.9;
-    }
-
-    100% {
-        transform: translateX(300px);
-        opacity: 0;
-    }
-}
 
 
 /* ============================================
