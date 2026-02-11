@@ -129,7 +129,7 @@ export function Hud({
   }, [lootAnimating, view, resources.sol]);
 
   return (
-    <div className={`hud ${showCloudOverlay ? 'hidden-ui' : ''} ${isMobile ? 'mobile' : ''}`}>
+    <div className={`hud ${isMobile ? 'mobile' : ''}`}>
       {/* Loot fly-in element */}
       {lootAnimating && view === 'HOME' && (
         <div
