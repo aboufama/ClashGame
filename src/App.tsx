@@ -843,7 +843,7 @@ function App() {
   const upgradeInProgressRef = useRef(false);
 
   const handleUpgradeBuilding = async () => {
-    // Prevent concurrent upgrades from fast clicks
+    // Serialize upgrade requests, but don't wait for save round-trips.
     if (upgradeInProgressRef.current) return;
     if (selectedInMap && selectedBuildingInfo) {
       const def = BUILDING_DEFINITIONS[selectedBuildingInfo.type];
@@ -891,9 +891,10 @@ function App() {
               setSelectedBuildingInfo(prev => prev ? { ...prev, level: newLevel } : null);
             }
 
-            // Wait for server confirmation before releasing the upgrade lock.
-            // This prevents another upgrade click before the server has the data.
-            await savePromise;
+            // Fire save in background so next upgrade can start immediately.
+            void savePromise.catch(error => {
+              console.error('Upgrade save failed:', error);
+            });
           }
         } finally {
           upgradeInProgressRef.current = false;

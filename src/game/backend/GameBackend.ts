@@ -588,9 +588,11 @@ export class Backend {
 
     const buildings: SerializedBuilding[] = [];
     const occupied = new Set<string>();
+    const structureOccupied = new Set<string>();
     const wallIndexByTile = new Map<string, number>();
     const placedCount = new Map<BuildingType, number>();
     let wallLevel = 1;
+    const enforceStructureGap = difficulty !== 'crazy';
 
     const getPlacedCount = (type: BuildingType) => placedCount.get(type) ?? 0;
     const bumpPlacedCount = (type: BuildingType) => {
@@ -621,6 +623,29 @@ export class Backend {
       }
     };
 
+    const canPlaceWithStructureGap = (x: number, y: number, width: number, height: number) => {
+      if (!enforceStructureGap) return true;
+      const gapTiles = 1;
+      for (let dx = -gapTiles; dx < width + gapTiles; dx++) {
+        for (let dy = -gapTiles; dy < height + gapTiles; dy++) {
+          const tx = x + dx;
+          const ty = y + dy;
+          if (tx < 0 || ty < 0 || tx >= mapSize || ty >= mapSize) continue;
+          if (structureOccupied.has(tileKey(tx, ty))) return false;
+        }
+      }
+      return true;
+    };
+
+    const occupyStructureRect = (x: number, y: number, width: number, height: number) => {
+      if (!enforceStructureGap) return;
+      for (let dx = 0; dx < width; dx++) {
+        for (let dy = 0; dy < height; dy++) {
+          structureOccupied.add(tileKey(x + dx, y + dy));
+        }
+      }
+    };
+
     const distanceToCenter = (x: number, y: number, width: number, height: number) => {
       const px = x + width / 2;
       const py = y + height / 2;
@@ -638,6 +663,7 @@ export class Backend {
       const normalizedLevel = normalizeLevel(type, level);
       if (!inBounds(x, y, definition.width, definition.height)) return false;
       if (!canPlaceRect(x, y, definition.width, definition.height)) return false;
+      if (type !== 'wall' && !canPlaceWithStructureGap(x, y, definition.width, definition.height)) return false;
 
       const idx = buildings.push({
         id: randomId(),
@@ -648,6 +674,9 @@ export class Backend {
       }) - 1;
 
       occupyRect(x, y, definition.width, definition.height);
+      if (type !== 'wall') {
+        occupyStructureRect(x, y, definition.width, definition.height);
+      }
       bumpPlacedCount(type);
       if (type === 'wall') {
         wallIndexByTile.set(tileKey(x, y), idx);
@@ -890,7 +919,7 @@ export class Backend {
       placeMany('tesla', 3, 2, hardDefenseZones, innerZones);
       placeMany('cannon', 5, () => randInt(3, 4), hardDefenseZones, midZones);
 
-      placeMany('army_camp', 3, 3, hardSupportZones, midZones);
+      placeMany('army_camp', 4, 3, hardSupportZones, midZones);
       placeMany('barracks', 3, 1, hardSupportZones, midZones);
       placeMany('solana_collector', randInt(6, 8), 2, hardSupportZones, outerZones);
 
@@ -956,6 +985,21 @@ export class Backend {
         { ...fullRect, minRadius: 4.0, maxRadius: 13.5 },
         { ...outerRect, minRadius: 6.0 }
       ]);
+    }
+
+    const hasNonWallBuilding = buildings.some(building => building.type !== 'wall');
+    if (!hasNonWallBuilding) {
+      // Absolute guard: ensure generated bot bases always have playable structures.
+      buildings.length = 0;
+      const cx = centerX - 1;
+      const cy = centerY - 1;
+      buildings.push(
+        { id: randomId(), type: 'town_hall', gridX: cx, gridY: cy, level: 1 },
+        { id: randomId(), type: 'cannon', gridX: cx - 3, gridY: cy, level: 1 },
+        { id: randomId(), type: 'barracks', gridX: cx + 4, gridY: cy, level: 1 },
+        { id: randomId(), type: 'army_camp', gridX: cx, gridY: cy + 4, level: 1 },
+        { id: randomId(), type: 'solana_collector', gridX: cx + 3, gridY: cy + 3, level: 1 }
+      );
     }
 
     const lootConfig = lootByDifficulty[difficulty];

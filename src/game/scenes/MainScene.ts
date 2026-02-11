@@ -5600,82 +5600,119 @@ export class MainScene extends Phaser.Scene {
         this.spawnRandomObstacles(8);
     }
 
-    private async generateEnemyVillage() {
-        const enemyWorld = await Backend.generateEnemyWorld();
-        // Give fake resources for loot
-        enemyWorld.resources = {
-            sol: Math.floor(20000 + Math.random() * 80000)
-        };
+    private instantiateEnemyWorld(
+        world: SerializedWorld,
+        meta: { id: string; username: string; isBot: boolean; attackId?: string }
+    ): number {
+        const enemyBuildings = Array.isArray(world.buildings) ? world.buildings : [];
+        if (enemyBuildings.length === 0) return 0;
 
-        // Track enemy info for village name
-        this.currentEnemyWorld = {
-            id: enemyWorld.id,
-            username: 'Bot Base',
-            isBot: true
-        };
+        this.currentEnemyWorld = meta;
+        const lootAmount = Math.max(0, Math.floor(world.resources?.sol ?? 0));
+        const lootMap = LootSystem.calculateLootDistribution(enemyBuildings, lootAmount);
 
-        const lootMap = LootSystem.calculateLootDistribution(enemyWorld.buildings, enemyWorld.resources.sol);
-
-        enemyWorld.buildings.forEach(b => {
+        let placed = 0;
+        enemyBuildings.forEach((b: any) => {
             const inst = this.instantiateBuilding(b, 'ENEMY');
-            if (inst) inst.loot = lootMap.get(b.id);
+            if (!inst) return;
+            inst.loot = lootMap.get(b.id);
+            placed++;
         });
 
-        this.updateVillageName();
+        if (placed > 0) {
+            this.updateVillageName();
+        }
+
+        return placed;
+    }
+
+    private spawnEmergencyEnemyVillage() {
+        const cx = 11;
+        const cy = 11;
+        const fallbackWorld: SerializedWorld = {
+            id: `bot_fallback_${Date.now()}`,
+            ownerId: 'bot',
+            username: 'Bot Base',
+            buildings: [
+                { id: Phaser.Utils.String.UUID(), type: 'town_hall', gridX: cx, gridY: cy, level: 1 },
+                { id: Phaser.Utils.String.UUID(), type: 'cannon', gridX: cx - 3, gridY: cy, level: 1 },
+                { id: Phaser.Utils.String.UUID(), type: 'barracks', gridX: cx + 4, gridY: cy, level: 1 },
+                { id: Phaser.Utils.String.UUID(), type: 'army_camp', gridX: cx, gridY: cy + 4, level: 1 },
+                { id: Phaser.Utils.String.UUID(), type: 'solana_collector', gridX: cx + 3, gridY: cy + 3, level: 1 }
+            ],
+            obstacles: [],
+            resources: { sol: 30000 },
+            army: {},
+            lastSaveTime: Date.now(),
+            revision: 1
+        };
+
+        this.instantiateEnemyWorld(fallbackWorld, {
+            id: fallbackWorld.id,
+            username: fallbackWorld.username || 'Bot Base',
+            isBot: true
+        });
+    }
+
+    private async generateEnemyVillage() {
+        const maxAttempts = 4;
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            const enemyWorld = await Backend.generateEnemyWorld();
+            // Give fake resources for loot
+            enemyWorld.resources = {
+                sol: Math.floor(20000 + Math.random() * 80000)
+            };
+
+            const placed = this.instantiateEnemyWorld(enemyWorld, {
+                id: enemyWorld.id,
+                username: enemyWorld.username || 'Bot Base',
+                isBot: true
+            });
+
+            if (placed > 0) return;
+            this.clearScene();
+        }
+
+        this.spawnEmergencyEnemyVillage();
     }
 
     // Load an online player's base for attack
     public async generateOnlineEnemyVillage(): Promise<boolean> {
         const onlineBase = await Backend.getOnlineBase(this.userId);
-        if (!onlineBase || onlineBase.buildings.length === 0) {
+        if (!onlineBase || !Array.isArray(onlineBase.buildings) || onlineBase.buildings.length === 0) {
             // Fallback to procedural generation if no online bases
             await this.generateEnemyVillage();
             return false;
         }
 
-        // Track enemy info for village name and notifications
-        this.currentEnemyWorld = {
+        const placed = this.instantiateEnemyWorld(onlineBase, {
             id: onlineBase.ownerId,
             username: onlineBase.username || 'Unknown Player',
             isBot: (onlineBase as any).isBot || false,
             attackId: Phaser.Utils.String.UUID()
-        };
-
-        const lootMap = LootSystem.calculateLootDistribution(onlineBase.buildings, onlineBase.resources.sol);
-
-        onlineBase.buildings.forEach((b: any) => {
-            const inst = this.instantiateBuilding(b, 'ENEMY');
-            if (inst) inst.loot = lootMap.get(b.id);
         });
-
-        this.updateVillageName();
+        if (placed === 0) {
+            this.clearScene();
+            await this.generateEnemyVillage();
+            return false;
+        }
         return true;
     }
 
     // Load a specific user's base for attack (from leaderboard)
     public async generateEnemyVillageFromUser(userId: string, username: string): Promise<boolean> {
         const userBase = await Backend.loadFromCloud(userId);
-        if (!userBase || userBase.buildings.length === 0) {
+        if (!userBase || !Array.isArray(userBase.buildings) || userBase.buildings.length === 0) {
             return false;
         }
 
-        // Track enemy info for village name and notifications
-        this.currentEnemyWorld = {
+        const placed = this.instantiateEnemyWorld(userBase, {
             id: userId,
             username: username,
             isBot: false,
             attackId: Phaser.Utils.String.UUID()
-        };
-
-        const lootMap = LootSystem.calculateLootDistribution(userBase.buildings, userBase.resources.sol);
-
-        userBase.buildings.forEach((b: any) => {
-            const inst = this.instantiateBuilding(b, 'ENEMY');
-            if (inst) inst.loot = lootMap.get(b.id);
         });
-
-        this.updateVillageName();
-        return true;
+        return placed > 0;
     }
 
 

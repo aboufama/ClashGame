@@ -9,6 +9,7 @@ const GROUND_PLANE_DEPTH = 0;
 const BUILDING_BIAS_SCALE = 2;
 const TROOP_BIAS_SCALE = 1;
 const OBSTACLE_BIAS_SCALE = 1;
+const BARRACKS_DEPTH_OFFSET = DEPTH_STEP + 12;
 
 const LAYER_OFFSETS = {
     obstacle: 2,
@@ -65,7 +66,10 @@ const obstacleBias = (width: number, height: number) =>
 export const depthForBuilding = (gridX: number, gridY: number, type: BuildingType) => {
     const def = BUILDING_DEFINITIONS[type];
     const layerOffset = type === 'wall' ? LAYER_OFFSETS.wall : LAYER_OFFSETS.building;
-    return depthForFootprint(gridX, gridY, def.width, def.height, layerOffset, buildingBias(type));
+    const depth = depthForFootprint(gridX, gridY, def.width, def.height, layerOffset, buildingBias(type));
+    // Barracks roofs are tall and can be incorrectly occluded by top-right walls without extra lift.
+    if (type === 'barracks') return depth + BARRACKS_DEPTH_OFFSET;
+    return depth;
 };
 
 export const depthForObstacle = (gridX: number, gridY: number, width: number, height: number) =>
