@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http.js';
 import { requireAuth } from '../_lib/auth.js';
-import { appendWorldPatchEvent, buildPatchFromClientState, ensurePlayerState, materializeState } from '../_lib/game_state.js';
+import { ensurePlayerState, materializeState, saveWorldState } from '../_lib/game_state.js';
 import { normalizeWorldInput, worldHasTownHall, type SerializedWorld } from '../_lib/models.js';
 import { upsertUserIndex } from '../_lib/indexes.js';
 
@@ -69,23 +69,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const patch = buildPatchFromClientState(current.world, normalizedIncoming, user.id, user.username);
     const requestKey = body.requestId?.trim() || undefined;
-    await appendWorldPatchEvent(user.id, patch, requestKey);
-
-    const updated = await materializeState(user.id, user.username, Date.now());
+    const updated = await saveWorldState(user.id, user.username, normalizedIncoming, requestKey);
 
     await upsertUserIndex({
       id: user.id,
       username: user.username,
-      buildingCount: updated.world.buildings.length,
+      buildingCount: updated.buildings.length,
       lastSeen: now,
       trophies: user.trophies ?? 0
     }).catch(error => {
       console.warn('save index sync failed', { userId: user.id, error });
     });
 
-    sendJson(res, 200, { ok: true, world: updated.world });
+    sendJson(res, 200, { ok: true, world: updated });
   } catch (error) {
     console.error('save error', error);
     sendError(res, 500, 'Failed to save base');

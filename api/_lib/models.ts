@@ -193,6 +193,8 @@ export function normalizeWorldInput(input: SerializedWorld, ownerId: string, use
   }, 1);
   const storedWallLevel = toFiniteInt(input.wallLevel, maxPlacedWallLevel);
   const wallLevel = Math.max(1, storedWallLevel);
+  const requestedSol = toFiniteInt(input.resources?.sol, STARTING_BALANCE);
+  const sol = clamp(requestedSol, 0, MAX_BALANCE);
 
   return {
     id: String(input.id || `world_${ownerId}`).slice(0, 120),
@@ -200,7 +202,7 @@ export function normalizeWorldInput(input: SerializedWorld, ownerId: string, use
     username,
     buildings,
     obstacles,
-    resources: { sol: 0 },
+    resources: { sol },
     army: sanitizeArmy(input.army),
     wallLevel,
     lastSaveTime: toFiniteInt(input.lastSaveTime, Date.now())

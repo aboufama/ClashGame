@@ -47,12 +47,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const requestKey = normalizedRequestKey(body);
     if (requestKey && current.requestKeys.has(requestKey)) {
-      sendJson(res, 200, { applied: true, sol: current.balance });
+      sendJson(res, 200, { applied: true, sol: current.balance, revision: current.revision });
       return;
     }
 
     if (delta < 0 && current.balance + delta < 0) {
-      sendJson(res, 200, { applied: false, sol: current.balance });
+      sendJson(res, 200, { applied: false, sol: current.balance, revision: current.revision });
       return;
     }
 
@@ -61,7 +61,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const updated = await materializeState(user.id, user.username, Date.now());
-    sendJson(res, 200, { applied: true, sol: updated.balance });
+    sendJson(res, 200, { applied: true, sol: updated.balance, revision: updated.revision });
   } catch (error) {
     console.error('apply resource error', error);
     sendError(res, 500, 'Failed to apply resources');

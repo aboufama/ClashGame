@@ -907,11 +907,8 @@ export class MainScene extends Phaser.Scene {
         // Load obstacles from backend, or spawn some if none exist
         if (placed > 0 && world.obstacles && world.obstacles.length > 0) {
             world.obstacles.forEach(o => {
-                this.placeObstacle(o.gridX, o.gridY, o.type, true); // skipBackend=true to prevent duplication
+                this.placeObstacle(o.gridX, o.gridY, o.type, true, o.id); // skipBackend=true to prevent duplication
             });
-        } else if (placed > 0) {
-            // Existing base has no obstacles - spawn some!
-            this.spawnRandomObstacles(12);
         }
 
         const campLevels = this.buildings.filter(b => b.type === 'army_camp').map(b => b.level ?? 1);
@@ -1512,12 +1509,12 @@ export class MainScene extends Phaser.Scene {
             ];
             const spot = neighbors[Math.floor(Math.random() * neighbors.length)];
             // placeObstacle checks validity (bounds + optimization)
-            this.placeObstacle(spot.x, spot.y, 'grass_patch');
+            this.placeObstacle(spot.x, spot.y, 'grass_patch', true);
         } else {
             // Spontaneous generation
             const x = Math.floor(Math.random() * (this.mapSize - 4)) + 2;
             const y = Math.floor(Math.random() * (this.mapSize - 4)) + 2;
-            this.placeObstacle(x, y, 'grass_patch');
+            this.placeObstacle(x, y, 'grass_patch', true);
         }
     }
 
@@ -1548,7 +1545,7 @@ export class MainScene extends Phaser.Scene {
     }
 
     // === OBSTACLE SYSTEM (Rocks, Trees, Grass) ===
-    public placeObstacle(gridX: number, gridY: number, type: ObstacleType, skipBackend: boolean = false) {
+    public placeObstacle(gridX: number, gridY: number, type: ObstacleType, skipBackend: boolean = false, idOverride?: string) {
         const info = OBSTACLES[type];
         if (!info) return false;
 
@@ -1559,7 +1556,7 @@ export class MainScene extends Phaser.Scene {
         const animOffset = Math.random() * Math.PI * 2;
 
         const obstacle: PlacedObstacle = {
-            id: Phaser.Utils.String.UUID(),
+            id: idOverride || Phaser.Utils.String.UUID(),
             type,
             gridX,
             gridY,
@@ -1635,37 +1632,6 @@ export class MainScene extends Phaser.Scene {
         this.obstacles.forEach(o => o.graphics.destroy());
         this.obstacles = [];
     }
-
-    private spawnRandomObstacles(count: number = 12) {
-        // Weighted types - grass appears 5x more often
-        const types: ObstacleType[] = [
-            'rock_small', 'rock_large',
-            'tree_oak', 'tree_pine',
-            'grass_patch', 'grass_patch', 'grass_patch', 'grass_patch', 'grass_patch' // 5x grass
-        ];
-        let placed = 0;
-        let attempts = 0;
-
-        while (placed < count && attempts < count * 10) {
-            const type = types[Math.floor(Math.random() * types.length)];
-            const info = OBSTACLES[type];
-            const gridX = Math.floor(Math.random() * (this.mapSize - info.width - 4)) + 2;
-            const gridY = Math.floor(Math.random() * (this.mapSize - info.height - 4)) + 2;
-
-            // Avoid center of map (where town hall usually goes)
-            const centerDist = Math.abs(gridX - 12) + Math.abs(gridY - 12);
-            if (centerDist < 6) {
-                attempts++;
-                continue;
-            }
-
-            if (this.placeObstacle(gridX, gridY, type)) {
-                placed++;
-            }
-            attempts++;
-        }
-    }
-
 
     // === LEVEL 1: WOODEN PALISADE ===
 

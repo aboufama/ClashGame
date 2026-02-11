@@ -17,6 +17,7 @@ interface ResolveBody {
 interface AttackResult {
   lootApplied: number;
   attackerBalance: number;
+  attackerRevision?: number;
 }
 
 function attackEventKey(attackId: string, side: 'victim' | 'attacker') {
@@ -123,7 +124,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const result: AttackResult = {
       lootApplied,
-      attackerBalance: attackerAfter.balance
+      attackerBalance: attackerAfter.balance,
+      attackerRevision: attackerAfter.revision
     };
 
     if (attackId) {

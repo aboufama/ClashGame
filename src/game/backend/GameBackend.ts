@@ -3,7 +3,6 @@ import type { SerializedBuilding, SerializedObstacle, SerializedWorld } from '..
 import { Auth } from './Auth';
 
 const CACHE_PREFIX = 'clash.base.';
-const SAVE_DELAY_MS = 350;
 
 type ResourceDeltaResult = { applied: boolean; sol: number };
 
@@ -16,6 +15,13 @@ function randomId(prefix = 'b_') {
     return `${prefix}${crypto.randomUUID()}`;
   }
   return `${prefix}${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function makeRequestId(prefix: string) {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `${prefix}_${crypto.randomUUID()}`;
+  }
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 export class Backend {
@@ -115,6 +121,21 @@ export class Backend {
     return Backend.saveTimers.size > 0 || Backend.inFlightSaves.size > 0;
   }
 
+  private static armiesEqual(
+    left: Record<string, number> | undefined,
+    right: Record<string, number> | undefined
+  ): boolean {
+    const a = left ?? {};
+    const b = right ?? {};
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+    for (const key of keys) {
+      const av = Math.max(0, Math.floor(Number(a[key]) || 0));
+      const bv = Math.max(0, Math.floor(Number(b[key]) || 0));
+      if (av !== bv) return false;
+    }
+    return true;
+  }
+
   private static async apiPost<T>(path: string, body: unknown): Promise<T> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     const response = await fetch(path, {
@@ -154,27 +175,34 @@ export class Backend {
 
   private static scheduleSave(userId: string) {
     if (!Auth.isOnlineMode()) return;
-    const existing = Backend.saveTimers.get(userId);
-    if (existing) window.clearTimeout(existing);
-    const handle = window.setTimeout(() => {
-      void Backend.saveWorld(userId);
-    }, SAVE_DELAY_MS);
-    Backend.saveTimers.set(userId, handle);
+    void Backend.saveImmediate(userId);
   }
 
   /**
-   * Cancel any pending debounce timer and fire a save immediately.
-   * Returns a Promise that resolves once the server confirms.
-   * Does NOT queue behind in-flight saves (uses saveWorldDirect).
+   * Cancel any pending debounce timer and enqueue an immediate save.
+   * Saves are serialized per-user to keep revision/order stable.
    */
   private static saveImmediate(userId: string): Promise<void> {
     if (!Auth.isOnlineMode()) return Promise.resolve();
+
     const existing = Backend.saveTimers.get(userId);
     if (existing) {
       window.clearTimeout(existing);
       Backend.saveTimers.delete(userId);
     }
-    return Backend.saveWorldDirect(userId);
+
+    const queued = Backend.inFlightSaves.get(userId) ?? Promise.resolve();
+    const task = queued
+      .catch(() => undefined)
+      .then(() => Backend.saveWorldDirect(userId));
+
+    Backend.inFlightSaves.set(userId, task);
+    return task.finally(() => {
+      const current = Backend.inFlightSaves.get(userId);
+      if (current === task) {
+        Backend.inFlightSaves.delete(userId);
+      }
+    });
   }
 
   /**
@@ -198,81 +226,6 @@ export class Backend {
     Backend.setCachedWorld(userId, current);
   }
 
-  private static async saveWorld(userId: string) {
-    // Wait for any in-flight save to finish BEFORE reading the cache.
-    // This ensures we have the latest revision number.
-    const previous = Backend.inFlightSaves.get(userId);
-    if (previous) await previous;
-
-    // Read the cache AFTER the previous save settled so we get the
-    // up-to-date revision and the latest local building changes.
-    const world = Backend.getCachedWorld(userId);
-    if (!world || !Auth.isOnlineMode()) return;
-    if (!Backend.canSaveWorld(userId, world)) return;
-
-    const task = (async () => {
-      try {
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-
-        const res = await fetch('/api/bases/save', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ world, ifMatchRevision: world.revision ?? 0 }),
-          cache: 'no-store',
-          keepalive: true,
-          credentials: 'same-origin'
-        });
-
-        if (res.ok) {
-          const data = await res.json() as { ok?: boolean; world?: SerializedWorld };
-          if (data.world) {
-            // Only adopt revision/resources/timestamp — never overwrite
-            // local buildings/obstacles/army which may have been modified
-            // while this save was in-flight.
-            Backend.mergeServerResponse(userId, data.world);
-          }
-        } else if (res.status === 409) {
-          // Conflict: server has a newer revision. Adopt the server's
-          // revision into our latest local cache and retry once.
-          const data = await res.json() as { conflict: boolean; world?: SerializedWorld };
-          if (data.world) {
-            Backend.mergeServerResponse(userId, data.world);
-            // Re-read the cache (now with correct revision but local buildings intact)
-            const merged = Backend.getCachedWorld(userId);
-            if (merged) {
-              const retryRes = await fetch('/api/bases/save', {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({ world: merged, ifMatchRevision: merged.revision ?? 0 }),
-                cache: 'no-store',
-                keepalive: true,
-                credentials: 'same-origin'
-              });
-              if (retryRes.ok) {
-                const retryData = await retryRes.json() as { ok?: boolean; world?: SerializedWorld };
-                if (retryData.world) {
-                  Backend.mergeServerResponse(userId, retryData.world);
-                }
-              } else {
-                console.warn('Save retry failed:', retryRes.status);
-              }
-            }
-          }
-        } else if (res.status === 401) {
-          console.warn('Save rejected: session expired or superseded');
-        } else {
-          console.warn('Save failed:', res.status);
-        }
-      } catch (error) {
-        console.warn('Save failed:', error);
-      }
-    })();
-
-    Backend.inFlightSaves.set(userId, task);
-    await task;
-    Backend.inFlightSaves.delete(userId);
-  }
-
   /**
    * Save directly without waiting for any queued/in-flight saves.
    * Used by saveImmediate for critical building operations that must
@@ -285,11 +238,12 @@ export class Backend {
 
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const requestId = makeRequestId('save');
 
       const res = await fetch('/api/bases/save', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ world, ifMatchRevision: world.revision ?? 0 }),
+        body: JSON.stringify({ world, ifMatchRevision: world.revision ?? 0, requestId }),
         cache: 'no-store',
         keepalive: true,
         credentials: 'same-origin'
@@ -307,7 +261,7 @@ export class Backend {
             const retryRes = await fetch('/api/bases/save', {
               method: 'POST',
               headers,
-              body: JSON.stringify({ world: merged, ifMatchRevision: merged.revision ?? 0 }),
+              body: JSON.stringify({ world: merged, ifMatchRevision: merged.revision ?? 0, requestId }),
               cache: 'no-store',
               keepalive: true,
               credentials: 'same-origin'
@@ -315,9 +269,15 @@ export class Backend {
             if (retryRes.ok) {
               const retryData = await retryRes.json() as { ok?: boolean; world?: SerializedWorld };
               if (retryData.world) Backend.mergeServerResponse(userId, retryData.world);
+            } else {
+              console.warn('Save retry failed:', retryRes.status);
             }
           }
         }
+      } else if (res.status === 401) {
+        console.warn('Save rejected: session expired or superseded');
+      } else {
+        console.warn('Save failed:', res.status);
       }
     } catch (error) {
       console.warn('Direct save failed:', error);
@@ -342,7 +302,7 @@ export class Backend {
       return;
     }
 
-    await Promise.all(Array.from(pendingUserIds).map(userId => Backend.saveWorld(userId)));
+    await Promise.all(Array.from(pendingUserIds).map(userId => Backend.saveImmediate(userId)));
   }
 
   /**
@@ -506,10 +466,14 @@ export class Backend {
       return { applied: true, sol: world?.resources.sol ?? 0 };
     }
 
-    const response = await Backend.apiPost<{ applied: boolean; sol: number }>('/api/resources/apply', { delta, reason, refId, requestId });
+    const response = await Backend.apiPost<{ applied: boolean; sol: number; revision?: number }>('/api/resources/apply', { delta, reason, refId, requestId });
     const world = Backend.getCachedWorld(userId);
     if (world && typeof response.sol === 'number') {
       world.resources.sol = response.sol;
+      if (typeof response.revision === 'number' && Number.isFinite(response.revision)) {
+        world.revision = Math.max(1, Math.floor(response.revision));
+      }
+      world.lastSaveTime = Date.now();
       Backend.setCachedWorld(userId, world);
     }
     return { applied: response.applied, sol: response.sol };
@@ -518,17 +482,22 @@ export class Backend {
   static updateResources(userId: string, sol: number) {
     const world = Backend.getCachedWorld(userId);
     if (!world) return;
-    world.resources.sol = Math.max(0, sol);
+    const nextSol = Math.max(0, Math.floor(Number(sol) || 0));
+    if (world.resources.sol === nextSol) return;
+    world.resources.sol = nextSol;
+    world.lastSaveTime = Date.now();
     Backend.setCachedWorld(userId, world);
-    Backend.scheduleSave(userId);
+    void Backend.saveImmediate(userId);
   }
 
   static updateArmy(userId: string, army: Record<string, number>) {
     const world = Backend.getCachedWorld(userId);
     if (!world) return;
+    if (Backend.armiesEqual(world.army, army)) return;
     world.army = { ...army };
+    world.lastSaveTime = Date.now();
     Backend.setCachedWorld(userId, world);
-    Backend.scheduleSave(userId);
+    void Backend.saveImmediate(userId);
   }
 
   static async placeBuilding(userId: string, type: BuildingType, gridX: number, gridY: number): Promise<SerializedBuilding | null> {
@@ -1157,9 +1126,9 @@ export class Backend {
     solLooted: number,
     destruction: number,
     attackId?: string
-  ): Promise<{ lootApplied: number; attackerBalance: number } | null> {
+  ): Promise<{ lootApplied: number; attackerBalance: number; attackerRevision?: number } | null> {
     if (!Auth.isOnlineMode()) return null;
-    const response = await Backend.apiPost<{ lootApplied: number; attackerBalance: number }>('/api/attacks/resolve', {
+    const response = await Backend.apiPost<{ lootApplied: number; attackerBalance: number; attackerRevision?: number }>('/api/attacks/resolve', {
       victimId,
       attackerId,
       attackerName,
@@ -1167,6 +1136,15 @@ export class Backend {
       destruction,
       attackId
     });
+    const world = Backend.getCachedWorld(attackerId);
+    if (world) {
+      world.resources.sol = Math.max(0, Math.floor(Number(response.attackerBalance) || 0));
+      if (typeof response.attackerRevision === 'number' && Number.isFinite(response.attackerRevision)) {
+        world.revision = Math.max(1, Math.floor(response.attackerRevision));
+      }
+      world.lastSaveTime = Date.now();
+      Backend.setCachedWorld(attackerId, world);
+    }
     return response;
   }
 
