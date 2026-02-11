@@ -436,7 +436,7 @@ function App() {
         cloudHideTimerRef.current = window.setTimeout(() => {
           setShowCloudOverlay(false);
           setCloudOpening(false);
-          // Trigger fly-in animation if there was a reward
+          // Trigger count-up animation if there was a reward
           setCloudTransitionReward(prev => {
             if (prev && prev > 0) {
               setLootAnimating({ amount: prev });
@@ -970,6 +970,7 @@ function App() {
         showCloudOverlay={showCloudOverlay}
         isMobile={isMobile}
         isScouting={Boolean(scoutTarget)}
+        pendingLoot={cloudTransitionReward}
         lootAnimating={lootAnimating}
         onLootAnimationDone={() => setLootAnimating(null)}
         onOpenSettings={() => setIsAccountOpen(true)}
@@ -1062,7 +1063,6 @@ function App() {
         opening={cloudOpening}
         loading={cloudOverlayLoading}
         loadingProgress={cloudLoadingProgress}
-        rewardAmount={cloudTransitionReward}
       />
 
       <BattleResultsModal

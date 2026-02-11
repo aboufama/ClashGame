@@ -25,6 +25,7 @@ interface HudProps {
   showCloudOverlay: boolean;
   isMobile: boolean;
   isScouting: boolean;
+  pendingLoot: number | null;
   lootAnimating: { amount: number } | null;
   onLootAnimationDone: () => void;
   onOpenSettings: () => void;
@@ -54,6 +55,7 @@ export function Hud({
   showCloudOverlay,
   isMobile,
   isScouting,
+  pendingLoot,
   lootAnimating,
   onLootAnimationDone,
   onOpenSettings,
@@ -77,9 +79,14 @@ export function Hud({
   };
   const showAttackTroopBar = !(isScouting && visibleTroops.length === 0);
 
+  // Whether we're showing loot (either pending on clouds or counting up)
+  const showingLoot = pendingLoot !== null || lootAnimating !== null;
+  const lootAmount = lootAnimating?.amount ?? pendingLoot ?? 0;
+
   // Count-up animation for resource display
   const [displaySol, setDisplaySol] = useState(resources.sol);
   const [isBouncing, setIsBouncing] = useState(false);
+  const [isFadingLoot, setIsFadingLoot] = useState(false);
   const animFrameRef = useRef<number>(0);
 
   // Keep displaySol in sync when not animating
@@ -89,9 +96,12 @@ export function Hud({
     }
   }, [resources.sol, lootAnimating]);
 
-  // Count-up effect when loot animation is active and view is HOME
+  // Count-up effect when loot animation triggers (clouds finished opening)
   useEffect(() => {
-    if (!lootAnimating || view !== 'HOME') return;
+    if (!lootAnimating) {
+      setIsFadingLoot(false);
+      return;
+    }
 
     const startSol = resources.sol - lootAnimating.amount;
     const endSol = resources.sol;
@@ -100,6 +110,7 @@ export function Hud({
 
     setDisplaySol(startSol);
     setIsBouncing(true);
+    setIsFadingLoot(true);
 
     const animate = (timestamp: number) => {
       if (!startTime) startTime = timestamp;
@@ -113,41 +124,33 @@ export function Hud({
         animFrameRef.current = requestAnimationFrame(animate);
       } else {
         setIsBouncing(false);
+        onLootAnimationDone();
       }
     };
 
-    // Small delay so the fly-in element is visible first
-    const timeout = setTimeout(() => {
-      animFrameRef.current = requestAnimationFrame(animate);
-    }, 200);
+    animFrameRef.current = requestAnimationFrame(animate);
 
     return () => {
-      clearTimeout(timeout);
       cancelAnimationFrame(animFrameRef.current);
       setIsBouncing(false);
     };
-  }, [lootAnimating, view, resources.sol]);
+  }, [lootAnimating, resources.sol]);
 
   return (
     <div className={`hud ${isMobile ? 'mobile' : ''}`}>
-      {/* Loot fly-in element */}
-      {lootAnimating && view === 'HOME' && (
-        <div
-          className="loot-fly-in"
-          onAnimationEnd={onLootAnimationDone}
-        >
-          +{formatSol(lootAnimating.amount, false, false)}
-        </div>
-      )}
-
       <div className="hud-top">
         {view === 'HOME' ? (
           <>
-            <div className="resources">
+            <div className={`resources ${showingLoot ? 'over-clouds' : ''}`}>
               <div className={`res-item sol ${isBouncing ? 'bounce' : ''}`}>
                 <span className="icon sol-icon" />
                 <span>{formatSol(displaySol, isMobile, false)}</span>
               </div>
+              {showingLoot && lootAmount > 0 && (
+                <div className={`loot-badge ${isFadingLoot ? 'fading' : ''}`}>
+                  +{formatSol(lootAmount, false, false)}
+                </div>
+              )}
             </div>
             <button className="settings-btn" onClick={onOpenSettings}>
               <div className="btn-icon icon settings-icon"></div>

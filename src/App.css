@@ -1273,52 +1273,28 @@ button:disabled {
     letter-spacing: 0.8px;
 }
 
-.cloud-reward-floating {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
+/* Resource bar elevated above clouds when showing loot */
+.resources.over-clouds {
+    z-index: 2147483001;
+}
+
+/* Loot badge next to resource display */
+.loot-badge {
     font-family: 'Press Start 2P', monospace;
-    font-size: 18px;
+    font-size: 14px;
     color: #14F195;
     text-shadow:
         2px 2px 0 #000,
         -1px -1px 0 #000,
         1px -1px 0 #000,
         -1px 1px 0 #000;
-    z-index: 4;
-    pointer-events: none;
+    padding-left: 4px;
+    transition: opacity 600ms ease-out;
+    opacity: 1;
 }
 
-/* Loot fly-in animation: center → top-left resource corner */
-.loot-fly-in {
-    position: fixed;
-    font-family: 'Press Start 2P', monospace;
-    font-size: 18px;
-    color: #14F195;
-    text-shadow:
-        2px 2px 0 #000,
-        -1px -1px 0 #000,
-        1px -1px 0 #000,
-        -1px 1px 0 #000;
-    z-index: 200;
-    pointer-events: none;
-    animation: lootFlyIn 600ms ease-in forwards;
-}
-
-@keyframes lootFlyIn {
-    0% {
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%) scale(1);
-        opacity: 1;
-    }
-    100% {
-        top: 20px;
-        left: 80px;
-        transform: translate(0, 0) scale(0.7);
-        opacity: 0.4;
-    }
+.loot-badge.fading {
+    opacity: 0;
 }
 
 /* Bounce pulse on resource item during count-up */
