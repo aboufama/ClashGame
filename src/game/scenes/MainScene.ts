@@ -2539,7 +2539,6 @@ export class MainScene extends Phaser.Scene {
 
         const chainCount = 3;
         const chainRadius = 3;
-        let lastTarget: { x: number, y: number } = start;
         let currentTargets: (Troop | null)[] = [troop];
 
         // Find chain targets
