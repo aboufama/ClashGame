@@ -141,9 +141,11 @@ export function Hud({
         {view === 'HOME' ? (
           <>
             <div className={`resources ${showingLoot ? 'over-clouds' : ''}`}>
-              <div className={`res-item sol ${isBouncing ? 'bounce' : ''}`}>
-                <span className="icon sol-icon" />
-                <span>{formatSol(displaySol, isMobile, false)}</span>
+              <div className="res-row">
+                <div className={`res-item sol ${isBouncing ? 'bounce' : ''}`}>
+                  <span className="icon sol-icon" />
+                  <span>{formatSol(displaySol, isMobile, false)}</span>
+                </div>
                 {showingLoot && lootAmount > 0 && (
                   <span className={`loot-badge ${isFadingLoot ? 'fading' : ''}`}>
                     +{formatSol(lootAmount, false, false)}
