@@ -143,12 +143,12 @@ export function Hud({
               <div className={`res-item sol ${isBouncing ? 'bounce' : ''}`}>
                 <span className="icon sol-icon" />
                 <span>{formatSol(displaySol, isMobile, false)}</span>
+                {showingLoot && lootAmount > 0 && (
+                  <span className={`loot-badge ${isFadingLoot ? 'fading' : ''}`}>
+                    +{formatSol(lootAmount, false, false)}
+                  </span>
+                )}
               </div>
-              {showingLoot && lootAmount > 0 && (
-                <div className={`loot-badge ${isFadingLoot ? 'fading' : ''}`}>
-                  +{formatSol(lootAmount, false, false)}
-                </div>
-              )}
             </div>
             <button className="settings-btn" onClick={onOpenSettings}>
               <div className="btn-icon icon settings-icon"></div>

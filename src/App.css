@@ -1288,7 +1288,7 @@ button:disabled {
         -1px -1px 0 #000,
         1px -1px 0 #000,
         -1px 1px 0 #000;
-    padding-left: 4px;
+    margin-left: auto;
     transition: opacity 600ms ease-out;
     opacity: 1;
 }

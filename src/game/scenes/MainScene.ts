@@ -1676,6 +1676,56 @@ export class MainScene extends Phaser.Scene {
                 defense.lastFireTime = needsInitialDelay ? time : (time - interval);
             }
 
+            // Tesla charge-up mechanic: handle charging/firing separately from cooldown
+            if (defense.type === 'tesla') {
+                // If currently charging, check if charge is complete (800ms)
+                if (defense.teslaCharging && defense.teslaChargeStart) {
+                    if (time >= defense.teslaChargeStart + 800) {
+                        // Charge complete — fire!
+                        const target = defense.teslaChargeTarget;
+                        if (target && target.health > 0) {
+                            this.fireDefenseAtTarget(defense, target, time);
+                        }
+                        defense.teslaCharging = false;
+                        defense.teslaCharged = true;
+                        defense.lastFireTime = time;
+                        defense.teslaChargeTarget = undefined;
+                    }
+                    return; // Don't look for new targets while charging
+                }
+
+                // Reset charged state after 400ms
+                if (defense.teslaCharged && defense.lastFireTime && time > defense.lastFireTime + 400) {
+                    defense.teslaCharged = false;
+                }
+
+                // Check cooldown before starting new charge
+                if (time < (defense.lastFireTime || 0) + interval) return;
+
+                // Find target and start charging
+                const bWidth = stats.width || 1;
+                const bHeight = stats.height || 1;
+                const centerX = defense.gridX + bWidth / 2;
+                const centerY = defense.gridY + bHeight / 2;
+
+                this.troops.forEach(troop => {
+                    if (troop.owner !== defense.owner && troop.health > 0) {
+                        const dist = Phaser.Math.Distance.Between(centerX, centerY, troop.gridX, troop.gridY);
+                        if (dist < minDist) {
+                            if (stats.minRange && dist < stats.minRange) return;
+                            minDist = dist; nearestTroop = troop;
+                        }
+                    }
+                });
+
+                if (nearestTroop) {
+                    defense.teslaCharging = true;
+                    defense.teslaChargeStart = time;
+                    defense.teslaChargeTarget = nearestTroop;
+                }
+                return;
+            }
+
             // Check if enough time has passed since last shot
             if (time < (defense.lastFireTime || 0) + interval) return;
 
@@ -2475,6 +2525,7 @@ export class MainScene extends Phaser.Scene {
 
 
     private shootTeslaAt(tesla: PlacedBuilding, troop: Troop) {
+        const stats = getBuildingStats(tesla.type as BuildingType, tesla.level || 1);
         const start = IsoUtils.cartToIso(tesla.gridX + 0.5, tesla.gridY + 0.5);
         start.y -= 40; // From the orb
 
@@ -2487,7 +2538,7 @@ export class MainScene extends Phaser.Scene {
         this.tweens.add({ targets: orbPulse, scale: 1.5, alpha: 0, duration: 150, onComplete: () => orbPulse.destroy() });
 
         const chainCount = 3;
-        const chainRadius = 5;
+        const chainRadius = 3;
         let lastTarget: { x: number, y: number } = start;
         let currentTargets: (Troop | null)[] = [troop];
 
@@ -2502,47 +2553,69 @@ export class MainScene extends Phaser.Scene {
             currentTargets.push(next || null);
         }
 
-        // Visualize electric chain
-        currentTargets.filter(t => t !== null).forEach((t, idx) => {
-            if (!t) return;
-            const end = IsoUtils.cartToIso(t.gridX, t.gridY);
+        // Crackling lightning: draw 4 successive bolts over ~200ms
+        const boltCount = 4;
+        const boltInterval = 50;
+        const validTargets = currentTargets.filter(t => t !== null) as Troop[];
 
-            // Draw multiple lightning layers for thickness effect
-            for (let layer = 0; layer < 3; layer++) {
-                const lightning = this.add.graphics();
-                const alpha = layer === 0 ? 1 : (layer === 1 ? 0.6 : 0.3);
-                const width = layer === 0 ? 3 : (layer === 1 ? 5 : 8);
-                const color = layer === 0 ? 0xffffff : (layer === 1 ? 0x88eeff : 0x00ccff);
+        for (let bolt = 0; bolt < boltCount; bolt++) {
+            const isFinalBolt = bolt === boltCount - 1;
+            let boltLastTarget = { ...start };
 
-                lightning.lineStyle(width, color, alpha);
-                lightning.setDepth(10000 - layer);
+            validTargets.forEach((t, idx) => {
+                const end = IsoUtils.cartToIso(t.gridX, t.gridY);
 
-                // Jagged branching path
-                lightning.beginPath();
-                lightning.moveTo(lastTarget.x, lastTarget.y);
+                // Draw multiple lightning layers for thickness effect
+                for (let layer = 0; layer < 3; layer++) {
+                    const lightning = this.add.graphics();
+                    const alpha = layer === 0 ? 1 : (layer === 1 ? 0.6 : 0.3);
+                    const width = layer === 0 ? 3 : (layer === 1 ? 5 : 8);
+                    const color = layer === 0 ? 0xffffff : (layer === 1 ? 0x88eeff : 0x00ccff);
 
-                const segments = 6;
-                const jitter = layer === 0 ? 8 : 12;
-                for (let j = 1; j < segments; j++) {
-                    const progress = j / segments;
-                    const tx = lastTarget.x + (end.x - lastTarget.x) * progress;
-                    const ty = lastTarget.y + (end.y - lastTarget.y) * progress;
-                    lightning.lineTo(
-                        tx + (Math.random() - 0.5) * jitter,
-                        ty + (Math.random() - 0.5) * jitter
-                    );
+                    lightning.lineStyle(width, color, alpha);
+                    lightning.setDepth(10000 - layer);
+
+                    // Jagged branching path with unique random jitter per bolt
+                    lightning.beginPath();
+                    lightning.moveTo(boltLastTarget.x, boltLastTarget.y);
+
+                    const segments = 6;
+                    const jitter = layer === 0 ? 8 : 12;
+                    for (let j = 1; j < segments; j++) {
+                        const progress = j / segments;
+                        const tx = boltLastTarget.x + (end.x - boltLastTarget.x) * progress;
+                        const ty = boltLastTarget.y + (end.y - boltLastTarget.y) * progress;
+                        lightning.lineTo(
+                            tx + (Math.random() - 0.5) * jitter,
+                            ty + (Math.random() - 0.5) * jitter
+                        );
+                    }
+                    lightning.lineTo(end.x, end.y);
+                    lightning.strokePath();
+
+                    if (isFinalBolt) {
+                        // Final bolt fades out normally
+                        this.tweens.add({
+                            targets: lightning,
+                            alpha: 0,
+                            duration: 150 + layer * 50,
+                            delay: bolt * boltInterval + idx * 40,
+                            onComplete: () => lightning.destroy()
+                        });
+                    } else {
+                        // Non-final bolts get destroyed when next bolt appears
+                        this.time.delayedCall(bolt * boltInterval + boltInterval, () => lightning.destroy());
+                    }
                 }
-                lightning.lineTo(end.x, end.y);
-                lightning.strokePath();
 
-                this.tweens.add({
-                    targets: lightning,
-                    alpha: 0,
-                    duration: 150 + layer * 50,
-                    delay: idx * 40,
-                    onComplete: () => lightning.destroy()
-                });
-            }
+                boltLastTarget = { x: end.x, y: end.y };
+            });
+        }
+
+        // Impact effects on final bolt timing
+        validTargets.forEach((t, idx) => {
+            const end = IsoUtils.cartToIso(t.gridX, t.gridY);
+            const impactDelay = (boltCount - 1) * boltInterval;
 
             // Electric spark particles at impact
             for (let s = 0; s < 4; s++) {
@@ -2560,7 +2633,7 @@ export class MainScene extends Phaser.Scene {
                     targets: spark,
                     alpha: 0,
                     duration: 100 + Math.random() * 100,
-                    delay: idx * 40,
+                    delay: impactDelay + idx * 40,
                     onComplete: () => spark.destroy()
                 });
             }
@@ -2572,16 +2645,15 @@ export class MainScene extends Phaser.Scene {
                 targets: impactGlow,
                 scale: 2, alpha: 0,
                 duration: 200,
-                delay: idx * 40,
+                delay: impactDelay + idx * 40,
                 onComplete: () => impactGlow.destroy()
             });
 
-            t.health -= 25 / (idx + 1);
+            // Use stats.damage instead of hardcoded 25
+            t.health -= stats.damage! / (idx + 1);
             t.hasTakenDamage = true;
             this.updateHealthBar(t);
             if (t.health <= 0) this.destroyTroop(t);
-
-            lastTarget = end;
         });
     }
 

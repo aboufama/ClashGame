@@ -32,6 +32,11 @@ export interface PlacedBuilding {
     prismLaserCore?: Phaser.GameObjects.Graphics;     // Inner core of laser
     prismChargingUp?: boolean;     // Whether it's charging up
     prismChargeTime?: number;      // When charging started
+    // Tesla charge state
+    teslaCharging?: boolean;
+    teslaChargeStart?: number;
+    teslaCharged?: boolean;
+    teslaChargeTarget?: Troop;
     // Range indicator
     rangeIndicator?: Phaser.GameObjects.Graphics;
     prismTrailLastPos?: { x: number, y: number }; // Track last scorch position for connected trail

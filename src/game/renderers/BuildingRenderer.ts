@@ -3018,7 +3018,39 @@ export class BuildingRenderer {
         const isLevel2 = level >= 2;
         const g = baseGraphics || graphics;
 
-        // Stone base platform (thicker for L2)
+        // Determine tesla state from building properties
+        const isCharging = building?.teslaCharging === true;
+        const chargeStart = building?.teslaChargeStart ?? 0;
+        const isCharged = building?.teslaCharged === true;
+        const lastFireTime = building?.lastFireTime ?? 0;
+        const chargeDuration = 800;
+        const chargeProgress = isCharging ? Math.min((time - chargeStart) / chargeDuration, 1) : 0;
+
+        // Cooldown: after firing, sink back over 600ms
+        const timeSinceFire = time - lastFireTime;
+        const isCoolingDown = !isCharging && !isCharged && lastFireTime > 0 && timeSinceFire < 600;
+        const cooldownProgress = isCoolingDown ? timeSinceFire / 600 : 0;
+
+        const isActive = isCharging || isCharged || isCoolingDown;
+
+        // Calculate yOffset for subtle dip when idle
+        const dipAmount = 5; // Subtle dip, not fully underground
+        let yOffset: number;
+        if (isCharging) {
+            // Rise from dip to 0 over charge duration
+            yOffset = dipAmount * (1 - chargeProgress);
+        } else if (isCharged) {
+            // Fully extended
+            yOffset = 0;
+        } else if (isCoolingDown) {
+            // Settle back down
+            yOffset = dipAmount * cooldownProgress;
+        } else {
+            // Idle: subtle dip
+            yOffset = dipAmount;
+        }
+
+        // Stone base platform (stays in place — this is the ground)
         g.fillStyle(isLevel2 ? 0x6a6a6a : 0x5a5a5a, alpha);
         g.fillPoints([c1, c2, c3, c4], true);
         g.lineStyle(isLevel2 ? 2 : 1, isLevel2 ? 0x4a4a4a : 0x3a3a3a, 0.5 * alpha);
@@ -3030,30 +3062,51 @@ export class BuildingRenderer {
             g.fillRect(center.x - 16, center.y + 2, 32, 4);
         }
 
-        // Wooden support post (thicker for L2)
+        // Wooden support post (shifted by yOffset)
         const postWidth = isLevel2 ? 10 : 8;
         graphics.fillStyle(isLevel2 ? 0x5a4a3a : 0x4a3a2a, alpha);
-        graphics.fillRect(center.x - postWidth / 2, center.y - 35, postWidth, 35);
+        graphics.fillRect(center.x - postWidth / 2, center.y - 35 + yOffset, postWidth, 35);
         graphics.lineStyle(1, 0x2a1a0a, 0.5 * alpha);
-        graphics.strokeRect(center.x - postWidth / 2, center.y - 35, postWidth, 35);
+        graphics.strokeRect(center.x - postWidth / 2, center.y - 35 + yOffset, postWidth, 35);
 
-        // Metal coil rings with subtle glow (more rings for L2)
+        // Metal coil rings (shifted by yOffset)
         const ringCount = isLevel2 ? 4 : 3;
         for (let i = 0; i < ringCount; i++) {
-            const ringY = center.y - 10 - i * (isLevel2 ? 7 : 8);
-            const ringGlow = 0.3 + Math.sin(time / 150 + i) * 0.1;
+            const ringY = center.y - 10 - i * (isLevel2 ? 7 : 8) + yOffset;
             const ringSize = isLevel2 ? 14 : 12;
-            graphics.fillStyle(isLevel2 ? 0x7a7a7a : 0x6a6a6a, alpha);
-            graphics.fillEllipse(center.x, ringY, ringSize, 4);
-            graphics.lineStyle(1, 0x3a3a3a, alpha);
-            graphics.strokeEllipse(center.x, ringY, ringSize, 4);
-            // Electric glow on rings
-            graphics.lineStyle(isLevel2 ? 2 : 1, 0x00ccff, alpha * ringGlow);
-            graphics.strokeEllipse(center.x, ringY, ringSize + 1, 5);
+
+            if (isActive) {
+                // Charging: rings light up bottom-to-top sequentially
+                const ringThreshold = i / ringCount;
+                const isLit = chargeProgress > ringThreshold || isCharged || isCoolingDown;
+
+                if (isLit) {
+                    // Lit ring: metallic with cyan glow
+                    graphics.fillStyle(0x7a7a7a, alpha);
+                    graphics.fillEllipse(center.x, ringY, ringSize, 4);
+                    graphics.lineStyle(1, 0x3a3a3a, alpha);
+                    graphics.strokeEllipse(center.x, ringY, ringSize, 4);
+                    const glowAlpha = isCharged ? 0.6 : (0.3 + (chargeProgress - ringThreshold) * 0.4);
+                    graphics.lineStyle(isLevel2 ? 2 : 1, 0x00ccff, alpha * glowAlpha);
+                    graphics.strokeEllipse(center.x, ringY, ringSize + 1, 5);
+                } else {
+                    // Unlit ring during charge-up
+                    graphics.fillStyle(0x4a4a4a, alpha);
+                    graphics.fillEllipse(center.x, ringY, ringSize, 4);
+                    graphics.lineStyle(1, 0x3a3a3a, alpha);
+                    graphics.strokeEllipse(center.x, ringY, ringSize, 4);
+                }
+            } else {
+                // Idle: dull gray rings, no glow
+                graphics.fillStyle(0x5a5a5a, alpha);
+                graphics.fillEllipse(center.x, ringY, ringSize, 4);
+                graphics.lineStyle(1, 0x3a3a3a, alpha);
+                graphics.strokeEllipse(center.x, ringY, ringSize, 4);
+            }
         }
 
-        // L2: Electrical ring around the base
-        if (isLevel2) {
+        // L2: Electrical ring around base — only visible when active
+        if (isLevel2 && isActive) {
             const ringPulse = 0.5 + Math.sin(time / 100) * 0.3;
             graphics.lineStyle(3, 0x00ccff, alpha * ringPulse * 0.6);
             graphics.strokeEllipse(center.x, center.y - 2, 24, 8);
@@ -3071,85 +3124,54 @@ export class BuildingRenderer {
             }
         }
 
-        // Glowing electric orb
-        const orbY = center.y - 40;
+        // Glowing electric orb (shifted by yOffset)
+        const orbY = center.y - 40 + yOffset;
 
-        // Pulsing glow intensity
-        const pulseIntensity = 0.8 + Math.sin(time / 120) * 0.2;
-        const fastPulse = 0.6 + Math.sin(time / 50) * 0.4;
+        if (isCharged || (isCharging && chargeProgress >= 1)) {
+            // Fully charged / firing: bright pulsing cyan orb
+            const pulseIntensity = 0.8 + Math.sin(time / 120) * 0.2;
 
-        // Outer glow (pulsing)
-        graphics.fillStyle(0x00ccff, 0.3 * alpha * pulseIntensity);
-        graphics.fillCircle(center.x, orbY, 14 + Math.sin(time / 80) * 2);
+            // Outer glow (pulsing)
+            graphics.fillStyle(0x00ccff, 0.3 * alpha * pulseIntensity);
+            graphics.fillCircle(center.x, orbY, 14 + Math.sin(time / 80) * 2);
 
-        // Mid glow
-        graphics.fillStyle(0x44ddff, 0.5 * alpha * pulseIntensity);
-        graphics.fillCircle(center.x, orbY, 10);
+            // Mid glow
+            graphics.fillStyle(0x44ddff, 0.5 * alpha * pulseIntensity);
+            graphics.fillCircle(center.x, orbY, 10);
 
-        // Core
-        graphics.fillStyle(tint ?? 0xaaeeff, alpha);
-        graphics.fillCircle(center.x, orbY, 7);
+            // Core
+            graphics.fillStyle(tint ?? 0xaaeeff, alpha);
+            graphics.fillCircle(center.x, orbY, 7);
 
-        // Electric highlight
-        graphics.fillStyle(0xffffff, 0.8 * alpha);
-        graphics.fillCircle(center.x - 2, orbY - 2, 2);
+            // Electric highlight
+            graphics.fillStyle(0xffffff, 0.8 * alpha);
+            graphics.fillCircle(center.x - 2, orbY - 2, 2);
+        } else if (isCharging) {
+            // Charging: orb starts dull, brightens as charge completes
+            const brightness = chargeProgress * 0.5;
 
-        // === IDLE CRACKLING ARCS ===
-        // Random arcs that jump from the orb
-        const arcCount = 3;
-        for (let i = 0; i < arcCount; i++) {
-            // Use time-based pseudo-random to create consistent but varied arcs
-            const seed = Math.floor(time / 100) + i * 137;
-            const arcActive = (seed % 5) < 2; // Arc appears ~40% of the time
-
-            if (arcActive) {
-                const arcAngle = ((seed * 1.618) % 6.28); // Golden ratio for nice distribution
-                const arcLength = 12 + (seed % 8);
-
-                // Start from orb
-                const startX = center.x + Math.cos(arcAngle) * 6;
-                const startY = orbY + Math.sin(arcAngle) * 6;
-
-                // End point with jitter
-                const endX = center.x + Math.cos(arcAngle) * arcLength + Math.sin(time / 20 + i) * 3;
-                const endY = orbY + Math.sin(arcAngle) * arcLength + Math.cos(time / 25 + i) * 2;
-
-                // Mid point for arc curve
-                const midX = (startX + endX) / 2 + Math.sin(time / 15 + i * 2) * 4;
-                const midY = (startY + endY) / 2 + Math.cos(time / 18 + i * 2) * 3;
-
-                // Draw crackling arc
-                graphics.lineStyle(2, 0x00ffff, alpha * fastPulse * 0.8);
-                graphics.beginPath();
-                graphics.moveTo(startX, startY);
-                graphics.lineTo(midX, midY);
-                graphics.lineTo(endX, endY);
-                graphics.strokePath();
-
-                // Brighter inner line
-                graphics.lineStyle(1, 0xffffff, alpha * fastPulse * 0.6);
-                graphics.beginPath();
-                graphics.moveTo(startX, startY);
-                graphics.lineTo(midX, midY);
-                graphics.lineTo(endX, endY);
-                graphics.strokePath();
-
-                // Spark at end
-                graphics.fillStyle(0xffffff, alpha * fastPulse);
-                graphics.fillCircle(endX, endY, 1.5);
+            // Dim glow grows with charge
+            if (chargeProgress > 0.7) {
+                graphics.fillStyle(0x00ccff, 0.15 * alpha * chargeProgress);
+                graphics.fillCircle(center.x, orbY, 10 + chargeProgress * 4);
             }
-        }
 
-        // Small floating sparks around the orb
-        for (let i = 0; i < 4; i++) {
-            const sparkAngle = (time / 200 + i * 1.57) % (Math.PI * 2);
-            const sparkDist = 16 + Math.sin(time / 100 + i) * 4;
-            const sparkX = center.x + Math.cos(sparkAngle) * sparkDist;
-            const sparkY = orbY + Math.sin(sparkAngle) * sparkDist * 0.6;
-            const sparkAlpha = 0.3 + Math.sin(time / 60 + i * 2) * 0.3;
+            // Orb transitions from dull to bright
+            const orbColor = chargeProgress > 0.8 ? 0x66aacc : 0x556677;
+            graphics.fillStyle(orbColor, alpha);
+            graphics.fillCircle(center.x, orbY, 7);
 
-            graphics.fillStyle(0x88ffff, alpha * sparkAlpha);
-            graphics.fillCircle(sparkX, sparkY, 1.5);
+            // Dim highlight
+            graphics.fillStyle(0xaaaaaa, 0.3 * alpha * brightness);
+            graphics.fillCircle(center.x - 2, orbY - 2, 2);
+        } else {
+            // Idle: dull gray-blue orb, no glow
+            graphics.fillStyle(0x556677, alpha);
+            graphics.fillCircle(center.x, orbY, 7);
+
+            // Subtle dull highlight
+            graphics.fillStyle(0x778899, 0.3 * alpha);
+            graphics.fillCircle(center.x - 2, orbY - 2, 1.5);
         }
     }
     static drawPrismTower(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, _building?: any, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {

@@ -163,12 +163,12 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         category: 'defense',
         maxCount: 3,
         color: 0x00ccff,
-        fireRate: 1500,
+        fireRate: 2500,
         damage: 60,
         maxLevel: 2,
         levels: [
-            { hp: 600, damage: 60, fireRate: 1500, cost: 600 },   // Level 1 - Standard
-            { hp: 750, damage: 75, fireRate: 1300, cost: 900 }    // Level 2 - Enhanced (ring + thicker base)
+            { hp: 600, damage: 60, fireRate: 2500, cost: 600 },   // Level 1 - Standard (slow charge-up)
+            { hp: 750, damage: 75, fireRate: 2200, cost: 900 }    // Level 2 - Enhanced (ring + thicker base)
         ]
     },
     wall: {
