@@ -130,4 +130,15 @@ function studioExternalAssetSyncPlugin(): PluginOption {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), studioExternalAssetSyncPlugin()],
+  build: {
+    chunkSizeWarningLimit: 1300,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          phaser: ['phaser'],
+          react: ['react', 'react-dom']
+        }
+      }
+    }
+  }
 })

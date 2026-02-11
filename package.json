@@ -11,6 +11,7 @@
     "dev:studio": "vite --host 127.0.0.1 --port 5173 --strictPort --open /dev/studio",
     "dev:game": "vite --host 127.0.0.1 --port 5173 --strictPort --open /game",
     "build": "tsc -b && vite build",
+    "build:vercel": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
