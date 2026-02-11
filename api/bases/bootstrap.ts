@@ -27,6 +27,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       buildingCount: state.world.buildings.length,
       lastSeen: now,
       trophies: user.trophies ?? 0
+    }).catch(error => {
+      console.warn('bootstrap index update failed', { userId: user.id, error });
     });
 
     sendJson(res, 200, { world: state.world });

@@ -24,6 +24,24 @@ export class Backend {
   private static inFlightSaves = new Map<string, Promise<void>>();
   private static cacheKeyPrefix = CACHE_PREFIX;
 
+  private static async wait(ms: number) {
+    await new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  private static async apiPostWithRetry<T>(path: string, body: unknown, attempts = 3): Promise<T> {
+    let lastError: unknown = null;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        return await Backend.apiPost<T>(path, body);
+      } catch (error) {
+        lastError = error;
+        if (attempt >= attempts) break;
+        await Backend.wait(150 * attempt);
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error(`API ${path} failed`);
+  }
+
   static hasPendingSave(userId?: string): boolean {
     if (userId) {
       return Backend.saveTimers.has(userId) || Backend.inFlightSaves.has(userId);
@@ -320,7 +338,7 @@ export class Backend {
 
   static async bootstrapBase(userId: string): Promise<SerializedWorld | null> {
     if (!Auth.isOnlineMode()) return null;
-    const response = await Backend.apiPost<{ world: SerializedWorld | null }>('/api/bases/bootstrap', {});
+    const response = await Backend.apiPostWithRetry<{ world: SerializedWorld | null }>('/api/bases/bootstrap', {});
     if (response.world) {
       Backend.setCachedWorld(userId, response.world);
     }
@@ -329,7 +347,7 @@ export class Backend {
 
   static async forceLoadFromCloud(userId: string): Promise<SerializedWorld | null> {
     if (!Auth.isOnlineMode()) return null;
-    const response = await Backend.apiPost<{ world: SerializedWorld | null }>('/api/bases/load', {});
+    const response = await Backend.apiPostWithRetry<{ world: SerializedWorld | null }>('/api/bases/load', {});
     if (response.world) {
       Backend.setCachedWorld(userId, response.world);
     }
@@ -345,7 +363,7 @@ export class Backend {
 
   static async loadFromCloud(userId: string): Promise<SerializedWorld | null> {
     if (!Auth.isOnlineMode()) return null;
-    const response = await Backend.apiPost<{ world: SerializedWorld | null }>('/api/bases/scout', { targetId: userId });
+    const response = await Backend.apiPostWithRetry<{ world: SerializedWorld | null }>('/api/bases/scout', { targetId: userId });
     return response.world ?? null;
   }
 
@@ -386,7 +404,7 @@ export class Backend {
   static async calculateOfflineProduction(userId: string): Promise<{ sol: number }> {
     if (!Auth.isOnlineMode()) return { sol: 0 };
     try {
-      const response = await Backend.apiPost<{ wallet: { balance: number; updatedAt: number }; added?: number }>('/api/resources/balance', {});
+      const response = await Backend.apiPostWithRetry<{ wallet: { balance: number; updatedAt: number }; added?: number }>('/api/resources/balance', {});
       const world = Backend.getCachedWorld(userId);
       if (world && response.wallet) {
         world.resources.sol = response.wallet.balance ?? world.resources.sol;

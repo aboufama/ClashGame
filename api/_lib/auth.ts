@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { readJson, writeJson } from './blob.js';
+import { listPathnames, readJson, writeJson } from './blob.js';
 import { sendError } from './http.js';
 import { readUsersIndex } from './indexes.js';
 import type { SessionRecord, UserRecord } from './models.js';
@@ -200,6 +200,20 @@ export async function findUserByIdentifier(identifier: string): Promise<UserReco
         await upsertUserAuthLookups(user).catch(() => undefined);
         return user;
       }
+    }
+  }
+
+  // Last-resort recovery: scan user records directly when both lookup and index are stale.
+  const userPathnames = await listPathnames('users/').catch(() => [] as string[]);
+  for (const pathname of userPathnames) {
+    if (!pathname.endsWith('.json')) continue;
+    const id = pathname.slice('users/'.length, -'.json'.length);
+    if (!id || seenIds.has(id)) continue;
+    seenIds.add(id);
+    const user = await readJson<UserRecord>(pathname);
+    if (user && matchesIdentifier(user)) {
+      await upsertUserAuthLookups(user).catch(() => undefined);
+      return user;
     }
   }
 

@@ -42,6 +42,12 @@ function deepClone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+function toFiniteInt(value: unknown, fallback: number) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.floor(n);
+}
+
 function normalizedRequestKey(requestKey: string | undefined) {
   if (!requestKey) return undefined;
   const trimmed = requestKey.trim();
@@ -200,9 +206,10 @@ async function readLegacySnapshot(userId: string, username: string): Promise<Gam
 
   normalizedWorld.resources.sol = baseBalance;
 
+  const createdAt = toFiniteInt(legacyWorld.lastSaveTime ?? legacyWallet?.updatedAt, now);
   return {
     schemaVersion: SCHEMA_VERSION,
-    createdAt: Number(legacyWorld.lastSaveTime || legacyWallet?.updatedAt || now),
+    createdAt,
     world: normalizedWorld,
     baseBalance
   };
@@ -212,17 +219,22 @@ async function loadSnapshot(userId: string, username: string): Promise<GameSnaps
   const path = snapshotPath(userId);
   const existing = await readJson<GameSnapshot>(path);
   if (existing && existing.schemaVersion === SCHEMA_VERSION && existing.world) {
+    const now = Date.now();
+    const createdAt = toFiniteInt(existing.createdAt, now);
+    const baseBalance = clamp(toFiniteInt(existing.baseBalance, STARTING_BALANCE), 0, MAX_BALANCE);
     return {
       schemaVersion: SCHEMA_VERSION,
-      createdAt: Number(existing.createdAt || Date.now()),
+      createdAt,
       world: normalizeSnapshotWorld(existing.world, userId, username),
-      baseBalance: clamp(Math.floor(Number(existing.baseBalance ?? STARTING_BALANCE)), 0, MAX_BALANCE)
+      baseBalance
     };
   }
 
   const migrated = await readLegacySnapshot(userId, username);
   if (migrated) {
-    await writeJson(path, migrated);
+    await writeJson(path, migrated).catch(error => {
+      console.warn('snapshot migrate write failed', { userId, error });
+    });
     return migrated;
   }
 
@@ -234,16 +246,28 @@ async function loadSnapshot(userId: string, username: string): Promise<GameSnaps
     baseBalance: STARTING_BALANCE
   };
 
-  await writeJson(path, snapshot);
+  await writeJson(path, snapshot).catch(error => {
+    console.warn('starter snapshot write failed', { userId, error });
+  });
   return snapshot;
 }
 
 async function loadEvents(userId: string): Promise<GameEvent[]> {
   const prefix = eventsPrefix(userId);
-  const pathnames = await listPathnames(prefix);
+  const pathnames = await listPathnames(prefix).catch(error => {
+    console.warn('events list failed', { userId, error });
+    return [] as string[];
+  });
   if (pathnames.length === 0) return [];
 
-  const raw = await Promise.all(pathnames.map(pathname => readJson<GameEvent>(pathname)));
+  const raw = await Promise.all(
+    pathnames.map(pathname =>
+      readJson<GameEvent>(pathname).catch(error => {
+        console.warn('event read failed', { userId, pathname, error });
+        return null;
+      })
+    )
+  );
   const events = raw.filter(isGameEvent);
 
   events.sort((a, b) => {
@@ -309,14 +333,14 @@ export async function materializeState(userId: string, username: string, at = Da
   const [snapshot, events] = await Promise.all([loadSnapshot(userId, username), loadEvents(userId)]);
 
   const world = deepClone(normalizeSnapshotWorld(snapshot.world, userId, username));
-  let balance = clamp(Math.floor(snapshot.baseBalance), 0, MAX_BALANCE);
+  let balance = clamp(toFiniteInt(snapshot.baseBalance, STARTING_BALANCE), 0, MAX_BALANCE);
   let worldRevision = 1;
-  let cursor = Math.max(0, Math.floor(snapshot.createdAt));
+  let cursor = Math.max(0, toFiniteInt(snapshot.createdAt, Date.now()));
   let lastMutationAt = cursor;
   const requestKeys = new Set<string>();
 
   for (const event of events) {
-    const eventAt = Math.max(cursor, Math.floor(event.at));
+    const eventAt = Math.max(cursor, toFiniteInt(event.at, cursor));
     const produced = producedBetween(world, cursor, eventAt);
     balance = clamp(balance + produced, 0, MAX_BALANCE);
     cursor = eventAt;
@@ -331,15 +355,18 @@ export async function materializeState(userId: string, username: string, at = Da
     if (requestKey) requestKeys.add(requestKey);
   }
 
-  const now = Math.max(cursor, Math.floor(at));
+  const now = Math.max(cursor, toFiniteInt(at, Date.now()));
   const productionSinceLastMutation = producedBetween(world, cursor, now);
   balance = clamp(balance + productionSinceLastMutation, 0, MAX_BALANCE);
+  if (!Number.isFinite(balance)) {
+    balance = clamp(toFiniteInt(snapshot.baseBalance, STARTING_BALANCE), 0, MAX_BALANCE);
+  }
 
   world.ownerId = userId;
   world.username = username;
   world.resources.sol = balance;
-  world.lastSaveTime = lastMutationAt;
-  world.revision = worldRevision;
+  world.lastSaveTime = Math.max(0, toFiniteInt(lastMutationAt, now));
+  world.revision = Math.max(1, toFiniteInt(worldRevision, 1));
 
   return {
     world,
