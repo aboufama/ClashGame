@@ -3,6 +3,7 @@ import { handleOptions, sendError, sendJson } from '../_lib/http.js';
 import { listPathnames, readJson } from '../_lib/blob.js';
 import { readUsersIndex } from '../_lib/indexes.js';
 import type { UserRecord } from '../_lib/models.js';
+import { countPlayerBuildings } from '../_lib/game_state.js';
 
 interface ListedUser {
   id: string;
@@ -51,6 +52,24 @@ function dedupeUsers(users: ListedUser[]): ListedUser[] {
   return Array.from(deduped.values()).slice(0, MAX_USERS);
 }
 
+async function hydrateAccurateBuildingCounts(users: ListedUser[]): Promise<ListedUser[]> {
+  if (users.length === 0) return users;
+
+  const refreshed = await Promise.all(users.map(async user => {
+    try {
+      const materializedCount = await countPlayerBuildings(user.id, user.username);
+      return sanitizeListedUser({
+        ...user,
+        buildingCount: Math.max(user.buildingCount, materializedCount)
+      });
+    } catch {
+      return sanitizeListedUser(user);
+    }
+  }));
+
+  return dedupeUsers(refreshed);
+}
+
 async function readUsersFromIndex(): Promise<ListedUser[]> {
   const index = await readUsersIndex();
   const listed = index.users
@@ -61,7 +80,7 @@ async function readUsersFromIndex(): Promise<ListedUser[]> {
       username: entry.username,
       buildingCount: entry.buildingCount
     }));
-  return dedupeUsers(listed);
+  return await hydrateAccurateBuildingCounts(dedupeUsers(listed));
 }
 
 async function readUsersFromFallback(): Promise<ListedUser[]> {
@@ -76,10 +95,10 @@ async function readUsersFromFallback(): Promise<ListedUser[]> {
     .map(record => sanitizeListedUser({
       id: record.id,
       username: record.username,
-      buildingCount: 1
+      buildingCount: 0
     }))
     .slice(0, MAX_USERS);
-  return dedupeUsers(listed);
+  return await hydrateAccurateBuildingCounts(dedupeUsers(listed));
 }
 
 function writeResponseHeaders(res: VercelResponse) {

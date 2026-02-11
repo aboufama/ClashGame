@@ -223,6 +223,26 @@ function App() {
     return false;
   }, [wait, waitForMainSceneReady]);
 
+  const loadCloudWorldWithRetry = useCallback(async (userId: string) => {
+    const maxAttempts = 4;
+    let lastWorld: any = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const world = await Backend.forceLoadFromCloud(userId);
+        lastWorld = world;
+        if (world && Array.isArray(world.buildings) && world.buildings.length > 0) {
+          return world;
+        }
+      } catch (error) {
+        console.warn('Cloud world load attempt failed', { attempt, error });
+      }
+      if (attempt < maxAttempts) {
+        await wait(200 * attempt);
+      }
+    }
+    return lastWorld;
+  }, [wait]);
+
   useEffect(() => {
     return () => {
       clearCloudTimers();
@@ -255,7 +275,7 @@ function App() {
         // This prevents showing outdated building positions/levels after switching browsers.
         updateVillageLoadCloud(24);
         let world = isOnline
-          ? await Backend.forceLoadFromCloud(userId)
+          ? await loadCloudWorldWithRetry(userId)
           : Backend.getCachedWorld(userId);
 
         if (!world || !Array.isArray(world.buildings)) {
@@ -332,7 +352,7 @@ function App() {
     };
 
     init();
-  }, [authReady, user, isOnline, beginVillageLoadCloud, updateVillageLoadCloud, revealVillageFromCloud, clearCloudTimers, ensureSceneBaseLoaded]);
+  }, [authReady, user, isOnline, beginVillageLoadCloud, updateVillageLoadCloud, revealVillageFromCloud, clearCloudTimers, ensureSceneBaseLoaded, loadCloudWorldWithRetry]);
 
   // Persist resources & army
   useEffect(() => {
