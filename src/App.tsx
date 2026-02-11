@@ -32,6 +32,7 @@ function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [isOnline, setIsOnline] = useState(false);
+  const [worldReady, setWorldReady] = useState(false);
   const [isAccountOpen, setIsAccountOpen] = useState(false);
   const isLockedOut = !user || !isOnline;
 
@@ -222,6 +223,7 @@ function App() {
     if (!authReady) return;
 
     if (!user || !isOnline) {
+      setWorldReady(false);
       clearCloudTimers();
       setLoading(false);
       setCloudOverlayLoading(false);
@@ -233,6 +235,7 @@ function App() {
     const init = async () => {
       let loaded = false;
       try {
+        setWorldReady(false);
         setLoading(true);
         beginVillageLoadCloud(8);
         const userId = user.id || 'default_player';
@@ -244,20 +247,14 @@ function App() {
           ? await Backend.forceLoadFromCloud(userId)
           : Backend.getCachedWorld(userId);
 
-        const needsBootstrap = !world || !world.buildings || world.buildings.length === 0;
-        if (needsBootstrap) {
-          updateVillageLoadCloud(40);
-          if (isOnline) {
-            const bootstrapped = await Backend.bootstrapBase(userId);
-            if (bootstrapped) {
-              world = bootstrapped;
-            } else {
-              console.error('Online base unavailable. Skipping local creation to avoid overwrite.');
-              return;
-            }
-          } else {
-            world = await Backend.createWorld(userId, 'PLAYER');
-          }
+        if (!world || !Array.isArray(world.buildings)) {
+          console.error('Failed to load a valid world payload from cloud. Aborting init to avoid destructive fallback.');
+          return;
+        }
+
+        if (world.buildings.length === 0) {
+          console.error('Cloud world is empty. Refusing automatic bootstrap/default creation to avoid overwrite.');
+          return;
         }
 
         updateVillageLoadCloud(58);
@@ -302,15 +299,18 @@ function App() {
         const sceneLoaded = await ensureSceneBaseLoaded();
         if (!sceneLoaded) {
           console.warn('Scene base load did not confirm success after retries.');
+          setWorldReady(false);
         }
         updateVillageLoadCloud(98);
         loaded = sceneLoaded;
+        setWorldReady(sceneLoaded);
 
         if (offline.sol > 0) {
           console.log(`Welcome back ${user.username}! Offline Production: ${offline.sol} SOL`);
         }
       } catch (error) {
         console.error('Error initializing game:', error);
+        setWorldReady(false);
       } finally {
         setLoading(false);
         if (!loaded) {
@@ -325,7 +325,7 @@ function App() {
 
   // Persist resources & army
   useEffect(() => {
-    if (user && !loading) {
+    if (user && !loading && worldReady) {
       try {
         const userId = user.id || 'default_player';
         Backend.updateResources(userId, resources.sol);
@@ -334,7 +334,7 @@ function App() {
         console.error('Error saving game state:', error);
       }
     }
-  }, [resources, army, user, loading]);
+  }, [resources, army, user, loading, worldReady]);
   const [capacity, setCapacity] = useState({ current: 0, max: 30 });
   const [selectedTroopType, setSelectedTroopType] = useState<'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'ram' | 'stormmage' | 'golem' | 'sharpshooter' | 'mobilemortar' | 'davincitank' | 'phalanx'>('warrior');
   const [visibleTroops, setVisibleTroops] = useState<string[]>([]);
@@ -366,6 +366,7 @@ function App() {
 
   const handleLoginAccount = async (identifier: string, password: string) => {
     setLoading(true);
+    setWorldReady(false);
     try {
       const existingId = user?.id;
       if (existingId) {
@@ -386,6 +387,7 @@ function App() {
 
   const handleRegisterAccount = async (email: string, username: string, password: string) => {
     setLoading(true);
+    setWorldReady(false);
     try {
       const existingId = user?.id;
       if (existingId) {
@@ -406,6 +408,7 @@ function App() {
 
   const handleLogoutAccount = async () => {
     setLoading(true);
+    setWorldReady(false);
     try {
       if (user?.id) {
         await Backend.flushPendingSave();

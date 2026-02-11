@@ -938,6 +938,28 @@ export class MainScene extends Phaser.Scene {
         return false;
     }
 
+    private logWorldLoadDiagnostics(world: SerializedWorld | null, stage: string, summary?: { requested: number; placed: number; playablePlaced: number }) {
+        if (!world) {
+            console.warn(`loadSavedBase diagnostics (${stage}): world is null`);
+            return;
+        }
+        const buildings = Array.isArray(world.buildings) ? world.buildings : [];
+        const hasTownHall = buildings.some(building => this.normalizeBuildingType(String((building as { type?: unknown }).type ?? '')) === 'town_hall');
+        const typeHistogram: Record<string, number> = {};
+        buildings.forEach(building => {
+            const rawType = String((building as { type?: unknown }).type ?? 'unknown');
+            typeHistogram[rawType] = (typeHistogram[rawType] ?? 0) + 1;
+        });
+        console.warn(`loadSavedBase diagnostics (${stage})`, {
+            worldId: world.id,
+            userId: this.userId,
+            buildingCount: buildings.length,
+            hasTownHall,
+            sampleTypes: Object.entries(typeHistogram).slice(0, 12),
+            summary
+        });
+    }
+
     private async loadSavedBase(
         forceOnline: boolean = false,
         options: { preferCache?: boolean; refreshOnline?: boolean } = {}
@@ -956,6 +978,7 @@ export class MainScene extends Phaser.Scene {
                     lastKnownSaveTime = cached.lastSaveTime ?? 0;
                 } else {
                     console.warn('loadSavedBase: Cached world failed visual instantiation checks, forcing remote read path.');
+                    this.logWorldLoadDiagnostics(cached, 'cache_failed_visual_apply', cacheSummary);
                 }
             }
         }
@@ -984,11 +1007,13 @@ export class MainScene extends Phaser.Scene {
                     console.warn("loadSavedBase: Town Hall missing. Skipping default placement to avoid data loss.");
                     this.needsDefaultBase = !Auth.isOnlineMode();
                 }
+                this.logWorldLoadDiagnostics(world, 'invalid_world_payload');
                 return false;
             }
 
             const summary = this.applyWorldToScene(world);
             if (!this.canUseAppliedHomeWorld(summary)) {
+                this.logWorldLoadDiagnostics(world, 'applied_world_not_playable', summary);
                 return false;
             }
             lastKnownSaveTime = world.lastSaveTime ?? 0;
@@ -1011,7 +1036,17 @@ export class MainScene extends Phaser.Scene {
         }
 
         if (!success && this.needsDefaultBase) {
-            await this.placeDefaultVillage();
+            // Never auto-write a fallback base in online mode; this can overwrite a valid remote base.
+            if (Auth.isOnlineMode()) {
+                console.error('reloadHomeBase: refusing automatic default base creation while online to avoid destructive overwrite');
+                return false;
+            }
+
+            const offlineWorld = await Backend.createWorld(this.userId, 'PLAYER');
+            const summary = this.applyWorldToScene(offlineWorld);
+            if (!this.canUseAppliedHomeWorld(summary)) {
+                return false;
+            }
             this.centerCamera();
             return true;
         }
@@ -5687,10 +5722,35 @@ export class MainScene extends Phaser.Scene {
                     }
 
                     if (!loadedPracticeBase) {
-                        // Fallback to default village if no saved base
-                        await this.placeDefaultVillage();
-                        // Convert all to enemy
-                        this.buildings.forEach(b => b.owner = 'ENEMY');
+                        // Fallback to local visual-only base if player world fails to load.
+                        // Do not call placeBuilding here, to avoid mutating/saving the player's home world.
+                        const fallbackWorld: SerializedWorld = {
+                            id: `practice_fallback_${Date.now()}`,
+                            ownerId: 'practice',
+                            username: 'Default Base',
+                            buildings: [
+                                { id: Phaser.Utils.String.UUID(), type: 'town_hall', gridX: 11, gridY: 11, level: 1 },
+                                { id: Phaser.Utils.String.UUID(), type: 'cannon', gridX: 8, gridY: 11, level: 1 },
+                                { id: Phaser.Utils.String.UUID(), type: 'barracks', gridX: 15, gridY: 11, level: 1 },
+                                { id: Phaser.Utils.String.UUID(), type: 'army_camp', gridX: 11, gridY: 15, level: 1 },
+                                { id: Phaser.Utils.String.UUID(), type: 'solana_collector', gridX: 14, gridY: 14, level: 1 }
+                            ],
+                            obstacles: [],
+                            resources: { sol: 0 },
+                            army: {},
+                            wallLevel: 1,
+                            lastSaveTime: Date.now(),
+                            revision: 1
+                        };
+                        const fallbackSummary = this.instantiateEnemyWorld(fallbackWorld, {
+                            id: 'practice',
+                            username: 'Default Base',
+                            isBot: true
+                        });
+                        loadedPracticeBase = fallbackSummary.playablePlaced > 0;
+                        if (!loadedPracticeBase) {
+                            console.error('startPracticeAttack: fallback visual base failed to instantiate', fallbackSummary);
+                        }
                         this.currentEnemyWorld = {
                             id: 'practice',
                             username: 'Default Base',
@@ -5941,26 +6001,6 @@ export class MainScene extends Phaser.Scene {
                 this.groundRenderTexture.draw(this.tempGraphics, this.RT_OFFSET_X, this.RT_OFFSET_Y);
             }
         }
-    }
-
-    private async placeDefaultVillage() {
-        this.clearScene();
-
-        // Core Layout - Starter Clean Slate
-        const cx = 11;
-        const cy = 11;
-
-        // Town Hall (Central)
-        await this.placeBuilding(cx, cy, 'town_hall', 'PLAYER', true);
-
-        // Essential Starter Buildings
-        await this.placeBuilding(cx - 3, cy, 'cannon', 'PLAYER', true);         // Defense
-        await this.placeBuilding(cx + 4, cy, 'barracks', 'PLAYER', true);       // Troops
-        await this.placeBuilding(cx, cy + 4, 'army_camp', 'PLAYER', true);      // Army
-        await this.placeBuilding(cx + 3, cy + 3, 'solana_collector', 'PLAYER', true); // Resource
-
-        // Spawn random wildlife/obstacles (Fewer for clean slate)
-        this.spawnRandomObstacles(8);
     }
 
     private instantiateEnemyWorld(

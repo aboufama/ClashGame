@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http.js';
 import { requireAuth } from '../_lib/auth.js';
 import { appendWorldPatchEvent, buildPatchFromClientState, ensurePlayerState, materializeState } from '../_lib/game_state.js';
-import type { SerializedWorld } from '../_lib/models.js';
+import { normalizeWorldInput, worldHasTownHall, type SerializedWorld } from '../_lib/models.js';
 import { upsertUserIndex } from '../_lib/indexes.js';
 
 interface SaveBody {
@@ -13,6 +13,12 @@ interface SaveBody {
 
 function hasRevisionCheck(value: unknown): value is number {
   return Number.isFinite(Number(value));
+}
+
+function isSuspiciousDownsize(currentCount: number, incomingCount: number): boolean {
+  if (currentCount < 20) return false;
+  if (incomingCount <= 0) return true;
+  return incomingCount <= Math.floor(currentCount * 0.2);
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -43,7 +49,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const patch = buildPatchFromClientState(current.world, body.world, user.id, user.username);
+    const normalizedIncoming = normalizeWorldInput(body.world, user.id, user.username);
+    if (!worldHasTownHall(normalizedIncoming)) {
+      console.warn('save blocked: incoming payload missing town hall', {
+        userId: user.id,
+        incomingCount: normalizedIncoming.buildings.length
+      });
+      sendJson(res, 409, { conflict: true, integrity: 'missing_town_hall', world: current.world });
+      return;
+    }
+
+    if (isSuspiciousDownsize(current.world.buildings.length, normalizedIncoming.buildings.length)) {
+      console.warn('save blocked: suspicious downsize detected', {
+        userId: user.id,
+        currentCount: current.world.buildings.length,
+        incomingCount: normalizedIncoming.buildings.length
+      });
+      sendJson(res, 409, { conflict: true, integrity: 'suspicious_downsize', world: current.world });
+      return;
+    }
+
+    const patch = buildPatchFromClientState(current.world, normalizedIncoming, user.id, user.username);
     const requestKey = body.requestId?.trim() || undefined;
     await appendWorldPatchEvent(user.id, patch, requestKey);
 

@@ -23,6 +23,7 @@ export class Backend {
   private static saveTimers = new Map<string, number>();
   private static inFlightSaves = new Map<string, Promise<void>>();
   private static cacheKeyPrefix = CACHE_PREFIX;
+  private static lastConfirmedRemoteBuildingCount = new Map<string, number>();
 
   private static async wait(ms: number) {
     await new Promise(resolve => setTimeout(resolve, ms));
@@ -59,6 +60,52 @@ export class Backend {
       inferred = Math.max(inferred, building.level ?? 1);
     }
     return Backend.clampWallLevel(inferred);
+  }
+
+  private static normalizeTypeKey(type: unknown): string {
+    return String(type ?? '').trim().toLowerCase().replace(/[\s_-]+/g, '');
+  }
+
+  private static hasTownHall(world: SerializedWorld): boolean {
+    return Array.isArray(world.buildings) && world.buildings.some(building => Backend.normalizeTypeKey(building.type) === 'townhall');
+  }
+
+  private static isWorldStructurallyValid(world: SerializedWorld): boolean {
+    return Array.isArray(world.buildings) && world.buildings.length > 0 && Backend.hasTownHall(world);
+  }
+
+  private static markConfirmedRemoteWorld(userId: string, world: SerializedWorld | null | undefined) {
+    if (!world || !Array.isArray(world.buildings)) return;
+    const count = Math.max(0, Math.floor(Number(world.buildings.length) || 0));
+    if (count > 0) {
+      Backend.lastConfirmedRemoteBuildingCount.set(userId, count);
+    }
+  }
+
+  private static isSuspiciousDownsize(userId: string, world: SerializedWorld): boolean {
+    const lastConfirmed = Backend.lastConfirmedRemoteBuildingCount.get(userId);
+    if (!lastConfirmed || lastConfirmed < 20) return false;
+    const currentCount = Array.isArray(world.buildings) ? world.buildings.length : 0;
+    return currentCount > 0 && currentCount <= Math.floor(lastConfirmed * 0.2);
+  }
+
+  private static canSaveWorld(userId: string, world: SerializedWorld): boolean {
+    if (!Backend.isWorldStructurallyValid(world)) {
+      console.warn('Save blocked: world payload failed structural validation', {
+        userId,
+        buildingCount: Array.isArray(world.buildings) ? world.buildings.length : 0
+      });
+      return false;
+    }
+    if (Backend.isSuspiciousDownsize(userId, world)) {
+      console.warn('Save blocked: suspicious base downsize detected', {
+        userId,
+        previousCount: Backend.lastConfirmedRemoteBuildingCount.get(userId),
+        nextCount: world.buildings.length
+      });
+      return false;
+    }
+    return true;
   }
 
   static hasPendingSave(userId?: string): boolean {
@@ -137,6 +184,7 @@ export class Backend {
    */
   private static mergeServerResponse(userId: string, serverWorld: SerializedWorld) {
     const current = Backend.getCachedWorld(userId);
+    Backend.markConfirmedRemoteWorld(userId, serverWorld);
     if (!current) {
       Backend.setCachedWorld(userId, serverWorld);
       return;
@@ -160,6 +208,7 @@ export class Backend {
     // up-to-date revision and the latest local building changes.
     const world = Backend.getCachedWorld(userId);
     if (!world || !Auth.isOnlineMode()) return;
+    if (!Backend.canSaveWorld(userId, world)) return;
 
     const task = (async () => {
       try {
@@ -232,6 +281,7 @@ export class Backend {
   private static async saveWorldDirect(userId: string): Promise<void> {
     const world = Backend.getCachedWorld(userId);
     if (!world || !Auth.isOnlineMode()) return;
+    if (!Backend.canSaveWorld(userId, world)) return;
 
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -313,6 +363,7 @@ export class Backend {
 
     const world = Backend.getCachedWorld(userId);
     if (!world) return;
+    if (!Backend.canSaveWorld(userId, world)) return;
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
@@ -335,6 +386,7 @@ export class Backend {
 
   static clearCacheForUser(userId: string) {
     Backend.memoryCache.delete(userId);
+    Backend.lastConfirmedRemoteBuildingCount.delete(userId);
     const timer = Backend.saveTimers.get(userId);
     if (timer) {
       window.clearTimeout(timer);
@@ -348,6 +400,7 @@ export class Backend {
 
   static clearAllCaches() {
     Backend.memoryCache.clear();
+    Backend.lastConfirmedRemoteBuildingCount.clear();
     Backend.saveTimers.forEach(timer => window.clearTimeout(timer));
     Backend.saveTimers.clear();
     Backend.inFlightSaves.clear();
@@ -362,6 +415,7 @@ export class Backend {
     if (!Auth.isOnlineMode()) return null;
     const response = await Backend.apiPostWithRetry<{ world: SerializedWorld | null }>('/api/bases/bootstrap', {});
     if (response.world) {
+      Backend.markConfirmedRemoteWorld(userId, response.world);
       Backend.setCachedWorld(userId, response.world);
     }
     return response.world ?? null;
@@ -371,6 +425,7 @@ export class Backend {
     if (!Auth.isOnlineMode()) return null;
     const response = await Backend.apiPostWithRetry<{ world: SerializedWorld | null }>('/api/bases/load', {});
     if (response.world) {
+      Backend.markConfirmedRemoteWorld(userId, response.world);
       Backend.setCachedWorld(userId, response.world);
     }
     return response.world ?? null;
@@ -379,6 +434,7 @@ export class Backend {
   static async refreshWorldFromCloud(userId: string): Promise<SerializedWorld | null> {
     const remote = await Backend.forceLoadFromCloud(userId);
     if (!remote) return null;
+    Backend.markConfirmedRemoteWorld(userId, remote);
     Backend.setCachedWorld(userId, remote);
     return remote;
   }
