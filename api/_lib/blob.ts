@@ -41,7 +41,7 @@ function pathnameFromBlobItem(item: { pathname?: string; url?: string }) {
   if (!item.url) return null;
   try {
     const url = new URL(item.url);
-    return url.pathname.replace(/^\//, '');
+    return decodeURIComponent(url.pathname.replace(/^\//, ''));
   } catch {
     return null;
   }
@@ -114,6 +114,54 @@ async function readVersionedJson<T>(pathname: string): Promise<T | null> {
   return await fetchJsonFromBlobUrl<T>(latest.url);
 }
 
+type VersionedJsonEntry<T> = {
+  pathname: string;
+  uploadedAtMs: number;
+  value: T;
+};
+
+async function readVersionedJsonEntries<T>(pathname: string, limit: number): Promise<Array<VersionedJsonEntry<T>>> {
+  ensureBlobToken();
+  const { list } = await getBlobModule();
+  const prefix = historyPrefix(pathname);
+
+  const blobs: Array<{ pathname: string; url: string; uploadedAtMs: number }> = [];
+  let cursor: string | undefined;
+
+  for (;;) {
+    const page = await list({ prefix, limit: 1000, cursor });
+    for (const blob of page.blobs) {
+      const blobPathname = pathnameFromBlobItem(blob);
+      if (!blobPathname || typeof blob.url !== 'string' || !blob.url) continue;
+      blobs.push({
+        pathname: blobPathname,
+        url: blob.url,
+        uploadedAtMs: blobUploadedAtMs((blob as { uploadedAt?: unknown }).uploadedAt)
+      });
+    }
+    if (!page.hasMore || !page.cursor) break;
+    cursor = page.cursor;
+  }
+
+  blobs.sort((a, b) => {
+    if (b.uploadedAtMs !== a.uploadedAtMs) return b.uploadedAtMs - a.uploadedAtMs;
+    return b.pathname.localeCompare(a.pathname);
+  });
+
+  const out: Array<VersionedJsonEntry<T>> = [];
+  for (const blob of blobs) {
+    if (out.length >= limit) break;
+    const value = await fetchJsonFromBlobUrl<T>(blob.url).catch(() => null);
+    if (value === null) continue;
+    out.push({
+      pathname: blob.pathname,
+      uploadedAtMs: blob.uploadedAtMs,
+      value
+    });
+  }
+  return out;
+}
+
 async function pruneHistory(pathname: string): Promise<void> {
   ensureBlobToken();
   const { list, del } = await getBlobModule();
@@ -170,6 +218,15 @@ export async function readJson<T>(pathname: string): Promise<T | null> {
     if (isBlobNotFound(error)) return null;
     throw error;
   }
+}
+
+export async function readJsonHistory<T>(pathname: string, limit = 8): Promise<T[]> {
+  const safeLimit = Math.max(1, Math.min(40, Math.floor(Number(limit) || 8)));
+  const entries = await readVersionedJsonEntries<T>(pathname, safeLimit).catch(error => {
+    if (isBlobNotFound(error)) return [];
+    throw error;
+  });
+  return entries.map(entry => entry.value);
 }
 
 export async function writeJson<T>(pathname: string, data: T, options: WriteOptions = {}): Promise<void> {

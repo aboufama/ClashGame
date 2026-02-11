@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http.js';
-import { deleteJson, writeJson } from '../_lib/blob.js';
+import { deleteJson, listPathnames, readJson, writeJson } from '../_lib/blob.js';
 import {
   createSession,
   createSessionCookie,
@@ -69,6 +69,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
+    // Last-line uniqueness guard: full user scan prevents duplicate usernames/emails
+    // when lookup/index entries are stale.
+    const userPathnames = await listPathnames('users/').catch(() => [] as string[]);
+    for (const pathname of userPathnames) {
+      if (!pathname.startsWith('users/') || !pathname.endsWith('.json')) continue;
+      const record = await readJson<UserRecord>(pathname).catch(() => null);
+      if (!record) continue;
+      if (normalizeEmail(record.email) === email) {
+        sendError(res, 409, 'Email already in use');
+        return;
+      }
+      if (normalizeUsernameKey(record.username) === normalizedUsername) {
+        sendError(res, 409, 'Username already in use');
+        return;
+      }
+    }
+
     const now = Date.now();
     const user: UserRecord = {
       id: randomId('u_'),
@@ -93,7 +110,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       user.activeSessionId = session.token;
       user.sessionExpiresAt = session.expiresAt;
 
-      await writeJson(`users/${user.id}.json`, user);
+      await writeJson(`users/${user.id}.json`, user, { allowOverwrite: false });
 
       res.setHeader('Set-Cookie', createSessionCookie(session.token));
       sendJson(res, 200, {

@@ -4,6 +4,12 @@ import { requireAuth } from '../_lib/auth.js';
 import { ensurePlayerState, materializeState, saveWorldState } from '../_lib/game_state.js';
 import { upsertUserIndex } from '../_lib/indexes.js';
 import { buildStarterWorld, worldHasTownHall, type SerializedWorld } from '../_lib/models.js';
+import { readJsonHistory } from '../_lib/blob.js';
+
+interface StoredStateSnapshot {
+  world?: SerializedWorld;
+  updatedAt?: number;
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleOptions(req, res)) return;
@@ -19,16 +25,66 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { user } = auth;
     const now = Date.now();
     await ensurePlayerState(user.id, user.username);
-    const state = await materializeState(user.id, user.username, now);
-    let world = state.world as SerializedWorld;
+    let world: SerializedWorld = (await materializeState(user.id, user.username, now)).world;
 
-    const hasBuildings = Array.isArray(world.buildings) && world.buildings.length > 0;
-    const hasTownHall = hasBuildings && worldHasTownHall(world);
+    const isRenderableWorld = (candidate: SerializedWorld | null | undefined) =>
+      !!candidate && Array.isArray(candidate.buildings) && candidate.buildings.length > 0;
+
+    for (let attempt = 1; attempt <= 8; attempt++) {
+      if (isRenderableWorld(world)) break;
+      await new Promise(resolve => setTimeout(resolve, 120 * attempt));
+      world = (await materializeState(user.id, user.username, Date.now())).world;
+    }
+
+    let hasBuildings = Array.isArray(world.buildings) && world.buildings.length > 0;
+    let hasTownHall = hasBuildings && worldHasTownHall(world);
+
+    if (!hasBuildings) {
+      const history = await readJsonHistory<StoredStateSnapshot>(`game/${user.id}/state.json`, 10).catch(error => {
+        console.warn('load history lookup failed', { userId: user.id, error });
+        return [] as StoredStateSnapshot[];
+      });
+      const candidates = history
+        .map(entry => entry?.world)
+        .filter((entry): entry is SerializedWorld => !!entry && Array.isArray(entry.buildings));
+
+      let best: SerializedWorld | null = null;
+      for (const candidate of candidates) {
+        const candidateCount = candidate.buildings.length;
+        const bestCount = best?.buildings?.length ?? -1;
+        const candidateHasTownHall = worldHasTownHall(candidate);
+        const bestHasTownHall = best ? worldHasTownHall(best) : false;
+        if (
+          !best ||
+          candidateCount > bestCount ||
+          (candidateCount === bestCount && candidateHasTownHall && !bestHasTownHall)
+        ) {
+          best = candidate;
+        }
+      }
+
+      if (best && best.buildings.length > 0) {
+        world = {
+          ...best,
+          ownerId: user.id,
+          username: user.username
+        };
+        hasBuildings = true;
+        hasTownHall = worldHasTownHall(world);
+        console.warn('load base recovered state from history snapshot', {
+          userId: user.id,
+          recoveredBuildingCount: world.buildings.length,
+          recoveredHasTownHall: hasTownHall
+        });
+      }
+    }
 
     if (!hasBuildings || !hasTownHall) {
       const starter = buildStarterWorld(user.id, user.username);
       const existingBuildings = Array.isArray(world.buildings) ? world.buildings : [];
-      const repairedBuildings = hasTownHall ? existingBuildings : [...existingBuildings, starter.buildings[0]];
+      const repairedBuildings = !hasBuildings
+        ? starter.buildings
+        : (hasTownHall ? existingBuildings : [...existingBuildings, starter.buildings[0]]);
       const repaired: SerializedWorld = {
         ...world,
         id: world.id || starter.id,

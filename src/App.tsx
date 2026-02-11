@@ -203,7 +203,7 @@ function App() {
     const sceneReady = await waitForMainSceneReady();
     if (!sceneReady) return false;
 
-    const maxAttempts = 12;
+    const maxAttempts = 24;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         const ok = await gameManager.loadBase();
@@ -218,13 +218,13 @@ function App() {
       } catch (error) {
         console.warn('Scene base load attempt failed', { attempt, error });
       }
-      await wait(150);
+      await wait(180);
     }
     return false;
   }, [wait, waitForMainSceneReady]);
 
   const loadCloudWorldWithRetry = useCallback(async (userId: string) => {
-    const maxAttempts = 4;
+    const maxAttempts = 8;
     let lastWorld: any = null;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
@@ -237,7 +237,7 @@ function App() {
         console.warn('Cloud world load attempt failed', { attempt, error });
       }
       if (attempt < maxAttempts) {
-        await wait(200 * attempt);
+        await wait(240 * attempt);
       }
     }
     return lastWorld;

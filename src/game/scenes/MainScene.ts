@@ -836,7 +836,6 @@ export class MainScene extends Phaser.Scene {
 
     private isWorldValid(world: SerializedWorld): boolean {
         if (!Array.isArray(world.buildings) || world.buildings.length === 0) return false;
-        let hasTownHall = false;
         let hasValidBuilding = false;
         for (const building of world.buildings) {
             const normalizedType = this.normalizeBuildingType(String((building as { type?: unknown }).type ?? ''));
@@ -847,11 +846,8 @@ export class MainScene extends Phaser.Scene {
             const rawY = Number((building as { gridY?: unknown }).gridY);
             if (!Number.isFinite(rawX) || !Number.isFinite(rawY)) continue;
             hasValidBuilding = true;
-            if (normalizedType === 'town_hall') {
-                hasTownHall = true;
-            }
         }
-        return hasValidBuilding && hasTownHall;
+        return hasValidBuilding;
     }
 
     private applyWorldToScene(world: SerializedWorld): { requested: number; placed: number; playablePlaced: number } {
@@ -1012,7 +1008,7 @@ export class MainScene extends Phaser.Scene {
                     console.log("loadSavedBase: Empty base. Triggering default placement.");
                     this.needsDefaultBase = true;
                 } else {
-                    console.warn("loadSavedBase: Town Hall missing. Skipping default placement to avoid data loss.");
+                    console.warn("loadSavedBase: No renderable buildings after sanitization. Skipping default placement to avoid data loss.");
                     this.needsDefaultBase = !Auth.isOnlineMode();
                 }
                 this.logWorldLoadDiagnostics(world, 'invalid_world_payload');
