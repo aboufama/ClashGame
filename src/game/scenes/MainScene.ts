@@ -24,6 +24,16 @@ import solanaCoin from '../../assets/Solana.png';
 const BUILDINGS = BUILDING_DEFINITIONS as any;
 const OBSTACLES = OBSTACLE_DEFINITIONS as any;
 
+interface EnemyInstantiationSummary {
+    requested: number;
+    prepared: number;
+    placed: number;
+    playablePlaced: number;
+    skippedUnknownType: number;
+    skippedOutOfBounds: number;
+    failedInstantiation: number;
+}
+
 
 
 
@@ -961,6 +971,11 @@ export class MainScene extends Phaser.Scene {
         }
 
         this.villageNameLabel.setText(`${name.toUpperCase()}'S VILLAGE`);
+    }
+
+    private setVillageNameVisible(visible: boolean) {
+        if (!this.villageNameLabel) return;
+        this.villageNameLabel.setVisible(visible);
     }
 
     private drawIsoTile(graphics: Phaser.GameObjects.Graphics, x: number, y: number, fillOnly: boolean = false) {
@@ -4857,6 +4872,9 @@ export class MainScene extends Phaser.Scene {
 
         this.troops.push(troop);
         this.hasDeployed = true;
+        if (owner === 'PLAYER' && this.mode === 'ATTACK' && !this.isScouting) {
+            this.setVillageNameVisible(false);
+        }
         this.updateHealthBar(troop);
         troop.target = TargetingSystem.findTarget(troop, this.buildings);
 
@@ -5302,21 +5320,30 @@ export class MainScene extends Phaser.Scene {
 
                     this.clearScene();
                     // Load player's own base as the enemy
-                    const playerWorld = await Backend.getWorld(this.userId);
-                    if (playerWorld && playerWorld.buildings.length > 0) {
-                        // Track as practice
-                        this.currentEnemyWorld = {
+                    let playerWorld: SerializedWorld | null = null;
+                    try {
+                        playerWorld = await Backend.getWorld(this.userId);
+                    } catch (error) {
+                        console.error('startPracticeAttack: failed to load player world', error);
+                    }
+
+                    let loadedPracticeBase = false;
+                    if (playerWorld && Array.isArray(playerWorld.buildings) && playerWorld.buildings.length > 0) {
+                        const summary = this.instantiateEnemyWorld(playerWorld, {
                             id: 'practice',
                             username: 'Your Base',
                             isBot: true
-                        };
-                        // Distribute loot
-                        const lootMap = LootSystem.calculateLootDistribution(playerWorld.buildings, playerWorld.resources.sol);
-                        playerWorld.buildings.forEach((b: any) => {
-                            const inst = this.instantiateBuilding(b, 'ENEMY'); // Load as enemy so defenses work
-                            if (inst) inst.loot = lootMap.get(b.id);
                         });
-                    } else {
+                        loadedPracticeBase = summary.playablePlaced > 0;
+                        if (!loadedPracticeBase) {
+                            console.warn('startPracticeAttack: player world had no playable structures, using fallback practice base', {
+                                worldId: playerWorld.id,
+                                summary
+                            });
+                        }
+                    }
+
+                    if (!loadedPracticeBase) {
                         // Fallback to default village if no saved base
                         await this.placeDefaultVillage();
                         // Convert all to enemy
@@ -5543,6 +5570,9 @@ export class MainScene extends Phaser.Scene {
         this.selectedInWorld = null;
         this.selectedBuildingType = null;
         this.isMoving = false;
+        this.hasDeployed = false;
+        this.lastDeployTime = 0;
+        this.deployStartTime = 0;
 
         // Clear all UI overlay graphics
         this.ghostBuilding.clear();
@@ -5552,6 +5582,8 @@ export class MainScene extends Phaser.Scene {
         this.deploymentGraphics.setVisible(false);
         this.forbiddenGraphics.clear();
         this.forbiddenGraphics.setVisible(false);
+
+        this.setVillageNameVisible(true);
 
         // Reset ground render texture - clear all baked building bases and redraw grass
         this.resetGroundTexture();
@@ -5603,27 +5635,105 @@ export class MainScene extends Phaser.Scene {
     private instantiateEnemyWorld(
         world: SerializedWorld,
         meta: { id: string; username: string; isBot: boolean; attackId?: string }
-    ): number {
+    ): EnemyInstantiationSummary {
         const enemyBuildings = Array.isArray(world.buildings) ? world.buildings : [];
-        if (enemyBuildings.length === 0) return 0;
+        const summary: EnemyInstantiationSummary = {
+            requested: enemyBuildings.length,
+            prepared: 0,
+            placed: 0,
+            playablePlaced: 0,
+            skippedUnknownType: 0,
+            skippedOutOfBounds: 0,
+            failedInstantiation: 0
+        };
+        if (enemyBuildings.length === 0) return summary;
+
+        const preparedBuildings: SerializedBuilding[] = [];
+        enemyBuildings.forEach(rawBuilding => {
+            const normalizedType = this.normalizeBuildingType(String((rawBuilding as { type?: unknown }).type ?? ''));
+            if (!normalizedType) {
+                summary.skippedUnknownType++;
+                return;
+            }
+
+            const definition = BUILDINGS[normalizedType];
+            const rawX = Number((rawBuilding as { gridX?: unknown }).gridX);
+            const rawY = Number((rawBuilding as { gridY?: unknown }).gridY);
+            if (!Number.isFinite(rawX) || !Number.isFinite(rawY)) {
+                summary.skippedOutOfBounds++;
+                return;
+            }
+
+            const gridX = Math.floor(rawX);
+            const gridY = Math.floor(rawY);
+            const inBounds = gridX >= 0 && gridY >= 0 && gridX + definition.width <= this.mapSize && gridY + definition.height <= this.mapSize;
+            if (!inBounds) {
+                summary.skippedOutOfBounds++;
+                return;
+            }
+
+            const rawLevel = Number((rawBuilding as { level?: unknown }).level ?? 1);
+            const level = Number.isFinite(rawLevel) ? Math.max(1, Math.floor(rawLevel)) : 1;
+            const rawId = (rawBuilding as { id?: unknown }).id;
+            const id = typeof rawId === 'string' && rawId.length > 0 ? rawId : Phaser.Utils.String.UUID();
+
+            preparedBuildings.push({
+                id,
+                type: normalizedType as BuildingType,
+                gridX,
+                gridY,
+                level
+            });
+        });
+        summary.prepared = preparedBuildings.length;
+        if (summary.prepared === 0) {
+            console.warn('instantiateEnemyWorld: no valid enemy buildings after sanitization', {
+                worldId: world.id,
+                username: meta.username,
+                summary
+            });
+            return summary;
+        }
 
         this.currentEnemyWorld = meta;
         const lootAmount = Math.max(0, Math.floor(world.resources?.sol ?? 0));
-        const lootMap = LootSystem.calculateLootDistribution(enemyBuildings, lootAmount);
+        const lootMap = LootSystem.calculateLootDistribution(preparedBuildings, lootAmount);
 
-        let placed = 0;
-        enemyBuildings.forEach((b: any) => {
-            const inst = this.instantiateBuilding(b, 'ENEMY');
-            if (!inst) return;
-            inst.loot = lootMap.get(b.id);
-            placed++;
+        preparedBuildings.forEach(building => {
+            try {
+                const inst = this.instantiateBuilding(building, 'ENEMY');
+                if (!inst) {
+                    summary.failedInstantiation++;
+                    return;
+                }
+                inst.loot = lootMap.get(building.id);
+                summary.placed++;
+                if (inst.type !== 'wall') {
+                    summary.playablePlaced++;
+                }
+            } catch (error) {
+                summary.failedInstantiation++;
+                console.error('instantiateEnemyWorld: building instantiation failed', {
+                    worldId: world.id,
+                    buildingId: building.id,
+                    buildingType: building.type,
+                    error
+                });
+            }
         });
 
-        if (placed > 0) {
+        if (summary.playablePlaced > 0) {
+            this.setVillageNameVisible(true);
             this.updateVillageName();
+        } else {
+            console.warn('instantiateEnemyWorld: enemy world had no playable buildings after instantiation', {
+                worldId: world.id,
+                username: meta.username,
+                summary
+            });
         }
 
-        return placed;
+        return summary;
     }
 
     private spawnEmergencyEnemyVillage() {
@@ -5647,29 +5757,44 @@ export class MainScene extends Phaser.Scene {
             revision: 1
         };
 
-        this.instantiateEnemyWorld(fallbackWorld, {
+        const fallbackSummary = this.instantiateEnemyWorld(fallbackWorld, {
             id: fallbackWorld.id,
             username: fallbackWorld.username || 'Bot Base',
             isBot: true
         });
+        if (fallbackSummary.playablePlaced === 0) {
+            console.error('spawnEmergencyEnemyVillage: fallback world failed to instantiate playable structures', fallbackSummary);
+        }
     }
 
     private async generateEnemyVillage() {
         const maxAttempts = 4;
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
-            const enemyWorld = await Backend.generateEnemyWorld();
-            // Give fake resources for loot
-            enemyWorld.resources = {
-                sol: Math.floor(20000 + Math.random() * 80000)
-            };
+            try {
+                const enemyWorld = await Backend.generateEnemyWorld();
+                // Give fake resources for loot
+                enemyWorld.resources = {
+                    sol: Math.floor(20000 + Math.random() * 80000)
+                };
 
-            const placed = this.instantiateEnemyWorld(enemyWorld, {
-                id: enemyWorld.id,
-                username: enemyWorld.username || 'Bot Base',
-                isBot: true
-            });
+                const summary = this.instantiateEnemyWorld(enemyWorld, {
+                    id: enemyWorld.id,
+                    username: enemyWorld.username || 'Bot Base',
+                    isBot: true
+                });
 
-            if (placed > 0) return;
+                if (summary.playablePlaced > 0) return;
+                console.warn('generateEnemyVillage: generated world had no playable buildings', {
+                    attempt: attempt + 1,
+                    worldId: enemyWorld.id,
+                    summary
+                });
+            } catch (error) {
+                console.error('generateEnemyVillage: enemy generation attempt failed', {
+                    attempt: attempt + 1,
+                    error
+                });
+            }
             this.clearScene();
         }
 
@@ -5678,20 +5803,30 @@ export class MainScene extends Phaser.Scene {
 
     // Load an online player's base for attack
     public async generateOnlineEnemyVillage(): Promise<boolean> {
-        const onlineBase = await Backend.getOnlineBase(this.userId);
+        let onlineBase: SerializedWorld | null = null;
+        try {
+            onlineBase = await Backend.getOnlineBase(this.userId);
+        } catch (error) {
+            console.error('generateOnlineEnemyVillage: failed to load online base', error);
+        }
         if (!onlineBase || !Array.isArray(onlineBase.buildings) || onlineBase.buildings.length === 0) {
             // Fallback to procedural generation if no online bases
             await this.generateEnemyVillage();
             return false;
         }
 
-        const placed = this.instantiateEnemyWorld(onlineBase, {
+        const summary = this.instantiateEnemyWorld(onlineBase, {
             id: onlineBase.ownerId,
             username: onlineBase.username || 'Unknown Player',
-            isBot: (onlineBase as any).isBot || false,
+            isBot: Boolean((onlineBase as { isBot?: boolean }).isBot),
             attackId: Phaser.Utils.String.UUID()
         });
-        if (placed === 0) {
+        if (summary.playablePlaced === 0) {
+            console.warn('generateOnlineEnemyVillage: online world had no playable buildings, falling back to bot base', {
+                worldId: onlineBase.id,
+                ownerId: onlineBase.ownerId,
+                summary
+            });
             this.clearScene();
             await this.generateEnemyVillage();
             return false;
@@ -5701,18 +5836,30 @@ export class MainScene extends Phaser.Scene {
 
     // Load a specific user's base for attack (from leaderboard)
     public async generateEnemyVillageFromUser(userId: string, username: string): Promise<boolean> {
-        const userBase = await Backend.loadFromCloud(userId);
+        let userBase: SerializedWorld | null = null;
+        try {
+            userBase = await Backend.loadFromCloud(userId);
+        } catch (error) {
+            console.error('generateEnemyVillageFromUser: failed to load user base', { userId, error });
+        }
         if (!userBase || !Array.isArray(userBase.buildings) || userBase.buildings.length === 0) {
             return false;
         }
 
-        const placed = this.instantiateEnemyWorld(userBase, {
+        const summary = this.instantiateEnemyWorld(userBase, {
             id: userId,
             username: username,
             isBot: false,
             attackId: Phaser.Utils.String.UUID()
         });
-        return placed > 0;
+        if (summary.playablePlaced === 0) {
+            console.warn('generateEnemyVillageFromUser: loaded user base had no playable buildings', {
+                userId,
+                worldId: userBase.id,
+                summary
+            });
+        }
+        return summary.playablePlaced > 0;
     }
 
 
