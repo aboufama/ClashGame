@@ -41,16 +41,15 @@ export function TrainingModal({
           <h2>Get ready for battle...</h2>
           <div className="header-actions">
             <button
-              className={`raid-btn practice ${capacity.current === 0 ? 'disabled' : ''}`}
+              className={`header-btn practice ${capacity.current === 0 ? 'disabled' : ''}`}
               onClick={onStartPractice}
               disabled={capacity.current === 0}
-              style={{ marginRight: '10px' }}
             >
               <div className="btn-icon icon practice-icon"></div>
               <span className="btn-label">PRACTICE</span>
             </button>
             <button
-              className={`raid-btn hurry ${capacity.current === 0 ? 'disabled' : ''}`}
+              className={`header-btn find-match ${capacity.current === 0 ? 'disabled' : ''}`}
               onClick={onFindMatch}
               disabled={capacity.current === 0}
             >
@@ -59,16 +58,15 @@ export function TrainingModal({
             </button>
             {isOnline && (
               <button
-                className={`attack-online-btn ${capacity.current === 0 ? 'disabled' : ''}`}
+                className={`header-btn attack-online ${capacity.current === 0 ? 'disabled' : ''}`}
                 onClick={onAttackOnline}
                 disabled={capacity.current === 0}
-                style={{ marginLeft: '10px' }}
               >
                 <span className="online-indicator"></span>
                 <span className="btn-label">ATTACK ONLINE</span>
               </button>
             )}
-            <button className="close-btn training-close-btn" onClick={onClose}>×</button>
+            <button className="header-btn close" onClick={onClose}>×</button>
           </div>
         </div>
 

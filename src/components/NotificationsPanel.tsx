@@ -68,7 +68,7 @@ export function NotificationsPanel({ userId, isOnline }: NotificationsPanelProps
   return (
     <div className="notifications-container">
       <button className="notifications-btn" onClick={handleOpen}>
-        <span className="bell-icon">🔔</span>
+        <div className="btn-icon icon bell-icon"></div>
         {unreadCount > 0 && (
           <span className="notification-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>
         )}

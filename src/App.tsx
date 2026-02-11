@@ -575,25 +575,60 @@ function App() {
       }
     });
 
-    // 'M' Keybind for moving, 'D' for debug overlay
+    const pressedKeys = new Set<string>();
+    let bonusComboTriggered = false;
+
+    // 'M' keybind for moving, 'D' for debug overlay, and 'B+M' debug bonus.
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.repeat) return;
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
         return;
       }
-      if (e.key.toLowerCase() === 'd') {
+
+      const key = e.key.toLowerCase();
+      pressedKeys.add(key);
+      const bonusComboActive = pressedKeys.has('b') && pressedKeys.has('m');
+
+      if (bonusComboActive) {
+        if (!bonusComboTriggered) {
+          bonusComboTriggered = true;
+          void applySolDelta(10_000, 'debug_bonus_combo');
+        }
+        return;
+      }
+
+      if (e.repeat) return;
+
+      if (key === 'd') {
         setIsDebugOpen(prev => !prev);
         return;
       }
-      if (e.key.toLowerCase() === 'm' && selectedInMapRef.current) {
+      if (key === 'm' && selectedInMapRef.current) {
         gameManager.moveSelectedBuilding();
       }
     };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      pressedKeys.delete(key);
+      if (!(pressedKeys.has('b') && pressedKeys.has('m'))) {
+        bonusComboTriggered = false;
+      }
+    };
+
+    const clearPressedKeys = () => {
+      pressedKeys.clear();
+      bonusComboTriggered = false;
+    };
+
     window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', clearPressedKeys);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', clearPressedKeys);
       if (gameRef.current) {
         gameRef.current.destroy(true);
         gameRef.current = null;
@@ -995,7 +1030,7 @@ function App() {
 
       {/* Notifications and Leaderboard - only show when in HOME mode and online */}
       {view === 'HOME' && isOnline && user && (
-        <div style={{ position: 'fixed', top: '16px', right: '80px', zIndex: 100, display: 'flex', gap: '8px' }}>
+        <div className="top-right-btns">
           <LeaderboardPanel
             currentUserId={user.id}
             isOnline={isOnline}

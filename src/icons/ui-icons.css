@@ -284,3 +284,81 @@
         /* Handle end */
         15px 18px #7A5C4A, 18px 18px #5D4037;
 }
+
+/* TROPHY ICON - Gold cup pixel art */
+.trophy-icon {
+    position: relative !important;
+}
+
+.trophy-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #DAA520;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Cup rim */
+        -6px -8px #DAA520, -4px -8px #FFD700, -2px -8px #FFD700,
+        0 -8px #FFD700, 2px -8px #FFD700, 4px -8px #DAA520,
+        /* Cup body */
+        -8px -6px #DAA520, -6px -6px #FFD700, -4px -6px #FFEC8B, -2px -6px #FFEC8B,
+        0 -6px #FFEC8B, 2px -6px #FFEC8B, 4px -6px #FFD700, 6px -6px #DAA520,
+        -8px -4px #B8860B, -6px -4px #FFD700, -4px -4px #FFEC8B, -2px -4px #FFF8DC,
+        0 -4px #FFEC8B, 2px -4px #FFD700, 4px -4px #FFD700, 6px -4px #B8860B,
+        /* Handles */
+        -10px -4px #B8860B, -10px -2px #DAA520, -10px 0 #B8860B,
+        8px -4px #8B6914, 8px -2px #B8860B, 8px 0 #8B6914,
+        /* Cup lower body */
+        -6px -2px #DAA520, -4px -2px #FFD700, -2px -2px #FFD700,
+        0 -2px #FFD700, 2px -2px #DAA520, 4px -2px #DAA520,
+        -6px 0 #B8860B, -4px 0 #DAA520, -2px 0 #DAA520,
+        0 0 #DAA520, 2px 0 #B8860B, 4px 0 #B8860B,
+        /* Cup taper */
+        -4px 2px #B8860B, -2px 2px #DAA520, 0 2px #DAA520, 2px 2px #B8860B,
+        /* Stem */
+        -2px 4px #B8860B, 0 4px #DAA520, 2px 4px #B8860B,
+        0 6px #B8860B,
+        /* Base */
+        -4px 8px #8B6914, -2px 8px #B8860B, 0 8px #DAA520, 2px 8px #B8860B, 4px 8px #8B6914;
+}
+
+/* BELL ICON - Notification bell pixel art */
+.bell-icon {
+    position: relative !important;
+    font-size: 0 !important;
+}
+
+.bell-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #DAA520;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Bell top nub */
+        0 -10px #B8860B,
+        /* Bell dome */
+        -2px -8px #DAA520, 0 -8px #FFD700, 2px -8px #DAA520,
+        -4px -6px #DAA520, -2px -6px #FFD700, 0 -6px #FFEC8B, 2px -6px #FFD700, 4px -6px #DAA520,
+        -6px -4px #B8860B, -4px -4px #DAA520, -2px -4px #FFD700, 0 -4px #FFEC8B,
+        2px -4px #FFD700, 4px -4px #DAA520, 6px -4px #B8860B,
+        /* Bell body */
+        -6px -2px #B8860B, -4px -2px #DAA520, -2px -2px #FFD700, 0 -2px #FFD700,
+        2px -2px #DAA520, 4px -2px #DAA520, 6px -2px #8B6914,
+        -6px 0 #8B6914, -4px 0 #B8860B, -2px 0 #DAA520, 0 0 #DAA520,
+        2px 0 #B8860B, 4px 0 #B8860B, 6px 0 #8B6914,
+        /* Bell flare */
+        -8px 2px #8B6914, -6px 2px #B8860B, -4px 2px #DAA520, -2px 2px #DAA520,
+        0 2px #B8860B, 2px 2px #B8860B, 4px 2px #B8860B, 6px 2px #8B6914, 8px 2px #8B6914,
+        /* Bell rim */
+        -8px 4px #6B4E0A, -6px 4px #8B6914, -4px 4px #B8860B, -2px 4px #B8860B,
+        0 4px #B8860B, 2px 4px #8B6914, 4px 4px #8B6914, 6px 4px #6B4E0A, 8px 4px #6B4E0A,
+        /* Clapper */
+        0 6px #8B6914, 0 8px #6B4E0A;
+}

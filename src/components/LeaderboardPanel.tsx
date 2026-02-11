@@ -86,7 +86,7 @@ export function LeaderboardPanel({ currentUserId, isOnline, onAttackUser, onScou
   return (
     <div className="leaderboard-container">
       <button className="leaderboard-btn" onClick={handleOpen} title="Leaderboard">
-        <span className="leaderboard-icon">🏆</span>
+        <div className="btn-icon icon trophy-icon"></div>
       </button>
 
       {isOpen && (
