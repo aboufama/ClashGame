@@ -203,10 +203,6 @@ export class RubbleRenderer {
     }
 
     static drawLavaPool(graphics: Phaser.GameObjects.Graphics, gridX: number, gridY: number, width: number, height: number, time: number, intensity: number) {
-        const c1 = IsoUtils.cartToIso(gridX, gridY);
-        const c2 = IsoUtils.cartToIso(gridX + width, gridY);
-        const c3 = IsoUtils.cartToIso(gridX + width, gridY + height);
-        const c4 = IsoUtils.cartToIso(gridX, gridY + height);
         const center = IsoUtils.cartToIso(gridX + width / 2, gridY + height / 2);
         const seed = gridX * 1000 + gridY;
 
