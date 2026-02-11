@@ -539,106 +539,66 @@ export class Backend {
     };
 
     const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+    const chance = (probability: number) => Math.random() < probability;
     const tileKey = (x: number, y: number) => `${x},${y}`;
 
-    type Tier = 'outpost' | 'stronghold' | 'fortress';
-    type RingConfig = { min: number; max: number };
-    type CountConfig = { min: number; max: number };
-    type ZoneConfig = { minRadius: number; maxRadius: number };
-
-    type TierProfile = {
-      name: string;
-      rings: RingConfig;
-      dividers: CountConfig;
-      miniCompartments: CountConfig;
-      collectors: CountConfig;
-      barracks: CountConfig;
-      camps: CountConfig;
-      defenses: Partial<Record<BuildingType, CountConfig>>;
-      wallBaseLevel: number;
-      lootBase: number;
-      lootVariance: number;
-    };
-
-    const tierRoll = Math.random();
-    const tier: Tier = tierRoll < 0.26 ? 'fortress' : tierRoll < 0.7 ? 'stronghold' : 'outpost';
-
-    const profiles: Record<Tier, TierProfile> = {
-      outpost: {
-        name: 'Bot Outpost',
-        rings: { min: 2, max: 3 },
-        dividers: { min: 1, max: 3 },
-        miniCompartments: { min: 1, max: 2 },
-        collectors: { min: 4, max: 8 },
-        barracks: { min: 1, max: 2 },
-        camps: { min: 1, max: 2 },
-        defenses: {
-          cannon: { min: 2, max: 4 },
-          mortar: { min: 1, max: 2 },
-          tesla: { min: 1, max: 2 },
-          ballista: { min: 0, max: 1 },
-          xbow: { min: 0, max: 1 },
-          spike_launcher: { min: 0, max: 1 },
-          prism: { min: 0, max: 1 },
-          magmavent: { min: 0, max: 0 },
-          dragons_breath: { min: 0, max: 0 }
-        },
-        wallBaseLevel: 1,
-        lootBase: 14000,
-        lootVariance: 15000
-      },
-      stronghold: {
-        name: 'Bot Stronghold',
-        rings: { min: 3, max: 4 },
-        dividers: { min: 3, max: 6 },
-        miniCompartments: { min: 2, max: 4 },
-        collectors: { min: 7, max: 12 },
-        barracks: { min: 2, max: 3 },
-        camps: { min: 2, max: 3 },
-        defenses: {
-          cannon: { min: 4, max: 5 },
-          mortar: { min: 2, max: 3 },
-          tesla: { min: 2, max: 3 },
-          ballista: { min: 1, max: 2 },
-          xbow: { min: 1, max: 2 },
-          spike_launcher: { min: 1, max: 2 },
-          prism: { min: 1, max: 1 },
-          magmavent: { min: 0, max: 1 },
-          dragons_breath: { min: 0, max: 1 }
-        },
-        wallBaseLevel: 2,
-        lootBase: 30000,
-        lootVariance: 35000
-      },
-      fortress: {
-        name: 'Bot Fortress',
-        rings: { min: 4, max: 6 },
-        dividers: { min: 6, max: 9 },
-        miniCompartments: { min: 4, max: 6 },
-        collectors: { min: 10, max: 16 },
-        barracks: { min: 3, max: 4 },
-        camps: { min: 3, max: 4 },
-        defenses: {
-          cannon: { min: 5, max: 5 },
-          mortar: { min: 3, max: 3 },
-          tesla: { min: 3, max: 3 },
-          ballista: { min: 2, max: 2 },
-          xbow: { min: 2, max: 2 },
-          spike_launcher: { min: 2, max: 2 },
-          prism: { min: 1, max: 1 },
-          magmavent: { min: 1, max: 1 },
-          dragons_breath: { min: 1, max: 1 }
-        },
-        wallBaseLevel: 3,
-        lootBase: 65000,
-        lootVariance: 90000
+    const shuffle = <T,>(items: readonly T[]) => {
+      const out = [...items];
+      for (let i = out.length - 1; i > 0; i--) {
+        const j = randInt(0, i);
+        const tmp = out[i];
+        out[i] = out[j];
+        out[j] = tmp;
       }
+      return out;
     };
 
-    const profile = profiles[tier];
+    type Difficulty = 'easy' | 'intermediate' | 'hard' | 'crazy';
+    type Rect = { minX: number; minY: number; maxX: number; maxY: number };
+    type Zone = Rect & { minRadius?: number; maxRadius?: number };
+    type LevelFactory = number | (() => number);
+
+    const difficultyRoll = Math.random();
+    const difficulty: Difficulty =
+      difficultyRoll < 0.40 ? 'easy' :
+      difficultyRoll < 0.85 ? 'intermediate' :
+      difficultyRoll < 0.95 ? 'hard' :
+      'crazy';
+
+    const botNameByDifficulty: Record<Difficulty, string> = {
+      easy: 'Bot Easy Base',
+      intermediate: 'Bot Intermediate Base',
+      hard: 'Bot Hard Fortress',
+      crazy: 'Bot Crazy Max Base'
+    };
+
+    const lootByDifficulty: Record<Difficulty, { base: number; variance: number; perBuilding: number }> = {
+      easy: { base: 9000, variance: 8000, perBuilding: 140 },
+      intermediate: { base: 23000, variance: 18000, perBuilding: 220 },
+      hard: { base: 52000, variance: 42000, perBuilding: 320 },
+      crazy: { base: 110000, variance: 90000, perBuilding: 500 }
+    };
+
+    const fullRect: Rect = {
+      minX: margin,
+      minY: margin,
+      maxX: mapSize - margin - 1,
+      maxY: mapSize - margin - 1
+    };
+
     const buildings: SerializedBuilding[] = [];
     const occupied = new Set<string>();
-    const wallAt = new Map<string, number>();
+    const wallIndexByTile = new Map<string, number>();
+    const placedCount = new Map<BuildingType, number>();
+    let wallLevel = 1;
+
+    const getPlacedCount = (type: BuildingType) => placedCount.get(type) ?? 0;
+    const bumpPlacedCount = (type: BuildingType) => {
+      placedCount.set(type, getPlacedCount(type) + 1);
+    };
+
+    const maxLevelFor = (type: BuildingType) => BUILDING_DEFINITIONS[type].maxLevel ?? 1;
+    const normalizeLevel = (type: BuildingType, level: number) => clamp(level, 1, maxLevelFor(type));
 
     const inBounds = (x: number, y: number, width: number, height: number) => {
       return x >= margin && y >= margin && x + width <= mapSize - margin && y + height <= mapSize - margin;
@@ -661,20 +621,21 @@ export class Backend {
       }
     };
 
+    const distanceToCenter = (x: number, y: number, width: number, height: number) => {
+      const px = x + width / 2;
+      const py = y + height / 2;
+      return Math.hypot(px - centerX, py - centerY);
+    };
+
     const placeBuilding = (type: BuildingType, x: number, y: number, level: number): boolean => {
       const definition = BUILDING_DEFINITIONS[type];
-      const maxLevel = definition.maxLevel ?? 1;
-      const normalizedLevel = clamp(level, 1, maxLevel);
+      if (getPlacedCount(type) >= definition.maxCount) return false;
 
-      if (type === 'wall') {
-        const key = tileKey(x, y);
-        const existing = wallAt.get(key);
-        if (existing !== undefined) {
-          buildings[existing].level = Math.max(buildings[existing].level, normalizedLevel);
-          return true;
-        }
+      if (type === 'wall' && wallIndexByTile.has(tileKey(x, y))) {
+        return true;
       }
 
+      const normalizedLevel = normalizeLevel(type, level);
       if (!inBounds(x, y, definition.width, definition.height)) return false;
       if (!canPlaceRect(x, y, definition.width, definition.height)) return false;
 
@@ -687,226 +648,325 @@ export class Backend {
       }) - 1;
 
       occupyRect(x, y, definition.width, definition.height);
+      bumpPlacedCount(type);
       if (type === 'wall') {
-        wallAt.set(tileKey(x, y), idx);
+        wallIndexByTile.set(tileKey(x, y), idx);
       }
       return true;
     };
 
-    const distanceToCenter = (x: number, y: number, width: number, height: number) => {
-      const px = x + width / 2;
-      const py = y + height / 2;
-      return Math.hypot(px - centerX, py - centerY);
-    };
-
-    const tryPlaceInZone = (
+    const tryPlaceInZones = (
       type: BuildingType,
-      zone: ZoneConfig,
-      levelMin: number,
-      levelMax: number,
-      attempts = 240
+      level: number,
+      zones: Zone[],
+      attempts = 260
     ) => {
       const definition = BUILDING_DEFINITIONS[type];
-      for (let i = 0; i < attempts; i++) {
-        const x = randInt(margin, mapSize - margin - definition.width);
-        const y = randInt(margin, mapSize - margin - definition.height);
+      if (zones.length === 0) return false;
+
+      for (let attempt = 0; attempt < attempts; attempt++) {
+        const zone = zones[randInt(0, zones.length - 1)];
+        const minX = zone.minX;
+        const maxX = zone.maxX - definition.width + 1;
+        const minY = zone.minY;
+        const maxY = zone.maxY - definition.height + 1;
+        if (maxX < minX || maxY < minY) continue;
+
+        const x = randInt(minX, maxX);
+        const y = randInt(minY, maxY);
         const dist = distanceToCenter(x, y, definition.width, definition.height);
-        if (dist < zone.minRadius || dist > zone.maxRadius) continue;
-        if (placeBuilding(type, x, y, randInt(levelMin, levelMax))) return true;
+        if (typeof zone.minRadius === 'number' && dist < zone.minRadius) continue;
+        if (typeof zone.maxRadius === 'number' && dist > zone.maxRadius) continue;
+        if (placeBuilding(type, x, y, level)) return true;
       }
+
       return false;
     };
 
-    const placeCountInZone = (
+    const resolveLevel = (type: BuildingType, levelFactory: LevelFactory) => {
+      const rawLevel = typeof levelFactory === 'number' ? levelFactory : levelFactory();
+      return normalizeLevel(type, rawLevel);
+    };
+
+    const placeMany = (
       type: BuildingType,
-      count: number,
-      zone: ZoneConfig,
-      levelMin: number,
-      levelMax: number
+      targetCount: number,
+      levelFactory: LevelFactory,
+      primaryZones: Zone[],
+      fallbackZones: Zone[] = [fullRect],
+      primaryAttempts = 260
     ) => {
       let placed = 0;
-      for (let i = 0; i < count; i++) {
-        if (tryPlaceInZone(type, zone, levelMin, levelMax)) {
+      for (let i = 0; i < targetCount; i++) {
+        const level = resolveLevel(type, levelFactory);
+        if (tryPlaceInZones(type, level, primaryZones, primaryAttempts)) {
+          placed++;
+          continue;
+        }
+        if (tryPlaceInZones(type, level, fallbackZones, primaryAttempts * 2)) {
           placed++;
         }
       }
       return placed;
     };
 
-    const ringWalls = (
-      minX: number,
-      minY: number,
-      maxX: number,
-      maxY: number,
-      levelBase: number,
-      gateCount: number
+    const placeAtPreferred = (
+      type: BuildingType,
+      levelFactory: LevelFactory,
+      preferredPositions: Array<{ x: number; y: number }>,
+      fallbackZones: Zone[]
     ) => {
-      if (minX >= maxX || minY >= maxY) return;
+      const level = resolveLevel(type, levelFactory);
+      for (const point of shuffle(preferredPositions)) {
+        if (placeBuilding(type, point.x, point.y, level)) return true;
+      }
+      return tryPlaceInZones(type, level, fallbackZones, 900);
+    };
 
-      const gates = new Set<string>();
-      const edgePickers = [
-        () => [randInt(minX + 1, maxX - 1), minY] as const,
-        () => [randInt(minX + 1, maxX - 1), maxY] as const,
-        () => [minX, randInt(minY + 1, maxY - 1)] as const,
-        () => [maxX, randInt(minY + 1, maxY - 1)] as const
-      ];
+    const addWallRing = (
+      rect: Rect,
+      gateCount: number,
+      gateSpan = 2
+    ) => {
+      if (rect.maxX - rect.minX < 2 || rect.maxY - rect.minY < 2) return;
+
+      type Edge = 'top' | 'bottom' | 'left' | 'right';
+      const gateTiles = new Set<string>();
+      const edges: Edge[] = ['top', 'bottom', 'left', 'right'];
 
       for (let i = 0; i < gateCount; i++) {
-        const picker = edgePickers[randInt(0, edgePickers.length - 1)];
-        const [gx, gy] = picker();
-        gates.add(tileKey(gx, gy));
+        const edge = edges[randInt(0, edges.length - 1)];
+
+        if (edge === 'top' || edge === 'bottom') {
+          const y = edge === 'top' ? rect.minY : rect.maxY;
+          const startX = randInt(rect.minX + 1, rect.maxX - 1);
+          for (let offset = 0; offset < gateSpan; offset++) {
+            const x = clamp(startX + offset, rect.minX + 1, rect.maxX - 1);
+            gateTiles.add(tileKey(x, y));
+          }
+        } else {
+          const x = edge === 'left' ? rect.minX : rect.maxX;
+          const startY = randInt(rect.minY + 1, rect.maxY - 1);
+          for (let offset = 0; offset < gateSpan; offset++) {
+            const y = clamp(startY + offset, rect.minY + 1, rect.maxY - 1);
+            gateTiles.add(tileKey(x, y));
+          }
+        }
       }
 
+      for (let x = rect.minX; x <= rect.maxX; x++) {
+        if (!gateTiles.has(tileKey(x, rect.minY))) placeBuilding('wall', x, rect.minY, wallLevel);
+        if (!gateTiles.has(tileKey(x, rect.maxY))) placeBuilding('wall', x, rect.maxY, wallLevel);
+      }
+
+      for (let y = rect.minY + 1; y <= rect.maxY - 1; y++) {
+        if (!gateTiles.has(tileKey(rect.minX, y))) placeBuilding('wall', rect.minX, y, wallLevel);
+        if (!gateTiles.has(tileKey(rect.maxX, y))) placeBuilding('wall', rect.maxX, y, wallLevel);
+      }
+    };
+
+    const addVerticalDivider = (
+      x: number,
+      minY: number,
+      maxY: number,
+      gapCenterY: number,
+      gapRadius = 1
+    ) => {
+      for (let y = minY; y <= maxY; y++) {
+        if (Math.abs(y - gapCenterY) <= gapRadius) continue;
+        placeBuilding('wall', x, y, wallLevel);
+      }
+    };
+
+    const addHorizontalDivider = (
+      y: number,
+      minX: number,
+      maxX: number,
+      gapCenterX: number,
+      gapRadius = 1
+    ) => {
       for (let x = minX; x <= maxX; x++) {
-        for (const y of [minY, maxY]) {
-          if (gates.has(tileKey(x, y))) continue;
-          const levelJitter = randInt(-1, 1);
-          placeBuilding('wall', x, y, clamp(levelBase + levelJitter, 1, 3));
-        }
-      }
-      for (let y = minY + 1; y <= maxY - 1; y++) {
-        for (const x of [minX, maxX]) {
-          if (gates.has(tileKey(x, y))) continue;
-          const levelJitter = randInt(-1, 1);
-          placeBuilding('wall', x, y, clamp(levelBase + levelJitter, 1, 3));
-        }
+        if (Math.abs(x - gapCenterX) <= gapRadius) continue;
+        placeBuilding('wall', x, y, wallLevel);
       }
     };
 
-    const addDivider = (bounds: { minX: number; minY: number; maxX: number; maxY: number }, levelBase: number) => {
-      const vertical = Math.random() < 0.5;
-      if (vertical) {
-        const x = randInt(bounds.minX + 2, bounds.maxX - 2);
-        const gapY = randInt(bounds.minY + 2, bounds.maxY - 2);
-        for (let y = bounds.minY + 1; y <= bounds.maxY - 1; y++) {
-          if (Math.abs(y - gapY) <= 1) continue;
-          placeBuilding('wall', x, y, clamp(levelBase + randInt(-1, 1), 1, 3));
-        }
-      } else {
-        const y = randInt(bounds.minY + 2, bounds.maxY - 2);
-        const gapX = randInt(bounds.minX + 2, bounds.maxX - 2);
-        for (let x = bounds.minX + 1; x <= bounds.maxX - 1; x++) {
-          if (Math.abs(x - gapX) <= 1) continue;
-          placeBuilding('wall', x, y, clamp(levelBase + randInt(-1, 1), 1, 3));
-        }
+    const fillWallsTo = (targetCount: number, zones: Zone[]) => {
+      const wallMax = BUILDING_DEFINITIONS.wall.maxCount;
+      const cappedTarget = clamp(targetCount, 0, wallMax);
+      let guard = 0;
+      while (getPlacedCount('wall') < cappedTarget && guard < cappedTarget * 100) {
+        guard++;
+        if (!tryPlaceInZones('wall', wallLevel, zones, 1)) continue;
       }
     };
+
+    const coreRect: Rect = { minX: 9, minY: 9, maxX: 15, maxY: 15 };
+    const innerRect: Rect = { minX: 7, minY: 7, maxX: 17, maxY: 17 };
+    const midRect: Rect = { minX: 5, minY: 5, maxX: 19, maxY: 19 };
+    const outerRect: Rect = { minX: 2, minY: 2, maxX: 22, maxY: 22 };
+
+    const coreZones: Zone[] = [{ ...coreRect, maxRadius: 6.5 }];
+    const innerZones: Zone[] = [{ ...innerRect, minRadius: 1.5, maxRadius: 8.8 }];
+    const midZones: Zone[] = [{ ...midRect, minRadius: 5.2, maxRadius: 12.2 }];
+    const outerZones: Zone[] = [{ ...outerRect, minRadius: 8.2 }];
+    const fullZones: Zone[] = [{ ...fullRect }];
 
     const townHallDef = BUILDING_DEFINITIONS.town_hall;
     const townHallX = centerX - Math.floor(townHallDef.width / 2);
     const townHallY = centerY - Math.floor(townHallDef.height / 2);
-    placeBuilding('town_hall', townHallX, townHallY, 1);
 
-    const ringCount = randInt(profile.rings.min, profile.rings.max);
-    let outerBounds = {
-      minX: townHallX - 2,
-      minY: townHallY - 2,
-      maxX: townHallX + townHallDef.width + 1,
-      maxY: townHallY + townHallDef.height + 1
-    };
+    if (difficulty === 'easy') {
+      // Easy: no walls, simple starter-style base under 10 buildings.
+      placeBuilding('town_hall', townHallX, townHallY, 1);
+      placeMany('cannon', 2, 1, innerZones, midZones);
+      if (chance(0.55)) placeMany('mortar', 1, 1, innerZones, midZones);
+      if (chance(0.40)) placeMany('tesla', 1, 1, innerZones, midZones);
 
-    for (let ring = 0; ring < ringCount; ring++) {
-      const extraX = 2 + ring * 2 + randInt(0, 1);
-      const extraY = 2 + ring * 2 + randInt(0, 1);
-      const jitterX = randInt(-1, 1);
-      const jitterY = randInt(-1, 1);
-      const minX = clamp(townHallX - extraX + jitterX, margin, mapSize - margin - 2);
-      const minY = clamp(townHallY - extraY + jitterY, margin, mapSize - margin - 2);
-      const maxX = clamp(townHallX + townHallDef.width + extraX + jitterX, minX + 2, mapSize - margin - 1);
-      const maxY = clamp(townHallY + townHallDef.height + extraY + jitterY, minY + 2, mapSize - margin - 1);
-      const ringLevel = clamp(profile.wallBaseLevel - Math.floor(ring / 2), 1, 3);
-      const gates = clamp(1 + Math.floor(ring / 2) + randInt(0, 1), 1, 4);
-      ringWalls(minX, minY, maxX, maxY, ringLevel, gates);
-      outerBounds = { minX, minY, maxX, maxY };
+      placeMany('army_camp', 1, 1, outerZones, midZones);
+      placeMany('barracks', 1, 1, outerZones, midZones);
+      placeMany('solana_collector', 2, 1, midZones, outerZones);
+    } else if (difficulty === 'intermediate') {
+      // Intermediate: one outer wall ring and level 2 where available.
+      wallLevel = 2;
+      placeBuilding('town_hall', townHallX, townHallY, 2);
+      addWallRing({ minX: 6, minY: 6, maxX: 18, maxY: 18 }, 2, 2);
+
+      const defenseZones: Zone[] = [{ minX: 7, minY: 7, maxX: 17, maxY: 17, maxRadius: 9.2 }];
+      const supportZones: Zone[] = [{ ...fullRect, minRadius: 7.2 }];
+
+      placeMany('ballista', 1, 2, defenseZones, innerZones);
+      placeMany('xbow', 1, 2, defenseZones, innerZones);
+      placeMany('mortar', 2, 2, defenseZones, innerZones);
+      placeMany('cannon', 4, 2, defenseZones, midZones);
+      placeMany('tesla', 2, 2, defenseZones, innerZones);
+
+      placeMany('army_camp', 2, 2, supportZones, midZones);
+      placeMany('barracks', 2, 2, supportZones, midZones);
+      placeMany('solana_collector', 6, 2, supportZones, fullZones);
+    } else if (difficulty === 'hard') {
+      // Hard: layered walls, compartment defenses, stronger/high-tier mix.
+      wallLevel = chance(0.45) ? 3 : 2;
+      placeBuilding('town_hall', townHallX, townHallY, 1);
+
+      const hardCoreZones: Zone[] = [{ ...coreRect, maxRadius: 6.0 }];
+      const hardDefenseZones: Zone[] = [{ ...innerRect, maxRadius: 9.5 }];
+      const hardSupportZones: Zone[] = [{ ...fullRect, minRadius: 7.0 }];
+
+      placeAtPreferred(
+        'magmavent',
+        2,
+        [
+          { x: centerX - 5, y: centerY - 1 },
+          { x: centerX + 2, y: centerY - 1 },
+          { x: centerX - 1, y: centerY - 5 },
+          { x: centerX - 1, y: centerY + 2 }
+        ],
+        hardDefenseZones
+      );
+
+      addWallRing({ minX: 5, minY: 5, maxX: 19, maxY: 19 }, 3, 2);
+      addWallRing({ minX: 8, minY: 8, maxX: 16, maxY: 16 }, 2, 2);
+      addWallRing({ minX: 10, minY: 10, maxX: 14, maxY: 14 }, 1, 2);
+      addVerticalDivider(centerX, 9, 15, centerY, 1);
+      addHorizontalDivider(centerY, 9, 15, centerX, 1);
+
+      if (getPlacedCount('magmavent') === 0) {
+        placeMany('magmavent', 1, 2, hardDefenseZones, fullZones, 1200);
+      }
+      placeMany('spike_launcher', chance(0.60) ? 2 : 1, 1, hardDefenseZones, midZones);
+      if (chance(0.50)) placeMany('prism', 1, 1, hardCoreZones, hardDefenseZones, 500);
+      placeMany('xbow', 2, 2, hardDefenseZones, innerZones);
+      placeMany('ballista', 2, 2, hardDefenseZones, innerZones);
+      placeMany('mortar', 3, () => randInt(2, 3), hardDefenseZones, innerZones);
+      placeMany('tesla', 3, 2, hardDefenseZones, innerZones);
+      placeMany('cannon', 5, () => randInt(3, 4), hardDefenseZones, midZones);
+
+      placeMany('army_camp', 3, 3, hardSupportZones, midZones);
+      placeMany('barracks', 3, 1, hardSupportZones, midZones);
+      placeMany('solana_collector', randInt(9, 12), 2, hardSupportZones, outerZones);
+
+      fillWallsTo(randInt(88, 96), [{ ...midRect, minRadius: 4.5, maxRadius: 12.5 }]);
+    } else {
+      // Crazy: maxed building levels, centered Dragon's Breath, dense layered layout.
+      wallLevel = 3;
+      addWallRing({ minX: 4, minY: 4, maxX: 20, maxY: 20 }, 4, 3);
+      addWallRing({ minX: 8, minY: 8, maxX: 16, maxY: 16 }, 2, 2);
+      addWallRing({ minX: 9, minY: 9, maxX: 14, maxY: 14 }, 1, 2);
+
+      const dragonX = centerX - 2;
+      const dragonY = centerY - 2;
+      if (!placeBuilding('dragons_breath', dragonX, dragonY, maxLevelFor('dragons_breath'))) {
+        placeMany('dragons_breath', 1, maxLevelFor('dragons_breath'), coreZones, innerZones, 900);
+      }
+
+      const crazyDefenseZones: Zone[] = [{ minX: 6, minY: 6, maxX: 18, maxY: 18 }];
+      const crazySupportZones: Zone[] = [{ ...fullRect }];
+
+      placeAtPreferred(
+        'town_hall',
+        maxLevelFor('town_hall'),
+        [
+          { x: centerX - 1, y: centerY + 3 },
+          { x: centerX - 1, y: centerY - 6 },
+          { x: centerX + 3, y: centerY - 1 },
+          { x: centerX - 6, y: centerY - 1 }
+        ],
+        crazyDefenseZones
+      );
+      if (getPlacedCount('town_hall') === 0) {
+        placeMany('town_hall', 1, maxLevelFor('town_hall'), fullZones, fullZones, 1200);
+      }
+
+      placeAtPreferred(
+        'magmavent',
+        maxLevelFor('magmavent'),
+        [
+          { x: centerX - 5, y: centerY - 1 },
+          { x: centerX + 2, y: centerY - 1 },
+          { x: centerX - 1, y: centerY - 5 },
+          { x: centerX - 1, y: centerY + 2 }
+        ],
+        crazyDefenseZones
+      );
+      if (getPlacedCount('magmavent') === 0) {
+        placeMany('magmavent', 1, maxLevelFor('magmavent'), crazyDefenseZones, fullZones, 1200);
+      }
+
+      placeMany('spike_launcher', BUILDING_DEFINITIONS.spike_launcher.maxCount, maxLevelFor('spike_launcher'), crazyDefenseZones, fullZones);
+      placeMany('xbow', BUILDING_DEFINITIONS.xbow.maxCount, maxLevelFor('xbow'), crazyDefenseZones, fullZones);
+      placeMany('ballista', BUILDING_DEFINITIONS.ballista.maxCount, maxLevelFor('ballista'), crazyDefenseZones, fullZones);
+      placeMany('mortar', BUILDING_DEFINITIONS.mortar.maxCount, maxLevelFor('mortar'), crazyDefenseZones, fullZones);
+      placeMany('army_camp', BUILDING_DEFINITIONS.army_camp.maxCount, maxLevelFor('army_camp'), crazySupportZones, fullZones);
+      placeMany('solana_collector', BUILDING_DEFINITIONS.solana_collector.maxCount, maxLevelFor('solana_collector'), crazySupportZones, fullZones);
+      placeMany('barracks', BUILDING_DEFINITIONS.barracks.maxCount, maxLevelFor('barracks'), crazySupportZones, fullZones);
+      placeMany('cannon', BUILDING_DEFINITIONS.cannon.maxCount, maxLevelFor('cannon'), crazySupportZones, fullZones);
+      placeMany('tesla', BUILDING_DEFINITIONS.tesla.maxCount, maxLevelFor('tesla'), crazySupportZones, fullZones);
+      placeMany('prism', BUILDING_DEFINITIONS.prism.maxCount, maxLevelFor('prism'), crazyDefenseZones, fullZones);
+
+      fillWallsTo(BUILDING_DEFINITIONS.wall.maxCount, [
+        { ...fullRect, minRadius: 4.0, maxRadius: 13.5 },
+        { ...outerRect, minRadius: 6.0 }
+      ]);
     }
 
-    const dividerCount = randInt(profile.dividers.min, profile.dividers.max);
-    for (let i = 0; i < dividerCount; i++) {
-      addDivider(outerBounds, profile.wallBaseLevel);
-    }
-
-    const miniCount = randInt(profile.miniCompartments.min, profile.miniCompartments.max);
-    for (let i = 0; i < miniCount; i++) {
-      const width = randInt(3, 5);
-      const height = randInt(3, 5);
-      const minX = clamp(randInt(outerBounds.minX + 1, outerBounds.maxX - width - 1), margin, mapSize - margin - width);
-      const minY = clamp(randInt(outerBounds.minY + 1, outerBounds.maxY - height - 1), margin, mapSize - margin - height);
-      ringWalls(minX, minY, minX + width, minY + height, clamp(profile.wallBaseLevel - 1, 1, 3), 1);
-    }
-
-    const zones: Record<'core' | 'inner' | 'mid' | 'outer', ZoneConfig> = {
-      core: { minRadius: 0, maxRadius: 5.8 },
-      inner: { minRadius: 3.5, maxRadius: 8.5 },
-      mid: { minRadius: 6.5, maxRadius: 11.8 },
-      outer: { minRadius: 10, maxRadius: 16.5 }
-    };
-
-    const defenseOrder: Array<{ type: BuildingType; zone: keyof typeof zones; levelBias: [number, number] }> = [
-      { type: 'dragons_breath', zone: 'core', levelBias: [1, 1] },
-      { type: 'magmavent', zone: 'inner', levelBias: [1, 2] },
-      { type: 'prism', zone: 'inner', levelBias: [1, 1] },
-      { type: 'xbow', zone: 'inner', levelBias: [1, 2] },
-      { type: 'ballista', zone: 'mid', levelBias: [1, 2] },
-      { type: 'mortar', zone: 'mid', levelBias: [1, 3] },
-      { type: 'spike_launcher', zone: 'mid', levelBias: [1, 1] },
-      { type: 'tesla', zone: 'outer', levelBias: [1, 2] },
-      { type: 'cannon', zone: 'outer', levelBias: [1, 4] }
-    ];
-
-    for (const { type, zone, levelBias } of defenseOrder) {
-      const requested = profile.defenses[type];
-      if (!requested) continue;
-      const maxCount = BUILDING_DEFINITIONS[type].maxCount;
-      const count = clamp(randInt(requested.min, requested.max), 0, maxCount);
-      const defMax = BUILDING_DEFINITIONS[type].maxLevel ?? 1;
-
-      const minLevelByTier =
-        tier === 'fortress' ? Math.max(1, Math.min(levelBias[0] + 1, defMax)) :
-        tier === 'stronghold' ? Math.max(1, Math.min(levelBias[0], defMax)) :
-        1;
-      const maxLevelByTier =
-        tier === 'fortress' ? defMax :
-        tier === 'stronghold' ? Math.max(1, defMax - (Math.random() < 0.25 ? 1 : 0)) :
-        Math.max(1, Math.min(defMax, levelBias[1]));
-
-      placeCountInZone(type, count, zones[zone], minLevelByTier, maxLevelByTier);
-    }
-
-    const collectorCount = clamp(randInt(profile.collectors.min, profile.collectors.max), 0, BUILDING_DEFINITIONS.solana_collector.maxCount);
-    const barracksCount = clamp(randInt(profile.barracks.min, profile.barracks.max), 1, BUILDING_DEFINITIONS.barracks.maxCount);
-    const campCount = clamp(randInt(profile.camps.min, profile.camps.max), 1, BUILDING_DEFINITIONS.army_camp.maxCount);
-
-    placeCountInZone('solana_collector', collectorCount, zones.outer, 1, 2);
-    placeCountInZone('barracks', barracksCount, zones.outer, 1, 1);
-    placeCountInZone('army_camp', campCount, zones.outer, tier === 'fortress' ? 2 : 1, tier === 'fortress' ? 3 : 2);
-
-    // Fill remaining space with extra perimeter walls for tougher pathing on stronger tiers.
-    const extraWallBudget = tier === 'fortress' ? 24 : tier === 'stronghold' ? 16 : 8;
-    for (let i = 0; i < extraWallBudget; i++) {
-      const x = randInt(margin, mapSize - margin - 1);
-      const y = randInt(margin, mapSize - margin - 1);
-      const dist = Math.hypot(x - centerX, y - centerY);
-      if (dist < 5 || dist > 17) continue;
-      placeBuilding('wall', x, y, clamp(profile.wallBaseLevel + randInt(-1, 0), 1, 3));
-    }
-
+    const lootConfig = lootByDifficulty[difficulty];
     const resourceSol = Math.floor(
-      profile.lootBase +
-      profile.lootVariance * Math.random() +
-      buildings.length * (tier === 'fortress' ? 320 : tier === 'stronghold' ? 250 : 180)
+      lootConfig.base +
+      Math.random() * lootConfig.variance +
+      buildings.length * lootConfig.perBuilding
     );
 
     return {
       id: `bot_${randomId('world_')}`,
       ownerId: 'bot',
-      username: profile.name,
+      username: botNameByDifficulty[difficulty],
       buildings,
       resources: { sol: resourceSol },
       lastSaveTime: Date.now(),
       revision: 1
     };
   }
-
   static async recordAttack(
     victimId: string,
     attackerId: string,
