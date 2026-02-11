@@ -183,6 +183,34 @@ function App() {
     }, 220);
   }, [clearCloudTimers]);
 
+  const wait = useCallback(async (ms: number) => {
+    await new Promise(resolve => setTimeout(resolve, ms));
+  }, []);
+
+  const waitForMainSceneReady = useCallback(async () => {
+    const timeoutMs = 5000;
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+      const sceneReady = Boolean((gameRef.current?.scene as { keys?: Record<string, unknown> } | undefined)?.keys?.MainScene);
+      if (sceneReady) return true;
+      await wait(50);
+    }
+    return false;
+  }, [wait]);
+
+  const ensureSceneBaseLoaded = useCallback(async () => {
+    const sceneReady = await waitForMainSceneReady();
+    if (!sceneReady) return false;
+
+    const maxAttempts = 8;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const ok = await gameManager.loadBase();
+      if (ok) return true;
+      await wait(100);
+    }
+    return false;
+  }, [wait, waitForMainSceneReady]);
+
   useEffect(() => {
     return () => {
       clearCloudTimers();
@@ -269,10 +297,14 @@ function App() {
           scene.updateUsername(user.username);
         }
 
-        // IMPORTANT: Trigger Phaser to reload the base using the now-known userId
-        await gameManager.loadBase();
+        // IMPORTANT: Trigger Phaser to reload the base using the now-known userId.
+        // Retry to avoid races where scene commands are not ready yet.
+        const sceneLoaded = await ensureSceneBaseLoaded();
+        if (!sceneLoaded) {
+          console.warn('Scene base load did not confirm success after retries.');
+        }
         updateVillageLoadCloud(98);
-        loaded = true;
+        loaded = sceneLoaded;
 
         if (offline.sol > 0) {
           console.log(`Welcome back ${user.username}! Offline Production: ${offline.sol} SOL`);
@@ -289,7 +321,7 @@ function App() {
     };
 
     init();
-  }, [authReady, user, isOnline, beginVillageLoadCloud, updateVillageLoadCloud, revealVillageFromCloud, clearCloudTimers]);
+  }, [authReady, user, isOnline, beginVillageLoadCloud, updateVillageLoadCloud, revealVillageFromCloud, clearCloudTimers, ensureSceneBaseLoaded]);
 
   // Persist resources & army
   useEffect(() => {

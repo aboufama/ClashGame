@@ -40,6 +40,16 @@ class GameManager {
     private uiHandlers: Partial<UIHandlers> = {};
     private sceneCommands: Partial<SceneCommands> = {};
 
+    private async waitForSceneLoadCommand(timeoutMs = 1500): Promise<(() => Promise<boolean>) | null> {
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+            const handler = this.sceneCommands.loadBase;
+            if (handler) return handler;
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
+        return null;
+    }
+
     registerUI(handlers: Partial<UIHandlers>) {
         this.uiHandlers = { ...this.uiHandlers, ...handlers };
     }
@@ -165,7 +175,9 @@ class GameManager {
     }
 
     async loadBase() {
-        return await this.sceneCommands.loadBase?.() ?? false;
+        const handler = this.sceneCommands.loadBase ?? await this.waitForSceneLoadCommand();
+        if (!handler) return false;
+        return await handler();
     }
 }
 

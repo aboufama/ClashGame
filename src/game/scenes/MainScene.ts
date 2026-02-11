@@ -193,6 +193,15 @@ export class MainScene extends Phaser.Scene {
         if (canonical === 'mine' || canonical === 'elixir_collector' || canonical === 'gold_mine' || canonical === 'elixir_pump' || canonical === 'gold_collector' || canonical === 'solana_mine') {
             return 'solana_collector';
         }
+        // Legacy compatibility: accept names that differ only by underscores.
+        if (!BUILDINGS[canonical]) {
+            const compactCanonical = canonical.replace(/_/g, '');
+            for (const key of Object.keys(BUILDINGS)) {
+                if (key.replace(/_/g, '') === compactCanonical) {
+                    return key as BuildingType;
+                }
+            }
+        }
         return BUILDINGS[canonical] ? (canonical as BuildingType) : null;
     }
 
@@ -243,7 +252,8 @@ export class MainScene extends Phaser.Scene {
             setSensitivity: (val: number) => {
                 this.cameraSensitivity = val;
             },
-            loadBase: () => this.loadSavedBase(false, { preferCache: true, refreshOnline: true })
+            // Startup path: App already fetched cloud state and cached it, so avoid a second cloud refresh here.
+            loadBase: () => this.reloadHomeBase({ refreshOnline: false })
         });
 
         // Initialize at 1.5
@@ -346,13 +356,7 @@ export class MainScene extends Phaser.Scene {
             }
         });
 
-        // Try to load saved base, otherwise place default if needed
-        this.loadSavedBase(false, { preferCache: true, refreshOnline: true }).then(async success => {
-            if (!success && this.needsDefaultBase) {
-                await this.placeDefaultVillage();
-            }
-            this.centerCamera();
-        });
+        // Base load is commanded by App once auth/session initialization is complete.
     }
 
     private centerCamera() {
@@ -820,30 +824,92 @@ export class MainScene extends Phaser.Scene {
     // Persistent state is now managed by Backend service automatically on modification
 
     private isWorldValid(world: SerializedWorld): boolean {
-        const hasTownHall = world.buildings.some(b => b.type === 'town_hall');
-        return world.buildings.length > 0 && hasTownHall;
+        if (!Array.isArray(world.buildings) || world.buildings.length === 0) return false;
+        let hasTownHall = false;
+        let hasValidBuilding = false;
+        for (const building of world.buildings) {
+            const normalizedType = this.normalizeBuildingType(String((building as { type?: unknown }).type ?? ''));
+            if (!normalizedType) continue;
+            const definition = BUILDINGS[normalizedType];
+            if (!definition) continue;
+            const rawX = Number((building as { gridX?: unknown }).gridX);
+            const rawY = Number((building as { gridY?: unknown }).gridY);
+            if (!Number.isFinite(rawX) || !Number.isFinite(rawY)) continue;
+            hasValidBuilding = true;
+            if (normalizedType === 'town_hall') {
+                hasTownHall = true;
+            }
+        }
+        return hasValidBuilding && hasTownHall;
     }
 
-    private applyWorldToScene(world: SerializedWorld) {
+    private applyWorldToScene(world: SerializedWorld): { requested: number; placed: number; playablePlaced: number } {
+        const requested = Array.isArray(world.buildings) ? world.buildings.length : 0;
+        let placed = 0;
+        let playablePlaced = 0;
+
         // Clear existing graphics and state before instantiation
         this.clearScene();
-        const maxWallFromWorld = world.buildings.reduce((max, building) => {
-            if (building.type !== 'wall') return max;
-            return Math.max(max, building.level || 1);
+
+        const maxWallFromWorld = (Array.isArray(world.buildings) ? world.buildings : []).reduce((max, building) => {
+            const normalizedType = this.normalizeBuildingType(String((building as { type?: unknown }).type ?? ''));
+            if (normalizedType !== 'wall') return max;
+            return Math.max(max, Math.max(1, Number((building as { level?: unknown }).level) || 1));
         }, 1);
         this.preferredWallLevel = Math.max(1, Math.max(world.wallLevel || 1, maxWallFromWorld));
 
-        // Load buildings
-        world.buildings.forEach(b => {
-            this.instantiateBuilding(b, 'PLAYER');
+        // Load buildings with strict per-building validation so one bad entry cannot blank the scene.
+        (Array.isArray(world.buildings) ? world.buildings : []).forEach(rawBuilding => {
+            const normalizedType = this.normalizeBuildingType(String((rawBuilding as { type?: unknown }).type ?? ''));
+            if (!normalizedType) return;
+
+            const definition = BUILDINGS[normalizedType];
+            if (!definition) return;
+
+            const rawX = Number((rawBuilding as { gridX?: unknown }).gridX);
+            const rawY = Number((rawBuilding as { gridY?: unknown }).gridY);
+            if (!Number.isFinite(rawX) || !Number.isFinite(rawY)) return;
+
+            const gridX = Phaser.Math.Clamp(Math.floor(rawX), 0, Math.max(0, this.mapSize - definition.width));
+            const gridY = Phaser.Math.Clamp(Math.floor(rawY), 0, Math.max(0, this.mapSize - definition.height));
+
+            const rawLevel = Number((rawBuilding as { level?: unknown }).level ?? 1);
+            const level = Number.isFinite(rawLevel) ? Math.max(1, Math.floor(rawLevel)) : 1;
+            const id = typeof (rawBuilding as { id?: unknown }).id === 'string' && String((rawBuilding as { id?: unknown }).id).length > 0
+                ? String((rawBuilding as { id?: unknown }).id)
+                : Phaser.Utils.String.UUID();
+
+            try {
+                const inst = this.instantiateBuilding(
+                    {
+                        id,
+                        type: normalizedType,
+                        gridX,
+                        gridY,
+                        level
+                    },
+                    'PLAYER'
+                );
+                if (!inst) return;
+                placed++;
+                if (inst.type !== 'wall') {
+                    playablePlaced++;
+                }
+            } catch (error) {
+                console.error('applyWorldToScene: failed to instantiate player building', {
+                    buildingId: id,
+                    buildingType: normalizedType,
+                    error
+                });
+            }
         });
 
         // Load obstacles from backend, or spawn some if none exist
-        if (world.obstacles && world.obstacles.length > 0) {
+        if (placed > 0 && world.obstacles && world.obstacles.length > 0) {
             world.obstacles.forEach(o => {
                 this.placeObstacle(o.gridX, o.gridY, o.type, true); // skipBackend=true to prevent duplication
             });
-        } else {
+        } else if (placed > 0) {
             // Existing base has no obstacles - spawn some!
             this.spawnRandomObstacles(12);
         }
@@ -851,6 +917,8 @@ export class MainScene extends Phaser.Scene {
         const campLevels = this.buildings.filter(b => b.type === 'army_camp').map(b => b.level ?? 1);
         gameManager.refreshCampCapacity(campLevels);
         gameManager.closeMenus?.(); // Ensure UI is reset when loading
+
+        return { requested, placed, playablePlaced };
     }
 
     private async refreshHomeBaseFromCloud(lastKnownSaveTime: number) {
@@ -862,6 +930,12 @@ export class MainScene extends Phaser.Scene {
         if (refreshedSave <= lastKnownSaveTime) return;
         if (this.mode !== 'HOME') return;
         this.applyWorldToScene(refreshed);
+    }
+
+    private canUseAppliedHomeWorld(summary: { requested: number; placed: number; playablePlaced: number }): boolean {
+        if (summary.playablePlaced > 0) return true;
+        console.warn('Home world applied with no playable structures', summary);
+        return false;
     }
 
     private async loadSavedBase(
@@ -876,9 +950,13 @@ export class MainScene extends Phaser.Scene {
         if (options.preferCache) {
             const cached = Backend.getCachedWorld(this.userId);
             if (cached && this.isWorldValid(cached)) {
-                this.applyWorldToScene(cached);
-                world = cached;
-                lastKnownSaveTime = cached.lastSaveTime ?? 0;
+                const cacheSummary = this.applyWorldToScene(cached);
+                if (this.canUseAppliedHomeWorld(cacheSummary)) {
+                    world = cached;
+                    lastKnownSaveTime = cached.lastSaveTime ?? 0;
+                } else {
+                    console.warn('loadSavedBase: Cached world failed visual instantiation checks, forcing remote read path.');
+                }
             }
         }
 
@@ -909,7 +987,10 @@ export class MainScene extends Phaser.Scene {
                 return false;
             }
 
-            this.applyWorldToScene(world);
+            const summary = this.applyWorldToScene(world);
+            if (!this.canUseAppliedHomeWorld(summary)) {
+                return false;
+            }
             lastKnownSaveTime = world.lastSaveTime ?? 0;
         }
 
@@ -918,6 +999,26 @@ export class MainScene extends Phaser.Scene {
         }
 
         return true;
+    }
+
+    private async reloadHomeBase(options: { refreshOnline?: boolean } = {}): Promise<boolean> {
+        const refreshOnline = options.refreshOnline ?? true;
+        let success = await this.loadSavedBase(false, { preferCache: true, refreshOnline });
+
+        // If local/cache hydration failed, force a direct cloud fetch once before giving up.
+        if (!success && Auth.isOnlineMode()) {
+            success = await this.loadSavedBase(true, { preferCache: false, refreshOnline: false });
+        }
+
+        if (!success && this.needsDefaultBase) {
+            await this.placeDefaultVillage();
+            this.centerCamera();
+            return true;
+        }
+        if (success) {
+            this.centerCamera();
+        }
+        return success;
     }
 
 
@@ -5762,11 +5863,7 @@ export class MainScene extends Phaser.Scene {
         this.mode = 'HOME';
         this.isScouting = false;
         this.hasDeployed = false;
-        const success = await this.loadSavedBase(false, { preferCache: true, refreshOnline: true });
-        if (!success && this.needsDefaultBase) {
-            await this.placeDefaultVillage();
-        }
-        this.centerCamera();
+        await this.reloadHomeBase({ refreshOnline: true });
     }
 
 
