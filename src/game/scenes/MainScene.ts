@@ -5509,6 +5509,14 @@ export class MainScene extends Phaser.Scene {
         });
     }
 
+    private runTransitionWithoutCloud(onMidpoint: () => void | Promise<void>) {
+        void Promise.resolve()
+            .then(() => onMidpoint())
+            .catch(error => {
+                console.error('Transition without cloud failed:', error);
+            });
+    }
+
 
 
     private createUI() {
@@ -5619,7 +5627,7 @@ export class MainScene extends Phaser.Scene {
                 });
             },
             startAttackOnUser: (userId: string, username: string) => {
-                this.showCloudTransition(async () => {
+                this.runTransitionWithoutCloud(async () => {
                     await this.flushPendingSaveForTransition();
                     // Set UI immediately
                     gameManager.setGameMode('ATTACK');
@@ -5643,7 +5651,7 @@ export class MainScene extends Phaser.Scene {
                 });
             },
             startScoutOnUser: (userId: string, username: string) => {
-                this.showCloudTransition(async () => {
+                this.runTransitionWithoutCloud(async () => {
                     await this.flushPendingSaveForTransition();
                     gameManager.setGameMode('ATTACK');
                     this.mode = 'ATTACK';
