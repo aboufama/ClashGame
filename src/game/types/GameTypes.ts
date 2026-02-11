@@ -8,7 +8,6 @@ export interface PlacedBuilding {
     gridX: number;
     gridY: number;
     graphics: Phaser.GameObjects.Graphics;
-    artSprite?: Phaser.GameObjects.Image;
     barrelGraphics?: Phaser.GameObjects.Graphics;
     healthBar: Phaser.GameObjects.Graphics;
     health: number;
