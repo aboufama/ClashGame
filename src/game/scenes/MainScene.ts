@@ -24,6 +24,39 @@ import solanaCoin from '../../assets/Solana.png';
 const BUILDINGS = BUILDING_DEFINITIONS as any;
 const OBSTACLES = OBSTACLE_DEFINITIONS as any;
 
+const BARRACKS_ART_KEYS = {
+    level1: 'barracks_level1',
+    level2: 'barracks_level2'
+} as const;
+
+type BarracksArtConfig = {
+    key: string;
+    isoX: number;
+    isoY: number;
+    scale: number;
+    rotationDeg: number;
+    opacity: number;
+};
+
+const BARRACKS_ART_BY_LEVEL: Record<1 | 2, BarracksArtConfig> = {
+    1: {
+        key: BARRACKS_ART_KEYS.level1,
+        isoX: -4.27734375,
+        isoY: 78.88169196428572,
+        scale: 0.334762,
+        rotationDeg: 0,
+        opacity: 1
+    },
+    2: {
+        key: BARRACKS_ART_KEYS.level2,
+        isoX: -4.25,
+        isoY: 75.04936820652173,
+        scale: 0.349179,
+        rotationDeg: 0,
+        opacity: 1
+    }
+};
+
 
 
 
@@ -185,6 +218,50 @@ export class MainScene extends Phaser.Scene {
         return BUILDINGS[canonical] ? (canonical as BuildingType) : null;
     }
 
+    private getBarracksArtConfig(level: number): BarracksArtConfig {
+        return level >= 2 ? BARRACKS_ART_BY_LEVEL[2] : BARRACKS_ART_BY_LEVEL[1];
+    }
+
+    private hideBarracksArt(building: PlacedBuilding) {
+        if (building.artSprite && building.artSprite.scene) {
+            building.artSprite.setVisible(false);
+        }
+    }
+
+    private syncBarracksArt(building: PlacedBuilding, alpha: number = 1): boolean {
+        const barracksInfo = BUILDINGS.barracks;
+        if (!barracksInfo) return false;
+
+        const art = this.getBarracksArtConfig(building.level || 1);
+        if (!this.textures.exists(art.key)) {
+            this.hideBarracksArt(building);
+            return false;
+        }
+
+        if (!building.artSprite || !building.artSprite.scene) {
+            building.artSprite = this.add.image(0, 0, art.key);
+            building.artSprite.setOrigin(0.5, 0.5);
+            this.textures.get(art.key).setFilter(Phaser.Textures.FilterMode.NEAREST);
+        } else if (building.artSprite.texture.key !== art.key) {
+            building.artSprite.setTexture(art.key);
+            this.textures.get(art.key).setFilter(Phaser.Textures.FilterMode.NEAREST);
+        }
+
+        const center = IsoUtils.cartToIso(
+            building.gridX + barracksInfo.width / 2,
+            building.gridY + barracksInfo.height / 2
+        );
+        const spriteAlpha = Math.max(0, Math.min(1, alpha * art.opacity));
+
+        building.artSprite.setPosition(center.x + art.isoX, center.y + art.isoY);
+        building.artSprite.setScale(art.scale);
+        building.artSprite.setRotation((art.rotationDeg * Math.PI) / 180);
+        building.artSprite.setAlpha(spriteAlpha);
+        building.artSprite.setDepth(depthForBuilding(building.gridX, building.gridY, 'barracks'));
+        building.artSprite.setVisible(true);
+        return true;
+    }
+
     private getAttackEnemyBuildings(): PlacedBuilding[] {
         if (this.mode === 'ATTACK') {
             return this.buildings.filter(b => b.type !== 'wall');
@@ -201,6 +278,8 @@ export class MainScene extends Phaser.Scene {
 
     preload() {
         this.load.image('solanaCoin', solanaCoin);
+        this.load.image(BARRACKS_ART_KEYS.level1, '/assets/buildings/barracks/level1.png');
+        this.load.image(BARRACKS_ART_KEYS.level2, '/assets/buildings/barracks/level2.png');
     }
 
     create() {
@@ -240,6 +319,12 @@ export class MainScene extends Phaser.Scene {
 
         if (this.textures.exists('solanaCoin')) {
             this.textures.get('solanaCoin').setFilter(Phaser.Textures.FilterMode.NEAREST);
+        }
+        if (this.textures.exists(BARRACKS_ART_KEYS.level1)) {
+            this.textures.get(BARRACKS_ART_KEYS.level1).setFilter(Phaser.Textures.FilterMode.NEAREST);
+        }
+        if (this.textures.exists(BARRACKS_ART_KEYS.level2)) {
+            this.textures.get(BARRACKS_ART_KEYS.level2).setFilter(Phaser.Textures.FilterMode.NEAREST);
         }
 
         this.inputController = new SceneInputController(this);
@@ -675,6 +760,9 @@ export class MainScene extends Phaser.Scene {
 
                 // Hide original building if being moved (ghost is shown instead)
                 if (this.isMoving && this.selectedInWorld === b) {
+                    if (b.type === 'barracks') {
+                        this.hideBarracksArt(b);
+                    }
                     b.graphics.clear();
                     b.baseGraphics?.clear();
                     return;
@@ -1193,9 +1281,17 @@ export class MainScene extends Phaser.Scene {
             case 'town_hall':
                 BuildingRenderer.drawTownHall(graphics, gridX, gridY, this.time.now, alpha, tint, baseGraphics, skipBase, onlyBase);
                 break;
-            case 'barracks':
-                BuildingRenderer.drawBarracks(graphics, c1, c2, c3, c4, center, alpha, tint, baseGraphics, skipBase, onlyBase);
+            case 'barracks': {
+                if (building && this.syncBarracksArt(building, alpha)) {
+                    graphics.clear();
+                    baseGraphics?.clear();
+                } else {
+                    if (building) this.hideBarracksArt(building);
+                    // Fallback for ghost previews or when image assets are unavailable.
+                    BuildingRenderer.drawBarracks(graphics, c1, c2, c3, c4, center, alpha, tint, baseGraphics, skipBase, onlyBase);
+                }
                 break;
+            }
             case 'cannon':
                 // Use level-based rendering for cannon
                 if (building && building.level >= 4) {
@@ -4095,6 +4191,7 @@ export class MainScene extends Phaser.Scene {
         const info = BUILDINGS[b.type];
         if (!info) {
             if (b.graphics) b.graphics.destroy();
+            if (b.artSprite) b.artSprite.destroy();
             if (b.baseGraphics) b.baseGraphics.destroy();
             if (b.barrelGraphics) b.barrelGraphics.destroy();
             if (b.rangeIndicator) b.rangeIndicator.destroy();
@@ -4108,6 +4205,7 @@ export class MainScene extends Phaser.Scene {
 
         // Cleanup graphics
         b.graphics.destroy();
+        if (b.artSprite) b.artSprite.destroy();
         if (b.baseGraphics) b.baseGraphics.destroy();
 
         // Clean up prism laser if this is a prism tower
@@ -5039,9 +5137,11 @@ export class MainScene extends Phaser.Scene {
 
         // Pop Animation
         this.tweens.killTweensOf(building.graphics);
+        if (building.artSprite) this.tweens.killTweensOf(building.artSprite);
         if (building.baseGraphics) this.tweens.killTweensOf(building.baseGraphics);
 
         building.graphics.y = 0;
+        const spriteBaseY = building.artSprite?.y ?? 0;
         if (building.baseGraphics) building.baseGraphics.y = 0;
 
         this.tweens.add({
@@ -5061,6 +5161,19 @@ export class MainScene extends Phaser.Scene {
                 yoyo: true,
                 ease: 'Quad.easeOut',
                 onComplete: () => { if (building.baseGraphics) building.baseGraphics.y = 0; }
+            });
+        }
+
+        if (building.artSprite) {
+            this.tweens.add({
+                targets: building.artSprite,
+                y: spriteBaseY - 10,
+                duration: 150,
+                yoyo: true,
+                ease: 'Quad.easeOut',
+                onComplete: () => {
+                    if (building.artSprite) building.artSprite.y = spriteBaseY;
+                }
             });
         }
     }
@@ -5504,6 +5617,7 @@ export class MainScene extends Phaser.Scene {
         // Clear all buildings and their associated graphics
         this.buildings.forEach(b => {
             b.graphics.destroy();
+            if (b.artSprite) b.artSprite.destroy();
             if (b.baseGraphics) b.baseGraphics.destroy();
             if (b.barrelGraphics) b.barrelGraphics.destroy();
             if (b.prismLaserGraphics) b.prismLaserGraphics.destroy();

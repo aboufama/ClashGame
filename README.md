@@ -1,73 +1,58 @@
-# React + TypeScript + Vite
+# Clash Prototype + Footprint Asset Wizard
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This repo contains:
+- The game prototype (`/game` route)
+- The Footprint Asset Wizard (`/dev/studio` route) for building art + footprint data
 
-Currently, two official plugins are available:
+## Quick Start
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Requirements:
+- Node.js 20.x
 
-## React Compiler
+Install and run:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev:game
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Open the wizard directly:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run dev:studio
 ```
+
+If `127.0.0.1:5173` is already in use, stop the other dev server first.
+
+## Wizard Export: What Is Automatic
+
+When you use **Copy JSON** in the wizard:
+- Building metadata is included (`id`, `name`, `width`, `height`, `footprintTiles`)
+- All image states are included
+- Each uploaded image is embedded as `sourceDataUrl` (base64 data URL)
+- POIs (named points) are included
+- Ground plane settings are included
+
+This means you can hand off a single JSON blob without placing separate image files.
+
+When you use **Export Footprint PNG**:
+- A neutral gray PNG with only the isometric footprint guide is generated
+- Useful as a composition guide in external AI image tools
+
+## Important Limits
+
+Wizard export does not auto-insert the building into game code. You still need to:
+1. Add the building definition
+2. Add/render the visual in the renderer
+3. Register scene logic if needed
+
+Use `/Users/andreboufama/Documents/PersonalStuff/ clash/docs/ADDING_BUILDINGS.md` for that flow.
+
+## Docs Index
+
+- `/Users/andreboufama/Documents/PersonalStuff/ clash/docs/README.md`
+- `/Users/andreboufama/Documents/PersonalStuff/ clash/docs/FOOTPRINT_ASSET_WIZARD.md`
+- `/Users/andreboufama/Documents/PersonalStuff/ clash/docs/ADDING_BUILDINGS.md`
+- `/Users/andreboufama/Documents/PersonalStuff/ clash/docs/RENDERING_AND_DEPTH.md`
+- `/Users/andreboufama/Documents/PersonalStuff/ clash/docs/ADDING_TROOPS.md`
+- `/Users/andreboufama/Documents/PersonalStuff/ clash/docs/ARCHITECTURE.md`

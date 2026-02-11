@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react';
 
 interface AccountModalProps {
   isOpen: boolean;
-  currentUser: { id: string; username: string; deviceSecret?: string } | null;
+  currentUser: { id: string; email: string; username: string } | null;
   isOnline: boolean;
   onClose: () => void;
-  onLogin: (playerId: string, deviceSecret: string) => Promise<void>;
-  onRegister: (username: string, playerId?: string, deviceSecret?: string) => Promise<string>;
+  onLogin: (identifier: string, password: string) => Promise<void>;
+  onRegister: (email: string, username: string, password: string) => Promise<void>;
   onLogout: () => Promise<void>;
 }
 
@@ -22,19 +22,18 @@ export function AccountModal({
   onLogout
 }: AccountModalProps) {
   const [mode, setMode] = useState<Mode>('current');
-  const [loginId, setLoginId] = useState('');
-  const [loginSecret, setLoginSecret] = useState('');
+  const [loginIdentifier, setLoginIdentifier] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [registerEmail, setRegisterEmail] = useState('');
   const [registerName, setRegisterName] = useState('');
-  const [registerId, setRegisterId] = useState('');
-  const [registerSecret, setRegisterSecret] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [registerConfirmPassword, setRegisterConfirmPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [createdSecret, setCreatedSecret] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
     setError(null);
-    setCreatedSecret(null);
     if (currentUser && isOnline) {
       setMode('current');
     } else {
@@ -53,31 +52,36 @@ export function AccountModal({
     setBusy(true);
     setError(null);
     try {
-      await onLogin(loginId.trim(), loginSecret.trim());
-      setLoginId('');
-      setLoginSecret('');
+      await onLogin(loginIdentifier.trim(), loginPassword);
+      setLoginIdentifier('');
+      setLoginPassword('');
       setMode('current');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Login failed.';
-      setError(message.includes('Invalid credentials') ? 'Account exists. Use the correct secret or create a new account.' : message);
+      setError(message);
     } finally {
       setBusy(false);
     }
   };
 
   const handleRegister = async () => {
+    if (registerPassword !== registerConfirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
     setBusy(true);
     setError(null);
     try {
-      const secret = await onRegister(registerName.trim() || 'Commander', registerId.trim() || undefined, registerSecret.trim() || undefined);
-      setCreatedSecret(secret);
+      await onRegister(registerEmail.trim(), registerName.trim(), registerPassword);
+      setRegisterEmail('');
       setRegisterName('');
-      setRegisterId('');
-      setRegisterSecret('');
+      setRegisterPassword('');
+      setRegisterConfirmPassword('');
       setMode('current');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Registration failed.';
-      setError(message.includes('Invalid credentials') ? 'Account already exists. Use Login instead.' : message);
+      setError(message);
     } finally {
       setBusy(false);
     }
@@ -114,7 +118,7 @@ export function AccountModal({
         <div className="account-tabs">
           <button
             className={`tab-btn ${mode === 'current' ? 'active' : ''}`}
-            disabled={!currentUser}
+            disabled={!currentUser || !isOnline}
             onClick={() => setMode('current')}
           >
             CURRENT
@@ -134,9 +138,9 @@ export function AccountModal({
         </div>
 
         {error && <div className="account-error">{error}</div>}
-        {busy && !error && <div className="account-warning">Signing in... please wait.</div>}
+        {busy && !error && <div className="account-warning">Please wait...</div>}
 
-        {mode === 'current' && currentUser && (
+        {mode === 'current' && currentUser && isOnline && (
           <div className="account-panel">
             <div className="account-field">
               <span>ID</span>
@@ -146,23 +150,19 @@ export function AccountModal({
               </div>
             </div>
             <div className="account-field">
-              <span>USERNAME</span>
+              <span>EMAIL</span>
               <div className="field-row">
-                <code>{currentUser.username}</code>
+                <code>{currentUser.email}</code>
+                <button className="copy-btn" onClick={() => copyText(currentUser.email)}>COPY</button>
               </div>
             </div>
             <div className="account-field">
-              <span>SECRET</span>
+              <span>USERNAME</span>
               <div className="field-row">
-                <code>{currentUser.deviceSecret ?? '***'}</code>
-                <button className="copy-btn" onClick={() => copyText(currentUser.deviceSecret)}>COPY</button>
+                <code>{currentUser.username}</code>
+                <button className="copy-btn" onClick={() => copyText(currentUser.username)}>COPY</button>
               </div>
             </div>
-            {createdSecret && (
-              <div className="account-warning">
-                Save your secret: <code>{createdSecret}</code>
-              </div>
-            )}
             <button className="logout-btn" onClick={handleLogout} disabled={busy}>
               LOG OUT
             </button>
@@ -172,23 +172,23 @@ export function AccountModal({
         {mode === 'login' && (
           <div className="account-panel">
             <label>
-              PLAYER ID
+              EMAIL OR USERNAME
               <input
-                value={loginId}
-                onChange={(e) => setLoginId(e.target.value)}
-                placeholder="p_xxxxxx"
+                value={loginIdentifier}
+                onChange={(e) => setLoginIdentifier(e.target.value)}
+                placeholder="email@example.com or Commander01"
               />
             </label>
             <label>
-              SECRET
+              PASSWORD
               <input
-                value={loginSecret}
-                onChange={(e) => setLoginSecret(e.target.value)}
-                placeholder="your secret"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                placeholder="your password"
                 type="password"
               />
             </label>
-            <button className="action-btn" onClick={handleLogin} disabled={busy || !loginId || !loginSecret}>
+            <button className="action-btn" onClick={handleLogin} disabled={busy || !loginIdentifier.trim() || !loginPassword}>
               LOG IN
             </button>
           </div>
@@ -197,30 +197,45 @@ export function AccountModal({
         {mode === 'register' && (
           <div className="account-panel">
             <label>
+              EMAIL
+              <input
+                value={registerEmail}
+                onChange={(e) => setRegisterEmail(e.target.value)}
+                placeholder="email@example.com"
+                type="email"
+              />
+            </label>
+            <label>
               USERNAME
               <input
                 value={registerName}
                 onChange={(e) => setRegisterName(e.target.value)}
-                placeholder="Commander"
+                placeholder="Commander01"
               />
             </label>
             <label>
-              PLAYER ID (optional)
+              PASSWORD
               <input
-                value={registerId}
-                onChange={(e) => setRegisterId(e.target.value)}
-                placeholder="leave blank for auto"
+                value={registerPassword}
+                onChange={(e) => setRegisterPassword(e.target.value)}
+                placeholder="minimum 8 characters"
+                type="password"
               />
             </label>
             <label>
-              SECRET (optional)
+              CONFIRM PASSWORD
               <input
-                value={registerSecret}
-                onChange={(e) => setRegisterSecret(e.target.value)}
-                placeholder="auto-generated if blank"
+                value={registerConfirmPassword}
+                onChange={(e) => setRegisterConfirmPassword(e.target.value)}
+                placeholder="repeat password"
+                type="password"
               />
             </label>
-            <button className="action-btn" onClick={handleRegister} disabled={busy}>
+            <button
+              className="action-btn"
+              onClick={handleRegister}
+              disabled={busy || !registerEmail.trim() || !registerName.trim() || !registerPassword || !registerConfirmPassword}
+            >
               CREATE ACCOUNT
             </button>
           </div>

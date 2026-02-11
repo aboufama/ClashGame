@@ -1,14 +1,14 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http.js';
-import { readJson, writeJson } from '../_lib/blob.js';
-import { createSession, hashSecret, sanitizeId } from '../_lib/auth.js';
+import { writeJson } from '../_lib/blob.js';
+import { createSession, createSessionCookie, findUserByIdentifier, verifyPassword } from '../_lib/auth.js';
 import { ensurePlayerState, materializeState } from '../_lib/game_state.js';
 import type { UserRecord } from '../_lib/models.js';
 import { upsertUserIndex } from '../_lib/indexes.js';
 
 interface LoginBody {
-  playerId?: string;
-  deviceSecret?: string;
+  identifier?: string;
+  password?: string;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -20,21 +20,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const body = await readJsonBody<LoginBody>(req);
-    const playerId = body.playerId ? sanitizeId(body.playerId) : '';
-    const deviceSecret = body.deviceSecret?.trim();
+    const identifier = body.identifier?.trim() ?? '';
+    const password = body.password ?? '';
 
-    if (!playerId || !deviceSecret) {
-      sendError(res, 400, 'playerId and deviceSecret required');
+    if (!identifier || !password) {
+      sendError(res, 400, 'identifier and password required');
       return;
     }
 
-    const user = await readJson<UserRecord>(`users/${playerId}.json`);
+    const user = await findUserByIdentifier(identifier);
     if (!user) {
       sendError(res, 404, 'User not found');
       return;
     }
 
-    if (user.secretHash !== hashSecret(deviceSecret)) {
+    if (!verifyPassword(password, user.passwordHash)) {
       sendError(res, 403, 'Invalid credentials');
       return;
     }
@@ -62,9 +62,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       trophies: updated.trophies ?? 0
     });
 
+    res.setHeader('Set-Cookie', createSessionCookie(session.token));
     sendJson(res, 200, {
-      user: { id: updated.id, username: updated.username },
-      token: session.token,
+      user: { id: updated.id, email: updated.email, username: updated.username },
       expiresAt: session.expiresAt
     });
   } catch (error) {

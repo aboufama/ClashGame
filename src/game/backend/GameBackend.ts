@@ -24,17 +24,14 @@ export class Backend {
   private static inFlightSaves = new Map<string, Promise<void>>();
   private static cacheKeyPrefix = CACHE_PREFIX;
 
-  private static async apiPost<T>(path: string, body: unknown, auth = true): Promise<T> {
+  private static async apiPost<T>(path: string, body: unknown): Promise<T> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (auth) {
-      const token = Auth.getToken();
-      if (token) headers.Authorization = `Bearer ${token}`;
-    }
     const response = await fetch(path, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
-      cache: 'no-store'
+      cache: 'no-store',
+      credentials: 'same-origin'
     });
     if (!response.ok) {
       throw new Error(`API ${path} failed (${response.status})`);
@@ -120,15 +117,14 @@ export class Backend {
     const task = (async () => {
       try {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        const token = Auth.getToken();
-        if (token) headers.Authorization = `Bearer ${token}`;
 
         const res = await fetch('/api/bases/save', {
           method: 'POST',
           headers,
           body: JSON.stringify({ world, ifMatchRevision: world.revision ?? 0 }),
           cache: 'no-store',
-          keepalive: true
+          keepalive: true,
+          credentials: 'same-origin'
         });
 
         if (res.ok) {
@@ -153,7 +149,8 @@ export class Backend {
                 headers,
                 body: JSON.stringify({ world: merged, ifMatchRevision: merged.revision ?? 0 }),
                 cache: 'no-store',
-                keepalive: true
+                keepalive: true,
+                credentials: 'same-origin'
               });
               if (retryRes.ok) {
                 const retryData = await retryRes.json() as { ok?: boolean; world?: SerializedWorld };
@@ -191,15 +188,14 @@ export class Backend {
 
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      const token = Auth.getToken();
-      if (token) headers.Authorization = `Bearer ${token}`;
 
       const res = await fetch('/api/bases/save', {
         method: 'POST',
         headers,
         body: JSON.stringify({ world, ifMatchRevision: world.revision ?? 0 }),
         cache: 'no-store',
-        keepalive: true
+        keepalive: true,
+        credentials: 'same-origin'
       });
 
       if (res.ok) {
@@ -216,7 +212,8 @@ export class Backend {
               headers,
               body: JSON.stringify({ world: merged, ifMatchRevision: merged.revision ?? 0 }),
               cache: 'no-store',
-              keepalive: true
+              keepalive: true,
+              credentials: 'same-origin'
             });
             if (retryRes.ok) {
               const retryData = await retryRes.json() as { ok?: boolean; world?: SerializedWorld };
@@ -263,8 +260,6 @@ export class Backend {
     if (!world) return;
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    const token = Auth.getToken();
-    if (token) headers.Authorization = `Bearer ${token}`;
 
     try {
       // Omit ifMatchRevision so the server skips the revision check.
@@ -275,7 +270,8 @@ export class Backend {
         method: 'POST',
         headers,
         body: JSON.stringify({ world }),
-        keepalive: true
+        keepalive: true,
+        credentials: 'same-origin'
       });
     } catch {
       // Nothing to do — page is unloading

@@ -1,81 +1,69 @@
 # Rendering and Depth (Isometric)
 
-This game uses a grid simulation with isometric projection for rendering. If you add buildings/troops, follow the depth + ground-plane rules here or you will eventually get “wall/troop in the wrong layer” bugs.
+Use this when a building or troop appears in front of the wrong thing.
 
-## Coordinate spaces
+## Core Rule
 
-- **Grid space**: integer `(gridX, gridY)` (0..`MAP_SIZE-1`), used for simulation.
-- **Isometric/screen space**: pixels, used for rendering.
+Simulation happens in grid space.
+Rendering happens in isometric pixel space.
 
-Conversion lives in:
-- `src/game/utils/IsoUtils.ts` (`cartToIso`, `isoToCart`)
+Coordinate helpers:
+- `src/game/utils/IsoUtils.ts`
 
-The scene defines tile geometry:
-- `src/game/scenes/MainScene.ts` (`tileWidth = 64`, `tileHeight = 32`)
+Tile geometry used by scene:
+- `tileWidth = 64`
+- `tileHeight = 32`
 
-## Depth ordering (the rule)
+## Depth Source of Truth
 
-Depth is computed centrally in:
+All depth values come from:
 - `src/game/systems/DepthSystem.ts`
 
-Key functions:
-- `depthForGroundPlane()`: the “always under everything” ground plane depth.
-- `depthForBuilding(gridX, gridY, type)`: building depth based on footprint + bias.
-- `depthForTroop(gridX, gridY, type)`: troop depth with troop-size bias.
-
-The important concept:
-- **Footprint anchor**: buildings use their bottom-right footprint tile (`gridX + width - 1`, `gridY + height - 1`) as the anchor for depth. This matches how isometric overlap actually works for multi-tile objects.
-
-## Ground plane: draw once, always below
-
-`MainScene` pre-renders the entire grass grid into a shared `RenderTexture`:
-- `src/game/scenes/MainScene.ts` → `createIsoGrid()`
-
-That texture is placed at:
+Main functions:
 - `depthForGroundPlane()`
+- `depthForBuilding(gridX, gridY, type)`
+- `depthForTroop(gridX, gridY, type)`
 
-### Baking building bases (ground-plane parts)
+For buildings, depth anchor is the bottom-right tile of the footprint.
 
-To avoid “base renders above troop” issues, building ground-plane visuals are baked onto the ground texture:
-- `MainScene.bakeBuildingToGround(b)` draws the building’s base only into a temporary `Graphics`, then stamps it onto the ground `RenderTexture`.
-- When moving/removing, `MainScene.unbakeBuildingFromGround(b)` redraws grass tiles over the old footprint.
+## Ground Plane Contract
 
-This is why building renderer functions are expected to support **two passes**:
-1. **Base pass**: draw only the ground-plane (floors, borders, footprints).
-2. **Dynamic/elevated pass**: draw everything that should participate in depth ordering (walls, towers, roofs, props that should overlap troops).
+Ground-level visuals must render below everything else.
 
-## Building renderer contract (required for correctness)
+How this project handles it:
+1. Grass/ground is pre-baked to a render texture.
+2. Building base parts are baked onto that texture.
+3. Elevated building parts are drawn in runtime pass with normal depth sorting.
 
-When you implement a new building renderer in `src/game/renderers/BuildingRenderer.ts`, structure it like this:
+Scene methods:
+- `MainScene.createIsoGrid()`
+- `MainScene.bakeBuildingToGround(...)`
+- `MainScene.unbakeBuildingFromGround(...)`
 
-- `skipBase`: if `true`, do not draw anything that belongs on the ground plane.
-- `onlyBase`: if `true`, draw only the ground plane and return (do not draw height).
+## Renderer Contract (Required)
+
+Building renderers in `src/game/renderers/BuildingRenderer.ts` must support:
+- `onlyBase`: draw only ground-plane/base parts
+- `skipBase`: skip base parts, draw elevated parts only
 
 Pattern:
 
 ```ts
-const g = baseGraphics || graphics; // optional, some renderers draw base to g
-
 if (!skipBase) {
-  // draw footprint / floor / border (ground-plane)
+  // ground-plane/base
 }
 
 if (!onlyBase) {
-  // draw walls / roof / props (elevated, should depth-sort)
+  // elevated geometry
 }
 ```
 
-`MainScene` calls your renderer in these modes:
-- Bake pass: `onlyBase = true` (stamped onto the ground `RenderTexture`)
-- Runtime pass: `skipBase = true` (draw elevated parts to the building’s `Graphics` at `depthForBuilding(...)`)
+If this split is not respected, layering bugs return.
 
-If you don’t follow this contract, you’ll reintroduce the original layering bug (bases rendering over troops/walls).
+## Quick Layering Test
 
-## How to sanity-check layering
-
-When testing any new/changed renderer:
-- Place a wall and a large troop near it (golem/davinci tank) in all relative positions (NW/NE/SW/SE).
-- Verify:
-  - ground-plane parts (floors, borders, decals) never draw above troops/walls
-  - elevated parts (wall height, towers, props) respect depth and overlap correctly
-
+1. Place walls/buildings and a large troop nearby.
+2. Check all relative directions.
+3. Confirm:
+- Floor/base never draws over troops
+- Elevated geometry overlaps correctly by depth

@@ -28,8 +28,9 @@ MobileUtils.preventDefaultTouchBehaviors();
 function App() {
   const gameRef = useRef<Phaser.Game | null>(null);
 
-  type UserProfile = { id: string; username: string; lastLogin: number; deviceSecret?: string };
+  type UserProfile = { id: string; email: string; username: string; lastLogin: number };
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [isOnline, setIsOnline] = useState(false);
   const [isAccountOpen, setIsAccountOpen] = useState(false);
   const isLockedOut = !user || !isOnline;
@@ -52,14 +53,23 @@ function App() {
     Auth.ensureUser()
       .then(({ user: authUser, online }) => {
         if (cancelled) return;
-        setUser({ id: authUser.id, username: authUser.username, lastLogin: Date.now(), deviceSecret: authUser.deviceSecret });
+        if (authUser) {
+          setUser({ id: authUser.id, email: authUser.email, username: authUser.username, lastLogin: Date.now() });
+        } else {
+          setUser(null);
+        }
         setIsOnline(online);
       })
       .catch(error => {
         console.warn('Auth init failed:', error);
         if (!cancelled) {
-          setUser({ id: 'offline_player', username: 'Commander', lastLogin: Date.now() });
+          setUser(null);
           setIsOnline(false);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setAuthReady(true);
         }
       });
     return () => {
@@ -180,6 +190,8 @@ function App() {
 
   // Load World & Resources once user is known
   useEffect(() => {
+    if (!authReady) return;
+
     if (!user || !isOnline) {
       clearCloudTimers();
       setLoading(false);
@@ -276,7 +288,7 @@ function App() {
     };
 
     init();
-  }, [user, isOnline, beginVillageLoadCloud, updateVillageLoadCloud, revealVillageFromCloud, clearCloudTimers]);
+  }, [authReady, user, isOnline, beginVillageLoadCloud, updateVillageLoadCloud, revealVillageFromCloud, clearCloudTimers]);
 
   // Persist resources & army
   useEffect(() => {
@@ -319,7 +331,7 @@ function App() {
     resourcesRef.current = resources;
   }, [selectedInMap, army, selectedTroopType, battleStats, resources]);
 
-  const handleLoginAccount = async (playerId: string, deviceSecret: string) => {
+  const handleLoginAccount = async (identifier: string, password: string) => {
     setLoading(true);
     try {
       const existingId = user?.id;
@@ -327,10 +339,10 @@ function App() {
         await Backend.flushPendingSave();
         Backend.clearCacheForUser(existingId);
       }
-      const authUser = await Auth.login(playerId, deviceSecret);
+      const authUser = await Auth.login(identifier, password);
       // Clear any stale cache for the NEW user from a previous session on this browser
       Backend.clearCacheForUser(authUser.id);
-      setUser({ id: authUser.id, username: authUser.username, lastLogin: Date.now(), deviceSecret: authUser.deviceSecret });
+      setUser({ id: authUser.id, email: authUser.email, username: authUser.username, lastLogin: Date.now() });
       setIsOnline(true);
       setIsAccountOpen(false);
     } catch (error) {
@@ -339,7 +351,7 @@ function App() {
     }
   };
 
-  const handleRegisterAccount = async (username: string, playerId?: string, deviceSecret?: string) => {
+  const handleRegisterAccount = async (email: string, username: string, password: string) => {
     setLoading(true);
     try {
       const existingId = user?.id;
@@ -347,13 +359,12 @@ function App() {
         await Backend.flushPendingSave();
         Backend.clearCacheForUser(existingId);
       }
-      const authUser = await Auth.register(username, playerId, deviceSecret);
+      const authUser = await Auth.register(email, username, password);
       // Clear any stale cache for the NEW user from a previous session on this browser
       Backend.clearCacheForUser(authUser.id);
-      setUser({ id: authUser.id, username: authUser.username, lastLogin: Date.now(), deviceSecret: authUser.deviceSecret });
+      setUser({ id: authUser.id, email: authUser.email, username: authUser.username, lastLogin: Date.now() });
       setIsOnline(true);
-      setIsAccountOpen(true);
-      return authUser.deviceSecret ?? '';
+      setIsAccountOpen(false);
     } catch (error) {
       setLoading(false);
       throw error;
@@ -918,8 +929,8 @@ function App() {
     calcWallCost();
   }, [selectedBuildingInfo, view]);
 
-  // Don't render until user is set
-  if (!user) {
+  // Wait for the initial session check before rendering game/login UI.
+  if (!authReady) {
     return (
       <div className="app-container">
         <CloudOverlay

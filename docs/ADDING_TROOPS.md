@@ -1,70 +1,62 @@
 # Adding Troops
 
-Troops require: a definition (stats), a renderer (visual), UI plumbing (training + selection), and sometimes special behavior in the scene update loop.
+Troop integration has four parts: definition, icon, renderer, behavior wiring.
 
-## 1) Add the type + definition
+## 1) Add troop type + definition
 
 Edit:
 - `src/game/config/GameDefinitions.ts`
 
-Steps:
-1. Add your troop ID to `export type TroopType = ...`.
-2. Add a `TROOP_DEFINITIONS[<id>]` entry (`cost`, `space`, `health`, `damage`, `range`, `speed`, etc).
+Do:
+1. Add new ID to `TroopType`.
+2. Add `TROOP_DEFINITIONS[<id>]` entry.
 
-Movement / pathfinding controls:
-- `movementType: 'ground' | 'air' | 'ghost'`
-- `wallTraversalCost` (lower = more willing to pass through walls)
+Typical fields:
+- `cost`, `space`, `health`, `damage`, `range`, `speed`
+- `movementType` (`ground`, `air`, `ghost`)
+- optional `wallTraversalCost`
 
-## 2) Add the icon (UI)
+## 2) Add UI icon
 
-Add a CSS icon class in:
-- `src/icons/accurate-icons.css` (`<id>-icon::before`)
+Edit:
+- `src/icons/accurate-icons.css`
 
-UI uses those IDs directly:
-- `src/components/TrainingModal.tsx` (training grid + queue icons)
-- `src/components/Hud.tsx` (battle bar troop icons)
+Add:
+- `<troop-id>-icon::before`
 
-## 3) Add the renderer
+Used by:
+- `src/components/TrainingModal.tsx`
+- `src/components/Hud.tsx`
 
-Implement visuals in:
+## 3) Add renderer
+
+Edit:
 - `src/game/renderers/TroopRenderer.ts`
 
-Steps:
-1. Add a new `case '<id>'` in `drawTroopVisual(...)`.
-2. Add a `draw<YourTroop>(...)` helper (follow style of existing troops).
+Do:
+1. Add case in `drawTroopVisual(...)`.
+2. Add drawing helper for the troop.
 
-## 4) Make it selectable/trainable in UI
+## 4) Wire selection/training lists
 
-Most UI lists come from definitions:
-- `src/App.tsx` builds `troopList` from `TROOP_DEFINITIONS` (and filters out internal-only troops like `romanwarrior`).
+Most lists derive from definitions, but some explicit lists exist in:
+- `src/App.tsx`
 
-However, a few places use explicit troop unions/lists (TypeScript + ordering):
-- `src/App.tsx`: `army` state shape and `selectedTroopType` union
-- `src/App.tsx`: `availableTroops` array used to choose the first deployable troop in ATTACK
+Update explicit unions/lists so TypeScript and UI selection stay valid.
 
-When you add a troop, update those lists so TypeScript and UI selection stay consistent.
+## 5) Add special behavior only if needed
 
-## 5) Behavior (default vs special-case)
+Default combat/path behavior already exists in:
+- `src/game/scenes/MainScene.ts`
+- `src/game/systems/TargetingSystem.ts`
+- `src/game/systems/PathfindingSystem.ts`
 
-The core combat loop is in:
-- `src/game/scenes/MainScene.ts` → `updateCombat(...)`
-
-Default behavior:
-- Target selection: `TargetingSystem.findTarget(...)` (`src/game/systems/TargetingSystem.ts`)
-- Pathfinding: `PathfindingSystem.findPath(...)` (`src/game/systems/PathfindingSystem.ts`)
-- Attack cadence: `Troop.attackDelay` and `Troop.lastAttackTime`
-
-If your troop is “normal” (simple melee/ranged), the existing logic may already work by just configuring stats.
-
-If your troop needs special behavior (chain lightning, splitting, AoE slams, setup states):
-- Add any extra state fields to `src/game/types/GameTypes.ts` (`Troop` interface).
-- Implement the special-case inside `MainScene.updateCombat(...)` (search for existing special types like `stormmage`, `recursion`, `phalanx`, `golem`, `mobilemortar`).
+If troop needs custom logic, add it in `MainScene.updateCombat(...)` and extend troop type fields in:
+- `src/game/types/GameTypes.ts`
 
 ## 6) Verify
 
-Checklist:
-- Can be trained (capacity + cost behave correctly).
-- Deploys in ATTACK mode via the battle bar.
-- Moves around buildings/walls as expected (ground vs air/ghost).
-- Renders at correct depth relative to walls/buildings (large troops are the usual stress test).
-
+- Trainable and deployable
+- Pathing behavior is correct
+- Depth/layering looks correct
+- Damage cadence/range matches design

@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, sendError, sendJson } from '../_lib/http.js';
 import { deleteJson, writeJson } from '../_lib/blob.js';
-import { requireAuth } from '../_lib/auth.js';
+import { clearSessionCookie, requireAuth } from '../_lib/auth.js';
 import type { UserRecord } from '../_lib/models.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -12,6 +12,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    res.setHeader('Set-Cookie', clearSessionCookie());
     const auth = await requireAuth(req, res);
     if (!auth) return;
 

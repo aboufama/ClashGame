@@ -20,6 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         buildingCount: entry.buildingCount
       }));
 
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
     sendJson(res, 200, { users });
   } catch (error) {
     console.error('list users error', error);

@@ -36,10 +36,11 @@ export interface SerializedWorld {
 
 export interface UserRecord {
   id: string;
+  email: string;
   username: string;
   createdAt: number;
   lastSeen: number;
-  secretHash: string;
+  passwordHash: string;
   activeSessionId?: string;
   sessionExpiresAt?: number;
   trophies?: number;

@@ -1,38 +1,35 @@
 export interface AuthUser {
   id: string;
+  email: string;
   username: string;
-  deviceSecret: string;
-  token?: string;
-  tokenExpiresAt?: number;
 }
 
 interface AuthResponse {
-  user: { id: string; username: string };
-  token: string;
-  expiresAt: number;
+  user: AuthUser;
+}
+
+interface SessionResponse {
+  authenticated?: boolean;
+  user?: AuthUser;
 }
 
 const STORAGE_KEY = 'clash.auth';
 
-function randomHex(bytes: number) {
-  if (typeof crypto === 'undefined' || typeof crypto.getRandomValues !== 'function') {
-    return Array.from({ length: bytes }, () => Math.floor(Math.random() * 256))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
-  }
-  const data = new Uint8Array(bytes);
-  crypto.getRandomValues(data);
-  return Array.from(data)
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
 function loadStoredUser(): AuthUser | null {
   if (typeof window === 'undefined') return null;
+
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as AuthUser;
+    const parsed = JSON.parse(raw) as Partial<AuthUser>;
+    if (!parsed || typeof parsed.id !== 'string' || typeof parsed.username !== 'string' || typeof parsed.email !== 'string') {
+      return null;
+    }
+    return {
+      id: parsed.id,
+      username: parsed.username,
+      email: parsed.email
+    };
   } catch {
     return null;
   }
@@ -43,13 +40,33 @@ function saveStoredUser(user: AuthUser) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
 }
 
-async function postJson<T>(path: string, body: unknown, token?: string): Promise<T> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) headers.Authorization = `Bearer ${token}`;
+async function postJson<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(path, {
     method: 'POST',
-    headers,
-    body: JSON.stringify(body)
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    cache: 'no-store',
+    credentials: 'same-origin'
+  });
+  if (!response.ok) {
+    const raw = await response.text();
+    let message = `Request failed: ${response.status}`;
+    try {
+      const parsed = JSON.parse(raw) as { error?: string };
+      if (parsed?.error) message = parsed.error;
+    } catch {
+      if (raw) message = raw;
+    }
+    throw new Error(message);
+  }
+  return (await response.json()) as T;
+}
+
+async function getJson<T>(path: string): Promise<T> {
+  const response = await fetch(path, {
+    method: 'GET',
+    cache: 'no-store',
+    credentials: 'same-origin'
   });
   if (!response.ok) {
     const raw = await response.text();
@@ -77,101 +94,71 @@ export class Auth {
     return Auth.online;
   }
 
-  static getToken() {
-    return Auth.current?.token ?? null;
-  }
-
-  static async ensureUser(): Promise<{ user: AuthUser; online: boolean }> {
-    let user = loadStoredUser();
-    if (!user) {
-      user = {
-        id: `p_${randomHex(6)}`,
-        username: `Commander-${randomHex(2)}`,
-        deviceSecret: randomHex(16)
-      };
-      saveStoredUser(user);
+  static async ensureUser(): Promise<{ user: AuthUser | null; online: boolean }> {
+    const stored = loadStoredUser();
+    if (stored) {
+      Auth.current = stored;
     }
 
-    const now = Date.now();
-    const tokenExpired = !user.token || (user.tokenExpiresAt ?? 0) < now;
-
-    if (tokenExpired) {
-      try {
-        const login = await postJson<AuthResponse>('/api/auth/login', {
-          playerId: user.id,
-          deviceSecret: user.deviceSecret
-        });
-        user = { ...user, token: login.token, tokenExpiresAt: login.expiresAt, username: login.user.username };
-        saveStoredUser(user);
-        Auth.online = true;
-      } catch {
-        try {
-          const registered = await postJson<AuthResponse>('/api/auth/register', {
-            playerId: user.id,
-            username: user.username,
-            deviceSecret: user.deviceSecret
-          });
-          user = { ...user, token: registered.token, tokenExpiresAt: registered.expiresAt, username: registered.user.username };
-          saveStoredUser(user);
-          Auth.online = true;
-        } catch (error) {
-          console.warn('Auth offline mode:', error);
-          Auth.online = false;
-        }
+    try {
+      const session = await getJson<SessionResponse>('/api/auth/session');
+      if (!session.authenticated || !session.user) {
+        throw new Error('No active session');
       }
-    } else {
+      saveStoredUser(session.user);
+      Auth.current = session.user;
       Auth.online = true;
+      return { user: session.user, online: true };
+    } catch (error) {
+      const expectedUnauthenticated = error instanceof Error && (
+        error.message.includes('401') ||
+        error.message.includes('Missing auth session') ||
+        error.message.includes('Session expired')
+      );
+      if (!expectedUnauthenticated && error instanceof Error) {
+        console.warn('Auth offline mode:', error.message);
+      } else if (!expectedUnauthenticated) {
+        console.warn('Auth offline mode:', error);
+      }
+      Auth.online = false;
+      if (stored) {
+        Auth.current = stored;
+        return { user: stored, online: false };
+      }
+      Auth.current = null;
+      return { user: null, online: false };
     }
-
-    Auth.current = user;
-    return { user, online: Auth.online };
   }
 
-  static async login(playerId: string, deviceSecret: string): Promise<AuthUser> {
+  static async login(identifier: string, password: string): Promise<AuthUser> {
     const login = await postJson<AuthResponse>('/api/auth/login', {
-      playerId,
-      deviceSecret
+      identifier,
+      password
     });
-    const user: AuthUser = {
-      id: login.user.id,
-      username: login.user.username,
-      deviceSecret,
-      token: login.token,
-      tokenExpiresAt: login.expiresAt
-    };
-    saveStoredUser(user);
-    Auth.current = user;
+    saveStoredUser(login.user);
+    Auth.current = login.user;
     Auth.online = true;
-    return user;
+    return login.user;
   }
 
-  static async register(username: string, playerId?: string, deviceSecret?: string): Promise<AuthUser> {
-    const secret = deviceSecret && deviceSecret.trim().length > 0 ? deviceSecret.trim() : randomHex(16);
-    const payload: { playerId?: string; username: string; deviceSecret: string } = {
+  static async register(email: string, username: string, password: string): Promise<AuthUser> {
+    const registered = await postJson<AuthResponse>('/api/auth/register', {
+      email,
       username,
-      deviceSecret: secret
-    };
-    if (playerId) payload.playerId = playerId;
-    const registered = await postJson<AuthResponse>('/api/auth/register', payload);
-    const user: AuthUser = {
-      id: registered.user.id,
-      username: registered.user.username,
-      deviceSecret: secret,
-      token: registered.token,
-      tokenExpiresAt: registered.expiresAt
-    };
-    saveStoredUser(user);
-    Auth.current = user;
+      password
+    });
+    saveStoredUser(registered.user);
+    Auth.current = registered.user;
     Auth.online = true;
-    return user;
+    return registered.user;
   }
 
   static async logout(): Promise<void> {
-    const token = Auth.current?.token;
-    if (token) {
-      try {
-        await postJson('/api/auth/logout', {}, token);
-      } catch (error) {
+    try {
+      await postJson('/api/auth/logout', {});
+    } catch (error) {
+      const expectedUnauthenticated = error instanceof Error && error.message.includes('401');
+      if (!expectedUnauthenticated) {
         console.warn('Logout request failed:', error);
       }
     }
