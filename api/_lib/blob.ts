@@ -1,4 +1,8 @@
+import crypto from 'crypto';
+
 const JSON_CONTENT_TYPE = 'application/json';
+const HISTORY_ROOT = '__history/json';
+const HISTORY_KEEP_VERSIONS = 12;
 
 type BlobModule = typeof import('@vercel/blob');
 
@@ -37,23 +41,131 @@ function pathnameFromBlobItem(item: { pathname?: string; url?: string }) {
   if (!item.url) return null;
   try {
     const url = new URL(item.url);
-    const path = url.pathname.replace(/^\//, '');
-    return decodeURIComponent(path);
+    return url.pathname.replace(/^\//, '');
   } catch {
     return null;
   }
 }
 
+function normalizePathname(pathname: string) {
+  return String(pathname || '').replace(/^\/+/, '');
+}
+
+function historyPrefix(pathname: string) {
+  const normalized = normalizePathname(pathname);
+  const hash = crypto.createHash('sha256').update(normalized).digest('hex');
+  return `${HISTORY_ROOT}/${hash}/`;
+}
+
+function historyPathname(pathname: string) {
+  const suffix = `${Date.now()}_${crypto.randomBytes(6).toString('hex')}.json`;
+  return `${historyPrefix(pathname)}${suffix}`;
+}
+
+function blobUploadedAtMs(value: unknown) {
+  if (value instanceof Date) return value.getTime();
+  const parsed = Number(new Date(String(value || '')).getTime());
+  if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  return 0;
+}
+
+async function fetchJsonFromBlobUrl<T>(urlString: string): Promise<T | null> {
+  const url = new URL(urlString);
+  url.searchParams.set('_t', String(Date.now()));
+  const response = await fetch(url.toString(), {
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache' }
+  });
+  if (!response.ok) return null;
+  return (await response.json()) as T;
+}
+
+async function readVersionedJson<T>(pathname: string): Promise<T | null> {
+  ensureBlobToken();
+  const { list } = await getBlobModule();
+  const prefix = historyPrefix(pathname);
+
+  let cursor: string | undefined;
+  let latest: { pathname: string; url: string; uploadedAtMs: number } | null = null;
+
+  for (;;) {
+    const page = await list({ prefix, limit: 1000, cursor });
+    for (const blob of page.blobs) {
+      const blobPathname = pathnameFromBlobItem(blob);
+      if (!blobPathname || typeof blob.url !== 'string' || !blob.url) continue;
+      const uploadedAtMs = blobUploadedAtMs((blob as { uploadedAt?: unknown }).uploadedAt);
+      if (
+        !latest ||
+        uploadedAtMs > latest.uploadedAtMs ||
+        (uploadedAtMs === latest.uploadedAtMs && blobPathname > latest.pathname)
+      ) {
+        latest = {
+          pathname: blobPathname,
+          url: blob.url,
+          uploadedAtMs
+        };
+      }
+    }
+    if (!page.hasMore || !page.cursor) break;
+    cursor = page.cursor;
+  }
+
+  if (!latest) return null;
+  return await fetchJsonFromBlobUrl<T>(latest.url);
+}
+
+async function pruneHistory(pathname: string): Promise<void> {
+  ensureBlobToken();
+  const { list, del } = await getBlobModule();
+  const prefix = historyPrefix(pathname);
+
+  const blobs: Array<{ pathname: string; uploadedAtMs: number }> = [];
+  let cursor: string | undefined;
+
+  for (;;) {
+    const page = await list({ prefix, limit: 1000, cursor });
+    for (const blob of page.blobs) {
+      const blobPathname = pathnameFromBlobItem(blob);
+      if (!blobPathname) continue;
+      blobs.push({
+        pathname: blobPathname,
+        uploadedAtMs: blobUploadedAtMs((blob as { uploadedAt?: unknown }).uploadedAt)
+      });
+    }
+    if (!page.hasMore || !page.cursor) break;
+    cursor = page.cursor;
+  }
+
+  if (blobs.length <= HISTORY_KEEP_VERSIONS) return;
+
+  blobs.sort((a, b) => {
+    if (b.uploadedAtMs !== a.uploadedAtMs) return b.uploadedAtMs - a.uploadedAtMs;
+    return b.pathname.localeCompare(a.pathname);
+  });
+
+  const stale = blobs.slice(HISTORY_KEEP_VERSIONS).map(blob => blob.pathname);
+  if (stale.length > 0) {
+    await del(stale);
+  }
+}
+
+async function deleteHistory(pathname: string): Promise<void> {
+  ensureBlobToken();
+  const { del } = await getBlobModule();
+  const historyPathnames = await listPathnames(historyPrefix(pathname));
+  if (historyPathnames.length === 0) return;
+  await del(historyPathnames);
+}
+
 export async function readJson<T>(pathname: string): Promise<T | null> {
   try {
+    const versioned = await readVersionedJson<T>(pathname);
+    if (versioned !== null) return versioned;
+
     ensureBlobToken();
     const { head } = await getBlobModule();
     const meta = await head(pathname);
-    const url = new URL(meta.url);
-    url.searchParams.set('_t', String(Date.now()));
-    const response = await fetch(url.toString(), { cache: 'no-store' });
-    if (!response.ok) return null;
-    return (await response.json()) as T;
+    return await fetchJsonFromBlobUrl<T>(meta.url);
   } catch (error) {
     if (isBlobNotFound(error)) return null;
     throw error;
@@ -66,20 +178,43 @@ export async function writeJson<T>(pathname: string, data: T, options: WriteOpti
   const cacheSeconds = options.cacheSeconds ?? 0;
   const allowOverwrite = options.allowOverwrite ?? true;
   const addRandomSuffix = options.addRandomSuffix ?? false;
+  const payload = JSON.stringify(data);
 
-  await put(pathname, JSON.stringify(data), {
+  await put(pathname, payload, {
     access: 'public',
     addRandomSuffix,
     allowOverwrite,
     contentType: JSON_CONTENT_TYPE,
     cacheControlMaxAge: cacheSeconds
   });
+
+  try {
+    await put(historyPathname(pathname), payload, {
+      access: 'public',
+      addRandomSuffix: false,
+      allowOverwrite: false,
+      contentType: JSON_CONTENT_TYPE,
+      cacheControlMaxAge: cacheSeconds
+    });
+    void pruneHistory(pathname).catch(error => {
+      console.warn('blob history prune failed', { pathname, error });
+    });
+  } catch (error) {
+    console.warn('blob history write failed', { pathname, error });
+  }
 }
 
 export async function deleteJson(pathname: string): Promise<void> {
   ensureBlobToken();
   const { del } = await getBlobModule();
-  await del(pathname);
+  await del(pathname).catch(error => {
+    if (isBlobNotFound(error)) return;
+    throw error;
+  });
+  await deleteHistory(pathname).catch(error => {
+    if (isBlobNotFound(error)) return;
+    throw error;
+  });
 }
 
 export async function listPathnames(prefix: string): Promise<string[]> {
@@ -108,4 +243,13 @@ export async function deletePrefix(prefix: string): Promise<void> {
   ensureBlobToken();
   const { del } = await getBlobModule();
   await del(pathnames);
+  await Promise.all(
+    pathnames.map(pathname =>
+      deleteHistory(pathname).catch(error => {
+        if (!isBlobNotFound(error)) {
+          console.warn('blob history delete failed', { pathname, error });
+        }
+      })
+    )
+  );
 }

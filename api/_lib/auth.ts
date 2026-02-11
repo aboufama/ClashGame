@@ -178,12 +178,52 @@ export async function findUserIdByUsername(username: string): Promise<string | n
   ]);
 }
 
+function isUserJsonPath(pathname: string) {
+  if (!pathname.startsWith('users/') || !pathname.endsWith('.json')) return false;
+  const id = pathname.slice('users/'.length, -'.json'.length);
+  return id.length > 0 && !id.includes('/');
+}
+
+function scoreUserCandidate(
+  user: UserRecord,
+  identifier: string,
+  normalizedEmail: string,
+  normalizedUsername: string,
+  prefersEmail: boolean,
+  indexedBuildingCount: number
+) {
+  const userEmail = typeof user.email === 'string' ? normalizeEmail(user.email) : '';
+  const userUsername = typeof user.username === 'string' ? normalizeUsernameKey(user.username) : '';
+  const matchById = user.id === identifier;
+  const matchByEmail = userEmail === normalizedEmail;
+  const matchByUsername = userUsername === normalizedUsername;
+
+  let matchScore = 0;
+  if (prefersEmail) {
+    if (matchByEmail) matchScore += 1_000_000_000_000_000;
+    if (matchByUsername) matchScore += 100_000_000_000_000;
+    if (matchById) matchScore += 10_000_000_000_000;
+  } else {
+    if (matchByUsername) matchScore += 1_000_000_000_000_000;
+    if (matchByEmail) matchScore += 100_000_000_000_000;
+    if (matchById) matchScore += 10_000_000_000_000;
+  }
+
+  const buildings = Math.max(0, Math.floor(Number(indexedBuildingCount) || 0));
+  const buildingScore = buildings * 1_000_000_000;
+  const lastSeenScore = Math.max(0, Math.floor(Number(user.lastSeen) || 0));
+  const createdAtScore = Math.max(0, Math.floor((Number(user.createdAt) || 0) / 1000));
+
+  return matchScore + buildingScore + lastSeenScore + createdAtScore;
+}
+
 export async function findUserByIdentifier(identifier: string): Promise<UserRecord | null> {
   const normalized = identifier.trim();
   if (!normalized) return null;
 
   const normalizedEmail = normalizeEmail(normalized);
   const normalizedUsername = normalizeUsernameKey(normalized);
+  const prefersEmail = normalized.includes('@');
 
   const matchesIdentifier = (user: UserRecord) => {
     if (!user || typeof user.id !== 'string') return false;
@@ -192,70 +232,92 @@ export async function findUserByIdentifier(identifier: string): Promise<UserReco
     return user.id === normalized || userEmail === normalizedEmail || userUsername === normalizedUsername;
   };
 
-  const seenIds = new Set<string>();
-  const candidates: string[] = [];
-  if (normalized.includes('@')) {
-    const emailId = await findUserIdByEmail(normalized);
-    if (emailId) candidates.push(emailId);
-  }
-
-  const usernameId = await findUserIdByUsername(normalized);
-  if (usernameId && !candidates.includes(usernameId)) candidates.push(usernameId);
-
-  for (const userId of candidates) {
-    if (!userId || seenIds.has(userId)) continue;
-    seenIds.add(userId);
-    const user = await readJson<UserRecord>(`users/${userId}.json`);
-    if (user && matchesIdentifier(user)) {
-      await upsertUserAuthLookups(user).catch(() => undefined);
-      return user;
-    }
-  }
-
-  // Legacy/stale fallback: recover by scanning users index when auth lookups are missing.
   const usersIndex = await readUsersIndex().catch(() => null);
   const indexUsers = usersIndex && Array.isArray(usersIndex.users) ? usersIndex.users : [];
+  const indexedBuildingCounts = new Map<string, number>();
+  for (const entry of indexUsers) {
+    if (!entry?.id) continue;
+    indexedBuildingCounts.set(entry.id, Math.max(0, Math.floor(Number(entry.buildingCount) || 0)));
+  }
 
-  const matchingUsernameEntries = indexUsers.filter(entry =>
-    normalizeUsernameKey(entry.username) === normalizedUsername
-  );
-  for (const entry of matchingUsernameEntries) {
-    if (!entry?.id || seenIds.has(entry.id)) continue;
-    seenIds.add(entry.id);
-    const user = await readJson<UserRecord>(`users/${entry.id}.json`);
-    if (user && matchesIdentifier(user)) {
-      await upsertUserAuthLookups(user).catch(() => undefined);
-      return user;
+  const candidateById = new Map<string, UserRecord>();
+  const scannedIds = new Set<string>();
+
+  const considerUser = (candidate: UserRecord | null) => {
+    if (!candidate || !matchesIdentifier(candidate)) return;
+    candidateById.set(candidate.id, candidate);
+  };
+
+  const loadCandidateById = async (userId: string) => {
+    if (!userId || scannedIds.has(userId)) return;
+    scannedIds.add(userId);
+    const user = await readJson<UserRecord>(`users/${userId}.json`).catch(() => null);
+    considerUser(user);
+  };
+
+  const lookupCandidates = await Promise.all([
+    prefersEmail ? findUserIdByEmail(normalized) : Promise.resolve(null),
+    findUserIdByUsername(normalized)
+  ]);
+  for (const userId of lookupCandidates) {
+    if (userId) {
+      await loadCandidateById(userId);
     }
   }
 
-  if (normalized.includes('@')) {
-    for (const entry of indexUsers) {
-      if (!entry?.id || seenIds.has(entry.id)) continue;
-      seenIds.add(entry.id);
-      const user = await readJson<UserRecord>(`users/${entry.id}.json`);
-      if (user && matchesIdentifier(user)) {
-        await upsertUserAuthLookups(user).catch(() => undefined);
-        return user;
-      }
+  for (const entry of indexUsers) {
+    if (!entry?.id) continue;
+    if (prefersEmail || normalizeUsernameKey(entry.username) === normalizedUsername) {
+      await loadCandidateById(entry.id);
     }
   }
 
-  // Last-resort recovery: scan user records directly when both lookup and index are stale.
   const userPathnames = await listPathnames('users/').catch(() => [] as string[]);
   for (const pathname of userPathnames) {
-    if (!pathname.endsWith('.json')) continue;
+    if (!isUserJsonPath(pathname)) continue;
     const id = pathname.slice('users/'.length, -'.json'.length);
-    if (!id || seenIds.has(id)) continue;
-    seenIds.add(id);
-    const user = await readJson<UserRecord>(pathname);
-    if (user && matchesIdentifier(user)) {
-      await upsertUserAuthLookups(user).catch(() => undefined);
-      return user;
+    if (scannedIds.has(id)) continue;
+    scannedIds.add(id);
+    const user = await readJson<UserRecord>(pathname).catch(() => null);
+    considerUser(user);
+  }
+
+  const candidates = Array.from(candidateById.values());
+  if (candidates.length === 0) return null;
+
+  let chosen = candidates[0];
+  let bestScore = scoreUserCandidate(
+    chosen,
+    normalized,
+    normalizedEmail,
+    normalizedUsername,
+    prefersEmail,
+    indexedBuildingCounts.get(chosen.id) ?? 0
+  );
+
+  for (let i = 1; i < candidates.length; i++) {
+    const candidate = candidates[i];
+    const score = scoreUserCandidate(
+      candidate,
+      normalized,
+      normalizedEmail,
+      normalizedUsername,
+      prefersEmail,
+      indexedBuildingCounts.get(candidate.id) ?? 0
+    );
+    if (score > bestScore) {
+      chosen = candidate;
+      bestScore = score;
+      continue;
+    }
+    if (score === bestScore && candidate.id.localeCompare(chosen.id) < 0) {
+      chosen = candidate;
+      bestScore = score;
     }
   }
 
-  return null;
+  await upsertUserAuthLookups(chosen).catch(() => undefined);
+  return chosen;
 }
 
 export async function upsertUserAuthLookups(user: UserRecord): Promise<void> {
@@ -267,7 +329,9 @@ export async function upsertUserAuthLookups(user: UserRecord): Promise<void> {
 
   await Promise.all([
     writeJson(emailLookupPath(user.email), record),
-    writeJson(usernameLookupPath(user.username), record)
+    writeJson(usernameLookupPath(user.username), record),
+    writeJson(legacyEmailLookupPath(user.email), record),
+    writeJson(legacyUsernameLookupPath(user.username), record)
   ]);
 }
 
@@ -302,26 +366,24 @@ async function reserveLookupPath(pathname: string, userId: string) {
 
 export async function reserveUserAuthLookups(user: Pick<UserRecord, 'id' | 'email' | 'username'>): Promise<LookupReservationResult> {
   const reservedPathnames: string[] = [];
-  const emailPath = emailLookupPath(user.email);
-  const usernamePath = usernameLookupPath(user.username);
+  const lookupTargets: Array<{ pathname: string; conflict: 'email' | 'username' }> = [
+    { pathname: emailLookupPath(user.email), conflict: 'email' },
+    { pathname: legacyEmailLookupPath(user.email), conflict: 'email' },
+    { pathname: usernameLookupPath(user.username), conflict: 'username' },
+    { pathname: legacyUsernameLookupPath(user.username), conflict: 'username' }
+  ];
 
-  const emailReservation = await reserveLookupPath(emailPath, user.id);
-  if (emailReservation.status === 'conflict') {
-    return { ok: false, conflict: 'email', reservedPathnames };
-  }
-  if (emailReservation.status === 'reserved') {
-    reservedPathnames.push(emailPath);
-  }
-
-  const usernameReservation = await reserveLookupPath(usernamePath, user.id);
-  if (usernameReservation.status === 'conflict') {
-    if (reservedPathnames.length > 0) {
-      await Promise.all(reservedPathnames.map(pathname => deleteJson(pathname).catch(() => undefined)));
+  for (const target of lookupTargets) {
+    const reservation = await reserveLookupPath(target.pathname, user.id);
+    if (reservation.status === 'conflict') {
+      if (reservedPathnames.length > 0) {
+        await Promise.all(reservedPathnames.map(pathname => deleteJson(pathname).catch(() => undefined)));
+      }
+      return { ok: false, conflict: target.conflict, reservedPathnames: [] };
     }
-    return { ok: false, conflict: 'username', reservedPathnames: [] };
-  }
-  if (usernameReservation.status === 'reserved') {
-    reservedPathnames.push(usernamePath);
+    if (reservation.status === 'reserved') {
+      reservedPathnames.push(target.pathname);
+    }
   }
 
   return { ok: true, reservedPathnames };

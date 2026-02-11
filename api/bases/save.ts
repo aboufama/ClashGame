@@ -49,24 +49,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const normalizedIncoming = normalizeWorldInput(body.world, user.id, user.username);
-    if (!worldHasTownHall(normalizedIncoming)) {
-      console.warn('save blocked: incoming payload missing town hall', {
+    let normalizedIncoming = normalizeWorldInput(body.world, user.id, user.username);
+    const missingTownHall = !worldHasTownHall(normalizedIncoming);
+    const suspiciousDownsize = isSuspiciousDownsize(current.world.buildings.length, normalizedIncoming.buildings.length);
+    if (missingTownHall || suspiciousDownsize) {
+      console.warn('save payload normalized to preserve authoritative structures', {
         userId: user.id,
-        incomingCount: normalizedIncoming.buildings.length
-      });
-      sendJson(res, 409, { conflict: true, integrity: 'missing_town_hall', world: current.world });
-      return;
-    }
-
-    if (isSuspiciousDownsize(current.world.buildings.length, normalizedIncoming.buildings.length)) {
-      console.warn('save blocked: suspicious downsize detected', {
-        userId: user.id,
+        missingTownHall,
+        suspiciousDownsize,
         currentCount: current.world.buildings.length,
         incomingCount: normalizedIncoming.buildings.length
       });
-      sendJson(res, 409, { conflict: true, integrity: 'suspicious_downsize', world: current.world });
-      return;
+      normalizedIncoming = {
+        ...normalizedIncoming,
+        buildings: current.world.buildings,
+        obstacles: current.world.obstacles ?? [],
+        wallLevel: Math.max(1, Number(normalizedIncoming.wallLevel ?? current.world.wallLevel ?? 1) || 1)
+      };
     }
 
     const requestKey = body.requestId?.trim() || undefined;
