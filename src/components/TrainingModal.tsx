@@ -68,7 +68,7 @@ export function TrainingModal({
                 <span className="btn-label">ATTACK ONLINE</span>
               </button>
             )}
-            <button className="close-btn" onClick={onClose}>×</button>
+            <button className="close-btn training-close-btn" onClick={onClose}>×</button>
           </div>
         </div>
 
@@ -105,7 +105,8 @@ export function TrainingModal({
                   <div className={`icon ${t.id}-icon large`}></div>
                   <span className="name" style={{ fontSize: '0.7rem', fontWeight: 900 }}>{t.name}</span>
                   <div className="cost-badge">
-                    {formatSol(t.cost)}
+                    <span className="icon sol-icon"></span>
+                    {formatSol(t.cost, false, false)}
                   </div>
                   {!hasSpace && <div style={{ fontSize: '8px', color: '#ff4444', position: 'absolute', bottom: '2px' }}>NO SPACE</div>}
                 </div>

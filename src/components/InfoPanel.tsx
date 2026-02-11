@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BUILDING_DEFINITIONS, type BuildingType, getBuildingStats } from '../game/config/GameDefinitions';
 import { BUILDING_TEXTS } from '../game/config/GameText';
+import { formatSol } from '../game/solana/Currency';
 interface InfoPanelProps {
     type: BuildingType;
     level: number;
@@ -179,8 +180,9 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ type, level, resources, is
                         {isMaxLevel ? 'MAX LEVEL' : (
                             <>
                                 <span>UPGRADE</span>
-                                <span style={{ fontSize: '0.65rem', opacity: canAfford ? 1 : 0.7, color: canAfford ? '#14F195' : '#ff4444' }}>
-                                    {finalCost} SOL
+                                <span style={{ fontSize: '0.65rem', opacity: canAfford ? 1 : 0.7, color: canAfford ? '#14F195' : '#ff4444', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    <span className="icon sol-icon" style={{ width: '14px', height: '14px' }}></span>
+                                    {formatSol(finalCost, false, false)}
                                 </span>
                             </>
                         )}

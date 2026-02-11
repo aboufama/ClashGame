@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Backend } from '../game/backend/GameBackend';
+import { formatSol } from '../game/solana/Currency';
 
 interface Notification {
   id: string;
@@ -99,7 +100,10 @@ export function NotificationsPanel({ userId, isOnline }: NotificationsPanelProps
                 <div key={notif.id} className={`notification-item ${!notif.read ? 'unread' : ''}`}>
                   <div className="attacker">{notif.attackerName} raided you!</div>
                   <div className="loot-info">
-                    <span>-{solLost} SOL</span>
+                    <span className="loot-amount">
+                      <span className="icon sol-icon"></span>
+                      -{formatSol(solLost, false, false)}
+                    </span>
                     <span>{notif.destruction}% destroyed</span>
                   </div>
                   <div className="timestamp">{formatTimeAgo(notif.timestamp)}</div>

@@ -37,6 +37,15 @@
   align-items: center;
 }
 
+.pill {
+  border: 1px solid #5d6d93;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: #1e2d4a;
+  background: #f7f9ff;
+}
+
 .inline-switch {
   display: flex;
   align-items: center;
@@ -175,7 +184,9 @@
 
 .button-row button,
 .shape-list button,
-.shape-editor button {
+.shape-editor button,
+.poi-list button,
+.poi-editor button {
   border: 1px solid #5d6d93;
   border-radius: 7px;
   background: #f6f8ff;
@@ -185,7 +196,8 @@
 }
 
 .button-row button.active,
-.shape-list button.active {
+.shape-list button.active,
+.poi-list button.active {
   background: #2d3f66;
   color: #fff;
   border-color: #2d3f66;
@@ -235,6 +247,38 @@
 .shape-editor .danger {
   border-color: #ab4040;
   color: #8d1f1f;
+}
+
+.poi-editor .danger {
+  border-color: #ab4040;
+  color: #8d1f1f;
+}
+
+.panel-note {
+  font-size: 12px;
+  color: #314264;
+}
+
+.add-poi-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.poi-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 160px;
+  overflow: auto;
+}
+
+.poi-editor {
+  border-top: 1px solid rgba(36, 47, 72, 0.18);
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 @media (max-width: 1100px) {

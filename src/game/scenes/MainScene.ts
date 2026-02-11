@@ -1128,6 +1128,8 @@ export class MainScene extends Phaser.Scene {
     }
 
     private bakeBuildingToGround(b: PlacedBuilding) {
+        // Walls are fully dynamic (level + neighbor links), so they should never be baked.
+        if (b.type === 'wall') return;
         if (!this.groundRenderTexture || !this.tempGraphics) return;
         this.tempGraphics.clear();
         // Draw ONLY the base to temporary graphics
@@ -1138,6 +1140,7 @@ export class MainScene extends Phaser.Scene {
 
     // Call this before moving/deleting to restore grass
     private unbakeBuildingFromGround(b: PlacedBuilding) {
+        if (b.type === 'wall') return;
         if (!this.groundRenderTexture || !this.tempGraphics) return;
 
         const info = BUILDINGS[b.type];

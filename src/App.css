@@ -150,8 +150,8 @@
 }
 
 .res-item .icon {
-    width: 48px;
-    height: 48px;
+    width: 24px;
+    height: 24px;
 }
 
 
@@ -655,6 +655,13 @@ button:disabled {
     background: #333;
 }
 
+.training-close-btn {
+    width: 42px;
+    min-height: 72px;
+    padding: 0;
+    font-size: 16px;
+}
+
 .housing-status {
     font-size: 10px;
     margin-bottom: 12px;
@@ -777,17 +784,19 @@ button:disabled {
     display: block;
     width: 2px;
     height: 2px;
-    background: #14F195;
+    background: #33cc66;
     top: 7px;
     left: 7px;
     box-shadow:
-        0 -3px #0fbf75, 0 -2px #eafff6,
-        -1px -2px #9945FF, 0 -2px #8dfed4, 1px -2px #7b2ff2,
-        -2px -1px #0a6f43, -1px -1px #14F195, 0 -1px #c8ffee, 1px -1px #14F195, 2px -1px #0a6f43,
-        -3px 0 #3a1a6b, -2px 0 #14F195, -1px 0 #c8ffee, 0 0 #ffffff, 1px 0 #c8ffee, 2px 0 #14F195, 3px 0 #3a1a6b,
-        -2px 1px #3a1a6b, -1px 1px #7b2ff2, 0 1px #14F195, 1px 1px #7b2ff2, 2px 1px #3a1a6b,
-        -1px 2px #3a1a6b, 0 2px #0fbf75, 1px 2px #3a1a6b,
-        0 3px #2a114d;
+        /* cap */
+        -1px -3px #d8b07a, 0 -3px #c69352, 1px -3px #a9793d,
+        /* glass neck */
+        -1px -2px #97f2a6, 0 -2px #7be28d, 1px -2px #66c97a,
+        /* bottle body */
+        -2px -1px #1f7a3a, -1px -1px #33cc66, 0 -1px #7ff0a2, 1px -1px #33cc66, 2px -1px #1f7a3a,
+        -2px 0 #1f7a3a, -1px 0 #2fb85f, 0 0 #a8ffd0, 1px 0 #2fb85f, 2px 0 #1f7a3a,
+        -2px 1px #1f7a3a, -1px 1px #29a856, 0 1px #7be28d, 1px 1px #29a856, 2px 1px #1f7a3a,
+        -1px 2px #1f7a3a, 0 2px #2b9a4f, 1px 2px #1f7a3a;
 }
 
 
@@ -903,6 +912,17 @@ button:disabled {
     font-size: 10px;
     color: var(--fantasy-gold);
     text-shadow: 2px 2px 0 #000;
+}
+
+.battle-resource-value {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.battle-resource-value .icon {
+    width: 16px;
+    height: 16px;
 }
 
 .battle-stat-value.destruction {
@@ -1192,8 +1212,8 @@ button:disabled {
 }
 
 .loot-item .icon {
-    width: 48px;
-    height: 48px;
+    width: 20px;
+    height: 20px;
 }
 
 /* Simple Square Cloud Transition */
@@ -1250,6 +1270,45 @@ button:disabled {
     font-size: 10px;
     color: #1a1a1a;
     letter-spacing: 0.8px;
+}
+
+.cloud-reward-panel {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 18px 24px;
+    background: rgba(8, 17, 28, 0.82);
+    border: 3px solid #2f445b;
+    box-shadow:
+        4px 4px 0 rgba(0, 0, 0, 0.35),
+        inset 1px 1px 0 rgba(255, 255, 255, 0.2);
+    z-index: 4;
+}
+
+.cloud-reward-label {
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: #d7e2ef;
+    text-shadow: 1px 1px 0 #000;
+}
+
+.cloud-reward-value {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: #8ff6ad;
+    text-shadow: 1px 1px 0 #000;
+}
+
+.cloud-reward-value .icon {
+    width: 20px;
+    height: 20px;
 }
 
 /* Left cloud - solid white square */
@@ -1425,6 +1484,8 @@ button:disabled {
         3px 3px 0 #2A2A2A,
         inset 2px 2px 0 #7A7A7A;
     transition: none;
+    min-height: 72px;
+    justify-content: center;
 }
 
 .raid-btn:hover {
@@ -1455,7 +1516,7 @@ button:disabled {
 .header-actions {
     display: flex;
     gap: 8px;
-    align-items: center;
+    align-items: stretch;
 }
 
 /* Troop Selector */
@@ -1927,6 +1988,11 @@ body.is-touch {
         padding: 6px 8px;
     }
 
+    .attack-online-btn,
+    .training-close-btn {
+        min-height: 60px;
+    }
+
     /* Settings modal */
     .settings-modal {
         max-width: 95vw;
@@ -2075,10 +2141,10 @@ body.is-touch {
 
 .notifications-btn {
     background: var(--panel-accent);
-    border: 2px solid var(--panel-border);
+    border: 3px solid var(--panel-border);
     color: var(--text-primary);
-    width: 40px;
-    height: 40px;
+    width: 48px;
+    height: 48px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2092,7 +2158,7 @@ body.is-touch {
 }
 
 .notifications-btn .bell-icon {
-    font-size: 16px;
+    font-size: 20px;
 }
 
 .notification-badge {
@@ -2182,6 +2248,17 @@ body.is-touch {
     margin-bottom: 4px;
 }
 
+.notification-item .loot-info .loot-amount {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.notification-item .loot-info .loot-amount .icon {
+    width: 12px;
+    height: 12px;
+}
+
 .notification-item .timestamp {
     font-size: 7px;
     color: #666;
@@ -2218,7 +2295,9 @@ body.is-touch {
     box-shadow: 0 4px 0 #661111;
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
+    min-height: 72px;
 }
 
 .attack-online-btn:hover:not(:disabled) {
@@ -2270,8 +2349,8 @@ body.is-touch {
 .leaderboard-btn {
     background: var(--panel-bg);
     border: 3px solid var(--panel-border);
-    width: 40px;
-    height: 40px;
+    width: 48px;
+    height: 48px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2290,7 +2369,7 @@ body.is-touch {
 }
 
 .leaderboard-icon {
-    font-size: 18px;
+    font-size: 20px;
 }
 
 .leaderboard-backdrop {

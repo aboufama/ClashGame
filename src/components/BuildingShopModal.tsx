@@ -59,7 +59,8 @@ export function BuildingShopModal({
                   <span className="name">{name}</span>
                   <span className="desc-text" style={{ fontSize: '10px', color: '#aaa', display: 'block', marginBottom: '4px' }}>{b.desc}</span>
                   <div className="cost-badge">
-                    {formatSol(cost)}
+                    <span className="icon sol-icon"></span>
+                    {formatSol(cost, false, false)}
                   </div>
                 </div>
               );

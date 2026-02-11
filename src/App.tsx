@@ -39,6 +39,7 @@ function App() {
   const [cloudOpening, setCloudOpening] = useState(false);
   const [cloudOverlayLoading, setCloudOverlayLoading] = useState(true);
   const [cloudLoadingProgress, setCloudLoadingProgress] = useState(4);
+  const [cloudTransitionReward, setCloudTransitionReward] = useState<number | null>(null);
   const cloudOpenTimerRef = useRef<number | null>(null);
   const cloudHideTimerRef = useRef<number | null>(null);
   const [resources, setResources] = useState({ sol: 0 });
@@ -149,6 +150,7 @@ function App() {
     setCloudOpening(false);
     setCloudOverlayLoading(true);
     setCloudLoadingProgress(Math.max(0, Math.min(100, Math.floor(progress))));
+    setCloudTransitionReward(null);
     setShowCloudOverlay(true);
   }, [clearCloudTimers]);
 
@@ -422,6 +424,7 @@ function App() {
         cloudHideTimerRef.current = window.setTimeout(() => {
           setShowCloudOverlay(false);
           setCloudOpening(false);
+          setCloudTransitionReward(null);
         }, 600); // Match CSS animation duration
       },
       addSol: (amount: number) => {
@@ -491,6 +494,7 @@ function App() {
         const scene = gameRef.current?.scene.getScene('MainScene') as any;
         const enemyWorld = scene?.currentEnemyWorld;
         const destruction = battleStatsRef.current.destruction;
+        let lootWon = Math.max(0, solLooted);
 
         if (enemyWorld && isOnline && !enemyWorld.isBot && enemyWorld.id !== 'practice') {
           const result = await Backend.recordAttack(
@@ -509,14 +513,20 @@ function App() {
           }
           if (lootApplied !== null) {
             setBattleStats(prev => ({ ...prev, solLooted: lootApplied }));
+            lootWon = Math.max(0, lootApplied);
+          } else {
+            lootWon = 0;
           }
         } else {
-          await applySolDelta(solLooted, 'battle_loot');
+          const delta = await applySolDelta(solLooted, 'battle_loot');
+          if (!delta.applied) {
+            lootWon = 0;
+          }
         }
 
         // Auto-trigger "Return Home" flow on raid end
         setShowBattleResults(false);
-        transitionHome();
+        transitionHome(lootWon);
       },
       getArmy: () => armyRef.current,
       getSelectedTroopType: () => selectedTroopTypeRef.current,
@@ -711,7 +721,8 @@ function App() {
     setCapacity(prev => ({ ...prev, current: prev.current - space }));
   };
 
-  const transitionHome = useCallback(() => {
+  const transitionHome = useCallback((rewardAmount: number = 0) => {
+    setCloudTransitionReward(rewardAmount > 0 ? Math.floor(rewardAmount) : null);
     const scene = gameRef.current?.scene.getScene('MainScene') as any;
     if (scene) {
       scene.showCloudTransition(async () => {
@@ -721,6 +732,7 @@ function App() {
         await scene.goHome();
       });
     } else {
+      setCloudTransitionReward(null);
       setView('HOME');
       setSelectedInMap(null);
       setScoutTarget(null);
@@ -788,7 +800,7 @@ function App() {
   const handleAttackScouted = () => {
     if (!scoutTarget) return;
     if (capacity.current === 0) {
-      alert('Train some troops first!');
+      setIsTrainingOpen(true);
       return;
     }
     const { userId, username } = scoutTarget;
@@ -798,7 +810,7 @@ function App() {
 
   const handleBattleResultsGoHome = () => {
     setShowBattleResults(false);
-    transitionHome();
+    transitionHome(Math.max(0, battleStatsRef.current.solLooted));
   };
 
 
@@ -938,6 +950,7 @@ function App() {
         wallUpgradeCostOverride={wallUpgradeCostOverride}
         showCloudOverlay={showCloudOverlay}
         isMobile={isMobile}
+        isScouting={Boolean(scoutTarget)}
         onOpenSettings={() => setIsAccountOpen(true)}
         onOpenBuild={() => setIsBuildingOpen(true)}
         onOpenTrain={() => setIsTrainingOpen(true)}
@@ -1028,6 +1041,7 @@ function App() {
         opening={cloudOpening}
         loading={cloudOverlayLoading}
         loadingProgress={cloudLoadingProgress}
+        rewardAmount={cloudTransitionReward}
       />
 
       <BattleResultsModal

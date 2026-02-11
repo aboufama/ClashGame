@@ -24,9 +24,10 @@ export function BattleResultsModal({ isOpen, stats, onGoHome }: BattleResultsMod
             <span className="battle-stat-value destruction">{stats.destruction}%</span>
           </div>
           <div className="battle-stat">
-            <span className="battle-stat-label">SOL LOOTED:</span>
-            <span className="battle-stat-value">
-              {formatSol(stats.solLooted)}
+            <span className="battle-stat-label">LOOT GAINED:</span>
+            <span className="battle-stat-value battle-resource-value">
+              <span className="icon sol-icon"></span>
+              {formatSol(stats.solLooted, false, false)}
             </span>
           </div>
         </div>

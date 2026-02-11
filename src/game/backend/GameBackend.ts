@@ -531,22 +531,381 @@ export class Backend {
   }
 
   static async generateEnemyWorld(): Promise<SerializedWorld> {
-    const cx = 11;
-    const cy = 11;
-    const buildings: SerializedBuilding[] = [
-      { id: randomId(), type: 'town_hall', gridX: cx, gridY: cy, level: 1 },
-      { id: randomId(), type: 'cannon', gridX: cx - 4, gridY: cy, level: 1 },
-      { id: randomId(), type: 'cannon', gridX: cx + 4, gridY: cy + 1, level: 1 },
-      { id: randomId(), type: 'barracks', gridX: cx + 2, gridY: cy - 4, level: 1 },
-      { id: randomId(), type: 'solana_collector', gridX: cx - 2, gridY: cy + 4, level: 1 }
+    const mapSize = 25;
+    const margin = 1;
+    const centerX = Math.floor(mapSize / 2);
+    const centerY = Math.floor(mapSize / 2);
+
+    const randInt = (min: number, max: number) => {
+      const lo = Math.ceil(Math.min(min, max));
+      const hi = Math.floor(Math.max(min, max));
+      return lo + Math.floor(Math.random() * (hi - lo + 1));
+    };
+
+    const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+    const tileKey = (x: number, y: number) => `${x},${y}`;
+
+    type Tier = 'outpost' | 'stronghold' | 'fortress';
+    type RingConfig = { min: number; max: number };
+    type CountConfig = { min: number; max: number };
+    type ZoneConfig = { minRadius: number; maxRadius: number };
+
+    type TierProfile = {
+      name: string;
+      rings: RingConfig;
+      dividers: CountConfig;
+      miniCompartments: CountConfig;
+      collectors: CountConfig;
+      barracks: CountConfig;
+      camps: CountConfig;
+      defenses: Partial<Record<BuildingType, CountConfig>>;
+      wallBaseLevel: number;
+      lootBase: number;
+      lootVariance: number;
+    };
+
+    const tierRoll = Math.random();
+    const tier: Tier = tierRoll < 0.26 ? 'fortress' : tierRoll < 0.7 ? 'stronghold' : 'outpost';
+
+    const profiles: Record<Tier, TierProfile> = {
+      outpost: {
+        name: 'Bot Outpost',
+        rings: { min: 2, max: 3 },
+        dividers: { min: 1, max: 3 },
+        miniCompartments: { min: 1, max: 2 },
+        collectors: { min: 4, max: 8 },
+        barracks: { min: 1, max: 2 },
+        camps: { min: 1, max: 2 },
+        defenses: {
+          cannon: { min: 2, max: 4 },
+          mortar: { min: 1, max: 2 },
+          tesla: { min: 1, max: 2 },
+          ballista: { min: 0, max: 1 },
+          xbow: { min: 0, max: 1 },
+          spike_launcher: { min: 0, max: 1 },
+          prism: { min: 0, max: 1 },
+          magmavent: { min: 0, max: 0 },
+          dragons_breath: { min: 0, max: 0 }
+        },
+        wallBaseLevel: 1,
+        lootBase: 14000,
+        lootVariance: 15000
+      },
+      stronghold: {
+        name: 'Bot Stronghold',
+        rings: { min: 3, max: 4 },
+        dividers: { min: 3, max: 6 },
+        miniCompartments: { min: 2, max: 4 },
+        collectors: { min: 7, max: 12 },
+        barracks: { min: 2, max: 3 },
+        camps: { min: 2, max: 3 },
+        defenses: {
+          cannon: { min: 4, max: 5 },
+          mortar: { min: 2, max: 3 },
+          tesla: { min: 2, max: 3 },
+          ballista: { min: 1, max: 2 },
+          xbow: { min: 1, max: 2 },
+          spike_launcher: { min: 1, max: 2 },
+          prism: { min: 1, max: 1 },
+          magmavent: { min: 0, max: 1 },
+          dragons_breath: { min: 0, max: 1 }
+        },
+        wallBaseLevel: 2,
+        lootBase: 30000,
+        lootVariance: 35000
+      },
+      fortress: {
+        name: 'Bot Fortress',
+        rings: { min: 4, max: 6 },
+        dividers: { min: 6, max: 9 },
+        miniCompartments: { min: 4, max: 6 },
+        collectors: { min: 10, max: 16 },
+        barracks: { min: 3, max: 4 },
+        camps: { min: 3, max: 4 },
+        defenses: {
+          cannon: { min: 5, max: 5 },
+          mortar: { min: 3, max: 3 },
+          tesla: { min: 3, max: 3 },
+          ballista: { min: 2, max: 2 },
+          xbow: { min: 2, max: 2 },
+          spike_launcher: { min: 2, max: 2 },
+          prism: { min: 1, max: 1 },
+          magmavent: { min: 1, max: 1 },
+          dragons_breath: { min: 1, max: 1 }
+        },
+        wallBaseLevel: 3,
+        lootBase: 65000,
+        lootVariance: 90000
+      }
+    };
+
+    const profile = profiles[tier];
+    const buildings: SerializedBuilding[] = [];
+    const occupied = new Set<string>();
+    const wallAt = new Map<string, number>();
+
+    const inBounds = (x: number, y: number, width: number, height: number) => {
+      return x >= margin && y >= margin && x + width <= mapSize - margin && y + height <= mapSize - margin;
+    };
+
+    const canPlaceRect = (x: number, y: number, width: number, height: number) => {
+      for (let dx = 0; dx < width; dx++) {
+        for (let dy = 0; dy < height; dy++) {
+          if (occupied.has(tileKey(x + dx, y + dy))) return false;
+        }
+      }
+      return true;
+    };
+
+    const occupyRect = (x: number, y: number, width: number, height: number) => {
+      for (let dx = 0; dx < width; dx++) {
+        for (let dy = 0; dy < height; dy++) {
+          occupied.add(tileKey(x + dx, y + dy));
+        }
+      }
+    };
+
+    const placeBuilding = (type: BuildingType, x: number, y: number, level: number): boolean => {
+      const definition = BUILDING_DEFINITIONS[type];
+      const maxLevel = definition.maxLevel ?? 1;
+      const normalizedLevel = clamp(level, 1, maxLevel);
+
+      if (type === 'wall') {
+        const key = tileKey(x, y);
+        const existing = wallAt.get(key);
+        if (existing !== undefined) {
+          buildings[existing].level = Math.max(buildings[existing].level, normalizedLevel);
+          return true;
+        }
+      }
+
+      if (!inBounds(x, y, definition.width, definition.height)) return false;
+      if (!canPlaceRect(x, y, definition.width, definition.height)) return false;
+
+      const idx = buildings.push({
+        id: randomId(),
+        type,
+        gridX: x,
+        gridY: y,
+        level: normalizedLevel
+      }) - 1;
+
+      occupyRect(x, y, definition.width, definition.height);
+      if (type === 'wall') {
+        wallAt.set(tileKey(x, y), idx);
+      }
+      return true;
+    };
+
+    const distanceToCenter = (x: number, y: number, width: number, height: number) => {
+      const px = x + width / 2;
+      const py = y + height / 2;
+      return Math.hypot(px - centerX, py - centerY);
+    };
+
+    const tryPlaceInZone = (
+      type: BuildingType,
+      zone: ZoneConfig,
+      levelMin: number,
+      levelMax: number,
+      attempts = 240
+    ) => {
+      const definition = BUILDING_DEFINITIONS[type];
+      for (let i = 0; i < attempts; i++) {
+        const x = randInt(margin, mapSize - margin - definition.width);
+        const y = randInt(margin, mapSize - margin - definition.height);
+        const dist = distanceToCenter(x, y, definition.width, definition.height);
+        if (dist < zone.minRadius || dist > zone.maxRadius) continue;
+        if (placeBuilding(type, x, y, randInt(levelMin, levelMax))) return true;
+      }
+      return false;
+    };
+
+    const placeCountInZone = (
+      type: BuildingType,
+      count: number,
+      zone: ZoneConfig,
+      levelMin: number,
+      levelMax: number
+    ) => {
+      let placed = 0;
+      for (let i = 0; i < count; i++) {
+        if (tryPlaceInZone(type, zone, levelMin, levelMax)) {
+          placed++;
+        }
+      }
+      return placed;
+    };
+
+    const ringWalls = (
+      minX: number,
+      minY: number,
+      maxX: number,
+      maxY: number,
+      levelBase: number,
+      gateCount: number
+    ) => {
+      if (minX >= maxX || minY >= maxY) return;
+
+      const gates = new Set<string>();
+      const edgePickers = [
+        () => [randInt(minX + 1, maxX - 1), minY] as const,
+        () => [randInt(minX + 1, maxX - 1), maxY] as const,
+        () => [minX, randInt(minY + 1, maxY - 1)] as const,
+        () => [maxX, randInt(minY + 1, maxY - 1)] as const
+      ];
+
+      for (let i = 0; i < gateCount; i++) {
+        const picker = edgePickers[randInt(0, edgePickers.length - 1)];
+        const [gx, gy] = picker();
+        gates.add(tileKey(gx, gy));
+      }
+
+      for (let x = minX; x <= maxX; x++) {
+        for (const y of [minY, maxY]) {
+          if (gates.has(tileKey(x, y))) continue;
+          const levelJitter = randInt(-1, 1);
+          placeBuilding('wall', x, y, clamp(levelBase + levelJitter, 1, 3));
+        }
+      }
+      for (let y = minY + 1; y <= maxY - 1; y++) {
+        for (const x of [minX, maxX]) {
+          if (gates.has(tileKey(x, y))) continue;
+          const levelJitter = randInt(-1, 1);
+          placeBuilding('wall', x, y, clamp(levelBase + levelJitter, 1, 3));
+        }
+      }
+    };
+
+    const addDivider = (bounds: { minX: number; minY: number; maxX: number; maxY: number }, levelBase: number) => {
+      const vertical = Math.random() < 0.5;
+      if (vertical) {
+        const x = randInt(bounds.minX + 2, bounds.maxX - 2);
+        const gapY = randInt(bounds.minY + 2, bounds.maxY - 2);
+        for (let y = bounds.minY + 1; y <= bounds.maxY - 1; y++) {
+          if (Math.abs(y - gapY) <= 1) continue;
+          placeBuilding('wall', x, y, clamp(levelBase + randInt(-1, 1), 1, 3));
+        }
+      } else {
+        const y = randInt(bounds.minY + 2, bounds.maxY - 2);
+        const gapX = randInt(bounds.minX + 2, bounds.maxX - 2);
+        for (let x = bounds.minX + 1; x <= bounds.maxX - 1; x++) {
+          if (Math.abs(x - gapX) <= 1) continue;
+          placeBuilding('wall', x, y, clamp(levelBase + randInt(-1, 1), 1, 3));
+        }
+      }
+    };
+
+    const townHallDef = BUILDING_DEFINITIONS.town_hall;
+    const townHallX = centerX - Math.floor(townHallDef.width / 2);
+    const townHallY = centerY - Math.floor(townHallDef.height / 2);
+    placeBuilding('town_hall', townHallX, townHallY, 1);
+
+    const ringCount = randInt(profile.rings.min, profile.rings.max);
+    let outerBounds = {
+      minX: townHallX - 2,
+      minY: townHallY - 2,
+      maxX: townHallX + townHallDef.width + 1,
+      maxY: townHallY + townHallDef.height + 1
+    };
+
+    for (let ring = 0; ring < ringCount; ring++) {
+      const extraX = 2 + ring * 2 + randInt(0, 1);
+      const extraY = 2 + ring * 2 + randInt(0, 1);
+      const jitterX = randInt(-1, 1);
+      const jitterY = randInt(-1, 1);
+      const minX = clamp(townHallX - extraX + jitterX, margin, mapSize - margin - 2);
+      const minY = clamp(townHallY - extraY + jitterY, margin, mapSize - margin - 2);
+      const maxX = clamp(townHallX + townHallDef.width + extraX + jitterX, minX + 2, mapSize - margin - 1);
+      const maxY = clamp(townHallY + townHallDef.height + extraY + jitterY, minY + 2, mapSize - margin - 1);
+      const ringLevel = clamp(profile.wallBaseLevel - Math.floor(ring / 2), 1, 3);
+      const gates = clamp(1 + Math.floor(ring / 2) + randInt(0, 1), 1, 4);
+      ringWalls(minX, minY, maxX, maxY, ringLevel, gates);
+      outerBounds = { minX, minY, maxX, maxY };
+    }
+
+    const dividerCount = randInt(profile.dividers.min, profile.dividers.max);
+    for (let i = 0; i < dividerCount; i++) {
+      addDivider(outerBounds, profile.wallBaseLevel);
+    }
+
+    const miniCount = randInt(profile.miniCompartments.min, profile.miniCompartments.max);
+    for (let i = 0; i < miniCount; i++) {
+      const width = randInt(3, 5);
+      const height = randInt(3, 5);
+      const minX = clamp(randInt(outerBounds.minX + 1, outerBounds.maxX - width - 1), margin, mapSize - margin - width);
+      const minY = clamp(randInt(outerBounds.minY + 1, outerBounds.maxY - height - 1), margin, mapSize - margin - height);
+      ringWalls(minX, minY, minX + width, minY + height, clamp(profile.wallBaseLevel - 1, 1, 3), 1);
+    }
+
+    const zones: Record<'core' | 'inner' | 'mid' | 'outer', ZoneConfig> = {
+      core: { minRadius: 0, maxRadius: 5.8 },
+      inner: { minRadius: 3.5, maxRadius: 8.5 },
+      mid: { minRadius: 6.5, maxRadius: 11.8 },
+      outer: { minRadius: 10, maxRadius: 16.5 }
+    };
+
+    const defenseOrder: Array<{ type: BuildingType; zone: keyof typeof zones; levelBias: [number, number] }> = [
+      { type: 'dragons_breath', zone: 'core', levelBias: [1, 1] },
+      { type: 'magmavent', zone: 'inner', levelBias: [1, 2] },
+      { type: 'prism', zone: 'inner', levelBias: [1, 1] },
+      { type: 'xbow', zone: 'inner', levelBias: [1, 2] },
+      { type: 'ballista', zone: 'mid', levelBias: [1, 2] },
+      { type: 'mortar', zone: 'mid', levelBias: [1, 3] },
+      { type: 'spike_launcher', zone: 'mid', levelBias: [1, 1] },
+      { type: 'tesla', zone: 'outer', levelBias: [1, 2] },
+      { type: 'cannon', zone: 'outer', levelBias: [1, 4] }
     ];
+
+    for (const { type, zone, levelBias } of defenseOrder) {
+      const requested = profile.defenses[type];
+      if (!requested) continue;
+      const maxCount = BUILDING_DEFINITIONS[type].maxCount;
+      const count = clamp(randInt(requested.min, requested.max), 0, maxCount);
+      const defMax = BUILDING_DEFINITIONS[type].maxLevel ?? 1;
+
+      const minLevelByTier =
+        tier === 'fortress' ? Math.max(1, Math.min(levelBias[0] + 1, defMax)) :
+        tier === 'stronghold' ? Math.max(1, Math.min(levelBias[0], defMax)) :
+        1;
+      const maxLevelByTier =
+        tier === 'fortress' ? defMax :
+        tier === 'stronghold' ? Math.max(1, defMax - (Math.random() < 0.25 ? 1 : 0)) :
+        Math.max(1, Math.min(defMax, levelBias[1]));
+
+      placeCountInZone(type, count, zones[zone], minLevelByTier, maxLevelByTier);
+    }
+
+    const collectorCount = clamp(randInt(profile.collectors.min, profile.collectors.max), 0, BUILDING_DEFINITIONS.solana_collector.maxCount);
+    const barracksCount = clamp(randInt(profile.barracks.min, profile.barracks.max), 1, BUILDING_DEFINITIONS.barracks.maxCount);
+    const campCount = clamp(randInt(profile.camps.min, profile.camps.max), 1, BUILDING_DEFINITIONS.army_camp.maxCount);
+
+    placeCountInZone('solana_collector', collectorCount, zones.outer, 1, 2);
+    placeCountInZone('barracks', barracksCount, zones.outer, 1, 1);
+    placeCountInZone('army_camp', campCount, zones.outer, tier === 'fortress' ? 2 : 1, tier === 'fortress' ? 3 : 2);
+
+    // Fill remaining space with extra perimeter walls for tougher pathing on stronger tiers.
+    const extraWallBudget = tier === 'fortress' ? 24 : tier === 'stronghold' ? 16 : 8;
+    for (let i = 0; i < extraWallBudget; i++) {
+      const x = randInt(margin, mapSize - margin - 1);
+      const y = randInt(margin, mapSize - margin - 1);
+      const dist = Math.hypot(x - centerX, y - centerY);
+      if (dist < 5 || dist > 17) continue;
+      placeBuilding('wall', x, y, clamp(profile.wallBaseLevel + randInt(-1, 0), 1, 3));
+    }
+
+    const resourceSol = Math.floor(
+      profile.lootBase +
+      profile.lootVariance * Math.random() +
+      buildings.length * (tier === 'fortress' ? 320 : tier === 'stronghold' ? 250 : 180)
+    );
 
     return {
       id: `bot_${randomId('world_')}`,
       ownerId: 'bot',
-      username: 'Bot Base',
+      username: profile.name,
       buildings,
-      resources: { sol: Math.floor(5000 + Math.random() * 10000) },
+      resources: { sol: resourceSol },
       lastSaveTime: Date.now(),
       revision: 1
     };

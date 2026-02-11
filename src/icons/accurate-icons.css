@@ -578,7 +578,7 @@
         -6px 6px #4A3A2A, 6px 6px #4A3A2A;
 }
 
-/* SOL COIN - Solana-inspired token */
+/* RESOURCE ICON - Green juice vial */
 .sol-icon {
     position: relative !important;
     overflow: hidden;
@@ -589,27 +589,25 @@
     position: absolute;
     width: 2px;
     height: 2px;
-    background: #14F195;
+    background: #33cc66;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     box-shadow:
-        /* Top edge highlight */
-        -2px -10px #b7ffe9, 0 -10px #ffffff, 2px -10px #b7ffe9,
-        -4px -8px #14F195, -2px -8px #b7ffe9, 0 -8px #ffffff, 2px -8px #b7ffe9, 4px -8px #14F195,
-        /* Upper body */
-        -6px -6px #0fbf75, -4px -6px #14F195, -2px -6px #b7ffe9, 0 -6px #ffffff, 2px -6px #b7ffe9, 4px -6px #14F195, 6px -6px #0fbf75,
-        -8px -4px #3a1a6b, -6px -4px #0fbf75, -4px -4px #14F195, -2px -4px #b7ffe9, 0 -4px #ffffff, 2px -4px #14F195, 4px -4px #14F195, 6px -4px #0fbf75, 8px -4px #3a1a6b,
-        /* Center band */
-        -8px -2px #3a1a6b, -6px -2px #0fbf75, -4px -2px #14F195, -2px -2px #9945FF, 0 -2px #14F195, 2px -2px #14F195, 4px -2px #14F195, 6px -2px #0fbf75, 8px -2px #3a1a6b,
-        -10px 0 #2a114d, -8px 0 #3a1a6b, -6px 0 #0fbf75, -4px 0 #2a114d, -2px 0 #2a114d, 0 0 #14F195, 2px 0 #2a114d, 4px 0 #14F195, 6px 0 #0fbf75, 8px 0 #3a1a6b, 10px 0 #2a114d,
-        -8px 2px #3a1a6b, -6px 2px #0fbf75, -4px 2px #14F195, -2px 2px #14F195, 0 2px #14F195, 2px 2px #2a114d, 4px 2px #14F195, 6px 2px #0fbf75, 8px 2px #3a1a6b,
-        /* Lower body */
-        -8px 4px #2a114d, -6px 4px #3a1a6b, -4px 4px #0fbf75, -2px 4px #14F195, 0 4px #14F195, 2px 4px #14F195, 4px 4px #0fbf75, 6px 4px #3a1a6b, 8px 4px #2a114d,
-        -6px 6px #2a114d, -4px 6px #3a1a6b, -2px 6px #0fbf75, 0 6px #0fbf75, 2px 6px #0fbf75, 4px 6px #3a1a6b, 6px 6px #2a114d,
-        /* Bottom edge */
-        -4px 8px #2a114d, -2px 8px #3a1a6b, 0 8px #0fbf75, 2px 8px #3a1a6b, 4px 8px #2a114d,
-        -2px 10px #2a114d, 0 10px #3a1a6b, 2px 10px #2a114d;
+        /* cork cap */
+        -2px -10px #8a6038, 0 -10px #b78654, 2px -10px #8a6038,
+        -2px -8px #b78654, 0 -8px #d6a273, 2px -8px #b78654,
+        /* neck */
+        -2px -6px #8de4a2, 0 -6px #aef4be, 2px -6px #8de4a2,
+        -2px -4px #63c67f, 0 -4px #7de095, 2px -4px #63c67f,
+        /* bottle body */
+        -6px -2px #1f6e38, -4px -2px #2d9950, -2px -2px #33cc66, 0 -2px #8af3ac, 2px -2px #33cc66, 4px -2px #2d9950, 6px -2px #1f6e38,
+        -8px 0 #194f2b, -6px 0 #1f6e38, -4px 0 #2d9950, -2px 0 #4fda81, 0 0 #bcffd2, 2px 0 #4fda81, 4px 0 #2d9950, 6px 0 #1f6e38, 8px 0 #194f2b,
+        -8px 2px #194f2b, -6px 2px #1f6e38, -4px 2px #2d9950, -2px 2px #42c972, 0 2px #8af3ac, 2px 2px #42c972, 4px 2px #2d9950, 6px 2px #1f6e38, 8px 2px #194f2b,
+        -8px 4px #143f23, -6px 4px #194f2b, -4px 4px #1f6e38, -2px 4px #2d9950, 0 4px #63c67f, 2px 4px #2d9950, 4px 4px #1f6e38, 6px 4px #194f2b, 8px 4px #143f23,
+        /* base shine and shadow */
+        -4px 6px #194f2b, -2px 6px #1f6e38, 0 6px #2d9950, 2px 6px #1f6e38, 4px 6px #194f2b,
+        -2px 8px #143f23, 0 8px #194f2b, 2px 8px #143f23;
 }
 
 /* GOLD COIN - Detailed shiny coin with $ symbol */

@@ -23,6 +23,7 @@ interface HudProps {
   wallUpgradeCostOverride?: number;
   showCloudOverlay: boolean;
   isMobile: boolean;
+  isScouting: boolean;
   onOpenSettings: () => void;
   onOpenBuild: () => void;
   onOpenTrain: () => void;
@@ -49,6 +50,7 @@ export function Hud({
   wallUpgradeCostOverride,
   showCloudOverlay,
   isMobile,
+  isScouting,
   onOpenSettings,
   onOpenBuild,
   onOpenTrain,
@@ -68,6 +70,7 @@ export function Hud({
     const def = TROOP_DEFINITIONS[type as TroopType];
     return def?.name || type;
   };
+  const showAttackTroopBar = !(isScouting && visibleTroops.length === 0);
 
   return (
     <div className={`hud ${showCloudOverlay ? 'hidden-ui' : ''} ${isMobile ? 'mobile' : ''}`}>
@@ -76,7 +79,8 @@ export function Hud({
           <>
             <div className="resources">
               <div className="res-item sol">
-                {formatSol(resources.sol, isMobile)}
+                <span className="icon sol-icon" />
+                <span>{formatSol(resources.sol, isMobile, false)}</span>
               </div>
             </div>
             <button className="settings-btn" onClick={onOpenSettings}>
@@ -97,7 +101,8 @@ export function Hud({
                 </div>
                 <div className="loot-display">
                   <div className="loot-item sol">
-                    <span>+{formatSol(battleStats.solLooted, isMobile)}</span>
+                    <span className="icon sol-icon" />
+                    <span>+{formatSol(battleStats.solLooted, isMobile, false)}</span>
                   </div>
                 </div>
               </>
@@ -121,8 +126,9 @@ export function Hud({
         />
       )}
 
-      <div className="build-menu">
-        {view === 'HOME' ? (
+      {(view === 'HOME' || showAttackTroopBar) && (
+        <div className="build-menu">
+          {view === 'HOME' ? (
           <div className="menu-inner">
             <div className="btn-group main-actions">
               <button className="action-btn build" onClick={onOpenBuild}>
@@ -135,30 +141,31 @@ export function Hud({
               </button>
             </div>
           </div>
-        ) : (
-          <div className="menu-inner raid">
-            <div className={`troop-selector ${isMobile ? 'mobile-troop-selector' : ''}`}>
-              {visibleTroops.map(t => {
-                const count = army[t];
-                return (
-                  <button
-                    key={t}
-                    className={`troop-sel-btn ${t} ${selectedTroopType === t ? 'active' : ''} ${count <= 0 ? 'disabled' : ''}`}
-                    disabled={count <= 0}
-                    onClick={() => count > 0 && onSelectTroop(t)}
-                  >
-                    <div className={`icon ${t}-icon`}></div>
-                    <span className="troop-count-badge">{count}</span>
-                    {isMobile && selectedTroopType === t && (
-                      <span className="mobile-troop-name">{getTroopName(t)}</span>
-                    )}
-                  </button>
-                );
-              })}
+          ) : (
+            <div className="menu-inner raid">
+              <div className={`troop-selector ${isMobile ? 'mobile-troop-selector' : ''}`}>
+                {visibleTroops.map(t => {
+                  const count = army[t];
+                  return (
+                    <button
+                      key={t}
+                      className={`troop-sel-btn ${t} ${selectedTroopType === t ? 'active' : ''} ${count <= 0 ? 'disabled' : ''}`}
+                      disabled={count <= 0}
+                      onClick={() => count > 0 && onSelectTroop(t)}
+                    >
+                      <div className={`icon ${t}-icon`}></div>
+                      <span className="troop-count-badge">{count}</span>
+                      {isMobile && selectedTroopType === t && (
+                        <span className="mobile-troop-name">{getTroopName(t)}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* Mobile floating action buttons for ATTACK mode */}
       {view === 'ATTACK' && isMobile && (
