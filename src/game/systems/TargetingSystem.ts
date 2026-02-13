@@ -1,11 +1,11 @@
 import Phaser from 'phaser';
-import { BUILDING_DEFINITIONS, TROOP_DEFINITIONS } from '../config/GameDefinitions';
+import { BUILDING_DEFINITIONS, getTroopStats } from '../config/GameDefinitions';
 import type { Troop, PlacedBuilding } from '../types/GameTypes';
 
 export class TargetingSystem {
 
     static findTarget(troop: Troop, buildings: PlacedBuilding[]): PlacedBuilding | null {
-        const def = TROOP_DEFINITIONS[troop.type];
+        const def = getTroopStats(troop.type, troop.level || 1);
 
         const enemies = buildings.filter(b => {
             if (b.owner === troop.owner || b.health <= 0) return false;

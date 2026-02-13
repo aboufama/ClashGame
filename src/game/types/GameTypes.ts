@@ -40,6 +40,7 @@ export interface PlacedBuilding {
     // Range indicator
     rangeIndicator?: Phaser.GameObjects.Graphics;
     prismTrailLastPos?: { x: number, y: number }; // Track last scorch position for connected trail
+    prismLastDamageTime?: number;
     lastTrailTime?: number;     // For specialized smoke trails
     lastSmokeTime?: number;     // For defensive smoke effects
     baseGraphics?: Phaser.GameObjects.Graphics; // Separate graphics for ground-level base (prevents clipping)
@@ -49,6 +50,7 @@ export interface PlacedBuilding {
 export interface Troop {
     id: string;
     type: 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'ram' | 'stormmage' | 'golem' | 'sharpshooter' | 'mobilemortar' | 'davincitank' | 'phalanx' | 'romanwarrior';
+    level: number;
     gameObject: Phaser.GameObjects.Graphics;
     healthBar: Phaser.GameObjects.Graphics;
     gridX: number;

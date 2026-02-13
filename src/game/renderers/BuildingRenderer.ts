@@ -194,8 +194,10 @@ export class BuildingRenderer {
         }
     }
 
-    static drawBarracks(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
-        const wallHeight = 28;
+    static drawBarracks(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
+        const level = building?.level ?? 1;
+        const isLevel2 = level >= 2;
+        const wallHeight = isLevel2 ? 32 : 28;
         const g = baseGraphics || graphics;
 
         // Wall top corners
@@ -206,11 +208,11 @@ export class BuildingRenderer {
 
         if (!skipBase) {
             // === STONE FOUNDATION ===
-            g.fillStyle(tint ?? 0x7a6a5a, alpha);
+            g.fillStyle(tint ?? (isLevel2 ? 0x8a6f5d : 0x7a6a5a), alpha);
             g.fillPoints([c1, c2, c3, c4], true);
 
             // Foundation texture
-            g.fillStyle(0x6a5a4a, alpha * 0.4);
+            g.fillStyle(isLevel2 ? 0x725948 : 0x6a5a4a, alpha * 0.45);
             g.fillCircle(center.x - 8, center.y + 3, 3);
             g.fillCircle(center.x + 6, center.y + 5, 2);
         }
@@ -218,11 +220,11 @@ export class BuildingRenderer {
         if (!onlyBase) {
             // === WALLS (proper isometric 3D) ===
             // Right wall (shadow side - SE facing)
-            graphics.fillStyle(tint ?? 0x8b3030, alpha);
+            graphics.fillStyle(tint ?? (isLevel2 ? 0x9d3d35 : 0x8b3030), alpha);
             graphics.fillPoints([c2, c3, t3, t2], true);
 
             // Left wall (lit side - SW facing)
-            graphics.fillStyle(tint ?? 0xa04040, alpha);
+            graphics.fillStyle(tint ?? (isLevel2 ? 0xb54a40 : 0xa04040), alpha);
             graphics.fillPoints([c3, c4, t4, t3], true);
 
             // Wall edge outlines
@@ -285,20 +287,20 @@ export class BuildingRenderer {
 
             // Roof panels (4 triangular sections for pitched roof)
             // Back-left panel (darkest)
-            graphics.fillStyle(0x3a2515, alpha);
+            graphics.fillStyle(isLevel2 ? 0x33231d : 0x3a2515, alpha);
             graphics.fillTriangle(r1.x, r1.y, r4.x, r4.y, peakBack.x, peakBack.y);
 
             // Back-right panel
-            graphics.fillStyle(0x4a3020, alpha);
+            graphics.fillStyle(isLevel2 ? 0x46342d : 0x4a3020, alpha);
             graphics.fillTriangle(r1.x, r1.y, r2.x, r2.y, peakBack.x, peakBack.y);
 
             // Front-right panel (medium)
-            graphics.fillStyle(0x5a3a25, alpha);
+            graphics.fillStyle(isLevel2 ? 0x564238 : 0x5a3a25, alpha);
             graphics.fillTriangle(r2.x, r2.y, r3.x, r3.y, peakFront.x, peakFront.y);
             graphics.fillTriangle(r2.x, r2.y, peakBack.x, peakBack.y, peakFront.x, peakFront.y);
 
             // Front-left panel (lightest)
-            graphics.fillStyle(0x6a4a30, alpha);
+            graphics.fillStyle(isLevel2 ? 0x685245 : 0x6a4a30, alpha);
             graphics.fillTriangle(r3.x, r3.y, r4.x, r4.y, peakFront.x, peakFront.y);
             graphics.fillTriangle(r4.x, r4.y, peakBack.x, peakBack.y, peakFront.x, peakFront.y);
 
@@ -309,6 +311,21 @@ export class BuildingRenderer {
             // Roof edge highlights
             graphics.lineStyle(1, 0x7a5a40, alpha * 0.6);
             graphics.lineBetween(r4.x, r4.y, peakFront.x, peakFront.y);
+
+            if (isLevel2) {
+                // Extra reinforcement strips and a small battle pennant for the upgraded barracks.
+                graphics.lineStyle(2, 0x666666, alpha * 0.8);
+                graphics.lineBetween((c3.x + c4.x) / 2 - 9, (c3.y + c4.y) / 2 - 9, (c3.x + c4.x) / 2 + 9, (c3.y + c4.y) / 2 - 9);
+                graphics.lineStyle(2, 0x5a5a5a, alpha * 0.75);
+                graphics.lineBetween((c2.x + c3.x) / 2, (c2.y + c3.y) / 2 - 10, (c2.x + c3.x) / 2, (c2.y + c3.y) / 2 - 20);
+                graphics.fillStyle(0xffd36b, alpha * 0.9);
+                graphics.beginPath();
+                graphics.moveTo((c2.x + c3.x) / 2, (c2.y + c3.y) / 2 - 20);
+                graphics.lineTo((c2.x + c3.x) / 2 + 12, (c2.y + c3.y) / 2 - 17);
+                graphics.lineTo((c2.x + c3.x) / 2, (c2.y + c3.y) / 2 - 14);
+                graphics.closePath();
+                graphics.fillPath();
+            }
         }
     }
 

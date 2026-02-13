@@ -48,67 +48,83 @@ export interface BuildingDef {
 
 export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
     town_hall: { id: 'town_hall', name: 'Town Hall', cost: 500, desc: 'The heart of your village.', width: 3, height: 3, maxHealth: 2000, category: 'other', maxCount: 1, color: 0x3366ff, maxLevel: 1, capacity: 30 },
-    barracks: { id: 'barracks', name: 'Barracks', cost: 200, desc: 'Trains brave troops.', width: 2, height: 2, maxHealth: 800, category: 'military', maxCount: 4, color: 0xff3333, maxLevel: 1 },
+    barracks: {
+        id: 'barracks',
+        name: 'Barracks',
+        cost: 200,
+        desc: 'Trains brave troops. Level 2 boosts troop combat stats.',
+        width: 2,
+        height: 2,
+        maxHealth: 850,
+        category: 'military',
+        maxCount: 4,
+        color: 0xff3333,
+        maxLevel: 2,
+        levels: [
+            { hp: 850, cost: 200 },
+            { hp: 1100, cost: 420 }
+        ]
+    },
     cannon: {
         id: 'cannon',
         name: 'Cannon',
-        cost: 250,
+        cost: 220,
         desc: 'Point defense against ground.',
         width: 1,
         height: 1,
-        maxHealth: 800,
+        maxHealth: 820,
         range: 7,
         category: 'defense',
         maxCount: 5,
         color: 0x333333,
-        fireRate: 2500,
-        damage: 70,
+        fireRate: 2400,
+        damage: 58,
         maxLevel: 4,
         levels: [
-            { hp: 800, damage: 70, fireRate: 2500, cost: 250 },       // Level 1 - Basic
-            { hp: 900, damage: 80, fireRate: 2300, cost: 400 },       // Level 2 - Reinforced
-            { hp: 950, damage: 88, fireRate: 2100, cost: 500 },       // Level 3 - Fortified (new intermediate)
-            { hp: 1000, damage: 95, fireRate: 2000, cost: 650 }       // Level 4 - Dual-barrel
+            { hp: 820, damage: 58, fireRate: 2400, cost: 220 },
+            { hp: 940, damage: 70, fireRate: 2200, cost: 360 },
+            { hp: 1040, damage: 82, fireRate: 2050, cost: 520 },
+            { hp: 1150, damage: 95, fireRate: 1900, cost: 700 }
         ]
     },
     ballista: {
         id: 'ballista',
         name: 'Ballista',
-        cost: 350,
+        cost: 360,
         desc: 'Heavy single-target damage.',
         width: 2,
         height: 2,
-        maxHealth: 900,
+        maxHealth: 950,
         range: 9,
         category: 'defense',
         maxCount: 2,
         color: 0x8b4513,
-        fireRate: 1750,
-        damage: 240,
+        fireRate: 1900,
+        damage: 185,
         maxLevel: 2,
         levels: [
-            { hp: 900, damage: 240, fireRate: 1750, cost: 350 },    // Level 1 - Standard
-            { hp: 1050, damage: 280, fireRate: 1600, cost: 550 }    // Level 2 - Reinforced
+            { hp: 950, damage: 185, fireRate: 1900, cost: 360 },
+            { hp: 1150, damage: 230, fireRate: 1700, cost: 620 }
         ]
     },
     xbow: {
         id: 'xbow',
         name: 'X-Bow',
-        cost: 800,
+        cost: 900,
         desc: 'Rapid fire long-range turret.',
         width: 2,
         height: 2,
-        maxHealth: 1500,
+        maxHealth: 1550,
         range: 11,
         category: 'defense',
         maxCount: 2,
         color: 0x8b008b,
-        fireRate: 200,
-        damage: 15,
+        fireRate: 220,
+        damage: 14,
         maxLevel: 2,
         levels: [
-            { hp: 1500, damage: 15, fireRate: 200, cost: 800 },     // Level 1 - Standard
-            { hp: 1750, damage: 18, fireRate: 180, cost: 1200 }     // Level 2 - Enhanced
+            { hp: 1550, damage: 14, fireRate: 220, cost: 900 },
+            { hp: 1850, damage: 18, fireRate: 190, cost: 1350 }
         ]
     },
     solana_collector: {
@@ -132,43 +148,43 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
     mortar: {
         id: 'mortar',
         name: 'Mortar',
-        cost: 400,
+        cost: 500,
         desc: 'Splash damage area shell.',
         width: 2,
         height: 2,
-        maxHealth: 700,
+        maxHealth: 760,
         range: 10,
         minRange: 3,
         category: 'defense',
         maxCount: 3,
         color: 0x555555,
-        fireRate: 4000,
-        damage: 45,
+        fireRate: 3900,
+        damage: 62,
         maxLevel: 3,
         levels: [
-            { hp: 700, damage: 45, fireRate: 4000, cost: 400 },    // Level 1 - Standard
-            { hp: 850, damage: 55, fireRate: 3600, cost: 650 },    // Level 2 - Reinforced
-            { hp: 1050, damage: 70, fireRate: 3200, cost: 950 }    // Level 3 - Heavy Artillery
+            { hp: 760, damage: 62, fireRate: 3900, cost: 500 },
+            { hp: 930, damage: 78, fireRate: 3500, cost: 780 },
+            { hp: 1150, damage: 95, fireRate: 3150, cost: 1100 }
         ]
     },
     tesla: {
         id: 'tesla',
         name: 'Tesla Coil',
-        cost: 600,
+        cost: 650,
         desc: 'Hidden zapping trap.',
         width: 1,
         height: 1,
-        maxHealth: 600,
+        maxHealth: 700,
         range: 6,
         category: 'defense',
         maxCount: 3,
         color: 0x00ccff,
-        fireRate: 2500,
-        damage: 60,
+        fireRate: 2400,
+        damage: 52,
         maxLevel: 2,
         levels: [
-            { hp: 600, damage: 60, fireRate: 2500, cost: 600 },   // Level 1 - Standard (slow charge-up)
-            { hp: 750, damage: 75, fireRate: 2200, cost: 900 }    // Level 2 - Enhanced (ring + thicker base)
+            { hp: 700, damage: 52, fireRate: 2400, cost: 650 },
+            { hp: 900, damage: 68, fireRate: 2100, cost: 980 }
         ]
     },
     wall: {
@@ -208,64 +224,84 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
             { hp: 1400, capacity: 30, cost: 700 }     // Level 3 - Full decor
         ]
     },
-    prism: { id: 'prism', name: 'Prism Tower', cost: 550, desc: 'Beam bounces between foes.', width: 1, height: 1, maxHealth: 1100, range: 8, category: 'defense', maxCount: 1, color: 0xff00ff, fireRate: 50, maxLevel: 1 },
+    prism: {
+        id: 'prism',
+        name: 'Prism Tower',
+        cost: 1050,
+        desc: 'Continuous beam that melts clustered enemies.',
+        width: 1,
+        height: 1,
+        maxHealth: 1200,
+        range: 8.5,
+        category: 'defense',
+        maxCount: 1,
+        color: 0xff00ff,
+        fireRate: 100,
+        damage: 52,
+        maxLevel: 2,
+        levels: [
+            { hp: 1200, damage: 52, fireRate: 100, cost: 1050, range: 8.5 },
+            { hp: 1450, damage: 68, fireRate: 90, cost: 1450, range: 9.0 }
+        ]
+    },
     magmavent: {
         id: 'magmavent',
         name: 'Magma Vent',
-        cost: 650,
+        cost: 1250,
         desc: 'Industrial grate erupts with area damage.',
         width: 3,
         height: 3,
-        maxHealth: 1200,
-        range: 4.2,
+        maxHealth: 1500,
+        range: 4.4,
         category: 'defense',
         maxCount: 1,
         color: 0xff4400,
         fireRate: 1500,
-        damage: 80,
+        damage: 96,
         maxLevel: 2,
         levels: [
-            { hp: 1200, damage: 80, fireRate: 1500, cost: 650, range: 4.2 },    // Level 1 - Basic grate
-            { hp: 1500, damage: 100, fireRate: 1300, cost: 1000, range: 4.2 }   // Level 2 - Enhanced with pressure gauges
+            { hp: 1500, damage: 96, fireRate: 1500, cost: 1250, range: 4.4 },
+            { hp: 1850, damage: 125, fireRate: 1250, cost: 1750, range: 4.6 }
         ]
     },
     dragons_breath: {
         id: 'dragons_breath',
         name: "Dragon's Breath",
-        cost: 1500,
+        cost: 2200,
         desc: '16 firecracker pods rain destruction on foes.',
         width: 4,
         height: 4,
-        maxHealth: 2500,
-        range: 13,
+        maxHealth: 2800,
+        range: 13.5,
         category: 'defense',
         maxCount: 1,
         color: 0xcc0000,
-        fireRate: 3000,  // 3 second salvo cycle
-        damage: 25,      // Per pod (16 pods = 400 max damage per salvo)
+        fireRate: 2800,
+        damage: 34,
         maxLevel: 1,
         levels: [
-            { hp: 2500, damage: 25, fireRate: 3000, cost: 1500 }
+            { hp: 2800, damage: 34, fireRate: 2800, cost: 2200, range: 13.5 }
         ]
     },
     spike_launcher: {
         id: 'spike_launcher',
         name: 'Spike Launcher',
-        cost: 500,
+        cost: 1450,
         desc: 'Trebuchet hurls spike bags that damage areas.',
         width: 2,
         height: 2,
-        maxHealth: 900,
-        range: 9,
+        maxHealth: 1200,
+        range: 9.5,
         minRange: 3,
         category: 'defense',
         maxCount: 2,
         color: 0x8b6914,
-        fireRate: 4500,    // Slow fire rate
-        damage: 30,        // Damage per tick in zone
-        maxLevel: 1,
+        fireRate: 4200,
+        damage: 38,
+        maxLevel: 2,
         levels: [
-            { hp: 900, damage: 30, fireRate: 4500, cost: 500 }
+            { hp: 1200, damage: 38, fireRate: 4200, cost: 1450, range: 9.5 },
+            { hp: 1450, damage: 52, fireRate: 3800, cost: 1950, range: 10.0 }
         ]
     },
 };
@@ -308,6 +344,9 @@ export interface TroopDef {
     chainRange?: number;  // Range for chain to jump
     healRadius?: number; // For healers
     healAmount?: number; // Heal per tick
+    attackDelay?: number; // Base attack interval (ms)
+    firstAttackDelay?: number; // Delay before first attack after spawn (ms)
+    splashRadius?: number;
     movementType?: 'ground' | 'air' | 'ghost'; // Traversal capability
     wallTraversalCost?: number; // Cost to move through a wall (default 5000, 0 for air/ghost)
 }
@@ -325,22 +364,64 @@ export interface ObstacleDef {
 
 
 export const TROOP_DEFINITIONS: Record<TroopType, TroopDef> = {
-    warrior: { id: 'warrior', name: 'Warrior', cost: 25, space: 1, desc: 'Fast melee fighter.', health: 100, range: 0.8, damage: 10, speed: 0.003, color: 0xffff00 },
-    archer: { id: 'archer', name: 'Archer', cost: 40, space: 1, desc: 'Ranged attacker.', health: 50, range: 2.7, damage: 14.0, speed: 0.0025, color: 0x00ffff },
-    giant: { id: 'giant', name: 'Giant', cost: 150, space: 5, desc: 'Tank targeting Defenses.', health: 600, range: 1.0, damage: 16, speed: 0.002, color: 0xff6600 },
-    ward: { id: 'ward', name: 'Ward', cost: 80, space: 6, desc: 'Heals friendly troops.', health: 100, range: 4.0, damage: 9, speed: 0.0025, color: 0x00ff00, healRadius: 7.0, healAmount: 5 },
-    recursion: { id: 'recursion', name: 'Recursion', cost: 80, space: 3, desc: 'Splits into two copies on death.', health: 150, range: 1.0, damage: 12, speed: 0.003, color: 0xff00ff },
+    warrior: { id: 'warrior', name: 'Warrior', cost: 25, space: 1, desc: 'Fast melee fighter.', health: 100, range: 0.8, damage: 10, speed: 0.003, color: 0xffff00, attackDelay: 800 },
+    archer: { id: 'archer', name: 'Archer', cost: 40, space: 1, desc: 'Ranged attacker.', health: 50, range: 2.7, damage: 14.0, speed: 0.0025, color: 0x00ffff, attackDelay: 900 },
+    giant: { id: 'giant', name: 'Giant', cost: 150, space: 5, desc: 'Tank targeting Defenses.', health: 600, range: 1.0, damage: 16, speed: 0.002, color: 0xff6600, attackDelay: 950 },
+    ward: { id: 'ward', name: 'Ward', cost: 80, space: 6, desc: 'Heals friendly troops.', health: 100, range: 4.0, damage: 9, speed: 0.0025, color: 0x00ff00, healRadius: 7.0, healAmount: 5, attackDelay: 1000 },
+    recursion: { id: 'recursion', name: 'Recursion', cost: 80, space: 3, desc: 'Splits into two copies on death.', health: 150, range: 1.0, damage: 12, speed: 0.003, color: 0xff00ff, attackDelay: 850 },
 
-    ram: { id: 'ram', name: 'Battering Ram', cost: 200, space: 8, desc: 'Charges Town Hall. 4x wall damage.', health: 800, range: 1.2, damage: 50, speed: 0.0018, color: 0x8b4513, targetPriority: 'town_hall', wallDamageMultiplier: 4, wallTraversalCost: 50 },
-    stormmage: { id: 'stormmage', name: 'Storm Mage', cost: 180, space: 6, desc: 'Chain lightning hits 4 targets.', health: 200, range: 4.9, damage: 40, speed: 0.002, color: 0x4444ff, chainCount: 4, chainRange: 5 },
-    golem: { id: 'golem', name: 'Stone Golem', cost: 500, space: 25, desc: 'Colossal stone titan. Nearly indestructible.', health: 6000, range: 1.5, damage: 53, speed: 0.0004, color: 0x6b7b8b, targetPriority: 'defense' },
+    ram: { id: 'ram', name: 'Battering Ram', cost: 200, space: 8, desc: 'Charges Town Hall. 4x wall damage.', health: 800, range: 1.2, damage: 50, speed: 0.0018, color: 0x8b4513, targetPriority: 'town_hall', wallDamageMultiplier: 4, wallTraversalCost: 50, attackDelay: 1100 },
+    stormmage: { id: 'stormmage', name: 'Storm Mage', cost: 180, space: 6, desc: 'Chain lightning hits 4 targets.', health: 200, range: 4.9, damage: 40, speed: 0.002, color: 0x4444ff, chainCount: 4, chainRange: 5, attackDelay: 1700 },
+    golem: { id: 'golem', name: 'Stone Golem', cost: 500, space: 25, desc: 'Colossal stone titan. Nearly indestructible.', health: 6000, range: 1.5, damage: 53, speed: 0.0004, color: 0x6b7b8b, targetPriority: 'defense', attackDelay: 3000, firstAttackDelay: 1500 },
 
-    sharpshooter: { id: 'sharpshooter', name: 'Sharpshooter', cost: 100, space: 4, desc: 'Elite archer with extended range.', health: 80, range: 5.6, damage: 70, speed: 0.002, color: 0x2e7d32 },
-    mobilemortar: { id: 'mobilemortar', name: 'Mobile Mortar', cost: 180, space: 8, desc: 'Portable mortar with splash damage.', health: 150, range: 6.75, damage: 200, speed: 0.0012, color: 0x555555 },
-    davincitank: { id: 'davincitank', name: 'Da Vinci Tank', cost: 600, space: 30, desc: 'Leonardo\'s armored war machine. Spins and fires in all directions.', health: 8000, range: 4.0, damage: 80, speed: 0.0006, color: 0xb8956e, targetPriority: 'defense' },
-    phalanx: { id: 'phalanx', name: 'Phalanx', cost: 350, space: 18, desc: 'Roman testudo formation. 3x3 shield wall with spears. Splits into 9 soldiers on death.', health: 3000, range: 1.5, damage: 45, speed: 0.0008, color: 0xc9a07a },
-    romanwarrior: { id: 'romanwarrior', name: 'Roman Soldier', cost: 0, space: 1, desc: 'An individual soldier from a Phalanx formation.', health: 300, range: 1.2, damage: 15, speed: 0.0015, color: 0xcc3333 }
+    sharpshooter: { id: 'sharpshooter', name: 'Sharpshooter', cost: 100, space: 4, desc: 'Elite archer with extended range.', health: 80, range: 5.6, damage: 70, speed: 0.002, color: 0x2e7d32, attackDelay: 1400 },
+    mobilemortar: { id: 'mobilemortar', name: 'Mobile Mortar', cost: 180, space: 8, desc: 'Portable mortar with splash damage.', health: 150, range: 6.75, damage: 200, speed: 0.0012, color: 0x555555, splashRadius: 2.2, attackDelay: 2200, firstAttackDelay: 1000 },
+    davincitank: { id: 'davincitank', name: 'Da Vinci Tank', cost: 600, space: 30, desc: 'Leonardo\'s armored war machine. Spins and fires in all directions.', health: 8000, range: 4.0, damage: 80, speed: 0.0006, color: 0xb8956e, targetPriority: 'defense', attackDelay: 1800 },
+    phalanx: { id: 'phalanx', name: 'Phalanx', cost: 350, space: 18, desc: 'Roman testudo formation. 3x3 shield wall with spears. Splits into 9 soldiers on death.', health: 3000, range: 1.5, damage: 45, speed: 0.0008, color: 0xc9a07a, attackDelay: 1400 },
+    romanwarrior: { id: 'romanwarrior', name: 'Roman Soldier', cost: 0, space: 1, desc: 'An individual soldier from a Phalanx formation.', health: 300, range: 1.2, damage: 15, speed: 0.0015, color: 0xcc3333, attackDelay: 900 }
 };
+
+const TROOP_LEVEL_MULTIPLIERS: Record<number, number> = {
+    1: 1,
+    2: 1.3
+};
+
+const toScaledFloat = (value: number, multiplier: number, digits: number = 2) =>
+    Number((value * multiplier).toFixed(digits));
+
+export function normalizeTroopLevel(level: number = 1): number {
+    if (!Number.isFinite(level)) return 1;
+    const normalized = Math.max(1, Math.floor(level));
+    const maxDefined = Math.max(...Object.keys(TROOP_LEVEL_MULTIPLIERS).map(Number));
+    return Math.min(normalized, maxDefined);
+}
+
+export function getTroopLevelMultiplier(level: number = 1): number {
+    return TROOP_LEVEL_MULTIPLIERS[normalizeTroopLevel(level)] ?? 1;
+}
+
+export function getTroopStats(type: TroopType, level: number = 1): TroopDef {
+    const base = TROOP_DEFINITIONS[type];
+    const multiplier = getTroopLevelMultiplier(level);
+    if (multiplier <= 1) return { ...base };
+
+    const utilityMultiplier = 1 + (multiplier - 1) * 0.45;
+    const speedMultiplier = 1 + (multiplier - 1) * 0.25;
+    const attackSpeedMultiplier = 1 + (multiplier - 1) * 0.2;
+
+    return {
+        ...base,
+        health: Math.round(base.health * multiplier),
+        damage: toScaledFloat(base.damage, multiplier),
+        speed: toScaledFloat(base.speed, speedMultiplier, 6),
+        range: toScaledFloat(base.range, utilityMultiplier),
+        healRadius: typeof base.healRadius === 'number' ? toScaledFloat(base.healRadius, utilityMultiplier) : base.healRadius,
+        healAmount: typeof base.healAmount === 'number' ? toScaledFloat(base.healAmount, multiplier) : base.healAmount,
+        chainRange: typeof base.chainRange === 'number' ? toScaledFloat(base.chainRange, utilityMultiplier) : base.chainRange,
+        splashRadius: typeof base.splashRadius === 'number' ? toScaledFloat(base.splashRadius, utilityMultiplier) : base.splashRadius,
+        attackDelay: typeof base.attackDelay === 'number' ? Math.max(150, Math.round(base.attackDelay / attackSpeedMultiplier)) : base.attackDelay
+    };
+}
 
 export const OBSTACLE_DEFINITIONS: Record<ObstacleType, ObstacleDef> = {
     rock_small: { id: 'rock_small', name: 'Small Rock', clearCost: 50, clearTime: 5, width: 1, height: 1, solReward: 10 },

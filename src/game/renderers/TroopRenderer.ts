@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 
 export class TroopRenderer {
-    static drawTroopVisual(graphics: Phaser.GameObjects.Graphics, type: 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'ram' | 'stormmage' | 'golem' | 'sharpshooter' | 'mobilemortar' | 'davincitank' | 'phalanx' | 'romanwarrior', owner: 'PLAYER' | 'ENEMY', facingAngle: number = 0, isMoving: boolean = true, slamOffset: number = 0, bowDrawProgress: number = 0, mortarRecoil: number = 0, isDeactivated: boolean = false, phalanxSpearOffset: number = 0) {
+    static drawTroopVisual(graphics: Phaser.GameObjects.Graphics, type: 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'ram' | 'stormmage' | 'golem' | 'sharpshooter' | 'mobilemortar' | 'davincitank' | 'phalanx' | 'romanwarrior', owner: 'PLAYER' | 'ENEMY', facingAngle: number = 0, isMoving: boolean = true, slamOffset: number = 0, bowDrawProgress: number = 0, mortarRecoil: number = 0, isDeactivated: boolean = false, phalanxSpearOffset: number = 0, troopLevel: number = 1) {
         const isPlayer = owner === 'PLAYER';
 
         switch (type) {
@@ -51,6 +51,16 @@ export class TroopRenderer {
             graphics.lineStyle(1, 0x000000, 0.5);
             const radius = type === 'ward' ? 8 : 8;
             graphics.strokeCircle(0, type === 'ward' ? 0 : -1, radius);
+        }
+
+        if (troopLevel >= 2) {
+            const accent = isPlayer ? 0xffd36b : 0xffb76b;
+            graphics.lineStyle(1.5, accent, 0.95);
+            graphics.strokeCircle(0, -26, 5.5);
+            graphics.fillStyle(accent, 0.9);
+            graphics.fillCircle(0, -26, 2.2);
+            graphics.fillStyle(0xfff3c6, 0.8);
+            graphics.fillCircle(-0.6, -26.8, 1.1);
         }
     }
 

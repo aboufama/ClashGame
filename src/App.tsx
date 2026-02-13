@@ -613,11 +613,13 @@ function App() {
             destruction,
             enemyWorld.attackId
           );
-          const lootApplied = typeof result?.lootApplied === 'number' ? result.lootApplied : null;
-          if (result?.attackerBalance !== undefined) {
-            setResources({ sol: Math.max(0, result.attackerBalance) });
+          const lootApplied = (typeof result?.lootApplied === 'number' && Number.isFinite(result.lootApplied))
+            ? Math.max(0, Math.floor(result.lootApplied))
+            : null;
+          if (typeof result?.attackerBalance === 'number' && Number.isFinite(result.attackerBalance)) {
+            setResources({ sol: Math.max(0, Math.floor(result.attackerBalance)) });
           } else if (lootApplied !== null) {
-            setResources(prev => ({ ...prev, sol: prev.sol + lootApplied }));
+            setResources(prev => ({ ...prev, sol: Math.max(0, prev.sol + lootApplied) }));
           }
           if (lootApplied !== null) {
             setBattleStats(prev => ({ ...prev, solLooted: lootApplied }));
@@ -1040,7 +1042,30 @@ function App() {
     }
   };
 
-  const buildingList = Object.values(BUILDING_DEFINITIONS);
+  const defenseShopOrder: BuildingType[] = ['wall', 'cannon', 'ballista', 'mortar', 'tesla', 'xbow', 'prism', 'magmavent', 'spike_launcher', 'dragons_breath'];
+  const defenseOrderIndex = new Map(defenseShopOrder.map((type, index) => [type, index]));
+  const categoryOrder: Record<string, number> = {
+    defense: 0,
+    military: 1,
+    resource: 2,
+    other: 3,
+    army: 1
+  };
+
+  const buildingList = Object.values(BUILDING_DEFINITIONS).sort((a, b) => {
+    const categoryRankA = categoryOrder[a.category || 'other'] ?? 99;
+    const categoryRankB = categoryOrder[b.category || 'other'] ?? 99;
+    if (categoryRankA !== categoryRankB) return categoryRankA - categoryRankB;
+
+    if (a.category === 'defense' && b.category === 'defense') {
+      const orderA = defenseOrderIndex.get(a.id as BuildingType) ?? 999;
+      const orderB = defenseOrderIndex.get(b.id as BuildingType) ?? 999;
+      if (orderA !== orderB) return orderA - orderB;
+    }
+
+    if (a.cost !== b.cost) return a.cost - b.cost;
+    return a.name.localeCompare(b.name);
+  });
   const troopList = Object.values(TROOP_DEFINITIONS).filter(t => t.id !== 'romanwarrior');
 
 

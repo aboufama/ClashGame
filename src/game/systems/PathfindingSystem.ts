@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { BUILDING_DEFINITIONS, TROOP_DEFINITIONS, MAP_SIZE } from '../config/GameDefinitions';
+import { BUILDING_DEFINITIONS, MAP_SIZE, getTroopStats } from '../config/GameDefinitions';
 import type { Troop, PlacedBuilding } from '../types/GameTypes';
 
 export class PathfindingSystem {
@@ -19,7 +19,7 @@ export class PathfindingSystem {
         const grid = new Int32Array(width * height).fill(PathfindingSystem.COST_DEFAULT);
 
         // 2. Determine Traversal Capabilities
-        const def = TROOP_DEFINITIONS[troop.type];
+        const def = getTroopStats(troop.type, troop.level || 1);
         const canFly = def.movementType === 'air' || def.movementType === 'ghost';
         const wallCost = canFly ? PathfindingSystem.COST_DEFAULT : (def.wallTraversalCost ?? PathfindingSystem.COST_WALL_DEFAULT);
 

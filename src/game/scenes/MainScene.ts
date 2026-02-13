@@ -2,7 +2,7 @@
 import Phaser from 'phaser';
 import { Backend } from '../backend/GameBackend';
 import type { SerializedBuilding, SerializedWorld } from '../data/Models';
-import { BUILDING_DEFINITIONS, OBSTACLE_DEFINITIONS, TROOP_DEFINITIONS, getBuildingStats, type BuildingType, type ObstacleType } from '../config/GameDefinitions';
+import { BUILDING_DEFINITIONS, OBSTACLE_DEFINITIONS, getBuildingStats, getTroopStats, type BuildingType, type ObstacleType, type TroopType } from '../config/GameDefinitions';
 import { LootSystem } from '../systems/LootSystem';
 import type { PlacedBuilding, Troop, PlacedObstacle } from '../types/GameTypes';
 import { BuildingRenderer } from '../renderers/BuildingRenderer';
@@ -162,6 +162,7 @@ export class MainScene extends Phaser.Scene {
 
     // Online attack tracking
     public currentEnemyWorld: { id: string; username: string; isBot?: boolean; attackId?: string } | null = null;
+    public playerBarracksLevel = 1;
     private needsDefaultBase = false;
     private sceneReadyForBaseLoad = false;
 
@@ -211,6 +212,37 @@ export class MainScene extends Phaser.Scene {
             return this.buildings.filter(b => b.type !== 'wall');
         }
         return this.buildings.filter(b => b.owner === 'ENEMY' && b.type !== 'wall');
+    }
+
+    private snapshotPlayerBarracksLevel() {
+        const maxBarracks = this.buildings.reduce((max, building) => {
+            if (building.owner !== 'PLAYER' || building.type !== 'barracks') return max;
+            return Math.max(max, Math.max(1, building.level || 1));
+        }, 1);
+        this.playerBarracksLevel = Math.max(1, maxBarracks);
+    }
+
+    private getBarracksLevelForOwner(owner: 'PLAYER' | 'ENEMY'): number {
+        if (owner === 'PLAYER' && this.mode === 'ATTACK') {
+            return Math.max(1, this.playerBarracksLevel);
+        }
+        const maxBarracks = this.buildings.reduce((max, building) => {
+            if (building.owner !== owner || building.type !== 'barracks') return max;
+            return Math.max(max, Math.max(1, building.level || 1));
+        }, 1);
+        if (owner === 'PLAYER') {
+            this.playerBarracksLevel = Math.max(1, maxBarracks);
+        }
+        return Math.max(1, maxBarracks);
+    }
+
+    private getTroopLevelForOwner(owner: 'PLAYER' | 'ENEMY'): number {
+        const barracksLevel = this.getBarracksLevelForOwner(owner);
+        return barracksLevel >= 2 ? 2 : 1;
+    }
+
+    private getTroopCombatStats(troop: Troop) {
+        return getTroopStats(troop.type, troop.level || 1);
     }
 
     private getBattleTotals() {
@@ -530,6 +562,7 @@ export class MainScene extends Phaser.Scene {
             this.manualFireDummyTarget = {
                 id: 'manual_fire_dummy',
                 type: 'warrior',
+                level: 1,
                 gameObject: this.add.graphics().setVisible(false),
                 healthBar: undefined as any,
                 gridX: 0,
@@ -863,7 +896,13 @@ export class MainScene extends Phaser.Scene {
             if (normalizedType !== 'wall') return max;
             return Math.max(max, Math.max(1, Number((building as { level?: unknown }).level) || 1));
         }, 1);
+        const maxBarracksFromWorld = (Array.isArray(world.buildings) ? world.buildings : []).reduce((max, building) => {
+            const normalizedType = this.normalizeBuildingType(String((building as { type?: unknown }).type ?? ''));
+            if (normalizedType !== 'barracks') return max;
+            return Math.max(max, Math.max(1, Number((building as { level?: unknown }).level) || 1));
+        }, 1);
         this.preferredWallLevel = Math.max(1, Math.max(world.wallLevel || 1, maxWallFromWorld));
+        this.playerBarracksLevel = Math.max(1, maxBarracksFromWorld);
 
         // Load buildings with strict per-building validation so one bad entry cannot blank the scene.
         (Array.isArray(world.buildings) ? world.buildings : []).forEach(rawBuilding => {
@@ -1219,6 +1258,10 @@ export class MainScene extends Phaser.Scene {
             this.preferredWallLevel = Math.max(this.preferredWallLevel, level || 1);
         }
 
+        if (normalizedType === 'barracks' && owner === 'PLAYER') {
+            this.playerBarracksLevel = Math.max(this.playerBarracksLevel, level || 1);
+        }
+
         // Update neighbor wall connections when a new wall is placed
         if (normalizedType === 'wall') {
             this.refreshWallNeighbors(gridX, gridY, owner);
@@ -1360,7 +1403,7 @@ export class MainScene extends Phaser.Scene {
                 BuildingRenderer.drawTownHall(graphics, gridX, gridY, this.time.now, alpha, tint, baseGraphics, skipBase, onlyBase);
                 break;
             case 'barracks':
-                BuildingRenderer.drawBarracks(graphics, c1, c2, c3, c4, center, alpha, tint, baseGraphics, skipBase, onlyBase);
+                BuildingRenderer.drawBarracks(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, skipBase, onlyBase);
                 break;
             case 'cannon':
                 // Use level-based rendering for cannon
@@ -1883,7 +1926,7 @@ export class MainScene extends Phaser.Scene {
 
             if (troop.type === 'ward') {
                 // --- PASSIVE WARD HEAL ---
-                const wardStats = TROOP_DEFINITIONS.ward;
+                const wardStats = this.getTroopCombatStats(troop);
                 const healDelay = 500; // Heal every 0.5 seconds
                 if (!(troop as any).lastPassiveHeal || time > (troop as any).lastPassiveHeal + healDelay) {
                     (troop as any).lastPassiveHeal = time;
@@ -1938,12 +1981,12 @@ export class MainScene extends Phaser.Scene {
                 const dy = Math.max(by - troop.gridY, 0, troop.gridY - (by + th));
                 const dist = Math.sqrt(dx * dx + dy * dy);
 
-                const stats = TROOP_DEFINITIONS[troop.type];
+                const stats = this.getTroopCombatStats(troop);
                 const isEnemy = b.owner !== troop.owner;
 
                 if (troop.type === 'ward' && time > troop.lastAttackTime + troop.attackDelay) {
                     // Ward specialized attack behavior (Grand Warden style)
-                    const wardStats = TROOP_DEFINITIONS.ward;
+                    const wardStats = stats;
                     const enemies = this.buildings.filter(b => b.owner !== troop.owner && b.health > 0);
                     let attackTarget: PlacedBuilding | null = null;
 
@@ -2289,6 +2332,7 @@ export class MainScene extends Phaser.Scene {
 
     private shootMortarAt(mortar: PlacedBuilding, troop: Troop) {
         const info = BUILDINGS['mortar'];
+        const stats = this.getDefenseStats(mortar);
         const start = IsoUtils.cartToIso(mortar.gridX + info.width / 2, mortar.gridY + info.height / 2);
         const end = IsoUtils.cartToIso(troop.gridX, troop.gridY);
 
@@ -2300,6 +2344,7 @@ export class MainScene extends Phaser.Scene {
         const level = mortar.level ?? 1;
         const shellScale = level >= 3 ? 1.3 : 1.0;
         const shellRadius = 8 * shellScale;
+        const mortarDamage = stats.damage || 62;
 
         // Mortar shell - starts invisible, appears as it leaves barrel
         const ball = this.add.graphics();
@@ -2356,12 +2401,20 @@ export class MainScene extends Phaser.Scene {
             },
             onComplete: () => {
                 ball.destroy();
-                this.createMortarExplosion(end.x, end.y, mortar.owner, troop.gridX, troop.gridY, level);
+                this.createMortarExplosion(end.x, end.y, mortar.owner, troop.gridX, troop.gridY, level, mortarDamage);
             }
         });
     }
 
-    private createMortarExplosion(x: number, y: number, owner: 'PLAYER' | 'ENEMY', targetGx: number, targetGy: number, level: number = 1) {
+    private createMortarExplosion(
+        x: number,
+        y: number,
+        owner: 'PLAYER' | 'ENEMY',
+        targetGx: number,
+        targetGy: number,
+        level: number = 1,
+        damage: number = 62
+    ) {
         const scale = level >= 3 ? 1.3 : 1.0;
         this.cameras.main.shake(50, 0.001 * scale);
 
@@ -2521,7 +2574,7 @@ export class MainScene extends Phaser.Scene {
         this.troops.slice().forEach(t => {
             const d = Phaser.Math.Distance.Between(t.gridX, t.gridY, targetGx, targetGy);
             if (d < splashRadius && t.owner !== owner) {
-                t.health -= 70;
+                t.health -= damage;
                 t.hasTakenDamage = true;
                 this.updateHealthBar(t);
                 if (t.health <= 0) this.destroyTroop(t);
@@ -2536,7 +2589,7 @@ export class MainScene extends Phaser.Scene {
 
         // Capture target reference at the start
         const targetTroop = troop;
-        const stats = getBuildingStats('cannon', cannon.level || 1);
+        const stats = this.getDefenseStats(cannon);
         const cannonDamage = stats.damage || 70;
 
         const info = BUILDINGS['cannon'];
@@ -2645,7 +2698,7 @@ export class MainScene extends Phaser.Scene {
 
 
     private shootTeslaAt(tesla: PlacedBuilding, troop: Troop) {
-        const stats = getBuildingStats(tesla.type as BuildingType, tesla.level || 1);
+        const stats = this.getDefenseStats(tesla);
         const start = IsoUtils.cartToIso(tesla.gridX + 0.5, tesla.gridY + 0.5);
         start.y -= 40; // From the orb
 
@@ -2779,6 +2832,9 @@ export class MainScene extends Phaser.Scene {
     // === PRISM TOWER - CONTINUOUS CRAZY LASER BEAM ===
     private shootPrismContinuousLaser(prism: PlacedBuilding, target: Troop, time: number) {
         const info = BUILDINGS['prism'];
+        const stats = this.getDefenseStats(prism);
+        const tickInterval = Math.max(25, stats.fireRate ?? 100);
+        const prismDps = stats.damage ?? 0;
         const start = IsoUtils.cartToIso(prism.gridX + info.width / 2, prism.gridY + info.height / 2);
         start.y -= 55; // From the crystal tip
         const end = IsoUtils.cartToIso(target.gridX, target.gridY);
@@ -2935,14 +2991,17 @@ export class MainScene extends Phaser.Scene {
             onComplete: () => crystalGlow.destroy()
         });
 
-        // Deal continuous damage (3 DPS * 50ms tick = ~0.15 damage per tick)
-        const damagePerTick = 3;
-        target.health -= damagePerTick;
-        target.hasTakenDamage = true;
-        this.updateHealthBar(target);
-        if (target.health <= 0) {
-            this.destroyTroop(target);
-            this.cleanupPrismLaser(prism);
+        const shouldApplyDamage = prism.prismLastDamageTime === undefined || time >= prism.prismLastDamageTime + tickInterval;
+        if (prismDps > 0 && shouldApplyDamage) {
+            prism.prismLastDamageTime = time;
+            const damagePerTick = prismDps * (tickInterval / 1000);
+            target.health -= damagePerTick;
+            target.hasTakenDamage = true;
+            this.updateHealthBar(target);
+            if (target.health <= 0) {
+                this.destroyTroop(target);
+                this.cleanupPrismLaser(prism);
+            }
         }
 
         prism.prismTarget = target;
@@ -2960,12 +3019,13 @@ export class MainScene extends Phaser.Scene {
         }
         prism.prismTarget = undefined;
         prism.prismTrailLastPos = undefined;
+        prism.prismLastDamageTime = undefined;
     }
 
     // === MAGMA VENT - MASSIVE VOLCANIC ERUPTION ===
     // === MAGMA VENT - MASSIVE VOLCANIC ERUPTION ===
     private shootMagmaEruption(magma: PlacedBuilding) {
-        const stats = getBuildingStats('magmavent', magma.level || 1);
+        const stats = this.getDefenseStats(magma);
         const info = BUILDING_DEFINITIONS['magmavent'];
         const center = IsoUtils.cartToIso(magma.gridX + info.width / 2, magma.gridY + info.height / 2);
         center.y -= 30; // From crater
@@ -3360,7 +3420,7 @@ export class MainScene extends Phaser.Scene {
     }
 
     private showMobileMortarShot(troop: Troop, target: PlacedBuilding, damage: number) {
-        const stats = TROOP_DEFINITIONS[troop.type as keyof typeof TROOP_DEFINITIONS] as any;
+        const stats = this.getTroopCombatStats(troop);
         const start = IsoUtils.cartToIso(troop.gridX, troop.gridY);
         const info = BUILDINGS[target.type];
         const end = IsoUtils.cartToIso(target.gridX + info.width / 2, target.gridY + info.height / 2);
@@ -3549,8 +3609,9 @@ export class MainScene extends Phaser.Scene {
         this.redrawTroop(troop);
 
         // Calculate chain targets
-        const chainCount = TROOP_DEFINITIONS.stormmage.chainCount || 4;
-        const chainRange = TROOP_DEFINITIONS.stormmage.chainRange || 5;
+        const stormStats = this.getTroopCombatStats(troop);
+        const chainCount = stormStats.chainCount || 4;
+        const chainRange = stormStats.chainRange || 5;
         const targets = this.findChainTargets(target, chainCount, chainRange, troop.owner);
 
         // Initial Zap Visual (Troop -> First Target)
@@ -3712,7 +3773,7 @@ export class MainScene extends Phaser.Scene {
 
     private shootBallistaAt(ballista: PlacedBuilding, troop: Troop) {
         const info = BUILDINGS['ballista'];
-        const stats = getBuildingStats('ballista', ballista.level || 1);
+        const stats = this.getDefenseStats(ballista);
         const start = IsoUtils.cartToIso(ballista.gridX + info.width / 2, ballista.gridY + info.height / 2);
         const end = IsoUtils.cartToIso(troop.gridX, troop.gridY);
         const angle = Math.atan2(end.y - start.y, end.x - start.x);
@@ -3910,8 +3971,9 @@ export class MainScene extends Phaser.Scene {
                     }
                 });
 
-                // Reload bolt after a delay (match fire rate of 3500ms - windup)
-                this.time.delayedCall(3000, () => {
+                // Reload bolt based on configured fire cadence.
+                const reloadDelay = Math.max(300, (stats.fireRate ?? 1900) - 250);
+                this.time.delayedCall(reloadDelay, () => {
                     ballista.ballistaBoltLoaded = true;
                 });
             }
@@ -3920,6 +3982,8 @@ export class MainScene extends Phaser.Scene {
 
     private shootXBowAt(xbow: PlacedBuilding, troop: Troop) {
         const info = BUILDINGS['xbow'];
+        const stats = this.getDefenseStats(xbow);
+        const xbowDamage = stats.damage || 14;
         const start = IsoUtils.cartToIso(xbow.gridX + info.width / 2, xbow.gridY + info.height / 2);
         const end = IsoUtils.cartToIso(troop.gridX, troop.gridY);
         const angle = Math.atan2(end.y - start.y, end.x - start.x);
@@ -3977,9 +4041,9 @@ export class MainScene extends Phaser.Scene {
             ease: 'Linear',
             onComplete: () => {
                 arrow.destroy();
-                // Deal smaller damage (15 per arrow, but fires 5x per second = 75 DPS)
+                // Deal level-scaled damage.
                 if (targetTroop && targetTroop.health > 0) {
-                    targetTroop.health -= 15;
+                    targetTroop.health -= xbowDamage;
                     targetTroop.hasTakenDamage = true;
                     this.updateHealthBar(targetTroop);
                     if (targetTroop.health <= 0) this.destroyTroop(targetTroop);
@@ -4073,13 +4137,13 @@ export class MainScene extends Phaser.Scene {
     private redrawTroop(troop: Troop) {
         const g = troop.gameObject;
         g.clear();
-        TroopRenderer.drawTroopVisual(g, troop.type, troop.owner, troop.facingAngle, true, troop.slamOffset || 0, troop.bowDrawProgress || 0, troop.mortarRecoil || 0, false, troop.phalanxSpearOffset || 0);
+        TroopRenderer.drawTroopVisual(g, troop.type, troop.owner, troop.facingAngle, true, troop.slamOffset || 0, troop.bowDrawProgress || 0, troop.mortarRecoil || 0, false, troop.phalanxSpearOffset || 0, troop.level || 1);
     }
 
     private redrawTroopWithMovement(troop: Troop, isMoving: boolean) {
         const g = troop.gameObject;
         g.clear();
-        TroopRenderer.drawTroopVisual(g, troop.type, troop.owner, troop.facingAngle, isMoving, troop.slamOffset || 0, troop.bowDrawProgress || 0, troop.mortarRecoil || 0, false, troop.phalanxSpearOffset || 0);
+        TroopRenderer.drawTroopVisual(g, troop.type, troop.owner, troop.facingAngle, isMoving, troop.slamOffset || 0, troop.bowDrawProgress || 0, troop.mortarRecoil || 0, false, troop.phalanxSpearOffset || 0, troop.level || 1);
     }
 
 
@@ -4101,7 +4165,7 @@ export class MainScene extends Phaser.Scene {
                     const edx = Math.max(bx - troop.gridX, 0, troop.gridX - (bx + tw));
                     const edy = Math.max(by - troop.gridY, 0, troop.gridY - (by + th));
                     const dist = Math.sqrt(edx * edx + edy * edy);
-                    const stats = TROOP_DEFINITIONS[troop.type];
+                    const stats = this.getTroopCombatStats(troop);
                     isActuallyMoving = dist > stats.range;
                 }
                 this.redrawTroopWithMovement(troop, isActuallyMoving);
@@ -4121,7 +4185,7 @@ export class MainScene extends Phaser.Scene {
                 const edx = Math.max(bx - troop.gridX, 0, troop.gridX - (bx + tw));
                 const edy = Math.max(by - troop.gridY, 0, troop.gridY - (by + th));
                 const dist = Math.sqrt(edx * edx + edy * edy);
-                const stats = TROOP_DEFINITIONS[troop.type];
+                const stats = this.getTroopCombatStats(troop);
 
                 if (dist > stats.range) {
                     const time = this.time.now;
@@ -4570,15 +4634,15 @@ export class MainScene extends Phaser.Scene {
 
         // Create rubble at the building location (attack mode only)
         if (this.mode === 'ATTACK') {
-            const info = BUILDINGS[b.type];
-            if (info) {
-                if (b.type === 'magmavent') {
-                    this.createLavaPool(b.gridX, b.gridY, info.width, info.height, b.owner);
-                } else {
-                    this.createRubble(b.gridX, b.gridY, info.width, info.height);
+                const info = BUILDINGS[b.type];
+                if (info) {
+                    if (b.type === 'magmavent') {
+                        this.createLavaPool(b.gridX, b.gridY, info.width, info.height, b.owner, b.level || 1);
+                    } else {
+                        this.createRubble(b.gridX, b.gridY, info.width, info.height);
+                    }
                 }
             }
-        }
 
         if (b.barrelGraphics) b.barrelGraphics.destroy();
         b.healthBar.destroy();
@@ -4660,7 +4724,7 @@ export class MainScene extends Phaser.Scene {
             for (const off of offsets) {
                 this.pendingSpawnCount++;
                 this.time.delayedCall(50, () => {
-                    this.spawnTroop(t.gridX + off.dx, t.gridY + off.dy, 'recursion', t.owner, nextGen);
+                    this.spawnTroop(t.gridX + off.dx, t.gridY + off.dy, 'recursion', t.owner, nextGen, t.level || 1);
                     this.pendingSpawnCount--;
                 });
             }
@@ -4862,7 +4926,7 @@ export class MainScene extends Phaser.Scene {
                 const off = offsets[i];
                 this.pendingSpawnCount++;
                 this.time.delayedCall(i * 30, () => { // Staggered spawn
-                    this.spawnTroop(t.gridX + off.dx, t.gridY + off.dy, 'romanwarrior', t.owner);
+                    this.spawnTroop(t.gridX + off.dx, t.gridY + off.dy, 'romanwarrior', t.owner, 0, t.level || 1);
                     this.pendingSpawnCount--;
                 });
             }
@@ -5131,13 +5195,24 @@ export class MainScene extends Phaser.Scene {
     }
 
 
-    public spawnTroop(gx: number, gy: number, type: 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'ram' | 'stormmage' | 'golem' | 'sharpshooter' | 'mobilemortar' | 'davincitank' | 'phalanx' | 'romanwarrior' = 'warrior', owner: 'PLAYER' | 'ENEMY' = 'PLAYER', recursionGen: number = 0) {
+    public spawnTroop(
+        gx: number,
+        gy: number,
+        type: TroopType = 'warrior',
+        owner: 'PLAYER' | 'ENEMY' = 'PLAYER',
+        recursionGen: number = 0,
+        troopLevelOverride?: number
+    ) {
         // Bounds check - Relaxed for deployment margin
         const margin = 2;
         if (gx < -margin || gy < -margin || gx >= this.mapSize + margin || gy >= this.mapSize + margin) {
             return;
         }
-        const stats = TROOP_DEFINITIONS[type];
+        const troopLevel = Math.max(1, Math.floor(troopLevelOverride ?? this.getTroopLevelForOwner(owner)));
+        const stats = getTroopStats(type, troopLevel);
+        const attackDelay = stats.attackDelay ?? (700 + Math.random() * 300);
+        const firstAttackDelay = stats.firstAttackDelay ?? 0;
+        const spawnTime = this.time.now;
         const pos = IsoUtils.cartToIso(gx, gy);
 
         // Scale factor for recursions based on generation (each split = 75% size)
@@ -5145,7 +5220,7 @@ export class MainScene extends Phaser.Scene {
 
         // Create detailed troop graphic
         const troopGraphic = this.add.graphics();
-        TroopRenderer.drawTroopVisual(troopGraphic, type, owner);
+        TroopRenderer.drawTroopVisual(troopGraphic, type, owner, 0, true, 0, 0, 0, false, 0, troopLevel);
         troopGraphic.setPosition(pos.x, pos.y);
         troopGraphic.setDepth(depthForTroop(gx, gy, type));
 
@@ -5188,13 +5263,14 @@ export class MainScene extends Phaser.Scene {
         const troop: Troop = {
             id: Phaser.Utils.String.UUID(),
             type: type,
+            level: troopLevel,
             gameObject: troopGraphic,
             healthBar: this.add.graphics(),
             gridX: gx, gridY: gy,
             health: troopHealth, maxHealth: troopHealth,
             target: null, owner: owner,
-            lastAttackTime: type === 'golem' ? -1500 : (type === 'mobilemortar' ? -1000 : 0), // Golem waits 1.5s, mortar waits 1s before first attack
-            attackDelay: type === 'golem' ? 3000 : (type === 'mobilemortar' ? 2000 : (700 + Math.random() * 300)),
+            lastAttackTime: spawnTime - attackDelay + firstAttackDelay,
+            attackDelay,
             speedMult: 0.9 + Math.random() * 0.2,
             hasTakenDamage: false,
             facingAngle: 0,
@@ -5645,6 +5721,7 @@ export class MainScene extends Phaser.Scene {
             startAttack: () => {
                 this.showCloudTransition(async () => {
                     await this.flushPendingSaveForTransition();
+                    this.snapshotPlayerBarracksLevel();
                     // Set UI immediately
                     gameManager.setGameMode('ATTACK');
                     this.mode = 'ATTACK';
@@ -5664,6 +5741,7 @@ export class MainScene extends Phaser.Scene {
             startPracticeAttack: () => {
                 this.showCloudTransition(async () => {
                     await this.flushPendingSaveForTransition();
+                    this.snapshotPlayerBarracksLevel();
                     // Set UI immediately
                     gameManager.setGameMode('ATTACK');
                     this.mode = 'ATTACK';
@@ -5743,6 +5821,7 @@ export class MainScene extends Phaser.Scene {
             startOnlineAttack: () => {
                 this.showCloudTransition(async () => {
                     await this.flushPendingSaveForTransition();
+                    this.snapshotPlayerBarracksLevel();
                     // Set UI immediately
                     gameManager.setGameMode('ATTACK');
                     this.mode = 'ATTACK';
@@ -5763,6 +5842,7 @@ export class MainScene extends Phaser.Scene {
             startAttackOnUser: (userId: string, username: string) => {
                 this.showCloudTransition(async () => {
                     await this.flushPendingSaveForTransition();
+                    this.snapshotPlayerBarracksLevel();
                     // Set UI immediately
                     gameManager.setGameMode('ATTACK');
                     this.mode = 'ATTACK';
@@ -5787,6 +5867,7 @@ export class MainScene extends Phaser.Scene {
             startScoutOnUser: (userId: string, username: string) => {
                 this.showCloudTransition(async () => {
                     await this.flushPendingSaveForTransition();
+                    this.snapshotPlayerBarracksLevel();
                     gameManager.setGameMode('ATTACK');
                     this.mode = 'ATTACK';
                     this.isScouting = true;
@@ -5876,6 +5957,9 @@ export class MainScene extends Phaser.Scene {
                     if (this.selectedInWorld.type === 'army_camp') {
                         const campLevels = this.buildings.filter(b => b.type === 'army_camp').map(b => b.level ?? 1);
                         gameManager.refreshCampCapacity(campLevels);
+                    }
+                    if (this.selectedInWorld.type === 'barracks' && this.selectedInWorld.owner === 'PLAYER') {
+                        this.playerBarracksLevel = Math.max(this.playerBarracksLevel, this.selectedInWorld.level || 1);
                     }
 
                     // NOTE: Do NOT call Backend.upgradeBuilding here.
@@ -6261,7 +6345,7 @@ export class MainScene extends Phaser.Scene {
     private shootDragonsBreathAt(db: PlacedBuilding, troop: Troop) {
         const info = BUILDING_DEFINITIONS['dragons_breath'];
         const start = IsoUtils.cartToIso(db.gridX + info.width / 2, db.gridY + info.height / 2);
-        const stats = getBuildingStats('dragons_breath', db.level || 1);
+        const stats = this.getDefenseStats(db);
         const range = stats.range || 13;
 
         // Find all potential targets in range to distribute pods
@@ -6469,6 +6553,12 @@ export class MainScene extends Phaser.Scene {
 
     private shootSpikeLauncherAt(launcher: PlacedBuilding, troop: Troop) {
         const info = BUILDINGS['spike_launcher'];
+        const stats = this.getDefenseStats(launcher);
+        const zoneDamage = stats.damage ?? 38;
+        const impactDamage = Math.round(zoneDamage * 1.45);
+        const level = launcher.level || 1;
+        const zoneRadius = level >= 2 ? 2.4 : 2.1;
+        const zoneDuration = 3600 + level * 400;
         const start = IsoUtils.cartToIso(launcher.gridX + info.width / 2, launcher.gridY + info.height / 2);
         const end = IsoUtils.cartToIso(troop.gridX, troop.gridY);
         const targetGridX = troop.gridX;
@@ -6568,7 +6658,7 @@ export class MainScene extends Phaser.Scene {
             },
             onComplete: () => {
                 bag.destroy();
-                this.createSpikeZone(end.x, end.y, targetGridX, targetGridY, launcher.owner, 30, 2, 4000);
+                this.createSpikeZone(end.x, end.y, targetGridX, targetGridY, launcher.owner, zoneDamage, zoneRadius, zoneDuration, impactDamage);
             }
         });
 
@@ -6576,7 +6666,17 @@ export class MainScene extends Phaser.Scene {
         this.createSmokeEffect(start.x, start.y - 35, 4, 0.5, 600);
     }
 
-    private createSpikeZone(x: number, y: number, gridX: number, gridY: number, owner: 'PLAYER' | 'ENEMY', damage: number, radius: number, duration: number) {
+    private createSpikeZone(
+        x: number,
+        y: number,
+        gridX: number,
+        gridY: number,
+        owner: 'PLAYER' | 'ENEMY',
+        damage: number,
+        radius: number,
+        duration: number,
+        impactDamage: number = Math.round(damage * 1.45)
+    ) {
         // Camera shake on impact
         this.cameras.main.shake(25, 0.00075);
 
@@ -6584,7 +6684,6 @@ export class MainScene extends Phaser.Scene {
         this.createSmokeEffect(x, y - 5, 5, 0.5, 600);
 
         // IMPACT DAMAGE - immediate damage to troops in zone
-        const impactDamage = 50; // One-time hit
         this.troops.forEach(t => {
             if (t.owner !== owner && t.health > 0) {
                 const dist = Phaser.Math.Distance.Between(t.gridX, t.gridY, gridX, gridY);
@@ -6619,10 +6718,11 @@ export class MainScene extends Phaser.Scene {
         // Draw scattered spikes on ground
         const drawSpikes = (alpha: number) => {
             zoneGraphics.clear();
+            const footprintScale = Math.max(0.85, radius / 2);
 
             // Dark ground patch
             zoneGraphics.fillStyle(0x3a3020, alpha * 0.5);
-            zoneGraphics.fillEllipse(x, y + 3, 55, 28);
+            zoneGraphics.fillEllipse(x, y + 3, 55 * footprintScale, 28 * footprintScale);
 
             // Scattered metal spikes (caltrops)
             const spikePositions = [
@@ -6742,9 +6842,10 @@ export class MainScene extends Phaser.Scene {
 
     // ===== LAVA POOL (Magma Vent death zone) =====
 
-    private createLavaPool(gridX: number, gridY: number, width: number, height: number, owner: 'PLAYER' | 'ENEMY') {
+    private createLavaPool(gridX: number, gridY: number, width: number, height: number, owner: 'PLAYER' | 'ENEMY', sourceLevel: number = 1) {
         const duration = 8000;
-        const damage = 40;
+        const ventStats = getBuildingStats('magmavent', sourceLevel);
+        const damage = Math.max(20, Math.round((ventStats.damage ?? 96) * 0.45));
 
         const zoneGraphics = this.add.graphics();
         zoneGraphics.setDepth(depthForRubble(gridX, gridY, width, height));
