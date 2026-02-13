@@ -12,7 +12,7 @@ export class TroopRenderer {
                 TroopRenderer.drawArcher(graphics, isPlayer, isMoving, facingAngle);
                 break;
             case 'giant':
-                TroopRenderer.drawGiant(graphics, isPlayer, isMoving);
+                TroopRenderer.drawGiant(graphics, isPlayer, isMoving, troopLevel);
                 break;
             case 'golem':
                 TroopRenderer.drawGolem(graphics, isPlayer, isMoving, slamOffset);
@@ -24,7 +24,7 @@ export class TroopRenderer {
                 TroopRenderer.drawMobileMortar(graphics, isPlayer, isMoving, facingAngle, mortarRecoil);
                 break;
             case 'ward':
-                TroopRenderer.drawWard(graphics, isPlayer);
+                TroopRenderer.drawWard(graphics, isPlayer, isMoving);
                 break;
             case 'recursion':
                 TroopRenderer.drawRecursion(graphics, isPlayer);
@@ -33,7 +33,7 @@ export class TroopRenderer {
                 TroopRenderer.drawRam(graphics, isPlayer, isMoving, facingAngle, troopLevel);
                 break;
             case 'stormmage':
-                TroopRenderer.drawStormMage(graphics, isPlayer);
+                TroopRenderer.drawStormMage(graphics, isPlayer, isMoving);
                 break;
             case 'davincitank':
                 TroopRenderer.drawDaVinciTank(graphics, isPlayer, isMoving, isDeactivated, facingAngle);
@@ -253,7 +253,7 @@ export class TroopRenderer {
         graphics.fillCircle(1, -9 + runBob, 0.8);
     }
 
-    private static drawGiant(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean) {
+    private static drawGiant(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean, troopLevel: number = 1) {
         // MASSIVE GIANT - Hulking brute
         const now = Date.now();
         const walkPhase = isMoving ? (now % 1000) / 1000 : 0; // Slower walk
@@ -357,6 +357,33 @@ export class TroopRenderer {
         graphics.lineTo(6, -24 + walkBob);
         graphics.closePath();
         graphics.fillPath();
+
+        // Level 2+ iron helmet
+        if (troopLevel >= 2) {
+            const hy = -19 + walkBob;
+            // Helmet dome
+            graphics.fillStyle(0x6a6a7a, 1);
+            graphics.beginPath();
+            graphics.arc(0, hy - 2, 9.5, Math.PI, 0, false);
+            graphics.closePath();
+            graphics.fillPath();
+            graphics.fillStyle(0x7a7a8a, 1);
+            graphics.beginPath();
+            graphics.arc(0, hy - 2, 8.5, Math.PI, 0, false);
+            graphics.closePath();
+            graphics.fillPath();
+            // Nose guard
+            graphics.fillStyle(0x6a6a7a, 1);
+            graphics.fillRect(-1.5, hy - 4, 3, 8);
+            // Rivet dots
+            graphics.fillStyle(0x9a9aaa, 1);
+            graphics.fillCircle(-5, hy - 2, 1);
+            graphics.fillCircle(5, hy - 2, 1);
+            graphics.fillCircle(0, hy - 7, 1);
+            // Highlight
+            graphics.fillStyle(0xaaaacc, 0.4);
+            graphics.fillCircle(-3, hy - 6, 2);
+        }
     }
 
     private static drawGolem(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean, slamOffset: number) {
@@ -1010,53 +1037,83 @@ export class TroopRenderer {
         graphics.fillCircle(soldierX + 1.5, -19 + soldierY, 0.6);
     }
 
-    private static drawWard(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean) {
+    private static drawWard(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean = false) {
         const glowColor = isPlayer ? 0x58d68d : 0x45b39d;
         const robeColor = isPlayer ? 0x2ecc71 : 0x27ae60;
         const robeDark = isPlayer ? 0x1e8449 : 0x196f3d;
         const skinColor = isPlayer ? 0xdeb887 : 0xc9a66b;
         const now = Date.now();
 
-        // Heal radius aura
-        const healRadiusPixels = 7 * 32;
+        // Gentle walk bob and staff sway
+        const walkPhase = isMoving ? (now % 800) / 800 : 0;
+        const walkBob = isMoving ? Math.sin(walkPhase * Math.PI * 2) * 1.5 : 0;
+        const staffSway = isMoving ? Math.sin(walkPhase * Math.PI * 2) * 0.8 : 0;
+
+        // Heal plus sign aura (isometric cross)
+        const healRadius = 7 * 32;
+        const halfR = healRadius / 2;
+        const armW = healRadius * 0.28; // width of each cross arm
+        const halfArmW = armW / 2;
         const pulseAlpha = 0.1 + Math.sin(now / 300) * 0.05;
+        const isoRatio = 0.5; // isometric Y compression
 
-        graphics.lineStyle(3, glowColor, pulseAlpha + 0.15);
+        // Fill the plus shape (isometric)
+        graphics.fillStyle(glowColor, pulseAlpha * 0.3);
+        // Vertical arm of cross (iso: goes top-left to bottom-right)
         graphics.beginPath();
-        const segments = 48;
-        for (let i = 0; i <= segments; i++) {
-            const theta = (i / segments) * Math.PI * 2;
-            const noise = Math.sin(now / 25 + theta * 3) * 4 +
-                Math.sin(now / 37 + theta * 7) * 2 +
-                Math.sin(now / 20 + theta * 11) * 1.5;
-            const rx = (healRadiusPixels + noise) * Math.cos(theta);
-            const ry = ((healRadiusPixels / 2) + noise * 0.5) * Math.sin(theta);
-            if (i === 0) graphics.moveTo(rx, 5 + ry);
-            else graphics.lineTo(rx, 5 + ry);
-        }
+        graphics.moveTo(-halfArmW, 5 + (-halfR) * isoRatio);
+        graphics.lineTo(halfArmW, 5 + (-halfR) * isoRatio);
+        graphics.lineTo(halfArmW, 5 + halfR * isoRatio);
+        graphics.lineTo(-halfArmW, 5 + halfR * isoRatio);
         graphics.closePath();
-        graphics.strokePath();
+        graphics.fillPath();
+        // Horizontal arm of cross
+        graphics.beginPath();
+        graphics.moveTo(-halfR, 5 + (-halfArmW) * isoRatio);
+        graphics.lineTo(halfR, 5 + (-halfArmW) * isoRatio);
+        graphics.lineTo(halfR, 5 + halfArmW * isoRatio);
+        graphics.lineTo(-halfR, 5 + halfArmW * isoRatio);
+        graphics.closePath();
+        graphics.fillPath();
 
-        graphics.fillStyle(glowColor, pulseAlpha * 0.25);
-        graphics.fillEllipse(0, 5, healRadiusPixels, healRadiusPixels / 2);
+        // Outline the plus shape with noisy edge
+        graphics.lineStyle(2, glowColor, pulseAlpha + 0.15);
+        const drawNoisyRect = (x1: number, y1: number, x2: number, y2: number) => {
+            const segs = 16;
+            graphics.beginPath();
+            for (let i = 0; i <= segs; i++) {
+                const t = i / segs;
+                const n = Math.sin(now / 25 + t * 8) * 3;
+                graphics.lineTo(x1 + (x2 - x1) * t + n * 0.3, y1 + (y2 - y1) * t + n * isoRatio * 0.3);
+            }
+            graphics.strokePath();
+        };
+        // Top of vertical arm
+        drawNoisyRect(-halfArmW, 5 + (-halfR) * isoRatio, halfArmW, 5 + (-halfR) * isoRatio);
+        // Bottom of vertical arm
+        drawNoisyRect(-halfArmW, 5 + halfR * isoRatio, halfArmW, 5 + halfR * isoRatio);
+        // Left of horizontal arm
+        drawNoisyRect(-halfR, 5 + (-halfArmW) * isoRatio, -halfR, 5 + halfArmW * isoRatio);
+        // Right of horizontal arm
+        drawNoisyRect(halfR, 5 + (-halfArmW) * isoRatio, halfR, 5 + halfArmW * isoRatio);
 
         // Shadow
         graphics.fillStyle(0x000000, 0.25);
         graphics.fillEllipse(0, 12, 12, 5);
 
-        // Robe skirt (triangular)
+        // Robe skirt (triangular) — stays grounded
         graphics.fillStyle(robeDark, 1);
         graphics.beginPath();
-        graphics.moveTo(-7, 2);
-        graphics.lineTo(7, 2);
+        graphics.moveTo(-7, 2 + walkBob * 0.3);
+        graphics.lineTo(7, 2 + walkBob * 0.3);
         graphics.lineTo(5, 11);
         graphics.lineTo(-5, 11);
         graphics.closePath();
         graphics.fillPath();
         graphics.fillStyle(robeColor, 1);
         graphics.beginPath();
-        graphics.moveTo(-6, 2);
-        graphics.lineTo(6, 2);
+        graphics.moveTo(-6, 2 + walkBob * 0.3);
+        graphics.lineTo(6, 2 + walkBob * 0.3);
         graphics.lineTo(4, 10);
         graphics.lineTo(-4, 10);
         graphics.closePath();
@@ -1064,60 +1121,72 @@ export class TroopRenderer {
 
         // Torso
         graphics.fillStyle(robeDark, 1);
-        graphics.fillRect(-5, -5, 10, 8);
+        graphics.fillRect(-5, -5 + walkBob, 10, 8);
         graphics.fillStyle(robeColor, 1);
-        graphics.fillRect(-4, -4, 8, 7);
+        graphics.fillRect(-4, -4 + walkBob, 8, 7);
 
         // Hood/cowl
         graphics.fillStyle(robeDark, 1);
         graphics.beginPath();
-        graphics.arc(0, -8, 6, Math.PI, 0, false);
+        graphics.arc(0, -8 + walkBob, 6, Math.PI, 0, false);
         graphics.closePath();
         graphics.fillPath();
         graphics.fillStyle(robeColor, 1);
         graphics.beginPath();
-        graphics.arc(0, -8, 5, Math.PI, 0, false);
+        graphics.arc(0, -8 + walkBob, 5, Math.PI, 0, false);
         graphics.closePath();
         graphics.fillPath();
 
         // Face
         graphics.fillStyle(skinColor, 1);
-        graphics.fillCircle(0, -8, 4);
+        graphics.fillCircle(0, -8 + walkBob, 4);
 
         // Eyes
         graphics.fillStyle(0x2a5a1a, 1);
-        graphics.fillCircle(-1.5, -8, 1);
-        graphics.fillCircle(1.5, -8, 1);
+        graphics.fillCircle(-1.5, -8 + walkBob, 1);
+        graphics.fillCircle(1.5, -8 + walkBob, 1);
 
-        // Staff held in right hand
+        // Staff held in right hand (sways when walking)
         graphics.fillStyle(0x5d4e37, 1);
-        graphics.fillRect(7, -16, 3, 24);
+        graphics.fillRect(7 + staffSway, -16 + walkBob, 3, 24);
         graphics.fillStyle(0x4a3520, 1);
-        graphics.fillRect(8, -16, 1.5, 24);
+        graphics.fillRect(8 + staffSway, -16 + walkBob, 1.5, 24);
 
         // Crystal orb on staff
         const orbPulse = 0.8 + Math.sin(now / 200) * 0.15;
         graphics.fillStyle(0x88ffcc, orbPulse);
-        graphics.fillCircle(8.5, -18, 4.5);
+        graphics.fillCircle(8.5 + staffSway, -18 + walkBob, 4.5);
         graphics.fillStyle(0xffffff, 0.5);
-        graphics.fillCircle(7, -19.5, 1.5);
+        graphics.fillCircle(7 + staffSway, -19.5 + walkBob, 1.5);
 
         // Glow around orb
         graphics.lineStyle(2, 0xaaffdd, 0.4);
-        graphics.strokeCircle(8.5, -18, 7);
+        graphics.strokeCircle(8.5 + staffSway, -18 + walkBob, 7);
 
-        // Left arm extended (casting)
+        // Left arm extended (casting) — gentle bob
         graphics.fillStyle(robeColor, 1);
         graphics.beginPath();
-        graphics.moveTo(-4, -3);
-        graphics.lineTo(-9, -7);
-        graphics.lineTo(-8, -9);
-        graphics.lineTo(-3, -5);
+        graphics.moveTo(-4, -3 + walkBob);
+        graphics.lineTo(-9, -7 + walkBob);
+        graphics.lineTo(-8, -9 + walkBob);
+        graphics.lineTo(-3, -5 + walkBob);
         graphics.closePath();
         graphics.fillPath();
         // Hand
         graphics.fillStyle(skinColor, 1);
-        graphics.fillCircle(-9, -8, 2);
+        graphics.fillCircle(-9, -8 + walkBob, 2);
+
+        // Heal particles when not moving (casting)
+        if (!isMoving) {
+            for (let i = 0; i < 2; i++) {
+                const pAngle = (now / 300 + i * Math.PI) % (Math.PI * 2);
+                const pDist = 5 + Math.sin(now / 200 + i) * 3;
+                const px = -9 + Math.cos(pAngle) * pDist;
+                const py = -10 + Math.sin(pAngle) * pDist * 0.5;
+                graphics.fillStyle(glowColor, 0.3 + Math.sin(now / 100 + i) * 0.2);
+                graphics.fillCircle(px, py, 1.5);
+            }
+        }
     }
 
     private static drawRecursion(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean) {
@@ -1482,19 +1551,26 @@ export class TroopRenderer {
         graphics.fillPath();
     }
 
-    private static drawStormMage(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean) {
+    private static drawStormMage(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean = false) {
         const now = Date.now();
         const robeColor = isPlayer ? 0x3344aa : 0x882222;
         const robeDark = isPlayer ? 0x222277 : 0x661111;
         const skinColor = isPlayer ? 0xdeb887 : 0xc9a66b;
         const glowColor = 0x00ffff;
 
-        // Static electricity sparks
-        for (let i = 0; i < 3; i++) {
+        // Walk animation
+        const walkPhase = isMoving ? (now % 700) / 700 : 0;
+        const walkBob = isMoving ? Math.sin(walkPhase * Math.PI * 2) * 1.5 : 0;
+        const hatSway = isMoving ? Math.sin(walkPhase * Math.PI * 2) * 0.5 : 0;
+        const staffSway = isMoving ? Math.sin(walkPhase * Math.PI * 2) * 1.0 : 0;
+
+        // Static electricity sparks (more when not moving / casting)
+        const sparkCount = isMoving ? 2 : 4;
+        for (let i = 0; i < sparkCount; i++) {
             const angle = (now / 100 + i * 2) % (Math.PI * 2);
             const dist = 12 + Math.sin(now / 200 + i) * 4;
             const px = Math.cos(angle) * dist;
-            const py = Math.sin(angle) * dist * 0.6 - 10;
+            const py = Math.sin(angle) * dist * 0.6 - 10 + walkBob;
             graphics.fillStyle(glowColor, 0.4 + Math.sin(now / 50 + i) * 0.3);
             graphics.fillCircle(px, py, 1.5);
         }
@@ -1503,19 +1579,19 @@ export class TroopRenderer {
         graphics.fillStyle(0x000000, 0.25);
         graphics.fillEllipse(0, 12, 12, 5);
 
-        // Robe skirt
+        // Robe skirt — stays grounded
         graphics.fillStyle(robeDark, 1);
         graphics.beginPath();
-        graphics.moveTo(-7, 2);
-        graphics.lineTo(7, 2);
+        graphics.moveTo(-7, 2 + walkBob * 0.3);
+        graphics.lineTo(7, 2 + walkBob * 0.3);
         graphics.lineTo(5, 11);
         graphics.lineTo(-5, 11);
         graphics.closePath();
         graphics.fillPath();
         graphics.fillStyle(robeColor, 1);
         graphics.beginPath();
-        graphics.moveTo(-6, 2);
-        graphics.lineTo(6, 2);
+        graphics.moveTo(-6, 2 + walkBob * 0.3);
+        graphics.lineTo(6, 2 + walkBob * 0.3);
         graphics.lineTo(4, 10);
         graphics.lineTo(-4, 10);
         graphics.closePath();
@@ -1523,80 +1599,81 @@ export class TroopRenderer {
 
         // Torso
         graphics.fillStyle(robeDark, 1);
-        graphics.fillRect(-5, -5, 10, 8);
+        graphics.fillRect(-5, -5 + walkBob, 10, 8);
         graphics.fillStyle(robeColor, 1);
-        graphics.fillRect(-4, -4, 8, 7);
+        graphics.fillRect(-4, -4 + walkBob, 8, 7);
 
         // Belt/sash with lightning emblem
         graphics.fillStyle(0xc9a227, 1);
-        graphics.fillRect(-5, 0, 10, 2);
+        graphics.fillRect(-5, 0 + walkBob, 10, 2);
 
         // Head
         graphics.fillStyle(skinColor, 1);
-        graphics.fillCircle(0, -9, 4);
+        graphics.fillCircle(0, -9 + walkBob, 4);
 
-        // Pointy wizard hat
+        // Pointy wizard hat (sways with walk)
         graphics.fillStyle(robeDark, 1);
         graphics.beginPath();
-        graphics.moveTo(-6, -8);
-        graphics.lineTo(6, -8);
-        graphics.lineTo(0, -22);
+        graphics.moveTo(-6, -8 + walkBob);
+        graphics.lineTo(6, -8 + walkBob);
+        graphics.lineTo(hatSway, -22 + walkBob);
         graphics.closePath();
         graphics.fillPath();
         graphics.fillStyle(robeColor, 1);
         graphics.beginPath();
-        graphics.moveTo(-5, -9);
-        graphics.lineTo(5, -9);
-        graphics.lineTo(0, -21);
+        graphics.moveTo(-5, -9 + walkBob);
+        graphics.lineTo(5, -9 + walkBob);
+        graphics.lineTo(hatSway, -21 + walkBob);
         graphics.closePath();
         graphics.fillPath();
         // Hat brim
         graphics.fillStyle(robeDark, 1);
-        graphics.fillEllipse(0, -8, 14, 4);
+        graphics.fillEllipse(0, -8 + walkBob, 14, 4);
 
         // Eyes
         graphics.fillStyle(0x2244aa, 1);
-        graphics.fillCircle(-1.5, -9, 1);
-        graphics.fillCircle(1.5, -9, 1);
+        graphics.fillCircle(-1.5, -9 + walkBob, 1);
+        graphics.fillCircle(1.5, -9 + walkBob, 1);
 
-        // Staff in right hand
+        // Staff in right hand (sways)
         graphics.fillStyle(0x5d4e37, 1);
-        graphics.fillRect(7, -18, 3, 26);
+        graphics.fillRect(7 + staffSway, -18 + walkBob, 3, 26);
         graphics.fillStyle(0x4a3520, 1);
-        graphics.fillRect(8, -18, 1.5, 26);
+        graphics.fillRect(8 + staffSway, -18 + walkBob, 1.5, 26);
 
         // Staff crystal (electric)
         const crystalGlow = 0.7 + Math.sin(now / 80) * 0.3;
         graphics.fillStyle(glowColor, 0.25 * crystalGlow);
-        graphics.fillCircle(8.5, -20, 7);
+        graphics.fillCircle(8.5 + staffSway, -20 + walkBob, 7);
         graphics.fillStyle(glowColor, 0.9);
-        graphics.fillCircle(8.5, -20, 3);
+        graphics.fillCircle(8.5 + staffSway, -20 + walkBob, 3);
         graphics.fillStyle(0xffffff, 0.8);
-        graphics.fillCircle(7.5, -21.5, 1.2);
+        graphics.fillCircle(7.5 + staffSway, -21.5 + walkBob, 1.2);
 
-        // Lightning arc from staff tip (occasional)
-        if (Math.sin(now / 60) > 0.6) {
+        // Lightning arc from staff tip (occasional, more frequent when stationary)
+        const arcThreshold = isMoving ? 0.85 : 0.6;
+        if (Math.sin(now / 60) > arcThreshold) {
             graphics.lineStyle(1, 0xffffff, 0.8);
-            const arcX = 8.5 + Math.sin(now / 30) * 6;
-            const arcY = -20 + Math.cos(now / 40) * 5;
-            graphics.lineBetween(8.5, -20, arcX, arcY);
+            const arcX = 8.5 + staffSway + Math.sin(now / 30) * 6;
+            const arcY = -20 + walkBob + Math.cos(now / 40) * 5;
+            graphics.lineBetween(8.5 + staffSway, -20 + walkBob, arcX, arcY);
         }
 
         // Left arm raised (casting gesture)
         graphics.fillStyle(robeColor, 1);
         graphics.beginPath();
-        graphics.moveTo(-4, -3);
-        graphics.lineTo(-10, -10);
-        graphics.lineTo(-8, -11);
-        graphics.lineTo(-3, -5);
+        graphics.moveTo(-4, -3 + walkBob);
+        graphics.lineTo(-10, -10 + walkBob);
+        graphics.lineTo(-8, -11 + walkBob);
+        graphics.lineTo(-3, -5 + walkBob);
         graphics.closePath();
         graphics.fillPath();
         // Hand with spark
         graphics.fillStyle(skinColor, 1);
-        graphics.fillCircle(-9, -10.5, 2);
+        graphics.fillCircle(-9, -10.5 + walkBob, 2);
         const sparkAlpha = 0.3 + Math.sin(now / 70) * 0.3;
         graphics.fillStyle(glowColor, sparkAlpha);
-        graphics.fillCircle(-9, -12, 2);
+        graphics.fillCircle(-9, -12 + walkBob, 2);
     }
 
     static drawDaVinciTank(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, _isMoving: boolean, isDeactivated: boolean = false, facingAngle: number = 0) {

@@ -39,6 +39,7 @@ interface HudProps {
   onMoveBuilding: () => void;
   isDummyActive: boolean;
   onToggleDummy: () => void;
+  troopLevel: number;
 }
 
 export function Hud({
@@ -69,7 +70,8 @@ export function Hud({
   onUpgradeBuilding,
   onMoveBuilding,
   isDummyActive,
-  onToggleDummy
+  onToggleDummy,
+  troopLevel
 }: HudProps) {
   // Unused props (kept for interface compatibility):
   void _capacity;
@@ -264,6 +266,7 @@ export function Hud({
                     >
                       <div className={`icon ${t}-icon`}></div>
                       <span className="troop-count-badge">{count}</span>
+                      {troopLevel > 1 && <span className="troop-level-badge">Lv{troopLevel}</span>}
                       {isMobile && selectedTroopType === t && (
                         <span className="mobile-troop-name">{getTroopName(t)}</span>
                       )}

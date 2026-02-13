@@ -1166,6 +1166,7 @@ function App() {
         onMoveBuilding={() => gameManager.moveSelectedBuilding()}
         isDummyActive={isDummyActive}
         onToggleDummy={handleToggleDummy}
+        troopLevel={troopLevel}
       />
 
       {view === 'ATTACK' && scoutTarget && (

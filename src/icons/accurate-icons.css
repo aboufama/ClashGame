@@ -184,7 +184,7 @@
 }
 
 
-/* RECURSION - Teal crystal mage with robes and crystalline staff */
+/* RECURSION - Alien hexagonal blob with split symbol */
 .recursion-icon::before {
     content: '';
     position: absolute;
@@ -195,29 +195,25 @@
     left: 50%;
     transform: translate(-50%, -50%);
     box-shadow:
-        /* Hooded head */
-        -4px -16px #006666, -2px -16px #008888, 0 -16px #00AAAA, 2px -16px #008888, 4px -16px #006666,
-        -6px -14px #004444, -4px -14px #006666, -2px -14px #008888, 0 -14px #00AAAA, 2px -14px #008888, 4px -14px #006666, 6px -14px #004444,
-        /* Face visible */
-        -4px -12px #006666, -2px -12px #DEB887, 0 -12px #F5DEB3, 2px -12px #DEB887, 4px -12px #006666,
-        /* Glowing teal eyes */
-        -2px -12px #00FFDD, 2px -12px #00FFDD,
-        /* Body robes */
-        -6px -10px #003333, -4px -10px #004444, -2px -10px #006666, 0 -10px #008888, 2px -10px #006666, 4px -10px #004444, 6px -10px #003333,
-        -6px -8px #002222, -4px -8px #003333, -2px -8px #004444, 0 -8px #006666, 2px -8px #004444, 4px -8px #003333, 6px -8px #002222,
-        /* Crystal staff */
-        10px -14px #00FFDD, 10px -12px #00FFAA, 10px -10px #00CC88,
-        10px -8px #654321, 10px -6px #8B4513, 10px -4px #654321, 10px -2px #8B4513, 10px 0 #654321,
-        /* Crystal sparkles */
-        8px -16px #FFFFFF, 12px -14px #00FFFF, 8px -12px #AAFFFF,
-        /* Arms */
-        -8px -6px #004444, 8px -6px #DEB887,
-        /* Lower robes */
-        -6px -6px #004444, -4px -6px #006666, -2px -6px #008888, 0 -6px #006666, 2px -6px #008888, 4px -6px #006666, 6px -6px #004444,
-        -6px -4px #003333, -4px -4px #004444, -2px -4px #006666, 0 -4px #004444, 2px -4px #006666, 4px -4px #004444, 6px -4px #003333,
-        -4px -2px #003333, -2px -2px #004444, 0 -2px #003333, 2px -2px #004444, 4px -2px #003333,
-        /* Feet */
-        -4px 0 #3E2723, -2px 0 #5C3317, 2px 0 #5C3317, 4px 0 #3E2723;
+        /* Outer hexagon shell */
+        0 -14px #00AA77, 2px -14px #00FFAA, -2px -14px #00FFAA,
+        -6px -12px #00AA77, -4px -12px #00FFAA, -2px -12px #00DDAA, 0 -12px #00FFAA, 2px -12px #00DDAA, 4px -12px #00FFAA, 6px -12px #00AA77,
+        -8px -10px #00AA77, -6px -10px #00CC88, -4px -10px #00FFAA, -2px -10px #00FFAA, 0 -10px #00FFAA, 2px -10px #00FFAA, 4px -10px #00FFAA, 6px -10px #00CC88, 8px -10px #00AA77,
+        -10px -8px #008866, -8px -8px #00AA77, -6px -8px #00CC88, -4px -8px #00DDAA, -2px -8px #00FFAA, 0 -8px #00FFAA, 2px -8px #00FFAA, 4px -8px #00DDAA, 6px -8px #00CC88, 8px -8px #00AA77, 10px -8px #008866,
+        /* Inner hexagon (darker) */
+        -4px -6px #007755, -2px -6px #008866, 0 -6px #00AA77, 2px -6px #008866, 4px -6px #007755,
+        -10px -6px #008866, -8px -6px #00AA77, -6px -6px #00AA77, 6px -6px #00AA77, 8px -6px #00AA77, 10px -6px #008866,
+        /* Central core - white with split cross */
+        -2px -4px #007755, 0 -4px #FFFFFF, 2px -4px #007755,
+        -10px -4px #00AA77, -8px -4px #00CC88, -6px -4px #008866, 6px -4px #008866, 8px -4px #00CC88, 10px -4px #00AA77,
+        -2px -2px #FFFFFF, 0 -2px #00FFAA, 2px -2px #FFFFFF,
+        -10px -2px #008866, -8px -2px #00AA77, -6px -2px #007755, 6px -2px #007755, 8px -2px #00AA77, 10px -2px #008866,
+        -2px 0 #007755, 0 0 #FFFFFF, 2px 0 #007755,
+        /* Lower hexagon */
+        -8px 0 #00AA77, -6px 0 #00CC88, -4px 0 #00AA77, 4px 0 #00AA77, 6px 0 #00CC88, 8px 0 #00AA77,
+        -6px 2px #00AA77, -4px 2px #00FFAA, -2px 2px #00FFAA, 0 2px #00FFAA, 2px 2px #00FFAA, 4px 2px #00FFAA, 6px 2px #00AA77,
+        -4px 4px #00AA77, -2px 4px #00CC88, 0 4px #00FFAA, 2px 4px #00CC88, 4px 4px #00AA77,
+        -2px 6px #008866, 0 6px #00AA77, 2px 6px #008866;
 }
 
 /* RAM - Battering ram siege weapon with log, metal head, wooden frame, wheels */

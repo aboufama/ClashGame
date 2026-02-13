@@ -1866,6 +1866,20 @@ body.is-touch {
     padding: 1px 3px;
 }
 
+.troop-level-badge {
+    position: absolute;
+    bottom: -2px;
+    left: -2px;
+    background: rgba(0, 0, 0, 0.6);
+    color: var(--fantasy-gold);
+    font-size: 6px;
+    padding: 0 2px;
+    font-family: 'Press Start 2P', monospace;
+    line-height: 1.4;
+    border-radius: 2px;
+    pointer-events: none;
+}
+
 .mobile-troop-name {
     position: absolute;
     bottom: -20px;
