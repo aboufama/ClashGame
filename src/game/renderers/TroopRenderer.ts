@@ -6,10 +6,10 @@ export class TroopRenderer {
 
         switch (type) {
             case 'warrior':
-                TroopRenderer.drawWarrior(graphics, isPlayer, isMoving);
+                TroopRenderer.drawWarrior(graphics, isPlayer, isMoving, troopLevel);
                 break;
             case 'archer':
-                TroopRenderer.drawArcher(graphics, isPlayer, isMoving, facingAngle);
+                TroopRenderer.drawArcher(graphics, isPlayer, isMoving, facingAngle, troopLevel);
                 break;
             case 'giant':
                 TroopRenderer.drawGiant(graphics, isPlayer, isMoving, troopLevel);
@@ -18,34 +18,34 @@ export class TroopRenderer {
                 TroopRenderer.drawGolem(graphics, isPlayer, isMoving, slamOffset, troopLevel);
                 break;
             case 'sharpshooter':
-                TroopRenderer.drawSharpshooter(graphics, isPlayer, isMoving, facingAngle, bowDrawProgress);
+                TroopRenderer.drawSharpshooter(graphics, isPlayer, isMoving, facingAngle, bowDrawProgress, troopLevel);
                 break;
             case 'mobilemortar':
-                TroopRenderer.drawMobileMortar(graphics, isPlayer, isMoving, facingAngle, mortarRecoil);
+                TroopRenderer.drawMobileMortar(graphics, isPlayer, isMoving, facingAngle, mortarRecoil, troopLevel);
                 break;
             case 'ward':
-                TroopRenderer.drawWard(graphics, isPlayer, isMoving);
+                TroopRenderer.drawWard(graphics, isPlayer, isMoving, troopLevel);
                 break;
             case 'recursion':
-                TroopRenderer.drawRecursion(graphics, isPlayer, isMoving);
+                TroopRenderer.drawRecursion(graphics, isPlayer, isMoving, troopLevel);
                 break;
             case 'ram':
                 TroopRenderer.drawRam(graphics, isPlayer, isMoving, facingAngle, troopLevel);
                 break;
             case 'stormmage':
-                TroopRenderer.drawStormMage(graphics, isPlayer, isMoving);
+                TroopRenderer.drawStormMage(graphics, isPlayer, isMoving, troopLevel);
                 break;
             case 'davincitank':
-                TroopRenderer.drawDaVinciTank(graphics, isPlayer, isMoving, isDeactivated, facingAngle);
+                TroopRenderer.drawDaVinciTank(graphics, isPlayer, isMoving, isDeactivated, facingAngle, troopLevel);
                 break;
             case 'phalanx':
-                TroopRenderer.drawPhalanx(graphics, isPlayer, isMoving, facingAngle, phalanxSpearOffset);
+                TroopRenderer.drawPhalanx(graphics, isPlayer, isMoving, facingAngle, phalanxSpearOffset, troopLevel);
                 break;
             case 'romanwarrior':
-                TroopRenderer.drawRomanSoldier(graphics, isPlayer, isMoving, facingAngle, false, 0);
+                TroopRenderer.drawRomanSoldier(graphics, isPlayer, isMoving, facingAngle, false, 0, 0, 0, 0, troopLevel);
                 break;
             case 'wallbreaker':
-                TroopRenderer.drawWallBreaker(graphics, isPlayer, isMoving);
+                TroopRenderer.drawWallBreaker(graphics, isPlayer, isMoving, troopLevel);
                 break;
         }
 
@@ -57,7 +57,7 @@ export class TroopRenderer {
 
     }
 
-    private static drawWarrior(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean) {
+    private static drawWarrior(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean, troopLevel: number = 1) {
         // WARRIOR - Armored swordsman with shield
         const now = Date.now();
         const runPhase = isMoving ? (now % 300) / 300 : 0;
@@ -178,9 +178,17 @@ export class TroopRenderer {
         graphics.lineTo(1 + bodyLean, runBob - 11);
         graphics.closePath();
         graphics.fillPath();
+
+        // L2: Gold band on helmet + shield boss upgrade
+        if (troopLevel >= 2) {
+            graphics.fillStyle(0xdaa520, 1);
+            graphics.fillRect(-4 + bodyLean, runBob - 8, 8, 1.5);
+            graphics.fillStyle(0xdaa520, 1);
+            graphics.fillCircle(-9 + bodyLean, runBob + 1, 2);
+        }
     }
 
-    private static drawArcher(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean, facingAngle: number) {
+    private static drawArcher(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean, facingAngle: number, troopLevel: number = 1) {
         // HOODED ARCHER - Agile ranger with bow
         const now = Date.now();
         const runPhase = isMoving ? (now % 350) / 350 : 0;
@@ -277,6 +285,16 @@ export class TroopRenderer {
         graphics.fillStyle(0xffffff, 0.8);
         graphics.fillCircle(-1, -9 + runBob, 0.8);
         graphics.fillCircle(1, -9 + runBob, 0.8);
+
+        // L2: Gold-tipped arrows in quiver + gold clasp on cloak
+        if (troopLevel >= 2) {
+            graphics.fillStyle(0xdaa520, 1);
+            graphics.fillTriangle(-6, -12 + runBob, -6.5, -13.5 + runBob, -5.5, -13.5 + runBob);
+            graphics.fillTriangle(-5, -11 + runBob, -5.5, -12.5 + runBob, -4.5, -12.5 + runBob);
+            // Gold clasp at collar
+            graphics.fillStyle(0xdaa520, 1);
+            graphics.fillCircle(0, -4 + runBob, 1.5);
+        }
     }
 
     private static drawGiant(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean, troopLevel: number = 1) {
@@ -291,39 +309,44 @@ export class TroopRenderer {
         const rightLeg = isMoving ? -stepCycle * 3 : 0;
         const shoulderLean = 0; // no shoulder jerk
 
-        // Attack animation — slam finishes just BEFORE damage fires at cycle end
-        // Club is visually at ground by phase 0.95, damage fires at phase 1.0
+        // Attack animation — 2x speed swing in first half, idle in second half
+        // Slam lands near phase 0.95, damage fires at phase 1.0
         const attackCycle = 3600; // must match attackDelay in GameDefinitions
         const attackPhase = !isMoving ? (now % attackCycle) / attackCycle : 0;
         let batAngle = -0.3; // resting on shoulder
         let rightArmAngle = -0.3; // arm angle tracks bat
         let bodyLean = 0;
         if (!isMoving) {
-            if (attackPhase < 0.1) {
+            if (attackPhase < 0.06) {
                 // Hold at ground (damage just fired)
                 batAngle = 1.6;
                 rightArmAngle = 0.6;
-                bodyLean = 4 * (1 - attackPhase / 0.1);
-            } else if (attackPhase < 0.35) {
+                bodyLean = 4 * (1 - attackPhase / 0.06);
+            } else if (attackPhase < 0.15) {
                 // Return bat to shoulder
-                const t = (attackPhase - 0.1) / 0.25;
+                const t = (attackPhase - 0.06) / 0.09;
                 batAngle = 1.6 - 1.9 * t;
                 rightArmAngle = 0.6 - 0.9 * t;
                 bodyLean = 0;
-            } else if (attackPhase < 0.8) {
-                // Slow windup — raise bat overhead, lean back
-                const t = (attackPhase - 0.35) / 0.45;
+            } else if (attackPhase < 0.5) {
+                // Idle — bat resting on shoulder
+                batAngle = -0.3;
+                rightArmAngle = -0.3;
+                bodyLean = 0;
+            } else if (attackPhase < 0.78) {
+                // Windup — raise bat overhead, lean back
+                const t = (attackPhase - 0.5) / 0.28;
                 batAngle = -0.3 - 1.2 * t;
                 rightArmAngle = -0.3 - 0.6 * t;
                 bodyLean = -2 * t;
-            } else if (attackPhase < 0.95) {
-                // Fast slam down
-                const t = (attackPhase - 0.8) / 0.15;
+            } else if (attackPhase < 0.92) {
+                // Fast slam down — club sweeps to near-horizontal
+                const t = (attackPhase - 0.78) / 0.14;
                 batAngle = -1.5 + 3.1 * t;
                 rightArmAngle = -0.9 + 1.5 * t;
                 bodyLean = -2 + 6 * t;
             } else {
-                // Hold at ground — club down, waiting for damage to fire
+                // Hold at ground — club parallel, waiting for damage
                 batAngle = 1.6;
                 rightArmAngle = 0.6;
                 bodyLean = 4;
@@ -873,7 +896,7 @@ export class TroopRenderer {
         graphics.fillCircle(22, -30 + bodySlam, 2);
     }
 
-    private static drawSharpshooter(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean, facingAngle: number, bowDrawProgress: number) {
+    private static drawSharpshooter(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean, facingAngle: number, bowDrawProgress: number, troopLevel: number = 1) {
         // SHARPSHOOTER - Elite archer with massive crossbow
         const now = Date.now();
         const runPhase = isMoving ? (now % 400) / 400 : 0;
@@ -993,9 +1016,22 @@ export class TroopRenderer {
         }
 
         graphics.restore();
+
+        // L2: Gold headband
+        if (troopLevel >= 2) {
+            graphics.fillStyle(0xdaa520, 1);
+            graphics.fillRect(-5, -28, 10, 2);
+            // Gold band around bow grip
+            graphics.fillStyle(0xdaa520, 0.8);
+            graphics.save();
+            graphics.translateCanvas(0, -12);
+            graphics.rotateCanvas(facingAngle + armBob);
+            graphics.fillRect(16, -2, 3, 4);
+            graphics.restore();
+        }
     }
 
-    private static drawMobileMortar(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean, facingAngle: number, mortarRecoil: number) {
+    private static drawMobileMortar(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean, facingAngle: number, mortarRecoil: number, troopLevel: number = 1) {
         // MOBILE MORTAR - Soldier ALWAYS IN FRONT dragging the mortar BEHIND
         const now = Date.now();
 
@@ -1180,9 +1216,22 @@ export class TroopRenderer {
         graphics.fillStyle(0x000000, 1);
         graphics.fillCircle(soldierX - 1.5, -19 + soldierY, 0.6);
         graphics.fillCircle(soldierX + 1.5, -19 + soldierY, 0.6);
+
+        // L2: Wider mortar barrel + gold reinforcement bands + ammo box on cart
+        if (troopLevel >= 2) {
+            // Extra reinforcement band on mortar tube
+            graphics.lineStyle(2, 0xdaa520, 0.9);
+            graphics.strokeEllipse(mortarX, -12 + mortarY, 5, 2.5);
+            graphics.strokeEllipse(mortarX, -6 + mortarY, 6, 2.5);
+            // Ammo crate on cart behind mortar
+            graphics.fillStyle(0x5a3a1a, 1);
+            graphics.fillRect(mortarX - 7, -2 + mortarY, 5, 4);
+            graphics.lineStyle(1, 0x444444, 0.6);
+            graphics.strokeRect(mortarX - 7, -2 + mortarY, 5, 4);
+        }
     }
 
-    private static drawWard(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean = false) {
+    private static drawWard(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean = false, troopLevel: number = 1) {
         const glowColor = isPlayer ? 0x58d68d : 0x45b39d;
         const robeColor = isPlayer ? 0x2ecc71 : 0x27ae60;
         const robeDark = isPlayer ? 0x1e8449 : 0x196f3d;
@@ -1307,9 +1356,19 @@ export class TroopRenderer {
                 graphics.fillCircle(px, py, 1.5);
             }
         }
+
+        // L2: Gold trim on robe + larger brighter orb
+        if (troopLevel >= 2) {
+            graphics.lineStyle(1.5, 0xdaa520, 0.9);
+            graphics.lineBetween(-6, 2 + walkBob * 0.3, -4, 10);
+            graphics.lineBetween(6, 2 + walkBob * 0.3, 4, 10);
+            // Extra glow ring around orb
+            graphics.lineStyle(1.5, 0xffd700, 0.5);
+            graphics.strokeCircle(8.5 + staffSway, -18 + walkBob, 6);
+        }
     }
 
-    private static drawRecursion(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean = false) {
+    private static drawRecursion(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean = false, troopLevel: number = 1) {
         // Fractal/geometric entity that splits on death
         const bodyColor = isPlayer ? 0x00ffaa : 0xaa00ff;
         const innerColor = isPlayer ? 0x00aa77 : 0x7700aa;
@@ -1402,6 +1461,24 @@ export class TroopRenderer {
                 graphics.fillStyle(bodyColor, 0.4 + Math.sin(now / 60 + i) * 0.3);
                 graphics.fillCircle(wx, wy, 1.5);
             }
+        }
+
+        // L2: Extra outer ring + gold core
+        if (troopLevel >= 2) {
+            graphics.lineStyle(1.5, 0xdaa520, 0.6);
+            graphics.beginPath();
+            for (let i = 0; i < 6; i++) {
+                const angle = rot * 0.5 + (i / 6) * Math.PI * 2;
+                const px = Math.cos(angle) * (outerRadius + 4);
+                const py = Math.sin(angle) * (outerRadius + 4) * 0.6 - 2 + hoverBob;
+                if (i === 0) graphics.moveTo(px, py);
+                else graphics.lineTo(px, py);
+            }
+            graphics.closePath();
+            graphics.strokePath();
+            // Gold core accent
+            graphics.fillStyle(0xffd700, 0.5);
+            graphics.fillCircle(0, -2 + hoverBob, 1.5);
         }
     }
 
@@ -1722,7 +1799,7 @@ export class TroopRenderer {
         graphics.fillPath();
     }
 
-    private static drawStormMage(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean = false) {
+    private static drawStormMage(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean = false, troopLevel: number = 1) {
         const now = Date.now();
         const robeColor = isPlayer ? 0x3344aa : 0x882222;
         const robeDark = isPlayer ? 0x222277 : 0x661111;
@@ -1845,9 +1922,21 @@ export class TroopRenderer {
         const sparkAlpha = 0.3 + Math.sin(now / 70) * 0.3;
         graphics.fillStyle(glowColor, sparkAlpha);
         graphics.fillCircle(-9, -12 + walkBob, 2);
+
+        // L2: Gold star on hat + rune markings on robe
+        if (troopLevel >= 2) {
+            // Gold star emblem on hat
+            graphics.fillStyle(0xffd700, 0.9);
+            graphics.fillCircle(hatSway * 0.5, -16 + walkBob, 2);
+            // Gold rune marks on robe
+            graphics.lineStyle(1, 0xdaa520, 0.6);
+            graphics.lineBetween(-3, -2 + walkBob, -1, -4 + walkBob);
+            graphics.lineBetween(-1, -4 + walkBob, 1, -2 + walkBob);
+            graphics.lineBetween(1, -2 + walkBob, 3, -4 + walkBob);
+        }
     }
 
-    static drawDaVinciTank(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, _isMoving: boolean, isDeactivated: boolean = false, facingAngle: number = 0) {
+    static drawDaVinciTank(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, _isMoving: boolean, isDeactivated: boolean = false, facingAngle: number = 0, troopLevel: number = 1) {
         // LEONARDO DA VINCI'S ARMORED WAR MACHINE
         // Conical wooden tank with cannons all around the base - NO rotation when moving
         // Rotation only happens after each shot (controlled by facingAngle from MainScene)
@@ -2101,10 +2190,32 @@ export class TroopRenderer {
             graphics.fillCircle(10, -18, 3);
             graphics.fillCircle(-5, -28, 2);
         }
+
+        // L2: Gold finial, decorative eagle emblem, gold rivet accents
+        if (troopLevel >= 2 && !isDeactivated) {
+            // Gold top finial instead of metal
+            graphics.fillStyle(0xffd700, alpha);
+            graphics.beginPath();
+            graphics.moveTo(0, topConeY - 10);
+            graphics.lineTo(-2, topConeY - 2);
+            graphics.lineTo(2, topConeY - 2);
+            graphics.closePath();
+            graphics.fillPath();
+            // Gold band around mid-cone
+            graphics.lineStyle(2, 0xdaa520, alpha * 0.8);
+            graphics.beginPath();
+            for (let t = 0; t <= Math.PI; t += 0.1) {
+                const px = Math.cos(t) * (coneMidRadius + 1);
+                const py = Math.sin(t) * (coneMidRadius + 1) * 0.5 + coneMidY + 3;
+                if (t === 0) graphics.moveTo(px, py);
+                else graphics.lineTo(px, py);
+            }
+            graphics.strokePath();
+        }
     }
 
     // === ROMAN SOLDIER - Individual Legionary ===
-    static drawRomanSoldier(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean, facingAngle: number, isTestudo: boolean, spearOffset: number = 0, sx: number = 0, sy: number = 0, stagger: number = 0) {
+    static drawRomanSoldier(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean, facingAngle: number, isTestudo: boolean, spearOffset: number = 0, sx: number = 0, sy: number = 0, stagger: number = 0, troopLevel: number = 1) {
         const now = Date.now();
         const marchPhase = isMoving ? (now % 600) / 600 : 0;
         const legPhase = (marchPhase + stagger) % 1;
@@ -2204,10 +2315,21 @@ export class TroopRenderer {
             graphics.fillStyle(shieldBoss, 1);
             graphics.fillCircle(shieldX, shieldY, 2.5);
         }
+
+        // L2: Gold helmet plume + gold shoulder pauldrons
+        if (troopLevel >= 2) {
+            // Taller gold crest
+            graphics.fillStyle(0xffd700, 1);
+            graphics.fillRect(sx - 1, currentSy - 21, 2, 6);
+            // Gold shoulder pauldrons
+            graphics.fillStyle(0xdaa520, 0.8);
+            graphics.fillCircle(sx - 5, currentSy - 5, 2);
+            graphics.fillCircle(sx + 5, currentSy - 5, 2);
+        }
     }
 
     // === PHALANX - Roman Testudo Formation (3x3 soldiers with shields overhead) ===
-    static drawPhalanx(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean, facingAngle: number, spearOffset: number = 0) {
+    static drawPhalanx(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean, facingAngle: number, spearOffset: number = 0, troopLevel: number = 1) {
         // Shadow
         graphics.fillStyle(0x000000, 0.4);
         graphics.fillEllipse(0, 8, 50, 25);
@@ -2237,7 +2359,7 @@ export class TroopRenderer {
 
         for (const s of soldiers) {
             const stagger = (s.row + s.col) * 0.15;
-            this.drawRomanSoldier(graphics, isPlayer, isMoving, facingAngle, true, spearOffset, s.wx, s.wy, stagger);
+            this.drawRomanSoldier(graphics, isPlayer, isMoving, facingAngle, true, spearOffset, s.wx, s.wy, stagger, troopLevel);
         }
 
         // Banner/Standard (center back)
@@ -2249,9 +2371,27 @@ export class TroopRenderer {
         graphics.fillRect(bannerX - 5, bannerY - 25, 10, 8);
         graphics.lineStyle(1.5, isPlayer ? 0xd4a84b : 0x8b7355, 1);
         graphics.strokeRect(bannerX - 5, bannerY - 25, 10, 8);
+
+        // L2: Eagle standard on banner pole + gold trim
+        if (troopLevel >= 2) {
+            // Eagle finial on banner pole
+            graphics.fillStyle(0xffd700, 1);
+            graphics.beginPath();
+            graphics.moveTo(bannerX, bannerY - 28);
+            graphics.lineTo(bannerX - 3, bannerY - 25);
+            graphics.lineTo(bannerX + 3, bannerY - 25);
+            graphics.closePath();
+            graphics.fillPath();
+            // Eagle wings
+            graphics.lineBetween(bannerX - 3, bannerY - 27, bannerX - 7, bannerY - 29);
+            graphics.lineBetween(bannerX + 3, bannerY - 27, bannerX + 7, bannerY - 29);
+            // Gold emblem on banner
+            graphics.fillStyle(0xffd700, 0.8);
+            graphics.fillCircle(bannerX, bannerY - 21, 2);
+        }
     }
 
-    private static drawWallBreaker(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean) {
+    private static drawWallBreaker(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean, troopLevel: number = 1) {
         // WALL BREAKER — Small guy carrying a big barrel of explosives overhead
         const now = Date.now();
         const runPhase = isMoving ? (now % 250) / 250 : 0;
@@ -2365,5 +2505,15 @@ export class TroopRenderer {
         graphics.fillStyle(skinDark, 1);
         graphics.fillCircle(-5.5, -12 + armBob, 2);
         graphics.fillCircle(5.5, -12 + armBob, 2);
+
+        // L2: Gold barrel bands + bigger fuse spark + gold headband
+        if (troopLevel >= 2) {
+            // Gold barrel bands
+            graphics.lineStyle(1.5, 0xdaa520, 0.9);
+            graphics.strokeEllipse(0, barrelY, 14, 10);
+            // Gold headband replaces red
+            graphics.fillStyle(0xdaa520, 1);
+            graphics.fillRect(-4, headY - 4, 8, 2);
+        }
     }
 }
