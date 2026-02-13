@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http.js';
-import { readJson, writeJson } from '../_lib/blob.js';
+import { deleteJson, readJson, writeJson } from '../_lib/blob.js';
 import { createSession, createSessionCookie, findUserByIdentifier, getAuthSessionToken, hashPassword, upsertUserAuthLookups, verifyPassword } from '../_lib/auth.js';
 import { resolveHomeWorld } from '../_lib/home_world.js';
 import type { SessionRecord, UserRecord } from '../_lib/models.js';
@@ -58,15 +58,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const now = Date.now();
     const incomingToken = getAuthSessionToken(req);
     const activeSessionId = typeof user.activeSessionId === 'string' ? user.activeSessionId : '';
-    if (activeSessionId && activeSessionId !== incomingToken) {
+    if (activeSessionId) {
       const activeSession = await readJson<SessionRecord>(`sessions/${activeSessionId}.json`).catch(() => null);
+      const sessionBelongsToUser = !!activeSession && activeSession.userId === user.id;
       const activeStillValid = !!activeSession &&
         activeSession.userId === user.id &&
         Number(activeSession.expiresAt) > now;
 
-      if (activeStillValid) {
-        sendError(res, 409, 'This account is already logged in on another session');
-        return;
+      if (activeStillValid && activeSessionId !== incomingToken) {
+        console.warn('login superseding active session', {
+          userId: user.id,
+          previousSessionId: activeSessionId
+        });
+      }
+
+      if (sessionBelongsToUser) {
+        await deleteJson(`sessions/${activeSessionId}.json`).catch(error => {
+          console.warn('failed to revoke previous active session during login', {
+            userId: user.id,
+            previousSessionId: activeSessionId,
+            error
+          });
+        });
       }
     }
 
