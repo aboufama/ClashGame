@@ -27,7 +27,7 @@ export class TroopRenderer {
                 TroopRenderer.drawWard(graphics, isPlayer, isMoving);
                 break;
             case 'recursion':
-                TroopRenderer.drawRecursion(graphics, isPlayer);
+                TroopRenderer.drawRecursion(graphics, isPlayer, isMoving);
                 break;
             case 'ram':
                 TroopRenderer.drawRam(graphics, isPlayer, isMoving, facingAngle, troopLevel);
@@ -55,11 +55,39 @@ export class TroopRenderer {
     }
 
     private static drawWarrior(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean) {
-        // WARRIOR - Same style as Ram warriors but standalone with sword and shield
+        // WARRIOR - Armored swordsman with shield
         const now = Date.now();
         const runPhase = isMoving ? (now % 300) / 300 : 0;
         const runBob = isMoving ? Math.sin(runPhase * Math.PI * 2) * 3 : 0;
         const legKick = isMoving ? Math.sin(runPhase * Math.PI * 2) * 3 : 0;
+
+        // Attack swing animation when stationary (attacking)
+        const attackPhase = !isMoving ? (now % 800) / 800 : 0;
+        // Swing: wind up (0-0.3), slash (0.3-0.5), hold (0.5-0.7), return (0.7-1.0)
+        let swordAngle = 0;
+        let bodyLean = 0;
+        if (!isMoving) {
+            if (attackPhase < 0.3) {
+                // Wind up — sword goes back
+                const t = attackPhase / 0.3;
+                swordAngle = -0.6 * t;
+                bodyLean = -1 * t;
+            } else if (attackPhase < 0.5) {
+                // Slash forward
+                const t = (attackPhase - 0.3) / 0.2;
+                swordAngle = -0.6 + 1.8 * t;
+                bodyLean = -1 + 3 * t;
+            } else if (attackPhase < 0.7) {
+                // Hold at forward position
+                swordAngle = 1.2;
+                bodyLean = 2;
+            } else {
+                // Return to neutral
+                const t = (attackPhase - 0.7) / 0.3;
+                swordAngle = 1.2 * (1 - t);
+                bodyLean = 2 * (1 - t);
+            }
+        }
 
         const skinColor = isPlayer ? 0xdeb887 : 0xc9a66b;
         const armorColor = isPlayer ? 0x8b4513 : 0x654321;
@@ -71,7 +99,6 @@ export class TroopRenderer {
 
         // Running legs
         graphics.fillStyle(armorDark, 1);
-        // Back leg
         graphics.beginPath();
         graphics.moveTo(-2, 4 + runBob);
         graphics.lineTo(-3 - legKick, 10);
@@ -79,7 +106,6 @@ export class TroopRenderer {
         graphics.lineTo(0, 4 + runBob);
         graphics.closePath();
         graphics.fillPath();
-        // Front leg
         graphics.beginPath();
         graphics.moveTo(2, 4 + runBob);
         graphics.lineTo(3 + legKick, 10);
@@ -93,62 +119,84 @@ export class TroopRenderer {
         graphics.fillEllipse(-2 - legKick, 11, 3, 2);
         graphics.fillEllipse(4 + legKick, 11, 3, 2);
 
-        // Body (leather armor)
+        // Body (leather armor) — leans into attack
         graphics.fillStyle(armorColor, 1);
-        graphics.fillCircle(0, runBob, 6);
+        graphics.fillCircle(bodyLean, runBob, 6);
         graphics.fillStyle(armorDark, 1);
-        graphics.fillCircle(1, runBob + 1, 5);
+        graphics.fillCircle(1 + bodyLean, runBob + 1, 5);
 
-        // Arms
-        graphics.fillStyle(skinColor, 1);
         // Left arm (holding shield)
+        graphics.fillStyle(skinColor, 1);
         graphics.beginPath();
-        graphics.moveTo(-4, runBob - 2);
-        graphics.lineTo(-8, runBob + 2);
-        graphics.lineTo(-6, runBob + 3);
-        graphics.lineTo(-2, runBob - 1);
-        graphics.closePath();
-        graphics.fillPath();
-        // Right arm (sword arm)
-        graphics.beginPath();
-        graphics.moveTo(4, runBob - 2);
-        graphics.lineTo(7, runBob - 8);
-        graphics.lineTo(5, runBob - 9);
-        graphics.lineTo(2, runBob - 1);
+        graphics.moveTo(-4 + bodyLean, runBob - 2);
+        graphics.lineTo(-8 + bodyLean, runBob + 2);
+        graphics.lineTo(-6 + bodyLean, runBob + 3);
+        graphics.lineTo(-2 + bodyLean, runBob - 1);
         graphics.closePath();
         graphics.fillPath();
 
         // Shield
         graphics.fillStyle(armorDark, 1);
-        graphics.fillCircle(-9, runBob + 2, 5);
+        graphics.fillCircle(-9 + bodyLean, runBob + 2, 5);
         graphics.fillStyle(armorColor, 1);
-        graphics.fillCircle(-9, runBob + 1, 4);
+        graphics.fillCircle(-9 + bodyLean, runBob + 1, 4);
         graphics.fillStyle(0x555555, 1);
-        graphics.fillCircle(-9, runBob + 1, 1.5);
+        graphics.fillCircle(-9 + bodyLean, runBob + 1, 1.5);
 
-        // Sword
+        // Right arm + sword (swings during attack)
+        const armBaseX = 4 + bodyLean;
+        const armBaseY = runBob - 2;
+        const swordLen = 12;
+        const swordTipX = armBaseX + Math.sin(swordAngle) * swordLen;
+        const swordTipY = armBaseY - Math.cos(swordAngle) * swordLen;
+        const swordMidX = armBaseX + Math.sin(swordAngle) * 4;
+        const swordMidY = armBaseY - Math.cos(swordAngle) * 4;
+
+        // Arm
+        graphics.fillStyle(skinColor, 1);
+        graphics.beginPath();
+        graphics.moveTo(armBaseX, armBaseY);
+        graphics.lineTo(swordMidX + 1, swordMidY);
+        graphics.lineTo(swordMidX - 1, swordMidY);
+        graphics.lineTo(armBaseX - 2, armBaseY);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Sword blade
         graphics.fillStyle(0xaaaaaa, 1);
-        graphics.fillRect(5, runBob - 16, 2, 10);
+        const bladePerp = 1;
+        const bladePerpX = Math.cos(swordAngle) * bladePerp;
+        const bladePerpY = Math.sin(swordAngle) * bladePerp;
+        graphics.beginPath();
+        graphics.moveTo(swordMidX - bladePerpX, swordMidY - bladePerpY);
+        graphics.lineTo(swordTipX, swordTipY);
+        graphics.lineTo(swordMidX + bladePerpX, swordMidY + bladePerpY);
+        graphics.closePath();
+        graphics.fillPath();
+        // Guard
         graphics.fillStyle(0x666666, 1);
-        graphics.fillRect(4, runBob - 7, 4, 2);
+        graphics.fillCircle(swordMidX, swordMidY, 2);
+        // Grip
         graphics.fillStyle(0x5c3317, 1);
-        graphics.fillRect(5, runBob - 5, 2, 3);
+        const gripX = armBaseX + Math.sin(swordAngle) * 2;
+        const gripY = armBaseY - Math.cos(swordAngle) * 2;
+        graphics.fillCircle(gripX, gripY, 1.5);
 
         // Head
         graphics.fillStyle(skinColor, 1);
-        graphics.fillCircle(0, runBob - 6, 4);
+        graphics.fillCircle(bodyLean, runBob - 6, 4);
         // Helmet
         graphics.fillStyle(0x555555, 1);
         graphics.beginPath();
-        graphics.arc(0, runBob - 7, 4, Math.PI, 0, false);
+        graphics.arc(bodyLean, runBob - 7, 4, Math.PI, 0, false);
         graphics.closePath();
         graphics.fillPath();
         // Helmet spike
         graphics.fillStyle(0x666666, 1);
         graphics.beginPath();
-        graphics.moveTo(-1, runBob - 11);
-        graphics.lineTo(0, runBob - 14);
-        graphics.lineTo(1, runBob - 11);
+        graphics.moveTo(-1 + bodyLean, runBob - 11);
+        graphics.lineTo(bodyLean, runBob - 14);
+        graphics.lineTo(1 + bodyLean, runBob - 11);
         graphics.closePath();
         graphics.fillPath();
     }
@@ -253,135 +301,229 @@ export class TroopRenderer {
     }
 
     private static drawGiant(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean, troopLevel: number = 1) {
-        // MASSIVE GIANT - Hulking brute
+        // GIANT - Large muscular humanoid warrior with a wooden bat
         const now = Date.now();
-        const walkPhase = isMoving ? (now % 1000) / 1000 : 0; // Slower walk
-        const walkBob = isMoving ? Math.sin(walkPhase * Math.PI * 2) * 3 : 0;
-        const legKick = isMoving ? Math.sin(walkPhase * Math.PI * 2) * 4 : 0;
-        const armSwing = isMoving ? Math.sin(walkPhase * Math.PI * 2) * 0.15 : 0;
 
-        const skinColor = isPlayer ? 0xe67e22 : 0x8e44ad;
-        const skinDark = isPlayer ? 0xd35400 : 0x6c3483;
-        const skinLight = isPlayer ? 0xf39c12 : 0x9b59b6;
+        // Heavy lumbering walk — alternating legs, subtle lean
+        const walkPhase = isMoving ? (now % 1200) / 1200 : 0;
+        const stepCycle = isMoving ? Math.sin(walkPhase * Math.PI * 2) : 0;
+        const walkBob = isMoving ? Math.abs(stepCycle) * 1.5 : 0;
+        const leftLeg = isMoving ? stepCycle * 3 : 0;
+        const rightLeg = isMoving ? -stepCycle * 3 : 0;
+        const shoulderLean = isMoving ? stepCycle * 1 : 0;
+
+        // Attack animation (bat swing)
+        const attackPhase = !isMoving ? (now % 950) / 950 : 0;
+        let batAngle = -0.3; // resting angle on shoulder
+        let bodyLean = 0;
+        if (!isMoving) {
+            if (attackPhase < 0.25) {
+                const t = attackPhase / 0.25;
+                batAngle = -0.3 - 0.8 * t;
+                bodyLean = -1.5 * t;
+            } else if (attackPhase < 0.45) {
+                const t = (attackPhase - 0.25) / 0.2;
+                batAngle = -1.1 + 2.5 * t;
+                bodyLean = -1.5 + 5 * t;
+            } else if (attackPhase < 0.6) {
+                batAngle = 1.4;
+                bodyLean = 3.5;
+            } else {
+                const t = (attackPhase - 0.6) / 0.4;
+                batAngle = 1.4 - 1.7 * t;
+                bodyLean = 3.5 * (1 - t);
+            }
+        }
+
+        const skinColor = isPlayer ? 0xdeb887 : 0xc9a66b;
+        const skinDark = isPlayer ? 0xc9a66b : 0xb8956e;
+        const vestColor = isPlayer ? 0x6b4226 : 0x4a3020;
+        const vestDark = isPlayer ? 0x4a2f1a : 0x3a2215;
+        const pantsColor = isPlayer ? 0x5a4a3a : 0x4a3a2a;
 
         // Large shadow
-        graphics.fillStyle(0x000000, 0.35);
-        graphics.fillEllipse(0, 14, 28, 12);
+        graphics.fillStyle(0x000000, 0.3);
+        graphics.fillEllipse(0, 14, 24, 10);
 
-        // Massive legs
-        graphics.fillStyle(skinDark, 1);
+        // Legs (thick, pants)
+        graphics.fillStyle(pantsColor, 1);
         // Left leg
         graphics.beginPath();
-        graphics.moveTo(-8, 2 + walkBob);
-        graphics.lineTo(-10 - legKick, 12);
-        graphics.lineTo(-4 - legKick, 14);
-        graphics.lineTo(-4, 2 + walkBob);
+        graphics.moveTo(-6, 3 + walkBob);
+        graphics.lineTo(-8 + leftLeg, 12);
+        graphics.lineTo(-3 + leftLeg, 13);
+        graphics.lineTo(-2, 3 + walkBob);
         graphics.closePath();
         graphics.fillPath();
         // Right leg
         graphics.beginPath();
-        graphics.moveTo(8, 2 + walkBob);
-        graphics.lineTo(10 + legKick, 12);
-        graphics.lineTo(4 + legKick, 14);
-        graphics.lineTo(4, 2 + walkBob);
+        graphics.moveTo(2, 3 + walkBob);
+        graphics.lineTo(3 + rightLeg, 12);
+        graphics.lineTo(8 + rightLeg, 13);
+        graphics.lineTo(6, 3 + walkBob);
         graphics.closePath();
         graphics.fillPath();
 
-        // Feet
-        graphics.fillStyle(skinDark, 1);
-        graphics.fillEllipse(-7 - legKick, 14, 7, 3);
-        graphics.fillEllipse(7 + legKick, 14, 7, 3);
+        // Boots
+        graphics.fillStyle(0x3a2a1a, 1);
+        graphics.fillEllipse(-5.5 + leftLeg, 13, 6, 2.5);
+        graphics.fillEllipse(5.5 + rightLeg, 13, 6, 2.5);
 
-        // Massive body
+        // Torso — broad, muscular (leather vest over skin)
         graphics.fillStyle(skinDark, 1);
-        graphics.fillCircle(0, -4 + walkBob, 16);
+        graphics.beginPath();
+        graphics.moveTo(-12 + shoulderLean + bodyLean, -6 + walkBob);
+        graphics.lineTo(12 + shoulderLean + bodyLean, -6 + walkBob);
+        graphics.lineTo(8 + bodyLean, 4 + walkBob);
+        graphics.lineTo(-8 + bodyLean, 4 + walkBob);
+        graphics.closePath();
+        graphics.fillPath();
         graphics.fillStyle(skinColor, 1);
-        graphics.fillCircle(0, -6 + walkBob, 14);
+        graphics.beginPath();
+        graphics.moveTo(-11 + shoulderLean + bodyLean, -5 + walkBob);
+        graphics.lineTo(11 + shoulderLean + bodyLean, -5 + walkBob);
+        graphics.lineTo(7 + bodyLean, 3 + walkBob);
+        graphics.lineTo(-7 + bodyLean, 3 + walkBob);
+        graphics.closePath();
+        graphics.fillPath();
 
-        // Belly
-        graphics.fillStyle(skinLight, 0.5);
-        graphics.fillCircle(0, -2 + walkBob, 8);
+        // Vest
+        graphics.fillStyle(vestColor, 1);
+        graphics.beginPath();
+        graphics.moveTo(-6 + bodyLean, -5 + walkBob);
+        graphics.lineTo(6 + bodyLean, -5 + walkBob);
+        graphics.lineTo(5 + bodyLean, 3 + walkBob);
+        graphics.lineTo(-5 + bodyLean, 3 + walkBob);
+        graphics.closePath();
+        graphics.fillPath();
+        // Vest lacing
+        graphics.lineStyle(1, vestDark, 0.7);
+        graphics.lineBetween(bodyLean, -4 + walkBob, bodyLean, 2 + walkBob);
 
         // Belt
-        graphics.fillStyle(0x5d4037, 1);
-        graphics.fillRect(-12, 0 + walkBob, 24, 5);
-        graphics.fillStyle(0xffd700, 1);
-        graphics.fillRect(-3, 0 + walkBob, 6, 5);
+        graphics.fillStyle(0x4a3520, 1);
+        graphics.fillRect(-8 + bodyLean, 1 + walkBob, 16, 3);
+        graphics.fillStyle(0xc9a227, 1);
+        graphics.fillRect(-2 + bodyLean, 1 + walkBob, 4, 3);
 
-        // Arms - both just swinging (no club)
+        // Left arm (free arm, swings opposite)
+        const leftArmSwing = isMoving ? -stepCycle * 2 : 0;
         graphics.fillStyle(skinColor, 1);
-        // Left arm
         graphics.beginPath();
-        graphics.moveTo(-14, -8 + walkBob);
-        graphics.lineTo(-18 + armSwing * 10, 4 + walkBob);
-        graphics.lineTo(-14 + armSwing * 10, 6 + walkBob);
-        graphics.lineTo(-10, -6 + walkBob);
+        graphics.moveTo(-12 + shoulderLean + bodyLean, -5 + walkBob);
+        graphics.lineTo(-15 + leftArmSwing + bodyLean, 5 + walkBob);
+        graphics.lineTo(-11 + leftArmSwing + bodyLean, 6 + walkBob);
+        graphics.lineTo(-9 + shoulderLean + bodyLean, -3 + walkBob);
         graphics.closePath();
         graphics.fillPath();
-        // Right arm
-        graphics.beginPath();
-        graphics.moveTo(14, -8 + walkBob);
-        graphics.lineTo(18 - armSwing * 10, 4 + walkBob);
-        graphics.lineTo(14 - armSwing * 10, 6 + walkBob);
-        graphics.lineTo(10, -6 + walkBob);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Head
+        // Fist
         graphics.fillStyle(skinDark, 1);
-        graphics.fillCircle(0, -18 + walkBob, 9);
+        graphics.fillCircle(-13 + leftArmSwing + bodyLean, 6 + walkBob, 3);
+
+        // Right arm + bat
+        const batBaseX = 12 + shoulderLean + bodyLean;
+        const batBaseY = -5 + walkBob;
+        const batLen = 22;
+        const batTipX = batBaseX + Math.sin(batAngle) * batLen;
+        const batTipY = batBaseY - Math.cos(batAngle) * batLen;
+        const batMidX = batBaseX + Math.sin(batAngle) * 8;
+        const batMidY = batBaseY - Math.cos(batAngle) * 8;
+
+        // Arm reaching to bat grip
         graphics.fillStyle(skinColor, 1);
-        graphics.fillCircle(0, -19 + walkBob, 8);
-
-        // Face
-        graphics.fillStyle(0x000000, 0.7);
-        graphics.fillCircle(-3, -20 + walkBob, 2); // Left eye
-        graphics.fillCircle(3, -20 + walkBob, 2);  // Right eye
-        graphics.fillStyle(skinDark, 1);
-        graphics.fillRect(-2, -16 + walkBob, 4, 3); // Nose
-
-        // Angry eyebrows
-        graphics.fillStyle(skinDark, 1);
         graphics.beginPath();
-        graphics.moveTo(-6, -23 + walkBob);
-        graphics.lineTo(-1, -21 + walkBob);
-        graphics.lineTo(-1, -22 + walkBob);
-        graphics.lineTo(-6, -24 + walkBob);
+        graphics.moveTo(batBaseX, batBaseY);
+        graphics.lineTo(batMidX + 1.5, batMidY);
+        graphics.lineTo(batMidX - 1.5, batMidY);
+        graphics.lineTo(batBaseX - 3, batBaseY + 2);
         graphics.closePath();
         graphics.fillPath();
+
+        // Bat handle (thin)
+        const perpX = Math.cos(batAngle);
+        const perpY = Math.sin(batAngle);
+        graphics.fillStyle(0x6b4a30, 1);
         graphics.beginPath();
-        graphics.moveTo(6, -23 + walkBob);
-        graphics.lineTo(1, -21 + walkBob);
-        graphics.lineTo(1, -22 + walkBob);
-        graphics.lineTo(6, -24 + walkBob);
+        graphics.moveTo(batBaseX - perpX * 1.5, batBaseY - perpY * 1.5);
+        graphics.lineTo(batBaseX + Math.sin(batAngle) * 14 - perpX * 1.5, batBaseY - Math.cos(batAngle) * 14 - perpY * 1.5);
+        graphics.lineTo(batBaseX + Math.sin(batAngle) * 14 + perpX * 1.5, batBaseY - Math.cos(batAngle) * 14 + perpY * 1.5);
+        graphics.lineTo(batBaseX + perpX * 1.5, batBaseY + perpY * 1.5);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Bat head (thick, tapered)
+        graphics.fillStyle(0x8b6b4a, 1);
+        const headStart = 14;
+        const headEnd = batLen;
+        graphics.beginPath();
+        graphics.moveTo(batBaseX + Math.sin(batAngle) * headStart - perpX * 2.5, batBaseY - Math.cos(batAngle) * headStart - perpY * 2.5);
+        graphics.lineTo(batTipX - perpX * 3, batTipY - perpY * 3);
+        graphics.lineTo(batTipX + perpX * 3, batTipY + perpY * 3);
+        graphics.lineTo(batBaseX + Math.sin(batAngle) * headStart + perpX * 2.5, batBaseY - Math.cos(batAngle) * headStart + perpY * 2.5);
+        graphics.closePath();
+        graphics.fillPath();
+        // Bat tip (rounded)
+        graphics.fillCircle(batTipX, batTipY, 3);
+        // Grip wrap
+        graphics.fillStyle(0x3a2a15, 1);
+        const gripPos = 3;
+        graphics.fillCircle(batBaseX + Math.sin(batAngle) * gripPos, batBaseY - Math.cos(batAngle) * gripPos, 2);
+
+        // Head — large, square-jawed
+        const headY = -14 + walkBob;
+        graphics.fillStyle(skinDark, 1);
+        graphics.fillCircle(bodyLean, headY, 7);
+        graphics.fillStyle(skinColor, 1);
+        graphics.fillCircle(bodyLean, headY - 1, 6.5);
+
+        // Jaw (wider at bottom)
+        graphics.fillStyle(skinColor, 1);
+        graphics.fillRect(-5 + bodyLean, headY + 1, 10, 4);
+
+        // Eyes
+        graphics.fillStyle(0x000000, 0.8);
+        graphics.fillCircle(-2.5 + bodyLean, headY - 1, 1.5);
+        graphics.fillCircle(2.5 + bodyLean, headY - 1, 1.5);
+
+        // Angry brow
+        graphics.fillStyle(skinDark, 1);
+        graphics.fillRect(-5 + bodyLean, headY - 4, 4, 1.5);
+        graphics.fillRect(1 + bodyLean, headY - 4, 4, 1.5);
+
+        // Stubble / chin
+        graphics.fillStyle(0x000000, 0.15);
+        graphics.fillRect(-3 + bodyLean, headY + 3, 6, 2);
+
+        // Short hair
+        graphics.fillStyle(0x3a2a1a, 1);
+        graphics.beginPath();
+        graphics.arc(bodyLean, headY - 2, 7, Math.PI, 0, false);
         graphics.closePath();
         graphics.fillPath();
 
         // Level 2+ iron helmet
         if (troopLevel >= 2) {
-            const hy = -19 + walkBob;
-            // Helmet dome
+            const hy = headY;
             graphics.fillStyle(0x6a6a7a, 1);
             graphics.beginPath();
-            graphics.arc(0, hy - 2, 9.5, Math.PI, 0, false);
+            graphics.arc(bodyLean, hy - 3, 8, Math.PI, 0, false);
             graphics.closePath();
             graphics.fillPath();
             graphics.fillStyle(0x7a7a8a, 1);
             graphics.beginPath();
-            graphics.arc(0, hy - 2, 8.5, Math.PI, 0, false);
+            graphics.arc(bodyLean, hy - 3, 7, Math.PI, 0, false);
             graphics.closePath();
             graphics.fillPath();
             // Nose guard
             graphics.fillStyle(0x6a6a7a, 1);
-            graphics.fillRect(-1.5, hy - 4, 3, 8);
-            // Rivet dots
+            graphics.fillRect(-1.5 + bodyLean, hy - 5, 3, 7);
+            // Rivets
             graphics.fillStyle(0x9a9aaa, 1);
-            graphics.fillCircle(-5, hy - 2, 1);
-            graphics.fillCircle(5, hy - 2, 1);
-            graphics.fillCircle(0, hy - 7, 1);
-            // Highlight
+            graphics.fillCircle(-4 + bodyLean, hy - 3, 1);
+            graphics.fillCircle(4 + bodyLean, hy - 3, 1);
+            graphics.fillCircle(bodyLean, hy - 8, 1);
             graphics.fillStyle(0xaaaacc, 0.4);
-            graphics.fillCircle(-3, hy - 6, 2);
+            graphics.fillCircle(-2 + bodyLean, hy - 7, 2);
         }
     }
 
@@ -1163,24 +1305,63 @@ export class TroopRenderer {
         }
     }
 
-    private static drawRecursion(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean) {
+    private static drawRecursion(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean = false) {
         // Fractal/geometric entity that splits on death
         const bodyColor = isPlayer ? 0x00ffaa : 0xaa00ff;
         const innerColor = isPlayer ? 0x00aa77 : 0x7700aa;
         const now = Date.now();
 
+        // Hover bob when moving
+        const hoverBob = isMoving ? Math.sin(now / 200) * 2 : 0;
+
+        // Attack animation: expands and contracts with energy burst
+        const attackPhase = !isMoving ? (now % 850) / 850 : 0;
+        let attackPulse = 0;
+        let burstAlpha = 0;
+        if (!isMoving) {
+            if (attackPhase < 0.15) {
+                // Contract inward
+                attackPulse = -(attackPhase / 0.15) * 3;
+            } else if (attackPhase < 0.35) {
+                // Expand outward with burst
+                const t = (attackPhase - 0.15) / 0.2;
+                attackPulse = -3 + 7 * t;
+                burstAlpha = t;
+            } else if (attackPhase < 0.5) {
+                // Hold expanded
+                attackPulse = 4;
+                burstAlpha = 1 - (attackPhase - 0.35) / 0.15;
+            } else {
+                // Return to normal
+                const t = (attackPhase - 0.5) / 0.5;
+                attackPulse = 4 * (1 - t);
+            }
+        }
+
+        const outerRadius = 10 + attackPulse;
+        const innerRadius = 5 + attackPulse * 0.4;
+
         // Shadow
         graphics.fillStyle(0x000000, 0.3);
         graphics.fillEllipse(0, 5, 14, 6);
 
-        // Outer hexagonal shell (rotating slowly)
-        const rot = now / 2000;
+        // Energy burst rings during attack
+        if (burstAlpha > 0) {
+            graphics.lineStyle(2, bodyColor, burstAlpha * 0.6);
+            graphics.strokeCircle(0, -2 + hoverBob, outerRadius + 5);
+            graphics.lineStyle(1, 0xffffff, burstAlpha * 0.4);
+            graphics.strokeCircle(0, -2 + hoverBob, outerRadius + 8);
+        }
+
+        // Outer hexagonal shell (rotating slowly, faster when attacking)
+        const rotSpeed = !isMoving ? 800 : 2000;
+        const rot = now / rotSpeed;
         graphics.fillStyle(bodyColor, 0.9);
         graphics.beginPath();
         for (let i = 0; i < 6; i++) {
             const angle = rot + (i / 6) * Math.PI * 2;
-            const px = Math.cos(angle) * 10;
-            const py = Math.sin(angle) * 10 * 0.6 - 2;
+            const px = Math.cos(angle) * outerRadius;
+            const py = Math.sin(angle) * outerRadius * 0.6 - 2 + hoverBob;
             if (i === 0) graphics.moveTo(px, py);
             else graphics.lineTo(px, py);
         }
@@ -1192,8 +1373,8 @@ export class TroopRenderer {
         graphics.beginPath();
         for (let i = 0; i < 6; i++) {
             const angle = -rot * 1.5 + (i / 6) * Math.PI * 2;
-            const px = Math.cos(angle) * 5;
-            const py = Math.sin(angle) * 5 * 0.6 - 2;
+            const px = Math.cos(angle) * innerRadius;
+            const py = Math.sin(angle) * innerRadius * 0.6 - 2 + hoverBob;
             if (i === 0) graphics.moveTo(px, py);
             else graphics.lineTo(px, py);
         }
@@ -1202,10 +1383,22 @@ export class TroopRenderer {
 
         // Central core with split symbol
         graphics.fillStyle(0xffffff, 0.9);
-        graphics.fillCircle(0, -2, 2.5);
+        graphics.fillCircle(0, -2 + hoverBob, 2.5);
         graphics.lineStyle(1, bodyColor, 1);
-        graphics.lineBetween(-1.5, -2, 1.5, -2);
-        graphics.lineBetween(0, -3.5, 0, -0.5);
+        graphics.lineBetween(-1.5, -2 + hoverBob, 1.5, -2 + hoverBob);
+        graphics.lineBetween(0, -3.5 + hoverBob, 0, -0.5 + hoverBob);
+
+        // Energy wisps when attacking
+        if (!isMoving) {
+            for (let i = 0; i < 3; i++) {
+                const wAngle = (now / 150 + i * 2.1) % (Math.PI * 2);
+                const wDist = outerRadius + 3 + Math.sin(now / 100 + i) * 2;
+                const wx = Math.cos(wAngle) * wDist;
+                const wy = Math.sin(wAngle) * wDist * 0.6 - 2 + hoverBob;
+                graphics.fillStyle(bodyColor, 0.4 + Math.sin(now / 60 + i) * 0.3);
+                graphics.fillCircle(wx, wy, 1.5);
+            }
+        }
     }
 
     private static drawRam(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean, facingAngle: number, troopLevel: number = 1) {
