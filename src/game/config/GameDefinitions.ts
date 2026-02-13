@@ -120,11 +120,11 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         maxCount: 3,
         color: 0x8b008b,
         fireRate: 220,
-        damage: 28,
+        damage: 20,
         maxLevel: 2,
         levels: [
-            { hp: 1550, damage: 28, fireRate: 220, cost: 900 },
-            { hp: 1850, damage: 36, fireRate: 190, cost: 1350 }
+            { hp: 1550, damage: 20, fireRate: 220, cost: 900 },
+            { hp: 1850, damage: 26, fireRate: 190, cost: 1350 }
         ]
     },
     solana_collector: {
