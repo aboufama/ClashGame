@@ -18,6 +18,7 @@ type UIHandlers = {
     refreshCampCapacity: (campLevels: number[]) => void;
     onBuildingPlaced: (type: string, isFree?: boolean) => void;
     closeMenus: () => void;
+    setDummyActive: (active: boolean) => void;
 };
 
 type SceneCommands = {
@@ -34,6 +35,7 @@ type SceneCommands = {
     setPixelation: (size: number) => void;
     setSensitivity: (val: number) => void;
     loadBase: () => Promise<boolean>;
+    toggleDummyTroop: () => void;
 };
 
 class GameManager {
@@ -170,8 +172,16 @@ class GameManager {
         this.sceneCommands.setSensitivity?.(val);
     }
 
+    toggleDummyTroop() {
+        this.sceneCommands.toggleDummyTroop?.();
+    }
+
     closeMenus() {
         this.uiHandlers.closeMenus?.();
+    }
+
+    setDummyActive(active: boolean) {
+        this.uiHandlers.setDummyActive?.(active);
     }
 
     async loadBase() {

@@ -400,6 +400,7 @@ function App() {
   const [shopWallLevel, setShopWallLevel] = useState(1);
   const [troopLevel, setTroopLevel] = useState(1);
   const [isDebugOpen, setIsDebugOpen] = useState(false);
+  const [isDummyActive, setIsDummyActive] = useState(false);
   const [scoutTarget, setScoutTarget] = useState<{ userId: string; username: string } | null>(null);
   const selectedInMapRef = useRef<string | null>(null);
   const armyRef = useRef(army);
@@ -545,6 +546,7 @@ function App() {
       },
       setGameMode: (mode: GameMode) => {
         setView(mode);
+        setIsDummyActive(false);
         if (mode === 'HOME') {
           setScoutTarget(null);
         }
@@ -666,6 +668,9 @@ function App() {
         setIsBuildingOpen(false);
         setSelectedInMap(null);
         setSelectedBuildingInfo(null);
+      },
+      setDummyActive: (active: boolean) => {
+        setIsDummyActive(active);
       }
     });
 
@@ -907,6 +912,11 @@ function App() {
       setScoutTarget(null);
     }
   }, []);
+
+  const handleToggleDummy = () => {
+    gameManager.toggleDummyTroop();
+    setIsDummyActive(prev => !prev);
+  };
 
   const handleStartAttack = () => {
     if (capacity.current === 0) return;
@@ -1154,6 +1164,8 @@ function App() {
         onDeleteBuilding={handleDeleteBuilding}
         onUpgradeBuilding={handleUpgradeBuilding}
         onMoveBuilding={() => gameManager.moveSelectedBuilding()}
+        isDummyActive={isDummyActive}
+        onToggleDummy={handleToggleDummy}
       />
 
       {view === 'ATTACK' && scoutTarget && (

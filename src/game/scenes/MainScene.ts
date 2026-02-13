@@ -129,6 +129,7 @@ export class MainScene extends Phaser.Scene {
     public selectedBuildingType: string | null = null;
     public selectedInWorld: PlacedBuilding | null = null;
     public isMoving = false;
+    public ghostGridPos: { x: number; y: number } | null = null;
     public isDragging = false;
     public dragOrigin: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
     public dragStartCam: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
@@ -158,7 +159,7 @@ export class MainScene extends Phaser.Scene {
 
     public villageNameLabel!: Phaser.GameObjects.Text;
     public attackModeSelectedBuilding: PlacedBuilding | null = null;
-    private manualFireDummyTarget: Troop | null = null;
+    public dummyTroop: Troop | null = null;
 
     // Online attack tracking
     public currentEnemyWorld: { id: string; username: string; isBot?: boolean; attackId?: string } | null = null;
@@ -176,8 +177,6 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
-    // Manual firing interactions
-    public isManualFiring = false;
     public isLockingDragForTroops = false;
     public selectionGraphics!: Phaser.GameObjects.Graphics;
 
@@ -370,6 +369,10 @@ export class MainScene extends Phaser.Scene {
         if (this.input.keyboard) {
             this.cursorKeys = this.input.keyboard.createCursorKeys();
             this.input.keyboard.on('keydown-ESC', () => {
+                if (this.dummyTroop) {
+                    this.removeDummyTroop();
+                    return;
+                }
                 this.cancelPlacement();
             });
             this.input.keyboard.on('keydown-M', () => {
@@ -415,10 +418,12 @@ export class MainScene extends Phaser.Scene {
         }
         this.selectedBuildingType = null;
         this.isMoving = false;
+        this.ghostGridPos = null;
         this.ghostBuilding.clear();
         this.ghostBuilding.setVisible(false);
         this.selectedInWorld = null;
         this.clearBuildingRangeIndicator();
+        this.removeDummyTroop();
         gameManager.onPlacementCancelled();
     }
 
@@ -441,9 +446,18 @@ export class MainScene extends Phaser.Scene {
         this.growGrass(time);
         this.updateRubbleAnimations(time);
 
-        // Manual firing loop for HOME mode interactions
-        if (this.mode === 'HOME' && this.isManualFiring && this.selectedInWorld) {
-            this.updateManualFire(time);
+        // Dummy troop cursor-follow
+        if (this.dummyTroop) {
+            const pointer = this.input.activePointer;
+            const worldPt = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+            const cart = IsoUtils.isoToCart(worldPt.x, worldPt.y);
+            this.dummyTroop.gridX = cart.x;
+            this.dummyTroop.gridY = cart.y;
+            const iso = IsoUtils.cartToIso(cart.x, cart.y);
+            this.dummyTroop.gameObject.setPosition(iso.x, iso.y);
+            this.dummyTroop.gameObject.setDepth(depthForTroop(cart.x, cart.y, 'warrior') + 10);
+            this.dummyTroop.health = this.dummyTroop.maxHealth;
+            this.dummyTroop.hasTakenDamage = false;
         }
     }
 
@@ -492,32 +506,103 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
-    public updateManualFire(time: number) {
-        const def = this.selectedInWorld;
-        if (!this.isFireableDefense(def)) return;
-
-        // Get target position
-        const pointer = this.input.activePointer;
-        const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-        const cartPos = IsoUtils.isoToCart(worldPoint.x, worldPoint.y);
-
-        // Safety: stop firing if cursor leaves range (and clean up prism beam).
-        if (!this.isWithinDefenseRange(def, cartPos.x, cartPos.y)) {
-            if (def.type === 'prism') this.cleanupPrismLaser(def);
-            return;
+    public activateDummyTroop() {
+        // Deselect any selected building
+        if (this.selectedInWorld) {
+            if (this.selectedInWorld.type === 'prism') this.cleanupPrismLaser(this.selectedInWorld);
+            this.selectedInWorld = null;
+            gameManager.onBuildingSelected(null);
+            this.clearBuildingRangeIndicator();
         }
 
-        this.tryFireDefenseAtGrid(def, cartPos.x, cartPos.y, time);
+        const pointer = this.input.activePointer;
+        const worldPt = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+        const cart = IsoUtils.isoToCart(worldPt.x, worldPt.y);
+        const iso = IsoUtils.cartToIso(cart.x, cart.y);
+
+        const gfx = this.add.graphics();
+        this.drawScarecrow(gfx);
+        gfx.setPosition(iso.x, iso.y);
+        gfx.setDepth(depthForTroop(cart.x, cart.y, 'warrior') + 10);
+
+        const healthBar = this.add.graphics().setVisible(false);
+
+        const troop: Troop = {
+            id: 'dummy_scarecrow',
+            type: 'warrior',
+            level: 1,
+            gameObject: gfx,
+            healthBar,
+            gridX: cart.x,
+            gridY: cart.y,
+            health: Infinity,
+            maxHealth: Infinity,
+            owner: 'ENEMY',
+            lastAttackTime: 0,
+            attackDelay: 999999,
+            speedMult: 0,
+            hasTakenDamage: false,
+            facingAngle: 0,
+            target: null
+        };
+
+        this.troops.push(troop);
+        this.dummyTroop = troop;
     }
 
-    private isFireableDefense(def: PlacedBuilding | null | undefined): def is PlacedBuilding {
-        if (!def) return false;
-        const info = BUILDINGS[def.type];
-        if (!info) return false;
-        if (info.category !== 'defense') return false;
-        if (def.type === 'wall') return false;
-        if (def.health <= 0) return false;
-        return true;
+    public removeDummyTroop() {
+        if (!this.dummyTroop) return;
+        const idx = this.troops.indexOf(this.dummyTroop);
+        if (idx !== -1) this.troops.splice(idx, 1);
+        this.dummyTroop.gameObject.destroy();
+        this.dummyTroop.healthBar.destroy();
+        this.dummyTroop = null;
+
+        // Clean up any active prism lasers
+        this.buildings.forEach(b => {
+            if (b.type === 'prism') this.cleanupPrismLaser(b);
+        });
+
+        gameManager.setDummyActive(false);
+    }
+
+    public toggleDummyTroop() {
+        if (this.dummyTroop) {
+            this.removeDummyTroop();
+        } else {
+            this.activateDummyTroop();
+        }
+    }
+
+    private drawScarecrow(graphics: Phaser.GameObjects.Graphics) {
+        // Brown vertical pole
+        graphics.lineStyle(3, 0x8B4513);
+        graphics.beginPath();
+        graphics.moveTo(0, -30);
+        graphics.lineTo(0, 10);
+        graphics.strokePath();
+
+        // Horizontal crossbar
+        graphics.lineStyle(3, 0x8B4513);
+        graphics.beginPath();
+        graphics.moveTo(-12, -18);
+        graphics.lineTo(12, -18);
+        graphics.strokePath();
+
+        // Circle head (burlap color)
+        graphics.fillStyle(0xD2B48C);
+        graphics.fillCircle(0, -34, 6);
+        graphics.lineStyle(1, 0x8B4513);
+        graphics.strokeCircle(0, -34, 6);
+
+        // Small triangular shirt below crossbar
+        graphics.fillStyle(0xA0522D);
+        graphics.beginPath();
+        graphics.moveTo(-10, -18);
+        graphics.lineTo(10, -18);
+        graphics.lineTo(0, -4);
+        graphics.closePath();
+        graphics.fillPath();
     }
 
     private getDefenseStats(def: PlacedBuilding) {
@@ -529,60 +614,8 @@ export class MainScene extends Phaser.Scene {
         return { x: def.gridX + stats.width / 2, y: def.gridY + stats.height / 2 };
     }
 
-    private isWithinDefenseRange(def: PlacedBuilding, targetGridX: number, targetGridY: number) {
-        const stats = this.getDefenseStats(def);
-        const center = this.getDefenseCenterGrid(def);
-        const range = stats.range ?? 10;
-        const minRange = stats.minRange ?? 0;
-        const dist = Phaser.Math.Distance.Between(targetGridX, targetGridY, center.x, center.y);
-        return dist <= range && dist >= minRange;
-    }
 
-    public isManualFireableAt(targetGridX: number, targetGridY: number) {
-        if (this.mode !== 'HOME') return false;
-        const def = this.selectedInWorld;
-        if (!this.isFireableDefense(def)) return false;
-        return this.isWithinDefenseRange(def, targetGridX, targetGridY);
-    }
 
-    // Returns true if the click should be "consumed" by the manual fire feature (keeps the building selected).
-    public consumeManualFireClick(targetGridX: number, targetGridY: number, time: number) {
-        if (this.mode !== 'HOME') return false;
-        const def = this.selectedInWorld;
-        if (!this.isFireableDefense(def)) return false;
-        if (!this.isWithinDefenseRange(def, targetGridX, targetGridY)) return false;
-
-        // Attempt a shot if off cooldown (and always update prism visuals while held/clicked).
-        this.tryFireDefenseAtGrid(def, targetGridX, targetGridY, time);
-        return true;
-    }
-
-    private getOrCreateManualFireDummyTarget(owner: 'PLAYER' | 'ENEMY') {
-        if (!this.manualFireDummyTarget) {
-            this.manualFireDummyTarget = {
-                id: 'manual_fire_dummy',
-                type: 'warrior',
-                level: 1,
-                gameObject: this.add.graphics().setVisible(false),
-                healthBar: undefined as any,
-                gridX: 0,
-                gridY: 0,
-                health: 1_000_000_000,
-                maxHealth: 1_000_000_000,
-                owner,
-                lastAttackTime: 0,
-                attackDelay: 999999,
-                speedMult: 0,
-                hasTakenDamage: false,
-                facingAngle: 0,
-                target: null
-            };
-        }
-        this.manualFireDummyTarget.owner = owner;
-        this.manualFireDummyTarget.health = this.manualFireDummyTarget.maxHealth;
-        this.manualFireDummyTarget.hasTakenDamage = false;
-        return this.manualFireDummyTarget;
-    }
 
     private fireDefenseAtTarget(defense: PlacedBuilding, target: Troop, time: number) {
         switch (defense.type) {
@@ -618,33 +651,6 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
-    private tryFireDefenseAtGrid(defense: PlacedBuilding, targetGridX: number, targetGridY: number, time: number) {
-        const stats = this.getDefenseStats(defense);
-        const interval = stats.fireRate ?? 2000;
-
-        // Prism is a continuous visual; keep it updating smoothly while held, but only advance cooldown in ticks.
-        const continuous = defense.type === 'prism';
-        const last = defense.lastFireTime ?? (time - interval);
-        // Always update turret direction for renderers that use angles (even if on cooldown).
-        const center = this.getDefenseCenterGrid(defense);
-        const angle = Math.atan2(targetGridY - center.y, targetGridX - center.x);
-        defense.ballistaTargetAngle = angle;
-        if (defense.ballistaAngle === undefined) defense.ballistaAngle = angle;
-
-        if (!continuous && time < last + interval) return false;
-
-        if (!continuous || time >= last + interval) {
-            defense.lastFireTime = time;
-        }
-
-        const targetOwner: 'PLAYER' | 'ENEMY' = defense.owner === 'PLAYER' ? 'ENEMY' : 'PLAYER';
-        const dummy = this.getOrCreateManualFireDummyTarget(targetOwner);
-        dummy.gridX = targetGridX;
-        dummy.gridY = targetGridY;
-
-        this.fireDefenseAtTarget(defense, dummy, time);
-        return true;
-    }
 
     private shootGenericDefenseAt(defense: PlacedBuilding, target: Troop) {
         let stats: any;
@@ -1819,7 +1825,8 @@ export class MainScene extends Phaser.Scene {
     }
 
     private updateCombat(time: number) {
-        if (this.mode !== 'ATTACK') return;
+        const isDummyActive = this.mode === 'HOME' && this.dummyTroop !== null;
+        if (this.mode !== 'ATTACK' && !isDummyActive) return;
 
         // Include any fireable defense (no per-type hardcoding).
         const defenses = this.buildings.filter(b => {
@@ -1918,6 +1925,8 @@ export class MainScene extends Phaser.Scene {
             }
         });
 
+        // Only fire defenses in dummy mode, skip troop AI/movement/damage
+        if (isDummyActive) return;
 
         this.troops.forEach(troop => {
             if (troop.health <= 0) return;
@@ -5626,11 +5635,15 @@ export class MainScene extends Phaser.Scene {
             const b = this.selectedInWorld;
             const info = BUILDINGS[b.type];
 
+            // When moving, draw outline at ghost position instead of actual position
+            const gx = (this.isMoving && this.ghostGridPos) ? this.ghostGridPos.x : b.gridX;
+            const gy = (this.isMoving && this.ghostGridPos) ? this.ghostGridPos.y : b.gridY;
+
             // Draw bright border around base
-            const p1 = IsoUtils.cartToIso(b.gridX, b.gridY);
-            const p2 = IsoUtils.cartToIso(b.gridX + info.width, b.gridY);
-            const p3 = IsoUtils.cartToIso(b.gridX + info.width, b.gridY + info.height);
-            const p4 = IsoUtils.cartToIso(b.gridX, b.gridY + info.height);
+            const p1 = IsoUtils.cartToIso(gx, gy);
+            const p2 = IsoUtils.cartToIso(gx + info.width, gy);
+            const p3 = IsoUtils.cartToIso(gx + info.width, gy + info.height);
+            const p4 = IsoUtils.cartToIso(gx, gy + info.height);
 
             this.selectionGraphics.lineStyle(4, 0x00ffff, 1); // Bright Cyan
             this.selectionGraphics.beginPath();
@@ -5709,6 +5722,7 @@ export class MainScene extends Phaser.Scene {
             selectBuilding: (type: string | null) => {
                 this.selectedBuildingType = type;
                 this.isMoving = false;
+                this.ghostGridPos = null;
                 if (!this.selectedBuildingType) {
                     this.ghostBuilding.setVisible(false);
                 } else {
@@ -5919,6 +5933,9 @@ export class MainScene extends Phaser.Scene {
                 // Immediate visual feedback
                 this.inputController.onPointerMove(this.input.activePointer);
             },
+            toggleDummyTroop: () => {
+                this.toggleDummyTroop();
+            },
             upgradeSelectedBuilding: () => {
                 if (this.selectedInWorld) {
                     const prevLevel = this.selectedInWorld.level || 1;
@@ -5932,6 +5949,10 @@ export class MainScene extends Phaser.Scene {
                     if (this.selectedInWorld.baseGraphics) this.selectedInWorld.baseGraphics.clear();
                     this.drawBuildingVisuals(this.selectedInWorld.graphics, this.selectedInWorld.gridX, this.selectedInWorld.gridY, this.selectedInWorld.type, 1, null, this.selectedInWorld, this.selectedInWorld.baseGraphics);
                     this.updateHealthBar(this.selectedInWorld);
+
+                    // Re-bake base at new level
+                    this.unbakeBuildingFromGround(this.selectedInWorld);
+                    this.bakeBuildingToGround(this.selectedInWorld);
 
                     // Play effect for the main building
                     this.playUpgradeEffect(this.selectedInWorld);
@@ -6014,10 +6035,12 @@ export class MainScene extends Phaser.Scene {
         this.clearObstacles();
 
         // Reset selection state
+        this.dummyTroop = null;
         this.attackModeSelectedBuilding = null;
         this.selectedInWorld = null;
         this.selectedBuildingType = null;
         this.isMoving = false;
+        this.ghostGridPos = null;
         this.hasDeployed = false;
         this.lastDeployTime = 0;
         this.deployStartTime = 0;

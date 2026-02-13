@@ -261,15 +261,6 @@ export class SceneInputController {
             this.lastWallDragTile = null;
         }
         if (pointer.button === 0) {
-            scene.isManualFiring = false; // Reset firing on interaction start
-
-            // If a building is selected, we can start manual firing immediately on press
-            if (scene.mode === 'HOME' && scene.selectedInWorld && !scene.selectedBuildingType && !scene.isMoving) {
-                const worldPoint = scene.cameras.main.getWorldPoint(pointer.x, pointer.y);
-                const gridPosFloat = IsoUtils.isoToCart(worldPoint.x, worldPoint.y);
-                scene.isManualFiring = scene.isManualFireableAt(gridPosFloat.x, gridPosFloat.y);
-            }
-
             // Just set up for potential drag
             scene.isDragging = false;
             scene.dragOrigin.set(pointer.x, pointer.y);
@@ -317,7 +308,6 @@ export class SceneInputController {
         // If moved significantly, treat as drag and do nothing else
         if (dist > 10) {
             scene.isDragging = false;
-            scene.isManualFiring = false;
             scene.isLockingDragForTroops = false;
             if (scene.selectedInWorld && (scene.selectedInWorld as any).type === 'prism') {
                 scene.cleanupPrismLaser(scene.selectedInWorld);
@@ -476,33 +466,19 @@ export class SceneInputController {
                     gameManager.onBuildingSelected({ id: clicked.id, type: clicked.type as BuildingType, level: clicked.level || 1 });
                     scene.showBuildingRangeIndicator(clicked);
                 }
-                scene.isManualFiring = false;
                 return;
             } else {
-                const consumedManualFire = scene.consumeManualFireClick(gridPosFloat.x, gridPosFloat.y, scene.time.now);
-                if (consumedManualFire) {
-                    scene.isManualFiring = false;
-                    scene.isDragging = false;
-                    scene.isLockingDragForTroops = false;
-                    if (scene.selectedInWorld && (scene.selectedInWorld as any).type === 'prism') {
-                        scene.cleanupPrismLaser(scene.selectedInWorld);
-                    }
-                    return;
-                }
-
                 if (scene.selectedInWorld && scene.selectedInWorld.type === 'prism') {
                     scene.cleanupPrismLaser(scene.selectedInWorld);
                 }
                 scene.selectedInWorld = null;
                 gameManager.onBuildingSelected(null);
                 scene.clearBuildingRangeIndicator();
-                scene.isManualFiring = false;
             }
         }
 
         // Final cleanup for interactions that rely on holding mouse down (like prism)
         scene.isDragging = false;
-        scene.isManualFiring = false;
         scene.isLockingDragForTroops = false;
         if (scene.selectedInWorld && (scene.selectedInWorld as any).type === 'prism') {
             scene.cleanupPrismLaser(scene.selectedInWorld);
@@ -521,6 +497,11 @@ export class SceneInputController {
         const gridPosFloat = cartFloat;
 
         scene.hoverGrid.set(gridPosSnap.x, gridPosSnap.y);
+
+        // Remove dummy if dragged back to HUD area
+        if (scene.dummyTroop && pointer.y > scene.cameras.main.height - 80) {
+            scene.removeDummyTroop();
+        }
 
         // Drag detection threshold
         if (pointer.isDown) {
@@ -568,13 +549,6 @@ export class SceneInputController {
                 }
             }
 
-            // Update manual firing state during movement (allows following cursor with laser/gun)
-            if (scene.mode === 'HOME' && scene.selectedInWorld && !scene.selectedBuildingType && !scene.isMoving && !scene.isDragging) {
-                scene.isManualFiring = scene.isManualFireableAt(gridPosFloat.x, gridPosFloat.y);
-                if (!scene.isManualFiring && scene.selectedInWorld.type === 'prism') {
-                    scene.cleanupPrismLaser(scene.selectedInWorld);
-                }
-            }
         }
 
         // Drag to build walls
@@ -640,8 +614,20 @@ export class SceneInputController {
 
                     // Ghost depth should be on top of everything for visibility
                     scene.ghostBuilding.setDepth(200000);
+
+                    // Track ghost position so selection outline & range indicator follow
+                    scene.ghostGridPos = { x: ghostX, y: ghostY };
+
+                    // Update range indicator to follow ghost
+                    if (scene.isMoving && scene.selectedInWorld?.rangeIndicator) {
+                        scene.showBuildingRangeIndicator(
+                            { ...scene.selectedInWorld, gridX: ghostX, gridY: ghostY } as any
+                        );
+                    }
                 } else { scene.ghostBuilding.setVisible(false); }
             }
+        } else {
+            scene.ghostGridPos = null;
         }
     }
 }

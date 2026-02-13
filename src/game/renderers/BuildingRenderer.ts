@@ -4069,7 +4069,7 @@ export class BuildingRenderer {
         const woodFront = tint ?? 0x6b4a30;
         const woodSide = tint ?? 0x5a3a20;
 
-        const { nN, nW } = neighbors;
+        const { nN, nS, nE, nW } = neighbors;
 
         const hw = wallThickness / 2;
         const cx = gridX + 0.5;
@@ -4105,8 +4105,11 @@ export class BuildingRenderer {
             }
         };
 
-        if (nN) addSegment(cx, cy, cx, gridY - 0.5);
-        if (nW) addSegment(cx, cy, gridX - 0.5, cy);
+        // Half-segments: center to own tile edge to avoid depth overlap at corners
+        if (nN) addSegment(cx, cy, cx, gridY);
+        if (nS) addSegment(cx, cy, cx, gridY + 1);
+        if (nE) addSegment(cx, cy, gridX + 1, cy);
+        if (nW) addSegment(cx, cy, gridX, cy);
 
         // Central post
         const ps = wallThickness * 0.7;
@@ -4219,8 +4222,11 @@ export class BuildingRenderer {
             }
         };
 
-        if (nN) addSegment(cx, cy, cx, gridY - 0.5);
-        if (nW) addSegment(cx, cy, gridX - 0.5, cy);
+        // Half-segments: center to own tile edge to avoid depth overlap at corners
+        if (nN) addSegment(cx, cy, cx, gridY);
+        if (nS) addSegment(cx, cy, cx, gridY + 1);
+        if (nE) addSegment(cx, cy, gridX + 1, cy);
+        if (nW) addSegment(cx, cy, gridX, cy);
 
         // Central pillar
         const ps = wallThickness * 0.6;
@@ -4274,7 +4280,7 @@ export class BuildingRenderer {
         const stoneFront = tint ?? 0x3a3a4a;
         const stoneSide = tint ?? 0x2a2a3a;
 
-        const { nN, nW } = neighbors;
+        const { nN, nS, nE, nW } = neighbors;
 
         const hw = wallThickness / 2;
         const cx = gridX + 0.5;
@@ -4310,8 +4316,11 @@ export class BuildingRenderer {
             }
         };
 
-        if (nN) addSegment(cx, cy, cx, gridY - 0.5);
-        if (nW) addSegment(cx, cy, gridX - 0.5, cy);
+        // Half-segments: center to own tile edge to avoid depth overlap at corners
+        if (nN) addSegment(cx, cy, cx, gridY);
+        if (nS) addSegment(cx, cy, cx, gridY + 1);
+        if (nE) addSegment(cx, cy, gridX + 1, cy);
+        if (nW) addSegment(cx, cy, gridX, cy);
 
         // Central pillar (larger for fortified)
         const ps = wallThickness * 0.7;

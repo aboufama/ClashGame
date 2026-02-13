@@ -37,6 +37,8 @@ interface HudProps {
   onDeleteBuilding: () => void;
   onUpgradeBuilding: () => void;
   onMoveBuilding: () => void;
+  isDummyActive: boolean;
+  onToggleDummy: () => void;
 }
 
 export function Hud({
@@ -65,7 +67,9 @@ export function Hud({
   onGoHome,
   onDeleteBuilding,
   onUpgradeBuilding,
-  onMoveBuilding
+  onMoveBuilding,
+  isDummyActive,
+  onToggleDummy
 }: HudProps) {
   // Unused props (kept for interface compatibility):
   void _capacity;
@@ -230,6 +234,10 @@ export function Hud({
               <button className="action-btn raid" onClick={onOpenTrain}>
                 <div className="btn-icon icon raid-icon"></div>
                 <span className="btn-label">{isMobile ? '' : 'RAID'}</span>
+              </button>
+              <button className={`action-btn test ${isDummyActive ? 'active' : ''}`} onClick={onToggleDummy}>
+                <div className="btn-icon icon test-icon"></div>
+                <span className="btn-label">{isMobile ? '' : 'TEST'}</span>
               </button>
             </div>
           </div>
