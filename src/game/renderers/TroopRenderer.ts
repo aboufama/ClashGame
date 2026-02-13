@@ -61,33 +61,9 @@ export class TroopRenderer {
         const runBob = isMoving ? Math.sin(runPhase * Math.PI * 2) * 3 : 0;
         const legKick = isMoving ? Math.sin(runPhase * Math.PI * 2) * 3 : 0;
 
-        // Attack swing animation when stationary (attacking)
-        const attackPhase = !isMoving ? (now % 800) / 800 : 0;
-        // Swing: wind up (0-0.3), slash (0.3-0.5), hold (0.5-0.7), return (0.7-1.0)
-        let swordAngle = 0;
-        let bodyLean = 0;
-        if (!isMoving) {
-            if (attackPhase < 0.3) {
-                // Wind up — sword goes back
-                const t = attackPhase / 0.3;
-                swordAngle = -0.6 * t;
-                bodyLean = -1 * t;
-            } else if (attackPhase < 0.5) {
-                // Slash forward
-                const t = (attackPhase - 0.3) / 0.2;
-                swordAngle = -0.6 + 1.8 * t;
-                bodyLean = -1 + 3 * t;
-            } else if (attackPhase < 0.7) {
-                // Hold at forward position
-                swordAngle = 1.2;
-                bodyLean = 2;
-            } else {
-                // Return to neutral
-                const t = (attackPhase - 0.7) / 0.3;
-                swordAngle = 1.2 * (1 - t);
-                bodyLean = 2 * (1 - t);
-            }
-        }
+        // When attacking (not moving), hold sword in a forward/down slash pose
+        const swordAngle = !isMoving ? 1.2 : 0;
+        const bodyLean = 0;
 
         const skinColor = isPlayer ? 0xdeb887 : 0xc9a66b;
         const armorColor = isPlayer ? 0x8b4513 : 0x654321;
@@ -304,34 +280,34 @@ export class TroopRenderer {
         // GIANT - Large muscular humanoid warrior with a wooden bat
         const now = Date.now();
 
-        // Heavy lumbering walk — alternating legs, subtle lean
-        const walkPhase = isMoving ? (now % 1200) / 1200 : 0;
+        // Heavy lumbering walk — alternating legs only, no body jerk
+        const walkPhase = isMoving ? (now % 1400) / 1400 : 0;
         const stepCycle = isMoving ? Math.sin(walkPhase * Math.PI * 2) : 0;
-        const walkBob = isMoving ? Math.abs(stepCycle) * 1.5 : 0;
+        const walkBob = isMoving ? Math.abs(stepCycle) * 1 : 0;
         const leftLeg = isMoving ? stepCycle * 3 : 0;
         const rightLeg = isMoving ? -stepCycle * 3 : 0;
-        const shoulderLean = isMoving ? stepCycle * 1 : 0;
+        const shoulderLean = 0; // no shoulder jerk
 
-        // Attack animation (bat swing)
-        const attackPhase = !isMoving ? (now % 950) / 950 : 0;
-        let batAngle = -0.3; // resting angle on shoulder
-        let bodyLean = 0;
+        // Attack animation — slow overhead slam to ground
+        const attackPhase = !isMoving ? (now % 1800) / 1800 : 0;
+        let batAngle = -0.3; // resting on shoulder
+        const bodyLean = 0; // no body jerk
         if (!isMoving) {
-            if (attackPhase < 0.25) {
-                const t = attackPhase / 0.25;
-                batAngle = -0.3 - 0.8 * t;
-                bodyLean = -1.5 * t;
-            } else if (attackPhase < 0.45) {
-                const t = (attackPhase - 0.25) / 0.2;
-                batAngle = -1.1 + 2.5 * t;
-                bodyLean = -1.5 + 5 * t;
-            } else if (attackPhase < 0.6) {
-                batAngle = 1.4;
-                bodyLean = 3.5;
+            if (attackPhase < 0.35) {
+                // Raise bat overhead (slow windup)
+                const t = attackPhase / 0.35;
+                batAngle = -0.3 - 1.2 * t;
+            } else if (attackPhase < 0.5) {
+                // Slam down to ground
+                const t = (attackPhase - 0.35) / 0.15;
+                batAngle = -1.5 + 3.3 * t;
+            } else if (attackPhase < 0.65) {
+                // Hold at ground
+                batAngle = 1.8;
             } else {
-                const t = (attackPhase - 0.6) / 0.4;
-                batAngle = 1.4 - 1.7 * t;
-                bodyLean = 3.5 * (1 - t);
+                // Slowly return to shoulder
+                const t = (attackPhase - 0.65) / 0.35;
+                batAngle = 1.8 - 2.1 * t;
             }
         }
 
