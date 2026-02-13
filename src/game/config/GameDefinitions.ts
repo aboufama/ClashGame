@@ -381,7 +381,7 @@ export const TROOP_DEFINITIONS: Record<TroopType, TroopDef> = {
     davincitank: { id: 'davincitank', name: 'Da Vinci Tank', cost: 600, space: 30, desc: 'Leonardo\'s armored war machine. Spins and fires in all directions.', health: 8000, range: 4.0, damage: 80, speed: 0.0006, color: 0xb8956e, targetPriority: 'defense', attackDelay: 1800 },
     phalanx: { id: 'phalanx', name: 'Phalanx', cost: 350, space: 18, desc: 'Roman testudo formation. 3x3 shield wall with spears. Splits into 9 soldiers on death.', health: 3000, range: 0.6, damage: 45, speed: 0.0008, color: 0xc9a07a, attackDelay: 1400 },
     romanwarrior: { id: 'romanwarrior', name: 'Roman Soldier', cost: 0, space: 1, desc: 'An individual soldier from a Phalanx formation.', health: 300, range: 0.5, damage: 15, speed: 0.0015, color: 0xcc3333, attackDelay: 900 },
-    wallbreaker: { id: 'wallbreaker', name: 'Wall Breaker', cost: 100, space: 4, desc: 'Suicidal bomber. Runs at walls and explodes for massive damage.', health: 60, range: 0.5, damage: 800, speed: 0.004, color: 0xff6633, targetPriority: 'wall', wallDamageMultiplier: 3, splashRadius: 2.5, attackDelay: 500 }
+    wallbreaker: { id: 'wallbreaker', name: 'Wall Breaker', cost: 100, space: 4, desc: 'Suicidal bomber. Runs at walls and explodes for massive damage.', health: 200, range: 0.5, damage: 800, speed: 0.004, color: 0xff6633, targetPriority: 'wall', wallDamageMultiplier: 3, splashRadius: 2.5, attackDelay: 500 }
 };
 
 const TROOP_LEVEL_MULTIPLIERS: Record<number, number> = {

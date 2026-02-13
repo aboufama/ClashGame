@@ -1,5 +1,22 @@
-import type { TroopDef } from '../game/config/GameDefinitions';
+import type { TroopDef, TroopType } from '../game/config/GameDefinitions';
+import { getTroopStats } from '../game/config/GameDefinitions';
 import { formatSol } from '../game/solana/Currency';
+
+const TROOP_FLAVOR: Record<string, string> = {
+    warrior: 'Cheap, cheerful, and surprisingly brave for someone with no armor.',
+    archer: 'Pew pew from a safe distance. Prefers not to get punched.',
+    giant: 'Big, slow, and really mad at defensive buildings.',
+    wallbreaker: 'Runs at walls with a bomb. Career expectancy: one attack.',
+    ward: 'Keeps everyone alive. Never gets a thank you.',
+    recursion: 'Kill it and it multiplies. Basically a work email.',
+    ram: 'Has one goal: smash the Town Hall. Very focused individual.',
+    stormmage: 'Zaps enemies in a chain. Shocking personality.',
+    golem: 'An ancient rock that woke up and chose violence.',
+    sharpshooter: 'Like an archer, but actually hits things from far away.',
+    mobilemortar: 'Portable splash damage. Sets up shop, then kaboom.',
+    davincitank: "Leonardo's finest. Spins and shoots in every direction.",
+    phalanx: 'A 3x3 squad of Romans. Splits into 9 angry soldiers on death.',
+};
 
 interface TrainingModalProps {
   isOpen: boolean;
@@ -80,14 +97,23 @@ export function TrainingModal({
               const canAfford = resources.sol >= t.cost;
               const hasSpace = capacity.current + t.space <= capacity.max;
               const isAvailable = canAfford && hasSpace;
+              const scaled = getTroopStats(t.id as TroopType, troopLevel);
+              const flavor = TROOP_FLAVOR[t.id] || t.desc;
 
               return (
                 <div
                   key={t.id}
                   className={`troop-grid-item ${!isAvailable ? 'disabled' : ''}`}
                   onClick={() => isAvailable && onTrainTroop(t.id)}
-                  title={`Housing space: ${t.space}`}
                 >
+                  <div className="troop-tooltip">
+                    <div className="tooltip-flavor">{flavor}</div>
+                    <div className="tooltip-stats">
+                      <span>♥ {scaled.health}</span>
+                      <span>⚔ {scaled.damage}</span>
+                      <span>◎ {t.space}</span>
+                    </div>
+                  </div>
                   <div className="level-badge">Lv{troopLevel}</div>
                   <div className={`icon ${t.id}-icon large`}></div>
                   <span className="name" style={{ fontSize: '0.7rem', fontWeight: 900 }}>{t.name}</span>

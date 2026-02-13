@@ -291,38 +291,42 @@ export class TroopRenderer {
         const rightLeg = isMoving ? -stepCycle * 3 : 0;
         const shoulderLean = 0; // no shoulder jerk
 
-        // Attack animation — slam lands at END of cycle, synced with damage application
-        // Damage fires when attackDelay elapses (phase ≈ 1.0/0.0), so slam hits just before
+        // Attack animation — slam finishes just BEFORE damage fires at cycle end
+        // Club is visually at ground by phase 0.95, damage fires at phase 1.0
         const attackCycle = 3600; // must match attackDelay in GameDefinitions
         const attackPhase = !isMoving ? (now % attackCycle) / attackCycle : 0;
         let batAngle = -0.3; // resting on shoulder
         let rightArmAngle = -0.3; // arm angle tracks bat
         let bodyLean = 0;
         if (!isMoving) {
-            if (attackPhase < 0.15) {
-                // Hold at ground after slam (damage just fired) — hold forward
-                const t = attackPhase / 0.15;
+            if (attackPhase < 0.1) {
+                // Hold at ground (damage just fired)
                 batAngle = 1.6;
                 rightArmAngle = 0.6;
-                bodyLean = 4 * (1 - t); // ease forward lean out
-            } else if (attackPhase < 0.45) {
-                // Slowly return bat to shoulder — rest
-                const t = (attackPhase - 0.15) / 0.3;
+                bodyLean = 4 * (1 - attackPhase / 0.1);
+            } else if (attackPhase < 0.35) {
+                // Return bat to shoulder
+                const t = (attackPhase - 0.1) / 0.25;
                 batAngle = 1.6 - 1.9 * t;
                 rightArmAngle = 0.6 - 0.9 * t;
                 bodyLean = 0;
-            } else if (attackPhase < 0.85) {
+            } else if (attackPhase < 0.8) {
                 // Slow windup — raise bat overhead, lean back
-                const t = (attackPhase - 0.45) / 0.4;
+                const t = (attackPhase - 0.35) / 0.45;
                 batAngle = -0.3 - 1.2 * t;
                 rightArmAngle = -0.3 - 0.6 * t;
                 bodyLean = -2 * t;
-            } else {
-                // Fast slam down — lunge forward with bat (damage fires at end)
-                const t = (attackPhase - 0.85) / 0.15;
+            } else if (attackPhase < 0.95) {
+                // Fast slam down
+                const t = (attackPhase - 0.8) / 0.15;
                 batAngle = -1.5 + 3.1 * t;
                 rightArmAngle = -0.9 + 1.5 * t;
-                bodyLean = -2 + 6 * t; // snap forward
+                bodyLean = -2 + 6 * t;
+            } else {
+                // Hold at ground — club down, waiting for damage to fire
+                batAngle = 1.6;
+                rightArmAngle = 0.6;
+                bodyLean = 4;
             }
         }
 
