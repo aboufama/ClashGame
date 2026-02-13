@@ -531,8 +531,8 @@ export class TroopRenderer {
         // COLOSSAL STONE GOLEM - Massive animated rock titan
         const now = Date.now();
 
-        // Walking animation - heavy, lumbering steps
-        const walkPhase = isMoving ? (now % 1200) / 1200 : 0;
+        // Walking animation - heavy, lumbering steps (slow cycle for weight)
+        const walkPhase = isMoving ? (now % 2400) / 2400 : 0;
 
         // Body movement - only when walking
         const stepBob = isMoving ? Math.abs(Math.sin(walkPhase * Math.PI * 2)) * 4 : 0;
