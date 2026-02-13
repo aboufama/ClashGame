@@ -2321,7 +2321,6 @@ export class MainScene extends Phaser.Scene {
                                 // WALL BREAKER — Suicide explosion on first attack
                                 troop.lastAttackTime = time;
                                 const wallMult = troop.target.type === 'wall' ? ((stats as any).wallDamageMultiplier || 3) : 1;
-                                const explosionDamage = stats.damage * wallMult;
                                 const sRadius = (stats as any).splashRadius || 2.5;
 
                                 // Apply splash damage to all buildings in radius
@@ -2344,8 +2343,9 @@ export class MainScene extends Phaser.Scene {
                                     }
                                 });
 
-                                // Kill itself
+                                // Kill itself and trigger explosion visual
                                 troop.health = 0;
+                                this.destroyTroop(troop);
                             } else {
                                 // Melee: immediate damage (Warrior, Giant, Ram)
                                 let finalDamage = stats.damage;
@@ -4893,6 +4893,12 @@ export class MainScene extends Phaser.Scene {
                     onComplete: () => spark.destroy()
                 });
             }
+
+            // Remove troop and skip default death effects
+            this.troops = this.troops.filter(x => x.id !== t.id);
+            t.gameObject.destroy();
+            t.healthBar.destroy();
+            return;
         }
 
         // RECURSION SPLIT: Spawn two smaller recursions on death if generation < 2
