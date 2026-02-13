@@ -91,55 +91,53 @@
         -4px 2px #3E2723, -2px 2px #5C3317, 2px 2px #5C3317, 4px 2px #3E2723;
 }
 
-/* GIANT - Massive bald muscular man with ORANGE skin and red beard */
+/* GIANT - Large muscular human with leather vest, dark hair, wooden bat */
 .giant-icon::before {
     content: '';
     position: absolute;
     width: 2px;
     height: 2px;
-    background: #FF8C00;
+    background: #DEB887;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     box-shadow:
-        /* Bald orange head */
-        -4px -22px #FF8C00, -2px -22px #FFA500, 0 -22px #FFA500, 2px -22px #FFA500, 4px -22px #FF8C00,
-        -6px -20px #FF8C00, -4px -20px #FFA500, -2px -20px #FFB347, 0 -20px #FFCC66, 2px -20px #FFB347, 4px -20px #FFA500, 6px -20px #FF8C00,
+        /* Dark short hair */
+        -4px -22px #3A2A1A, -2px -22px #3A2A1A, 0 -22px #3A2A1A, 2px -22px #3A2A1A, 4px -22px #3A2A1A,
+        -6px -20px #3A2A1A, -4px -20px #4A3A2A, -2px -20px #3A2A1A, 0 -20px #4A3A2A, 2px -20px #3A2A1A, 4px -20px #4A3A2A, 6px -20px #3A2A1A,
         /* Face */
-        -6px -18px #FF8C00, -4px -18px #FFA500, -2px -18px #FFB347, 0 -18px #FFA500, 2px -18px #FFB347, 4px -18px #FFA500, 6px -18px #FF8C00,
-        /* Eyes (angry) */
-        -4px -16px #1A1A1A, -2px -16px #FFA500, 2px -16px #FFA500, 4px -16px #1A1A1A,
-        /* Red beard */
-        -6px -14px #CC0000, -4px -14px #FF0000, -2px -14px #CC0000, 0 -14px #FF0000, 2px -14px #CC0000, 4px -14px #FF0000, 6px -14px #CC0000,
-        -8px -12px #990000, -6px -12px #CC0000, -4px -12px #FF0000, -2px -12px #CC0000, 0 -12px #FF0000, 2px -12px #CC0000, 4px -12px #FF0000, 6px -12px #CC0000, 8px -12px #990000,
-        /* Thick orange neck */
-        -4px -10px #FF8C00, -2px -10px #FFA500, 0 -10px #FFA500, 2px -10px #FFA500, 4px -10px #FF8C00,
-        /* MASSIVE orange shoulders and arms */
-        -18px -8px #FF8C00, -16px -8px #FFA500, -14px -8px #FFB347, -12px -8px #FFA500, -10px -8px #FF8C00,
-        10px -8px #FF8C00, 12px -8px #FFA500, 14px -8px #FFB347, 16px -8px #FFA500, 18px -8px #FF8C00,
-        /* Chest */
-        -8px -8px #FF8C00, -6px -8px #FFA500, -4px -8px #FFB347, -2px -8px #FFA500, 0 -8px #FFB347, 2px -8px #FFA500, 4px -8px #FFB347, 6px -8px #FFA500, 8px -8px #FF8C00,
-        -8px -6px #FF8C00, -6px -6px #FFA500, -4px -6px #FFA500, -2px -6px #FFB347, 0 -6px #FFA500, 2px -6px #FFB347, 4px -6px #FFA500, 6px -6px #FFA500, 8px -6px #FF8C00,
-        /* Huge arms going down */
-        -20px -6px #FFA500, -18px -6px #FFB347, -16px -6px #FFA500,
-        16px -6px #FFA500, 18px -6px #FFB347, 20px -6px #FFA500,
-        -20px -4px #FF8C00, -18px -4px #FFA500, -16px -4px #FF8C00,
-        16px -4px #FF8C00, 18px -4px #FFA500, 20px -4px #FF8C00,
-        /* Fists raised */
-        -22px -2px #FF8C00, -20px -2px #FFA500, -18px -2px #FFB347, -16px -2px #FFA500,
-        16px -2px #FFA500, 18px -2px #FFB347, 20px -2px #FFA500, 22px -2px #FF8C00,
+        -6px -18px #C9A66B, -4px -18px #DEB887, -2px -18px #DEB887, 0 -18px #DEB887, 2px -18px #DEB887, 4px -18px #DEB887, 6px -18px #C9A66B,
+        /* Eyes + brow */
+        -4px -16px #1A1A1A, -2px -16px #DEB887, 0 -16px #DEB887, 2px -16px #DEB887, 4px -16px #1A1A1A,
+        /* Jaw / stubble */
+        -6px -14px #C9A66B, -4px -14px #B8956E, -2px -14px #C9A66B, 0 -14px #B8956E, 2px -14px #C9A66B, 4px -14px #B8956E, 6px -14px #C9A66B,
+        /* Neck */
+        -4px -12px #C9A66B, -2px -12px #DEB887, 0 -12px #DEB887, 2px -12px #DEB887, 4px -12px #C9A66B,
+        /* Broad shoulders (skin) + bat on right */
+        -16px -10px #C9A66B, -14px -10px #DEB887, -12px -10px #DEB887,
+        12px -10px #DEB887, 14px -10px #DEB887, 16px -10px #C9A66B,
+        18px -10px #8B6B4A, 18px -12px #8B6B4A, 18px -14px #8B6B4A, 18px -16px #6B4A30, 18px -18px #6B4A30, 18px -20px #6B4A30,
+        /* Vest over chest */
+        -10px -10px #6B4226, -8px -10px #6B4226, -6px -10px #6B4226, -4px -10px #6B4226, -2px -10px #4A2F1A, 0 -10px #6B4226, 2px -10px #4A2F1A, 4px -10px #6B4226, 6px -10px #6B4226, 8px -10px #6B4226, 10px -10px #6B4226,
+        -10px -8px #6B4226, -8px -8px #4A2F1A, -6px -8px #6B4226, -4px -8px #6B4226, -2px -8px #4A2F1A, 0 -8px #6B4226, 2px -8px #4A2F1A, 4px -8px #6B4226, 6px -8px #6B4226, 8px -8px #4A2F1A, 10px -8px #6B4226,
+        /* Left arm (skin) */
+        -16px -8px #DEB887, -14px -8px #C9A66B, -16px -6px #DEB887, -14px -6px #C9A66B,
+        -16px -4px #C9A66B, -14px -4px #C9A66B,
+        /* Right arm holding bat */
+        16px -8px #DEB887, 14px -8px #C9A66B, 16px -6px #DEB887,
         /* Belt */
-        -8px -4px #5C3317, -6px -4px #8B4513, -4px -4px #654321, -2px -4px #8B4513, 0 -4px #654321, 2px -4px #8B4513, 4px -4px #654321, 6px -4px #8B4513, 8px -4px #5C3317,
-        /* Brown shorts */
-        -8px -2px #654321, -6px -2px #8B4513, -4px -2px #654321, -2px -2px #8B4513, 0 -2px #654321, 2px -2px #8B4513, 4px -2px #654321, 6px -2px #8B4513, 8px -2px #654321,
-        -6px 0 #5C3317, -4px 0 #654321, -2px 0 #5C3317, 2px 0 #5C3317, 4px 0 #654321, 6px 0 #5C3317,
-        /* Thick orange legs */
-        -6px 2px #FF8C00, -4px 2px #FFA500, -2px 2px #FF8C00, 2px 2px #FF8C00, 4px 2px #FFA500, 6px 2px #FF8C00,
-        -6px 4px #FF8C00, -4px 4px #FFA500, -2px 4px #FF8C00, 2px 4px #FF8C00, 4px 4px #FFA500, 6px 4px #FF8C00,
-        -6px 6px #E67300, -4px 6px #FF8C00, -2px 6px #E67300, 2px 6px #E67300, 4px 6px #FF8C00, 6px 6px #E67300,
-        /* Big bare orange feet */
-        -8px 8px #FF8C00, -6px 8px #FFA500, -4px 8px #FF8C00, -2px 8px #E67300,
-        2px 8px #E67300, 4px 8px #FF8C00, 6px 8px #FFA500, 8px 8px #FF8C00;
+        -10px -6px #4A3520, -8px -6px #4A3520, -6px -6px #4A3520, -4px -6px #4A3520, -2px -6px #C9A227, 0 -6px #C9A227, 2px -6px #C9A227, 4px -6px #4A3520, 6px -6px #4A3520, 8px -6px #4A3520, 10px -6px #4A3520,
+        /* Pants */
+        -8px -4px #5A4A3A, -6px -4px #5A4A3A, -4px -4px #5A4A3A, -2px -4px #5A4A3A, 2px -4px #5A4A3A, 4px -4px #5A4A3A, 6px -4px #5A4A3A, 8px -4px #5A4A3A,
+        -8px -2px #4A3A2A, -6px -2px #5A4A3A, -4px -2px #4A3A2A, 4px -2px #4A3A2A, 6px -2px #5A4A3A, 8px -2px #4A3A2A,
+        /* Legs */
+        -8px 0 #5A4A3A, -6px 0 #4A3A2A, -4px 0 #5A4A3A, 4px 0 #5A4A3A, 6px 0 #4A3A2A, 8px 0 #5A4A3A,
+        -8px 2px #4A3A2A, -6px 2px #5A4A3A, -4px 2px #4A3A2A, 4px 2px #4A3A2A, 6px 2px #5A4A3A, 8px 2px #4A3A2A,
+        /* Boots */
+        -10px 4px #3A2A1A, -8px 4px #3A2A1A, -6px 4px #3A2A1A, -4px 4px #3A2A1A,
+        4px 4px #3A2A1A, 6px 4px #3A2A1A, 8px 4px #3A2A1A, 10px 4px #3A2A1A,
+        /* Left fist */
+        -18px -2px #C9A66B, -16px -2px #DEB887;
 }
 
 
