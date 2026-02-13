@@ -81,6 +81,15 @@ export function Hud({
   };
   const showAttackTroopBar = !(isScouting && visibleTroops.length === 0);
 
+  // Auto-dismiss hotkey hint
+  const [showHotkeyHint, setShowHotkeyHint] = useState(true);
+  useEffect(() => {
+    if (view !== 'ATTACK' || isMobile) return;
+    setShowHotkeyHint(true);
+    const timer = setTimeout(() => setShowHotkeyHint(false), 4000);
+    return () => clearTimeout(timer);
+  }, [view, isMobile]);
+
   // Number keys (1-9, 0) select troops in the battle bar
   useEffect(() => {
     if (view !== 'ATTACK' || !showAttackTroopBar || isMobile) return;
@@ -262,7 +271,7 @@ export function Hud({
                   );
                 })}
               </div>
-              {!isMobile && visibleTroops.length > 0 && (
+              {!isMobile && visibleTroops.length > 0 && showHotkeyHint && (
                 <div className="troop-hotkey-hint">Use number keys to switch troops</div>
               )}
             </div>
