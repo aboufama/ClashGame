@@ -117,14 +117,14 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         maxHealth: 1550,
         range: 11,
         category: 'defense',
-        maxCount: 2,
+        maxCount: 3,
         color: 0x8b008b,
         fireRate: 220,
-        damage: 14,
+        damage: 28,
         maxLevel: 2,
         levels: [
-            { hp: 1550, damage: 14, fireRate: 220, cost: 900 },
-            { hp: 1850, damage: 18, fireRate: 190, cost: 1350 }
+            { hp: 1550, damage: 28, fireRate: 220, cost: 900 },
+            { hp: 1850, damage: 36, fireRate: 190, cost: 1350 }
         ]
     },
     solana_collector: {
@@ -237,12 +237,12 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         maxCount: 1,
         color: 0xff00ff,
         fireRate: 100,
-        damage: 52,
+        damage: 156,
         maxLevel: 3,
         levels: [
-            { hp: 1200, damage: 52, fireRate: 100, cost: 1050, range: 8.5 },
-            { hp: 1450, damage: 68, fireRate: 90, cost: 1450, range: 9.0 },
-            { hp: 1750, damage: 88, fireRate: 75, cost: 2100, range: 9.5 }  // Level 3 - Prismatic Obelisk
+            { hp: 1200, damage: 156, fireRate: 100, cost: 1050, range: 8.5 },
+            { hp: 1450, damage: 204, fireRate: 90, cost: 1450, range: 9.0 },
+            { hp: 1750, damage: 264, fireRate: 75, cost: 2100, range: 9.5 }  // Level 3 - Prismatic Obelisk
         ]
     },
     magmavent: {
