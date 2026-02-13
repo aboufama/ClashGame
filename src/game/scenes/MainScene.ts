@@ -2357,23 +2357,26 @@ export class MainScene extends Phaser.Scene {
                                 this.showHitEffect(troop.target.graphics);
                                 this.updateHealthBar(troop.target);
 
-                                const currentPos = IsoUtils.cartToIso(troop.gridX, troop.gridY);
-                                const targetPos = IsoUtils.cartToIso(bx + tw / 2, by + th / 2);
-                                const angle = Math.atan2(targetPos.y - currentPos.y, targetPos.x - currentPos.x);
+                                // Giant uses renderer-driven lean, no separate punch tween
+                                if (troop.type !== 'giant') {
+                                    const currentPos = IsoUtils.cartToIso(troop.gridX, troop.gridY);
+                                    const targetPos = IsoUtils.cartToIso(bx + tw / 2, by + th / 2);
+                                    const angle = Math.atan2(targetPos.y - currentPos.y, targetPos.x - currentPos.x);
 
-                                // Ram gets a bigger punch animation
-                                const punchDist = troop.type === 'ram' ? 18 : 10;
-                                this.tweens.add({
-                                    targets: troop.gameObject,
-                                    x: currentPos.x + Math.cos(angle) * punchDist,
-                                    y: currentPos.y + Math.sin(angle) * (punchDist * 0.5),
-                                    duration: troop.type === 'ram' ? 100 : 50,
-                                    yoyo: true
-                                });
+                                    // Ram gets a bigger punch animation
+                                    const punchDist = troop.type === 'ram' ? 18 : 10;
+                                    this.tweens.add({
+                                        targets: troop.gameObject,
+                                        x: currentPos.x + Math.cos(angle) * punchDist,
+                                        y: currentPos.y + Math.sin(angle) * (punchDist * 0.5),
+                                        duration: troop.type === 'ram' ? 100 : 50,
+                                        yoyo: true
+                                    });
 
-                                // Screen shake for Ram impact
-                                if (troop.type === 'ram') {
-                                    this.cameras.main.shake(40, 0.002);
+                                    // Screen shake for Ram impact
+                                    if (troop.type === 'ram') {
+                                        this.cameras.main.shake(40, 0.002);
+                                    }
                                 }
 
                                 if (troop.target.health <= 0) {
@@ -4763,49 +4766,133 @@ export class MainScene extends Phaser.Scene {
         if (t.id === 'dummy_target') return; // Ignore dummy targets used for fun shooting
         const pos = IsoUtils.cartToIso(t.gridX, t.gridY);
 
-        // WALL BREAKER EXPLOSION: Big boom on death
+        // WALL BREAKER EXPLOSION: Detailed boom with smoke, debris, and area ring
         if (t.type === 'wallbreaker') {
-            // Large explosion effect
-            const boom1 = this.add.circle(pos.x, pos.y - 5, 25, 0xff4400, 0.9);
-            boom1.setDepth(30002);
-            this.tweens.add({ targets: boom1, scale: 3, alpha: 0, duration: 300, onComplete: () => boom1.destroy() });
-            const boom2 = this.add.circle(pos.x, pos.y - 5, 15, 0xffaa00, 0.8);
-            boom2.setDepth(30003);
-            this.tweens.add({ targets: boom2, scale: 2.5, alpha: 0, duration: 250, onComplete: () => boom2.destroy() });
-            const boom3 = this.add.circle(pos.x, pos.y - 5, 8, 0xffff00, 0.9);
-            boom3.setDepth(30004);
-            this.tweens.add({ targets: boom3, scale: 2, alpha: 0, duration: 200, onComplete: () => boom3.destroy() });
+            const ex = pos.x;
+            const ey = pos.y - 5;
 
-            // Screen shake
-            this.cameras.main.shake(80, 0.004);
+            // 1. Area damage ring — expanding ground circle showing blast radius
+            const ring = this.add.graphics();
+            ring.lineStyle(3, 0xff6600, 0.7);
+            ring.strokeEllipse(0, 0, 20, 10); // isometric ellipse
+            ring.fillStyle(0xff4400, 0.15);
+            ring.fillEllipse(0, 0, 20, 10);
+            ring.setPosition(ex, ey + 8);
+            ring.setDepth(29999);
+            this.tweens.add({
+                targets: ring, scaleX: 4, scaleY: 4, alpha: 0,
+                duration: 400, ease: 'Quad.easeOut',
+                onComplete: () => ring.destroy()
+            });
 
-            // Debris particles
-            for (let i = 0; i < 10; i++) {
+            // 2. Core flash — bright white/yellow burst
+            const flash = this.add.graphics();
+            flash.fillStyle(0xffffff, 0.9);
+            flash.fillCircle(0, 0, 6);
+            flash.fillStyle(0xffff44, 0.7);
+            flash.fillCircle(0, 0, 10);
+            flash.setPosition(ex, ey);
+            flash.setDepth(30005);
+            this.tweens.add({ targets: flash, scale: 2.5, alpha: 0, duration: 150, onComplete: () => flash.destroy() });
+
+            // 3. Fireball — orange/red expanding ball
+            const fireball = this.add.graphics();
+            fireball.fillStyle(0xff4400, 0.8);
+            fireball.fillCircle(0, 0, 10);
+            fireball.fillStyle(0xff8800, 0.6);
+            fireball.fillCircle(-2, -2, 6);
+            fireball.setPosition(ex, ey);
+            fireball.setDepth(30003);
+            this.tweens.add({ targets: fireball, scale: 2, alpha: 0, duration: 300, onComplete: () => fireball.destroy() });
+
+            // 4. Screen shake
+            this.cameras.main.shake(60, 0.003);
+
+            // 5. Debris — barrel chunks, wood splinters, stone bits
+            for (let i = 0; i < 14; i++) {
                 const debrisAngle = Math.random() * Math.PI * 2;
-                const debrisDist = 20 + Math.random() * 30;
+                const debrisDist = 15 + Math.random() * 35;
                 const debris = this.add.graphics();
-                const debrisColor = [0x5a3a1a, 0x444444, 0x8b6b4a, 0xff6633][Math.floor(Math.random() * 4)];
-                debris.fillStyle(debrisColor, 0.9);
-                debris.fillCircle(0, 0, 1.5 + Math.random() * 2);
-                debris.setPosition(pos.x, pos.y - 5);
+                const isWood = Math.random() > 0.4;
+                if (isWood) {
+                    // Wood/barrel chunk
+                    debris.fillStyle([0x5a3a1a, 0x6b4a2a, 0x8b6b4a][Math.floor(Math.random() * 3)], 0.9);
+                    debris.fillRect(-1.5, -1, 3, 2 + Math.random() * 2);
+                } else {
+                    // Metal band / stone bit
+                    debris.fillStyle([0x555555, 0x777777, 0x993300][Math.floor(Math.random() * 3)], 0.9);
+                    debris.fillCircle(0, 0, 1 + Math.random() * 1.5);
+                }
+                debris.setPosition(ex, ey);
                 debris.setDepth(30001);
+                const arcHeight = -20 - Math.random() * 20;
+                const endX = ex + Math.cos(debrisAngle) * debrisDist;
+                const endY = ey + Math.sin(debrisAngle) * debrisDist * 0.5;
+                const midX = (ex + endX) / 2;
+                const midY = (ey + endY) / 2 + arcHeight;
+                const dur = 350 + Math.random() * 250;
+                // Arcing trajectory
                 this.tweens.add({
                     targets: debris,
-                    x: pos.x + Math.cos(debrisAngle) * debrisDist,
-                    y: pos.y - 5 + Math.sin(debrisAngle) * debrisDist * 0.5 - 15,
+                    x: { value: midX, duration: dur * 0.5, ease: 'Sine.easeOut' },
+                    duration: dur
+                });
+                this.tweens.add({
+                    targets: debris,
+                    x: { value: endX, duration: dur * 0.5, delay: dur * 0.5, ease: 'Sine.easeIn' },
+                    duration: dur
+                });
+                this.tweens.add({
+                    targets: debris,
+                    y: [{ value: midY, duration: dur * 0.5, ease: 'Sine.easeOut' }, { value: endY, duration: dur * 0.5, ease: 'Sine.easeIn' }],
                     alpha: 0,
-                    duration: 400 + Math.random() * 200,
+                    rotation: Math.random() * 6,
+                    duration: dur,
                     onComplete: () => debris.destroy()
                 });
             }
 
-            // Smoke cloud
-            const smoke = this.add.graphics();
-            smoke.fillStyle(0x333333, 0.5);
-            smoke.fillCircle(0, 0, 20);
-            smoke.setPosition(pos.x, pos.y - 5);
-            smoke.setDepth(30000);
-            this.tweens.add({ targets: smoke, scale: 3, alpha: 0, duration: 800, onComplete: () => smoke.destroy() });
+            // 6. Smoke puffs — multiple rising smoke clouds
+            for (let i = 0; i < 4; i++) {
+                const smoke = this.add.graphics();
+                const smokeSize = 6 + Math.random() * 8;
+                const smokeAlpha = 0.3 + Math.random() * 0.2;
+                smoke.fillStyle(i < 2 ? 0x222222 : 0x444444, smokeAlpha);
+                smoke.fillCircle(0, 0, smokeSize);
+                const offsetX = (Math.random() - 0.5) * 16;
+                const offsetY = (Math.random() - 0.5) * 8;
+                smoke.setPosition(ex + offsetX, ey + offsetY);
+                smoke.setDepth(30000);
+                this.tweens.add({
+                    targets: smoke,
+                    y: ey + offsetY - 25 - Math.random() * 15,
+                    x: ex + offsetX + (Math.random() - 0.5) * 10,
+                    scale: 2 + Math.random(),
+                    alpha: 0,
+                    duration: 600 + Math.random() * 400,
+                    delay: i * 50,
+                    onComplete: () => smoke.destroy()
+                });
+            }
+
+            // 7. Sparks — small bright particles
+            for (let i = 0; i < 6; i++) {
+                const spark = this.add.graphics();
+                spark.fillStyle([0xffaa00, 0xff6600, 0xffff00][Math.floor(Math.random() * 3)], 1);
+                spark.fillCircle(0, 0, 1);
+                spark.setPosition(ex, ey);
+                spark.setDepth(30004);
+                const sparkAngle = Math.random() * Math.PI * 2;
+                const sparkDist = 20 + Math.random() * 25;
+                this.tweens.add({
+                    targets: spark,
+                    x: ex + Math.cos(sparkAngle) * sparkDist,
+                    y: ey + Math.sin(sparkAngle) * sparkDist * 0.5 - 10,
+                    alpha: 0,
+                    duration: 200 + Math.random() * 150,
+                    onComplete: () => spark.destroy()
+                });
+            }
         }
 
         // RECURSION SPLIT: Spawn two smaller recursions on death if generation < 2

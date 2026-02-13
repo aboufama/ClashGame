@@ -292,30 +292,35 @@ export class TroopRenderer {
         const shoulderLean = 0; // no shoulder jerk
 
         // Attack animation — slow overhead slam to ground, arm carries bat
+        // Sync forward lean with bat slam so they move together
         const attackPhase = !isMoving ? (now % 1800) / 1800 : 0;
         let batAngle = -0.3; // resting on shoulder
         let rightArmAngle = -0.3; // arm angle tracks bat
-        const bodyLean = 0;
+        let bodyLean = 0;
         if (!isMoving) {
             if (attackPhase < 0.35) {
-                // Raise bat overhead (slow windup)
+                // Raise bat overhead (slow windup) — lean back slightly
                 const t = attackPhase / 0.35;
                 batAngle = -0.3 - 1.2 * t;
                 rightArmAngle = -0.3 - 0.6 * t;
+                bodyLean = -2 * t; // lean back during windup
             } else if (attackPhase < 0.5) {
-                // Slam down to ground
+                // Slam down to ground — lunge forward with bat
                 const t = (attackPhase - 0.35) / 0.15;
                 batAngle = -1.5 + 3.1 * t;
                 rightArmAngle = -0.9 + 1.5 * t;
+                bodyLean = -2 + 6 * t; // snap forward (from -2 to +4)
             } else if (attackPhase < 0.65) {
-                // Hold at ground
+                // Hold at ground — hold forward
                 batAngle = 1.6;
                 rightArmAngle = 0.6;
+                bodyLean = 4;
             } else {
-                // Slowly return to shoulder
+                // Slowly return to neutral
                 const t = (attackPhase - 0.65) / 0.35;
                 batAngle = 1.6 - 1.9 * t;
                 rightArmAngle = 0.6 - 0.9 * t;
+                bodyLean = 4 * (1 - t); // ease back to 0
             }
         }
 
