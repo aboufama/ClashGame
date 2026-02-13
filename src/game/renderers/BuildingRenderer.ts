@@ -356,52 +356,6 @@ export class BuildingRenderer {
             graphics.lineStyle(1, isLevel2 ? 0x6a6a7a : 0x7a5a40, alpha * 0.6);
             graphics.lineBetween(r4.x, r4.y, peakFront.x, peakFront.y);
 
-            if (isLevel2) {
-                // Iron reinforcement bands on SE wall
-                graphics.lineStyle(2, 0x777777, alpha * 0.6);
-                const seMidX = (c2.x + c3.x) / 2;
-                const seMidY = (c2.y + c3.y) / 2;
-                graphics.lineBetween(seMidX - 6, seMidY - wallHeight * 0.3, seMidX + 6, seMidY - wallHeight * 0.3);
-                graphics.lineBetween(seMidX - 6, seMidY - wallHeight * 0.6, seMidX + 6, seMidY - wallHeight * 0.6);
-
-                // Battle banner pole on SE wall corner
-                const poleX = (c2.x + c3.x) / 2;
-                const poleY = (c2.y + c3.y) / 2;
-                graphics.lineStyle(2, 0x5a5a5a, alpha * 0.85);
-                graphics.lineBetween(poleX, poleY - 10, poleX, poleY - 28);
-                // Crimson battle banner
-                graphics.fillStyle(0xcc2222, alpha * 0.9);
-                graphics.beginPath();
-                graphics.moveTo(poleX, poleY - 28);
-                graphics.lineTo(poleX + 14, poleY - 25);
-                graphics.lineTo(poleX + 12, poleY - 21);
-                graphics.lineTo(poleX, poleY - 18);
-                graphics.closePath();
-                graphics.fillPath();
-                // Banner emblem (gold sword cross)
-                graphics.lineStyle(1, 0xffd700, alpha * 0.8);
-                graphics.lineBetween(poleX + 6, poleY - 26, poleX + 6, poleY - 20);
-                graphics.lineBetween(poleX + 3, poleY - 23, poleX + 9, poleY - 23);
-
-                // Weapon rack beside door
-                const rackX = doorCenterX + normX * doorHalfWidth + normX * 8;
-                const rackY = doorCenterY + normY * doorHalfWidth + normY * 8;
-                graphics.lineStyle(2, 0x5d4037, alpha * 0.7);
-                graphics.lineBetween(rackX, rackY, rackX, rackY - 14);
-                graphics.lineStyle(1.5, 0x999999, alpha * 0.65);
-                graphics.lineBetween(rackX - 5, rackY - 4, rackX + 5, rackY - 12);
-                graphics.lineBetween(rackX + 5, rackY - 4, rackX - 5, rackY - 12);
-
-                // Torch on SW wall
-                const torchX = doorCenterX - normX * doorHalfWidth - normX * 6;
-                const torchY = doorCenterY - normY * doorHalfWidth - normY * 6;
-                graphics.lineStyle(2, 0x5d4037, alpha * 0.7);
-                graphics.lineBetween(torchX, torchY - 2, torchX, torchY - 10);
-                graphics.fillStyle(0xff8800, alpha * 0.85);
-                graphics.fillCircle(torchX, torchY - 12, 3);
-                graphics.fillStyle(0xffcc00, alpha * 0.7);
-                graphics.fillCircle(torchX, torchY - 13, 2);
-            }
         }
     }
 
