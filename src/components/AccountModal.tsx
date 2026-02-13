@@ -10,7 +10,8 @@ interface AccountModalProps {
   onLogout: () => Promise<void>;
 }
 
-type Mode = 'current' | 'login' | 'register';
+type Mode = 'login' | 'register';
+const EMAIL_LIKE_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function AccountModal({
   isOpen,
@@ -21,7 +22,7 @@ export function AccountModal({
   onRegister,
   onLogout
 }: AccountModalProps) {
-  const [mode, setMode] = useState<Mode>('current');
+  const [mode, setMode] = useState<Mode>('login');
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [registerEmail, setRegisterEmail] = useState('');
@@ -35,33 +36,36 @@ export function AccountModal({
   useEffect(() => {
     if (!isOpen) return;
     setError(null);
-    if (currentUser && isOnline) {
-      setMode('current');
-    } else {
-      setMode('login');
-    }
+    setMode('login');
   }, [isOpen, currentUser, isOnline]);
-
-  const copyText = (value?: string) => {
-    if (!value) return;
-    if (navigator.clipboard?.writeText) {
-      void navigator.clipboard.writeText(value);
-    }
-  };
 
   const handleLogin = async () => {
     if (submitLockRef.current || busy) return;
+    const identifier = loginIdentifier.trim();
+    if (!identifier || !loginPassword) {
+      setError('Enter your email/username and password.');
+      return;
+    }
+
     submitLockRef.current = true;
     setBusy(true);
     setError(null);
     try {
-      await onLogin(loginIdentifier.trim(), loginPassword);
+      await onLogin(identifier, loginPassword);
       setLoginIdentifier('');
       setLoginPassword('');
-      setMode('current');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Login failed.';
-      setError(message);
+      if (
+        EMAIL_LIKE_PATTERN.test(identifier) &&
+        message.toLowerCase().includes('no account found')
+      ) {
+        setRegisterEmail(identifier);
+        setMode('register');
+        setError('No account found for that email. Create an account below.');
+      } else {
+        setError(message);
+      }
     } finally {
       submitLockRef.current = false;
       setBusy(false);
@@ -84,7 +88,7 @@ export function AccountModal({
       setRegisterName('');
       setRegisterPassword('');
       setRegisterConfirmPassword('');
-      setMode('current');
+      setMode('login');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Registration failed.';
       setError(message);
@@ -117,22 +121,20 @@ export function AccountModal({
       <div className="account-modal">
         <div className="account-modal-header">
           <h3>ACCOUNT</h3>
-          {currentUser && (
+          {currentUser && isOnline && (
             <span className={`status-pill ${isOnline ? 'online' : 'offline'}`}>
-              {isOnline ? 'ONLINE' : 'OFFLINE'}
+              ONLINE AS {currentUser.username.toUpperCase()}
             </span>
           )}
-          <button className="account-close" onClick={onClose}>✕</button>
+          {currentUser && isOnline && (
+            <button className="logout-btn" onClick={handleLogout} disabled={busy}>
+              LOG OUT
+            </button>
+          )}
+          <button className="account-close" onClick={onClose} disabled={busy}>✕</button>
         </div>
 
         <div className="account-tabs">
-          <button
-            className={`tab-btn ${mode === 'current' ? 'active' : ''}`}
-            disabled={!currentUser || !isOnline}
-            onClick={() => setMode('current')}
-          >
-            CURRENT
-          </button>
           <button
             className={`tab-btn ${mode === 'login' ? 'active' : ''}`}
             onClick={() => setMode('login')}
@@ -150,37 +152,14 @@ export function AccountModal({
         {error && <div className="account-error">{error}</div>}
         {busy && !error && <div className="account-warning">Please wait...</div>}
 
-        {mode === 'current' && currentUser && isOnline && (
-          <div className="account-panel">
-            <div className="account-field">
-              <span>ID</span>
-              <div className="field-row">
-                <code>{currentUser.id}</code>
-                <button className="copy-btn" onClick={() => copyText(currentUser.id)}>COPY</button>
-              </div>
-            </div>
-            <div className="account-field">
-              <span>EMAIL</span>
-              <div className="field-row">
-                <code>{currentUser.email}</code>
-                <button className="copy-btn" onClick={() => copyText(currentUser.email)}>COPY</button>
-              </div>
-            </div>
-            <div className="account-field">
-              <span>USERNAME</span>
-              <div className="field-row">
-                <code>{currentUser.username}</code>
-                <button className="copy-btn" onClick={() => copyText(currentUser.username)}>COPY</button>
-              </div>
-            </div>
-            <button className="logout-btn" onClick={handleLogout} disabled={busy}>
-              LOG OUT
-            </button>
-          </div>
-        )}
-
         {mode === 'login' && (
-          <div className="account-panel">
+          <form
+            className="account-panel"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void handleLogin();
+            }}
+          >
             <label>
               EMAIL OR USERNAME
               <input
@@ -198,10 +177,10 @@ export function AccountModal({
                 type="password"
               />
             </label>
-            <button className="action-btn" onClick={handleLogin} disabled={busy || !loginIdentifier.trim() || !loginPassword}>
+            <button className="action-btn" type="submit" disabled={busy || !loginIdentifier.trim() || !loginPassword}>
               LOG IN
             </button>
-          </div>
+          </form>
         )}
 
         {mode === 'register' && (
