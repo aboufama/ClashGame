@@ -291,36 +291,38 @@ export class TroopRenderer {
         const rightLeg = isMoving ? -stepCycle * 3 : 0;
         const shoulderLean = 0; // no shoulder jerk
 
-        // Attack animation — slow overhead slam to ground, arm carries bat
-        // Sync forward lean with bat slam so they move together
-        const attackPhase = !isMoving ? (now % 1800) / 1800 : 0;
+        // Attack animation — slam lands at END of cycle, synced with damage application
+        // Damage fires when attackDelay elapses (phase ≈ 1.0/0.0), so slam hits just before
+        const attackCycle = 3600; // must match attackDelay in GameDefinitions
+        const attackPhase = !isMoving ? (now % attackCycle) / attackCycle : 0;
         let batAngle = -0.3; // resting on shoulder
         let rightArmAngle = -0.3; // arm angle tracks bat
         let bodyLean = 0;
         if (!isMoving) {
-            if (attackPhase < 0.35) {
-                // Raise bat overhead (slow windup) — lean back slightly
-                const t = attackPhase / 0.35;
-                batAngle = -0.3 - 1.2 * t;
-                rightArmAngle = -0.3 - 0.6 * t;
-                bodyLean = -2 * t; // lean back during windup
-            } else if (attackPhase < 0.5) {
-                // Slam down to ground — lunge forward with bat
-                const t = (attackPhase - 0.35) / 0.15;
-                batAngle = -1.5 + 3.1 * t;
-                rightArmAngle = -0.9 + 1.5 * t;
-                bodyLean = -2 + 6 * t; // snap forward (from -2 to +4)
-            } else if (attackPhase < 0.65) {
-                // Hold at ground — hold forward
+            if (attackPhase < 0.15) {
+                // Hold at ground after slam (damage just fired) — hold forward
+                const t = attackPhase / 0.15;
                 batAngle = 1.6;
                 rightArmAngle = 0.6;
-                bodyLean = 4;
-            } else {
-                // Slowly return to neutral
-                const t = (attackPhase - 0.65) / 0.35;
+                bodyLean = 4 * (1 - t); // ease forward lean out
+            } else if (attackPhase < 0.45) {
+                // Slowly return bat to shoulder — rest
+                const t = (attackPhase - 0.15) / 0.3;
                 batAngle = 1.6 - 1.9 * t;
                 rightArmAngle = 0.6 - 0.9 * t;
-                bodyLean = 4 * (1 - t); // ease back to 0
+                bodyLean = 0;
+            } else if (attackPhase < 0.85) {
+                // Slow windup — raise bat overhead, lean back
+                const t = (attackPhase - 0.45) / 0.4;
+                batAngle = -0.3 - 1.2 * t;
+                rightArmAngle = -0.3 - 0.6 * t;
+                bodyLean = -2 * t;
+            } else {
+                // Fast slam down — lunge forward with bat (damage fires at end)
+                const t = (attackPhase - 0.85) / 0.15;
+                batAngle = -1.5 + 3.1 * t;
+                rightArmAngle = -0.9 + 1.5 * t;
+                bodyLean = -2 + 6 * t; // snap forward
             }
         }
 
