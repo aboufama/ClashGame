@@ -8,6 +8,7 @@ interface TrainingModalProps {
   resources: { sol: number };
   army: Record<string, number>;
   troops: TroopDef[];
+  troopLevel: number;
   onClose: () => void;
   onStartPractice: () => void;
   onFindMatch: () => void;
@@ -22,6 +23,7 @@ export function TrainingModal({
   resources,
   army,
   troops,
+  troopLevel,
   onClose,
   onStartPractice,
   onFindMatch,
@@ -67,7 +69,7 @@ export function TrainingModal({
               <div key={type} className="queue-item">
                 <button className="remove-btn" onClick={() => onUntrainTroop(type)}>×</button>
                 <div className={`icon ${type}-icon`}></div>
-                <div className="count">{count}</div>
+                <div className="count">x{count}</div>
               </div>
             ))}
             {capacity.current === 0 && <div className="hint" style={{ width: '100%', opacity: 0.5 }}>Army is empty. Train some troops below!</div>}
@@ -84,8 +86,9 @@ export function TrainingModal({
                   key={t.id}
                   className={`troop-grid-item ${!isAvailable ? 'disabled' : ''}`}
                   onClick={() => isAvailable && onTrainTroop(t.id)}
+                  title={`Housing space: ${t.space}`}
                 >
-                  <div className="count-badge">{t.space}</div>
+                  <div className="level-badge">Lv{troopLevel}</div>
                   <div className={`icon ${t.id}-icon large`}></div>
                   <span className="name" style={{ fontSize: '0.7rem', fontWeight: 900 }}>{t.name}</span>
                   <div className="cost-badge">
