@@ -548,6 +548,7 @@ export class MainScene extends Phaser.Scene {
 
         this.troops.push(troop);
         this.dummyTroop = troop;
+        this.game.canvas.style.cursor = 'none';
     }
 
     public removeDummyTroop() {
@@ -557,6 +558,7 @@ export class MainScene extends Phaser.Scene {
         this.dummyTroop.gameObject.destroy();
         this.dummyTroop.healthBar.destroy();
         this.dummyTroop = null;
+        this.game.canvas.style.cursor = '';
 
         // Clean up any active prism lasers
         this.buildings.forEach(b => {

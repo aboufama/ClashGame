@@ -4105,26 +4105,37 @@ export class BuildingRenderer {
             }
         };
 
-        // Half-segments: center to own tile edge to avoid depth overlap at corners
-        if (nN) addSegment(cx, cy, cx, gridY);
-        if (nS) addSegment(cx, cy, cx, gridY + 1);
-        if (nE) addSegment(cx, cy, gridX + 1, cy);
-        if (nW) addSegment(cx, cy, gridX, cy);
+        // Straight-through detection: skip post for continuous stretches
+        const isStraightNS = nN && nS && !nE && !nW;
+        const isStraightEW = nE && nW && !nN && !nS;
+        const isStraight = isStraightNS || isStraightEW;
 
-        // Central post
-        const ps = wallThickness * 0.7;
-        const hps = ps / 2;
-        const pTL = IsoUtils.cartToIso(cx - hps, cy - hps);
-        const pTR = IsoUtils.cartToIso(cx + hps, cy - hps);
-        const pBR = IsoUtils.cartToIso(cx + hps, cy + hps);
-        const pBL = IsoUtils.cartToIso(cx - hps, cy + hps);
-        const ptTL = new Phaser.Math.Vector2(pTL.x, pTL.y - wallHeight);
-        const ptTR = new Phaser.Math.Vector2(pTR.x, pTR.y - wallHeight);
-        const ptBR = new Phaser.Math.Vector2(pBR.x, pBR.y - wallHeight);
-        const ptBL = new Phaser.Math.Vector2(pBL.x, pBL.y - wallHeight);
-        sideFaces.push({ points: [pTR, pBR, ptBR, ptTR], color: woodSide });
-        sideFaces.push({ points: [pBR, pBL, ptBL, ptBR], color: woodFront });
-        topFaces.push([ptTL, ptTR, ptBR, ptBL]);
+        if (isStraight) {
+            // Draw a single full segment through the tile (no post)
+            if (isStraightNS) addSegment(cx, gridY, cx, gridY + 1);
+            if (isStraightEW) addSegment(gridX, cy, gridX + 1, cy);
+        } else {
+            // Half-segments: center to own tile edge to avoid depth overlap at corners
+            if (nN) addSegment(cx, cy, cx, gridY);
+            if (nS) addSegment(cx, cy, cx, gridY + 1);
+            if (nE) addSegment(cx, cy, gridX + 1, cy);
+            if (nW) addSegment(cx, cy, gridX, cy);
+
+            // Central post
+            const ps = wallThickness * 0.7;
+            const hps = ps / 2;
+            const pTL = IsoUtils.cartToIso(cx - hps, cy - hps);
+            const pTR = IsoUtils.cartToIso(cx + hps, cy - hps);
+            const pBR = IsoUtils.cartToIso(cx + hps, cy + hps);
+            const pBL = IsoUtils.cartToIso(cx - hps, cy + hps);
+            const ptTL = new Phaser.Math.Vector2(pTL.x, pTL.y - wallHeight);
+            const ptTR = new Phaser.Math.Vector2(pTR.x, pTR.y - wallHeight);
+            const ptBR = new Phaser.Math.Vector2(pBR.x, pBR.y - wallHeight);
+            const ptBL = new Phaser.Math.Vector2(pBL.x, pBL.y - wallHeight);
+            sideFaces.push({ points: [pTR, pBR, ptBR, ptTR], color: woodSide });
+            sideFaces.push({ points: [pBR, pBL, ptBL, ptBR], color: woodFront });
+            topFaces.push([ptTL, ptTR, ptBR, ptBL]);
+        }
 
         // Render side faces
         for (const face of sideFaces) {
@@ -4138,42 +4149,56 @@ export class BuildingRenderer {
             graphics.fillPoints(top, true);
         }
 
-        // Wood grain lines on front faces
-        graphics.lineStyle(1, 0x4a2a15, alpha * 0.4);
-        const pcx = (ptTL.x + ptBR.x) / 2;
-        const pcy = (ptTL.y + ptBR.y) / 2;
-        graphics.lineBetween(pcx - 2, pcy + wallHeight * 0.3, pcx - 2, pcy + wallHeight * 0.8);
-        graphics.lineBetween(pcx + 1, pcy + wallHeight * 0.2, pcx + 1, pcy + wallHeight * 0.7);
+        // Post decorations only when not a straight segment
+        if (!isStraight) {
+            const ps = wallThickness * 0.7;
+            const hps = ps / 2;
+            const pTL = IsoUtils.cartToIso(cx - hps, cy - hps);
+            const pTR = IsoUtils.cartToIso(cx + hps, cy - hps);
+            const pBR = IsoUtils.cartToIso(cx + hps, cy + hps);
+            const pBL = IsoUtils.cartToIso(cx - hps, cy + hps);
+            const ptTL = new Phaser.Math.Vector2(pTL.x, pTL.y - wallHeight);
+            const ptTR = new Phaser.Math.Vector2(pTR.x, pTR.y - wallHeight);
+            const ptBR = new Phaser.Math.Vector2(pBR.x, pBR.y - wallHeight);
+            const ptBL = new Phaser.Math.Vector2(pBL.x, pBL.y - wallHeight);
 
-        // Sharpened top (pointed stake)
-        const peakY = pcy - 6;
-        graphics.fillStyle(0x9b7b5a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(pcx, peakY);
-        graphics.lineTo(ptTL.x, ptTL.y);
-        graphics.lineTo(ptTR.x, ptTR.y);
-        graphics.closePath();
-        graphics.fillPath();
-        graphics.beginPath();
-        graphics.moveTo(pcx, peakY);
-        graphics.lineTo(ptTR.x, ptTR.y);
-        graphics.lineTo(ptBR.x, ptBR.y);
-        graphics.closePath();
-        graphics.fillPath();
-        graphics.fillStyle(0x7b5b3a, alpha);
-        graphics.beginPath();
-        graphics.moveTo(pcx, peakY);
-        graphics.lineTo(ptBR.x, ptBR.y);
-        graphics.lineTo(ptBL.x, ptBL.y);
-        graphics.closePath();
-        graphics.fillPath();
+            // Wood grain lines on front faces
+            const pcx = (ptTL.x + ptBR.x) / 2;
+            const pcy = (ptTL.y + ptBR.y) / 2;
+            graphics.lineStyle(1, 0x4a2a15, alpha * 0.4);
+            graphics.lineBetween(pcx - 2, pcy + wallHeight * 0.3, pcx - 2, pcy + wallHeight * 0.8);
+            graphics.lineBetween(pcx + 1, pcy + wallHeight * 0.2, pcx + 1, pcy + wallHeight * 0.7);
 
-        // Rope binding
-        const ropeY = pcy + 8;
-        graphics.lineStyle(2, 0x8a7a5a, alpha);
-        graphics.lineBetween(pcx - 4, ropeY, pcx + 4, ropeY);
-        graphics.lineStyle(1, 0x6a5a3a, alpha * 0.6);
-        graphics.lineBetween(pcx - 3, ropeY + 2, pcx + 3, ropeY + 2);
+            // Sharpened top (pointed stake)
+            const peakY = pcy - 6;
+            graphics.fillStyle(0x9b7b5a, alpha);
+            graphics.beginPath();
+            graphics.moveTo(pcx, peakY);
+            graphics.lineTo(ptTL.x, ptTL.y);
+            graphics.lineTo(ptTR.x, ptTR.y);
+            graphics.closePath();
+            graphics.fillPath();
+            graphics.beginPath();
+            graphics.moveTo(pcx, peakY);
+            graphics.lineTo(ptTR.x, ptTR.y);
+            graphics.lineTo(ptBR.x, ptBR.y);
+            graphics.closePath();
+            graphics.fillPath();
+            graphics.fillStyle(0x7b5b3a, alpha);
+            graphics.beginPath();
+            graphics.moveTo(pcx, peakY);
+            graphics.lineTo(ptBR.x, ptBR.y);
+            graphics.lineTo(ptBL.x, ptBL.y);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Rope binding
+            const ropeY = pcy + 8;
+            graphics.lineStyle(2, 0x8a7a5a, alpha);
+            graphics.lineBetween(pcx - 4, ropeY, pcx + 4, ropeY);
+            graphics.lineStyle(1, 0x6a5a3a, alpha * 0.6);
+            graphics.lineBetween(pcx - 3, ropeY + 2, pcx + 3, ropeY + 2);
+        }
     }
 
     // === LEVEL 2: STONE WALL ===
@@ -4222,26 +4247,36 @@ export class BuildingRenderer {
             }
         };
 
-        // Half-segments: center to own tile edge to avoid depth overlap at corners
-        if (nN) addSegment(cx, cy, cx, gridY);
-        if (nS) addSegment(cx, cy, cx, gridY + 1);
-        if (nE) addSegment(cx, cy, gridX + 1, cy);
-        if (nW) addSegment(cx, cy, gridX, cy);
+        // Straight-through detection: skip pillar for continuous stretches
+        const isStraightNS = nN && nS && !nE && !nW;
+        const isStraightEW = nE && nW && !nN && !nS;
+        const isStraight = isStraightNS || isStraightEW;
 
-        // Central pillar
-        const ps = wallThickness * 0.6;
-        const hps = ps / 2;
-        const pTL = IsoUtils.cartToIso(cx - hps, cy - hps);
-        const pTR = IsoUtils.cartToIso(cx + hps, cy - hps);
-        const pBR = IsoUtils.cartToIso(cx + hps, cy + hps);
-        const pBL = IsoUtils.cartToIso(cx - hps, cy + hps);
-        const ptTL = new Phaser.Math.Vector2(pTL.x, pTL.y - wallHeight);
-        const ptTR = new Phaser.Math.Vector2(pTR.x, pTR.y - wallHeight);
-        const ptBR = new Phaser.Math.Vector2(pBR.x, pBR.y - wallHeight);
-        const ptBL = new Phaser.Math.Vector2(pBL.x, pBL.y - wallHeight);
-        sideFaces.push({ points: [pTR, pBR, ptBR, ptTR], color: stoneSide });
-        sideFaces.push({ points: [pBR, pBL, ptBL, ptBR], color: stoneFront });
-        topFaces.push([ptTL, ptTR, ptBR, ptBL]);
+        if (isStraight) {
+            if (isStraightNS) addSegment(cx, gridY, cx, gridY + 1);
+            if (isStraightEW) addSegment(gridX, cy, gridX + 1, cy);
+        } else {
+            // Half-segments: center to own tile edge to avoid depth overlap at corners
+            if (nN) addSegment(cx, cy, cx, gridY);
+            if (nS) addSegment(cx, cy, cx, gridY + 1);
+            if (nE) addSegment(cx, cy, gridX + 1, cy);
+            if (nW) addSegment(cx, cy, gridX, cy);
+
+            // Central pillar
+            const ps = wallThickness * 0.6;
+            const hps = ps / 2;
+            const pTL = IsoUtils.cartToIso(cx - hps, cy - hps);
+            const pTR = IsoUtils.cartToIso(cx + hps, cy - hps);
+            const pBR = IsoUtils.cartToIso(cx + hps, cy + hps);
+            const pBL = IsoUtils.cartToIso(cx - hps, cy + hps);
+            const ptTL = new Phaser.Math.Vector2(pTL.x, pTL.y - wallHeight);
+            const ptTR = new Phaser.Math.Vector2(pTR.x, pTR.y - wallHeight);
+            const ptBR = new Phaser.Math.Vector2(pBR.x, pBR.y - wallHeight);
+            const ptBL = new Phaser.Math.Vector2(pBL.x, pBL.y - wallHeight);
+            sideFaces.push({ points: [pTR, pBR, ptBR, ptTR], color: stoneSide });
+            sideFaces.push({ points: [pBR, pBL, ptBL, ptBR], color: stoneFront });
+            topFaces.push([ptTL, ptTR, ptBR, ptBL]);
+        }
 
         // Render side faces
         for (const face of sideFaces) {
@@ -4255,18 +4290,28 @@ export class BuildingRenderer {
             graphics.fillPoints(top, true);
         }
 
-        // Top highlights
-        graphics.lineStyle(1, 0xe8dcc8, alpha * 0.6);
-        graphics.lineBetween(ptTL.x, ptTL.y, ptTR.x, ptTR.y);
-        graphics.lineBetween(ptTL.x, ptTL.y, ptBL.x, ptBL.y);
+        // Post decorations only when not a straight segment
+        if (!isStraight) {
+            const ps = wallThickness * 0.6;
+            const hps = ps / 2;
+            const ptTL = new Phaser.Math.Vector2(IsoUtils.cartToIso(cx - hps, cy - hps).x, IsoUtils.cartToIso(cx - hps, cy - hps).y - wallHeight);
+            const ptTR = new Phaser.Math.Vector2(IsoUtils.cartToIso(cx + hps, cy - hps).x, IsoUtils.cartToIso(cx + hps, cy - hps).y - wallHeight);
+            const ptBL = new Phaser.Math.Vector2(IsoUtils.cartToIso(cx - hps, cy + hps).x, IsoUtils.cartToIso(cx - hps, cy + hps).y - wallHeight);
+            const ptBR = new Phaser.Math.Vector2(IsoUtils.cartToIso(cx + hps, cy + hps).x, IsoUtils.cartToIso(cx + hps, cy + hps).y - wallHeight);
 
-        // Junction decoration
-        const neighborCount = (nN ? 1 : 0) + (nS ? 1 : 0) + (nE ? 1 : 0) + (nW ? 1 : 0);
-        if (neighborCount >= 3) {
-            const pcx = (ptTL.x + ptBR.x) / 2;
-            const pcy = (ptTL.y + ptBR.y) / 2;
-            graphics.fillStyle(0xe8dcc8, alpha);
-            graphics.fillCircle(pcx, pcy, 2.5);
+            // Top highlights
+            graphics.lineStyle(1, 0xe8dcc8, alpha * 0.6);
+            graphics.lineBetween(ptTL.x, ptTL.y, ptTR.x, ptTR.y);
+            graphics.lineBetween(ptTL.x, ptTL.y, ptBL.x, ptBL.y);
+
+            // Junction decoration
+            const neighborCount = (nN ? 1 : 0) + (nS ? 1 : 0) + (nE ? 1 : 0) + (nW ? 1 : 0);
+            if (neighborCount >= 3) {
+                const pcx = (ptTL.x + ptBR.x) / 2;
+                const pcy = (ptTL.y + ptBR.y) / 2;
+                graphics.fillStyle(0xe8dcc8, alpha);
+                graphics.fillCircle(pcx, pcy, 2.5);
+            }
         }
     }
 
@@ -4316,26 +4361,36 @@ export class BuildingRenderer {
             }
         };
 
-        // Half-segments: center to own tile edge to avoid depth overlap at corners
-        if (nN) addSegment(cx, cy, cx, gridY);
-        if (nS) addSegment(cx, cy, cx, gridY + 1);
-        if (nE) addSegment(cx, cy, gridX + 1, cy);
-        if (nW) addSegment(cx, cy, gridX, cy);
+        // Straight-through detection: skip pillar for continuous stretches
+        const isStraightNS = nN && nS && !nE && !nW;
+        const isStraightEW = nE && nW && !nN && !nS;
+        const isStraight = isStraightNS || isStraightEW;
 
-        // Central pillar (larger for fortified)
-        const ps = wallThickness * 0.7;
-        const hps = ps / 2;
-        const pTL = IsoUtils.cartToIso(cx - hps, cy - hps);
-        const pTR = IsoUtils.cartToIso(cx + hps, cy - hps);
-        const pBR = IsoUtils.cartToIso(cx + hps, cy + hps);
-        const pBL = IsoUtils.cartToIso(cx - hps, cy + hps);
-        const ptTL = new Phaser.Math.Vector2(pTL.x, pTL.y - wallHeight);
-        const ptTR = new Phaser.Math.Vector2(pTR.x, pTR.y - wallHeight);
-        const ptBR = new Phaser.Math.Vector2(pBR.x, pBR.y - wallHeight);
-        const ptBL = new Phaser.Math.Vector2(pBL.x, pBL.y - wallHeight);
-        sideFaces.push({ points: [pTR, pBR, ptBR, ptTR], color: stoneSide });
-        sideFaces.push({ points: [pBR, pBL, ptBL, ptBR], color: stoneFront });
-        topFaces.push([ptTL, ptTR, ptBR, ptBL]);
+        if (isStraight) {
+            if (isStraightNS) addSegment(cx, gridY, cx, gridY + 1);
+            if (isStraightEW) addSegment(gridX, cy, gridX + 1, cy);
+        } else {
+            // Half-segments: center to own tile edge to avoid depth overlap at corners
+            if (nN) addSegment(cx, cy, cx, gridY);
+            if (nS) addSegment(cx, cy, cx, gridY + 1);
+            if (nE) addSegment(cx, cy, gridX + 1, cy);
+            if (nW) addSegment(cx, cy, gridX, cy);
+
+            // Central pillar (larger for fortified)
+            const ps = wallThickness * 0.7;
+            const hps = ps / 2;
+            const pTL = IsoUtils.cartToIso(cx - hps, cy - hps);
+            const pTR = IsoUtils.cartToIso(cx + hps, cy - hps);
+            const pBR = IsoUtils.cartToIso(cx + hps, cy + hps);
+            const pBL = IsoUtils.cartToIso(cx - hps, cy + hps);
+            const ptTL = new Phaser.Math.Vector2(pTL.x, pTL.y - wallHeight);
+            const ptTR = new Phaser.Math.Vector2(pTR.x, pTR.y - wallHeight);
+            const ptBR = new Phaser.Math.Vector2(pBR.x, pBR.y - wallHeight);
+            const ptBL = new Phaser.Math.Vector2(pBL.x, pBL.y - wallHeight);
+            sideFaces.push({ points: [pTR, pBR, ptBR, ptTR], color: stoneSide });
+            sideFaces.push({ points: [pBR, pBL, ptBL, ptBR], color: stoneFront });
+            topFaces.push([ptTL, ptTR, ptBR, ptBL]);
+        }
 
         // Render side faces
         for (const face of sideFaces) {
@@ -4349,17 +4404,27 @@ export class BuildingRenderer {
             graphics.fillPoints(top, true);
         }
 
-        // Top highlights & Gold/Steel trim
-        graphics.lineStyle(1, 0xc9a227, alpha * 0.8);
-        graphics.lineBetween(ptTL.x, ptTL.y, ptTR.x, ptTR.y);
-        graphics.lineBetween(ptTL.x, ptTL.y, ptBL.x, ptBL.y);
+        // Post decorations only when not a straight segment
+        if (!isStraight) {
+            const ps = wallThickness * 0.7;
+            const hps = ps / 2;
+            const ptTL = new Phaser.Math.Vector2(IsoUtils.cartToIso(cx - hps, cy - hps).x, IsoUtils.cartToIso(cx - hps, cy - hps).y - wallHeight);
+            const ptTR = new Phaser.Math.Vector2(IsoUtils.cartToIso(cx + hps, cy - hps).x, IsoUtils.cartToIso(cx + hps, cy - hps).y - wallHeight);
+            const ptBL = new Phaser.Math.Vector2(IsoUtils.cartToIso(cx - hps, cy + hps).x, IsoUtils.cartToIso(cx - hps, cy + hps).y - wallHeight);
+            const ptBR = new Phaser.Math.Vector2(IsoUtils.cartToIso(cx + hps, cy + hps).x, IsoUtils.cartToIso(cx + hps, cy + hps).y - wallHeight);
 
-        // Stone texture highlights
-        graphics.fillStyle(0xffffff, alpha * 0.08);
-        const pcx = (ptTL.x + ptBR.x) / 2;
-        const pcy = (ptTL.y + ptBR.y) / 2;
-        graphics.fillRect(pcx - 4, pcy + 7, 2, 2);
-        graphics.fillRect(pcx + 2, pcy + 13, 2, 2);
+            // Top highlights & Gold/Steel trim
+            graphics.lineStyle(1, 0xc9a227, alpha * 0.8);
+            graphics.lineBetween(ptTL.x, ptTL.y, ptTR.x, ptTR.y);
+            graphics.lineBetween(ptTL.x, ptTL.y, ptBL.x, ptBL.y);
+
+            // Stone texture highlights
+            graphics.fillStyle(0xffffff, alpha * 0.08);
+            const pcx = (ptTL.x + ptBR.x) / 2;
+            const pcy = (ptTL.y + ptBR.y) / 2;
+            graphics.fillRect(pcx - 4, pcy + 7, 2, 2);
+            graphics.fillRect(pcx + 2, pcy + 13, 2, 2);
+        }
     }
 
 

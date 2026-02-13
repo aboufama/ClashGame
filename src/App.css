@@ -550,6 +550,21 @@ button:disabled {
     background: #FFED4E;
 }
 
+.action-btn.test {
+    background: #5a4a3a;
+    border-color: #7a6a5a;
+}
+
+.action-btn.test:hover {
+    background: #6a5a4a;
+}
+
+.action-btn.test.active {
+    background: #8B4513;
+    border-color: #D2B48C;
+    box-shadow: 0 0 8px rgba(210, 180, 140, 0.6);
+}
+
 .action-btn.next-map {
     background: var(--panel-accent);
     border-color: var(--panel-border);
