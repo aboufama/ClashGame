@@ -1964,17 +1964,22 @@ export class MainScene extends Phaser.Scene {
                                 other.health = Math.min(other.maxHealth, other.health + (wardStats.healAmount ?? 0));
                                 this.updateHealthBar(other);
 
-                                // Small green puff of health
+                                // Green plus sign heal indicator
                                 const pos = IsoUtils.cartToIso(other.gridX, other.gridY);
-                                const flash = this.add.circle(pos.x, pos.y - 12, 5, 0x00ff88, 0.5);
-                                flash.setDepth(other.gameObject.depth + 1);
+                                const plusGfx = this.add.graphics();
+                                plusGfx.setPosition(pos.x, pos.y - 12);
+                                plusGfx.setDepth(other.gameObject.depth + 1);
+                                plusGfx.fillStyle(0x00ff88, 0.7);
+                                plusGfx.fillRect(-1, -4, 2, 8); // vertical bar
+                                plusGfx.fillRect(-4, -1, 8, 2); // horizontal bar
                                 this.tweens.add({
-                                    targets: flash,
+                                    targets: plusGfx,
                                     y: pos.y - 25,
                                     alpha: 0,
-                                    scale: 1.5,
+                                    scaleX: 1.5,
+                                    scaleY: 1.5,
                                     duration: 500,
-                                    onComplete: () => flash.destroy()
+                                    onComplete: () => plusGfx.destroy()
                                 });
                             }
                         }

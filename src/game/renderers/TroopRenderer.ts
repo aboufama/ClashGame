@@ -1049,53 +1049,28 @@ export class TroopRenderer {
         const walkBob = isMoving ? Math.sin(walkPhase * Math.PI * 2) * 1.5 : 0;
         const staffSway = isMoving ? Math.sin(walkPhase * Math.PI * 2) * 0.8 : 0;
 
-        // Heal plus sign aura (isometric cross)
-        const healRadius = 7 * 32;
-        const halfR = healRadius / 2;
-        const armW = healRadius * 0.28; // width of each cross arm
-        const halfArmW = armW / 2;
+        // Heal radius aura (circle)
+        const healRadiusPixels = 7 * 32;
         const pulseAlpha = 0.1 + Math.sin(now / 300) * 0.05;
-        const isoRatio = 0.5; // isometric Y compression
 
-        // Fill the plus shape (isometric)
-        graphics.fillStyle(glowColor, pulseAlpha * 0.3);
-        // Vertical arm of cross (iso: goes top-left to bottom-right)
+        graphics.lineStyle(3, glowColor, pulseAlpha + 0.15);
         graphics.beginPath();
-        graphics.moveTo(-halfArmW, 5 + (-halfR) * isoRatio);
-        graphics.lineTo(halfArmW, 5 + (-halfR) * isoRatio);
-        graphics.lineTo(halfArmW, 5 + halfR * isoRatio);
-        graphics.lineTo(-halfArmW, 5 + halfR * isoRatio);
+        const segments = 48;
+        for (let i = 0; i <= segments; i++) {
+            const theta = (i / segments) * Math.PI * 2;
+            const noise = Math.sin(now / 25 + theta * 3) * 4 +
+                Math.sin(now / 37 + theta * 7) * 2 +
+                Math.sin(now / 20 + theta * 11) * 1.5;
+            const rx = (healRadiusPixels + noise) * Math.cos(theta);
+            const ry = ((healRadiusPixels / 2) + noise * 0.5) * Math.sin(theta);
+            if (i === 0) graphics.moveTo(rx, 5 + ry);
+            else graphics.lineTo(rx, 5 + ry);
+        }
         graphics.closePath();
-        graphics.fillPath();
-        // Horizontal arm of cross
-        graphics.beginPath();
-        graphics.moveTo(-halfR, 5 + (-halfArmW) * isoRatio);
-        graphics.lineTo(halfR, 5 + (-halfArmW) * isoRatio);
-        graphics.lineTo(halfR, 5 + halfArmW * isoRatio);
-        graphics.lineTo(-halfR, 5 + halfArmW * isoRatio);
-        graphics.closePath();
-        graphics.fillPath();
+        graphics.strokePath();
 
-        // Outline the plus shape with noisy edge
-        graphics.lineStyle(2, glowColor, pulseAlpha + 0.15);
-        const drawNoisyRect = (x1: number, y1: number, x2: number, y2: number) => {
-            const segs = 16;
-            graphics.beginPath();
-            for (let i = 0; i <= segs; i++) {
-                const t = i / segs;
-                const n = Math.sin(now / 25 + t * 8) * 3;
-                graphics.lineTo(x1 + (x2 - x1) * t + n * 0.3, y1 + (y2 - y1) * t + n * isoRatio * 0.3);
-            }
-            graphics.strokePath();
-        };
-        // Top of vertical arm
-        drawNoisyRect(-halfArmW, 5 + (-halfR) * isoRatio, halfArmW, 5 + (-halfR) * isoRatio);
-        // Bottom of vertical arm
-        drawNoisyRect(-halfArmW, 5 + halfR * isoRatio, halfArmW, 5 + halfR * isoRatio);
-        // Left of horizontal arm
-        drawNoisyRect(-halfR, 5 + (-halfArmW) * isoRatio, -halfR, 5 + halfArmW * isoRatio);
-        // Right of horizontal arm
-        drawNoisyRect(halfR, 5 + (-halfArmW) * isoRatio, halfR, 5 + halfArmW * isoRatio);
+        graphics.fillStyle(glowColor, pulseAlpha * 0.25);
+        graphics.fillEllipse(0, 5, healRadiusPixels, healRadiusPixels / 2);
 
         // Shadow
         graphics.fillStyle(0x000000, 0.25);

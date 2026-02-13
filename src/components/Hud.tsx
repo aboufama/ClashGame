@@ -88,7 +88,7 @@ export function Hud({
   useEffect(() => {
     if (view !== 'ATTACK' || isMobile) return;
     setShowHotkeyHint(true);
-    const timer = setTimeout(() => setShowHotkeyHint(false), 4000);
+    const timer = setTimeout(() => setShowHotkeyHint(false), 6000);
     return () => clearTimeout(timer);
   }, [view, isMobile]);
 
