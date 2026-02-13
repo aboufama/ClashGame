@@ -374,7 +374,7 @@ export const TROOP_DEFINITIONS: Record<TroopType, TroopDef> = {
 
     ram: { id: 'ram', name: 'Battering Ram', cost: 200, space: 8, desc: 'Charges Town Hall. 4x wall damage.', health: 800, range: 0.6, damage: 50, speed: 0.0018, color: 0x8b4513, targetPriority: 'town_hall', wallDamageMultiplier: 4, wallTraversalCost: 50, attackDelay: 1100 },
     stormmage: { id: 'stormmage', name: 'Storm Mage', cost: 180, space: 6, desc: 'Chain lightning hits 4 targets.', health: 200, range: 4.9, damage: 40, speed: 0.002, color: 0x4444ff, chainCount: 4, chainRange: 5, attackDelay: 1700 },
-    golem: { id: 'golem', name: 'Stone Golem', cost: 500, space: 25, desc: 'Colossal stone titan. Nearly indestructible.', health: 6000, range: 0.8, damage: 53, speed: 0.0004, color: 0x6b7b8b, targetPriority: 'defense', attackDelay: 3000, firstAttackDelay: 1500 },
+    golem: { id: 'golem', name: 'Stone Golem', cost: 500, space: 25, desc: 'Colossal stone titan. Nearly indestructible.', health: 9000, range: 0.8, damage: 106, speed: 0.0004, color: 0x6b7b8b, targetPriority: 'defense', attackDelay: 3000, firstAttackDelay: 1500 },
 
     sharpshooter: { id: 'sharpshooter', name: 'Sharpshooter', cost: 100, space: 4, desc: 'Elite archer with extended range.', health: 80, range: 5.6, damage: 70, speed: 0.002, color: 0x2e7d32, attackDelay: 1400 },
     mobilemortar: { id: 'mobilemortar', name: 'Mobile Mortar', cost: 180, space: 8, desc: 'Portable mortar with splash damage.', health: 150, range: 6.75, damage: 200, speed: 0.0012, color: 0x555555, splashRadius: 2.2, attackDelay: 2200, firstAttackDelay: 1000 },

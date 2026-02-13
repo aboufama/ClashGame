@@ -15,7 +15,7 @@ export class TroopRenderer {
                 TroopRenderer.drawGiant(graphics, isPlayer, isMoving, troopLevel);
                 break;
             case 'golem':
-                TroopRenderer.drawGolem(graphics, isPlayer, isMoving, slamOffset);
+                TroopRenderer.drawGolem(graphics, isPlayer, isMoving, slamOffset, troopLevel);
                 break;
             case 'sharpshooter':
                 TroopRenderer.drawSharpshooter(graphics, isPlayer, isMoving, facingAngle, bowDrawProgress);
@@ -527,7 +527,7 @@ export class TroopRenderer {
         }
     }
 
-    private static drawGolem(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean, slamOffset: number) {
+    private static drawGolem(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean, slamOffset: number, troopLevel: number = 1) {
         // COLOSSAL STONE GOLEM - Massive animated rock titan
         const now = Date.now();
 
@@ -802,24 +802,28 @@ export class TroopRenderer {
         graphics.closePath();
         graphics.fillPath();
 
-        // Eye sockets (dark)
-        graphics.fillStyle(0x1a1a1a, 1);
+        // Eye sockets (dark) — L2 has deeper/darker sockets
+        const socketColor = troopLevel >= 2 ? 0x0a0a0a : 0x1a1a1a;
+        graphics.fillStyle(socketColor, 1);
         graphics.fillCircle(-6, -45 + bodySlam, 4);
         graphics.fillCircle(6, -45 + bodySlam, 4);
 
-        // Glowing eyes
-        const eyePulse = 0.7 + Math.sin(now / 200) * 0.3;
-        graphics.fillStyle(glowColor, eyePulse);
-        graphics.fillCircle(-6, -45 + bodySlam, 3);
-        graphics.fillCircle(6, -45 + bodySlam, 3);
-        graphics.fillStyle(glowColorBright, eyePulse * 0.8);
-        graphics.fillCircle(-6, -45 + bodySlam, 1.5);
-        graphics.fillCircle(6, -45 + bodySlam, 1.5);
-
-        // Eye glow effect
-        graphics.lineStyle(2, glowColor, eyePulse * 0.4);
-        graphics.strokeCircle(-6, -45 + bodySlam, 5);
-        graphics.strokeCircle(6, -45 + bodySlam, 5);
+        // Eyes only glow when attacking (not moving = in combat)
+        if (!isMoving) {
+            const eyePulse = 0.7 + Math.sin(now / 200) * 0.3;
+            const eyeGlow = troopLevel >= 2 ? (isPlayer ? 0x2288dd : 0xdd2222) : glowColor;
+            const eyeBright = troopLevel >= 2 ? (isPlayer ? 0x66aaee : 0xee6666) : glowColorBright;
+            graphics.fillStyle(eyeGlow, eyePulse);
+            graphics.fillCircle(-6, -45 + bodySlam, 3);
+            graphics.fillCircle(6, -45 + bodySlam, 3);
+            graphics.fillStyle(eyeBright, eyePulse * 0.8);
+            graphics.fillCircle(-6, -45 + bodySlam, 1.5);
+            graphics.fillCircle(6, -45 + bodySlam, 1.5);
+            // Eye glow effect
+            graphics.lineStyle(2, eyeGlow, eyePulse * 0.4);
+            graphics.strokeCircle(-6, -45 + bodySlam, 5);
+            graphics.strokeCircle(6, -45 + bodySlam, 5);
+        }
 
         // Jagged mouth
         graphics.fillStyle(0x2a2a2a, 1);
