@@ -368,19 +368,19 @@ export interface ObstacleDef {
 export const TROOP_DEFINITIONS: Record<TroopType, TroopDef> = {
     warrior: { id: 'warrior', name: 'Warrior', cost: 25, space: 1, desc: 'Fast melee fighter.', health: 100, range: 0.5, damage: 10, speed: 0.003, color: 0xffff00, attackDelay: 800 },
     archer: { id: 'archer', name: 'Archer', cost: 40, space: 1, desc: 'Ranged attacker.', health: 50, range: 2.7, damage: 14.0, speed: 0.0025, color: 0x00ffff, attackDelay: 900 },
-    giant: { id: 'giant', name: 'Giant', cost: 150, space: 5, desc: 'Tank targeting Defenses.', health: 1200, range: 0.7, damage: 16, speed: 0.001, color: 0xff6600, attackDelay: 950 },
-    ward: { id: 'ward', name: 'Ward', cost: 80, space: 6, desc: 'Heals friendly troops.', health: 100, range: 4.0, damage: 9, speed: 0.0025, color: 0x00ff00, healRadius: 7.0, healAmount: 5, attackDelay: 1000 },
-    recursion: { id: 'recursion', name: 'Recursion', cost: 80, space: 3, desc: 'Splits into two copies on death.', health: 150, range: 1.0, damage: 12, speed: 0.003, color: 0xff00ff, attackDelay: 850 },
+    giant: { id: 'giant', name: 'Giant', cost: 150, space: 5, desc: 'Tank targeting Defenses.', health: 1200, range: 0.5, damage: 16, speed: 0.001, color: 0xff6600, attackDelay: 950 },
+    ward: { id: 'ward', name: 'Ward', cost: 80, space: 6, desc: 'Heals friendly troops.', health: 100, range: 4.0, damage: 9, speed: 0.00125, color: 0x00ff00, healRadius: 7.0, healAmount: 5, attackDelay: 1000 },
+    recursion: { id: 'recursion', name: 'Recursion', cost: 80, space: 3, desc: 'Splits into two copies on death.', health: 150, range: 0.5, damage: 12, speed: 0.003, color: 0xff00ff, attackDelay: 850 },
 
-    ram: { id: 'ram', name: 'Battering Ram', cost: 200, space: 8, desc: 'Charges Town Hall. 4x wall damage.', health: 800, range: 1.2, damage: 50, speed: 0.0018, color: 0x8b4513, targetPriority: 'town_hall', wallDamageMultiplier: 4, wallTraversalCost: 50, attackDelay: 1100 },
+    ram: { id: 'ram', name: 'Battering Ram', cost: 200, space: 8, desc: 'Charges Town Hall. 4x wall damage.', health: 800, range: 0.6, damage: 50, speed: 0.0018, color: 0x8b4513, targetPriority: 'town_hall', wallDamageMultiplier: 4, wallTraversalCost: 50, attackDelay: 1100 },
     stormmage: { id: 'stormmage', name: 'Storm Mage', cost: 180, space: 6, desc: 'Chain lightning hits 4 targets.', health: 200, range: 4.9, damage: 40, speed: 0.002, color: 0x4444ff, chainCount: 4, chainRange: 5, attackDelay: 1700 },
-    golem: { id: 'golem', name: 'Stone Golem', cost: 500, space: 25, desc: 'Colossal stone titan. Nearly indestructible.', health: 6000, range: 1.5, damage: 53, speed: 0.0004, color: 0x6b7b8b, targetPriority: 'defense', attackDelay: 3000, firstAttackDelay: 1500 },
+    golem: { id: 'golem', name: 'Stone Golem', cost: 500, space: 25, desc: 'Colossal stone titan. Nearly indestructible.', health: 6000, range: 0.8, damage: 53, speed: 0.0004, color: 0x6b7b8b, targetPriority: 'defense', attackDelay: 3000, firstAttackDelay: 1500 },
 
     sharpshooter: { id: 'sharpshooter', name: 'Sharpshooter', cost: 100, space: 4, desc: 'Elite archer with extended range.', health: 80, range: 5.6, damage: 70, speed: 0.002, color: 0x2e7d32, attackDelay: 1400 },
     mobilemortar: { id: 'mobilemortar', name: 'Mobile Mortar', cost: 180, space: 8, desc: 'Portable mortar with splash damage.', health: 150, range: 6.75, damage: 200, speed: 0.0012, color: 0x555555, splashRadius: 2.2, attackDelay: 2200, firstAttackDelay: 1000 },
     davincitank: { id: 'davincitank', name: 'Da Vinci Tank', cost: 600, space: 30, desc: 'Leonardo\'s armored war machine. Spins and fires in all directions.', health: 8000, range: 4.0, damage: 80, speed: 0.0006, color: 0xb8956e, targetPriority: 'defense', attackDelay: 1800 },
-    phalanx: { id: 'phalanx', name: 'Phalanx', cost: 350, space: 18, desc: 'Roman testudo formation. 3x3 shield wall with spears. Splits into 9 soldiers on death.', health: 3000, range: 1.5, damage: 45, speed: 0.0008, color: 0xc9a07a, attackDelay: 1400 },
-    romanwarrior: { id: 'romanwarrior', name: 'Roman Soldier', cost: 0, space: 1, desc: 'An individual soldier from a Phalanx formation.', health: 300, range: 1.2, damage: 15, speed: 0.0015, color: 0xcc3333, attackDelay: 900 }
+    phalanx: { id: 'phalanx', name: 'Phalanx', cost: 350, space: 18, desc: 'Roman testudo formation. 3x3 shield wall with spears. Splits into 9 soldiers on death.', health: 3000, range: 0.6, damage: 45, speed: 0.0008, color: 0xc9a07a, attackDelay: 1400 },
+    romanwarrior: { id: 'romanwarrior', name: 'Roman Soldier', cost: 0, space: 1, desc: 'An individual soldier from a Phalanx formation.', health: 300, range: 0.5, damage: 15, speed: 0.0015, color: 0xcc3333, attackDelay: 900 }
 };
 
 const TROOP_LEVEL_MULTIPLIERS: Record<number, number> = {

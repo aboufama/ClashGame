@@ -47,10 +47,9 @@ export class TroopRenderer {
         }
 
         // Outline (skip for troops with detailed custom shapes)
-        if (type !== 'warrior' && type !== 'archer' && type !== 'giant' && type !== 'ram' && type !== 'golem' && type !== 'sharpshooter' && type !== 'mobilemortar' && type !== 'davincitank' && type !== 'phalanx' && type !== 'romanwarrior') {
+        if (type !== 'warrior' && type !== 'archer' && type !== 'giant' && type !== 'ram' && type !== 'golem' && type !== 'sharpshooter' && type !== 'mobilemortar' && type !== 'davincitank' && type !== 'phalanx' && type !== 'romanwarrior' && type !== 'ward' && type !== 'stormmage' && type !== 'recursion') {
             graphics.lineStyle(1, 0x000000, 0.5);
-            const radius = type === 'ward' ? 8 : 8;
-            graphics.strokeCircle(0, type === 'ward' ? 0 : -1, radius);
+            graphics.strokeCircle(0, -1, 8);
         }
 
     }
