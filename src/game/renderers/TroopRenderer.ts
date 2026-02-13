@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 
 export class TroopRenderer {
-    static drawTroopVisual(graphics: Phaser.GameObjects.Graphics, type: 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'ram' | 'stormmage' | 'golem' | 'sharpshooter' | 'mobilemortar' | 'davincitank' | 'phalanx' | 'romanwarrior', owner: 'PLAYER' | 'ENEMY', facingAngle: number = 0, isMoving: boolean = true, slamOffset: number = 0, bowDrawProgress: number = 0, mortarRecoil: number = 0, isDeactivated: boolean = false, phalanxSpearOffset: number = 0, troopLevel: number = 1) {
+    static drawTroopVisual(graphics: Phaser.GameObjects.Graphics, type: 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'ram' | 'stormmage' | 'golem' | 'sharpshooter' | 'mobilemortar' | 'davincitank' | 'phalanx' | 'romanwarrior' | 'wallbreaker', owner: 'PLAYER' | 'ENEMY', facingAngle: number = 0, isMoving: boolean = true, slamOffset: number = 0, bowDrawProgress: number = 0, mortarRecoil: number = 0, isDeactivated: boolean = false, phalanxSpearOffset: number = 0, troopLevel: number = 1) {
         const isPlayer = owner === 'PLAYER';
 
         switch (type) {
@@ -44,10 +44,13 @@ export class TroopRenderer {
             case 'romanwarrior':
                 TroopRenderer.drawRomanSoldier(graphics, isPlayer, isMoving, facingAngle, false, 0);
                 break;
+            case 'wallbreaker':
+                TroopRenderer.drawWallBreaker(graphics, isPlayer, isMoving);
+                break;
         }
 
         // Outline (skip for troops with detailed custom shapes)
-        if (type !== 'warrior' && type !== 'archer' && type !== 'giant' && type !== 'ram' && type !== 'golem' && type !== 'sharpshooter' && type !== 'mobilemortar' && type !== 'davincitank' && type !== 'phalanx' && type !== 'romanwarrior' && type !== 'ward' && type !== 'stormmage' && type !== 'recursion') {
+        if (type !== 'warrior' && type !== 'archer' && type !== 'giant' && type !== 'ram' && type !== 'golem' && type !== 'sharpshooter' && type !== 'mobilemortar' && type !== 'davincitank' && type !== 'phalanx' && type !== 'romanwarrior' && type !== 'ward' && type !== 'stormmage' && type !== 'recursion' && type !== 'wallbreaker') {
             graphics.lineStyle(1, 0x000000, 0.5);
             graphics.strokeCircle(0, -1, 8);
         }
@@ -288,26 +291,31 @@ export class TroopRenderer {
         const rightLeg = isMoving ? -stepCycle * 3 : 0;
         const shoulderLean = 0; // no shoulder jerk
 
-        // Attack animation — slow overhead slam to ground
+        // Attack animation — slow overhead slam to ground, arm carries bat
         const attackPhase = !isMoving ? (now % 1800) / 1800 : 0;
         let batAngle = -0.3; // resting on shoulder
-        const bodyLean = 0; // no body jerk
+        let rightArmAngle = -0.3; // arm angle tracks bat
+        const bodyLean = 0;
         if (!isMoving) {
             if (attackPhase < 0.35) {
                 // Raise bat overhead (slow windup)
                 const t = attackPhase / 0.35;
                 batAngle = -0.3 - 1.2 * t;
+                rightArmAngle = -0.3 - 0.6 * t;
             } else if (attackPhase < 0.5) {
                 // Slam down to ground
                 const t = (attackPhase - 0.35) / 0.15;
-                batAngle = -1.5 + 3.3 * t;
+                batAngle = -1.5 + 3.1 * t;
+                rightArmAngle = -0.9 + 1.5 * t;
             } else if (attackPhase < 0.65) {
                 // Hold at ground
-                batAngle = 1.8;
+                batAngle = 1.6;
+                rightArmAngle = 0.6;
             } else {
                 // Slowly return to shoulder
                 const t = (attackPhase - 0.65) / 0.35;
-                batAngle = 1.8 - 2.1 * t;
+                batAngle = 1.6 - 1.9 * t;
+                rightArmAngle = 0.6 - 0.9 * t;
             }
         }
 
@@ -396,24 +404,30 @@ export class TroopRenderer {
         graphics.fillStyle(skinDark, 1);
         graphics.fillCircle(-13 + leftArmSwing + bodyLean, 6 + walkBob, 3);
 
-        // Right arm + bat
-        const batBaseX = 12 + shoulderLean + bodyLean;
-        const batBaseY = -5 + walkBob;
-        const batLen = 22;
+        // Right arm + bat — arm swings with bat
+        const shoulderX = 12 + bodyLean;
+        const shoulderY = -5 + walkBob;
+        const armLen = 12;
+        const elbowX = shoulderX + Math.sin(rightArmAngle) * armLen;
+        const elbowY = shoulderY - Math.cos(rightArmAngle) * armLen;
+        const batBaseX = elbowX;
+        const batBaseY = elbowY;
+        const batLen = 20;
         const batTipX = batBaseX + Math.sin(batAngle) * batLen;
         const batTipY = batBaseY - Math.cos(batAngle) * batLen;
-        const batMidX = batBaseX + Math.sin(batAngle) * 8;
-        const batMidY = batBaseY - Math.cos(batAngle) * 8;
 
-        // Arm reaching to bat grip
+        // Arm from shoulder to grip
         graphics.fillStyle(skinColor, 1);
         graphics.beginPath();
-        graphics.moveTo(batBaseX, batBaseY);
-        graphics.lineTo(batMidX + 1.5, batMidY);
-        graphics.lineTo(batMidX - 1.5, batMidY);
-        graphics.lineTo(batBaseX - 3, batBaseY + 2);
+        graphics.moveTo(shoulderX, shoulderY);
+        graphics.lineTo(elbowX + 1.5, elbowY);
+        graphics.lineTo(elbowX - 1.5, elbowY);
+        graphics.lineTo(shoulderX - 3, shoulderY + 2);
         graphics.closePath();
         graphics.fillPath();
+        // Fist at grip
+        graphics.fillStyle(skinDark, 1);
+        graphics.fillCircle(elbowX, elbowY, 2.5);
 
         // Bat handle (thin)
         const perpX = Math.cos(batAngle);
@@ -430,7 +444,6 @@ export class TroopRenderer {
         // Bat head (thick, tapered)
         graphics.fillStyle(0x8b6b4a, 1);
         const headStart = 14;
-        const headEnd = batLen;
         graphics.beginPath();
         graphics.moveTo(batBaseX + Math.sin(batAngle) * headStart - perpX * 2.5, batBaseY - Math.cos(batAngle) * headStart - perpY * 2.5);
         graphics.lineTo(batTipX - perpX * 3, batTipY - perpY * 3);
@@ -2221,5 +2234,121 @@ export class TroopRenderer {
         graphics.fillRect(bannerX - 5, bannerY - 25, 10, 8);
         graphics.lineStyle(1.5, isPlayer ? 0xd4a84b : 0x8b7355, 1);
         graphics.strokeRect(bannerX - 5, bannerY - 25, 10, 8);
+    }
+
+    private static drawWallBreaker(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean) {
+        // WALL BREAKER — Small guy carrying a big barrel of explosives overhead
+        const now = Date.now();
+        const runPhase = isMoving ? (now % 250) / 250 : 0;
+        const runBob = isMoving ? Math.sin(runPhase * Math.PI * 2) * 1.5 : 0;
+        const leftLeg = isMoving ? Math.sin(runPhase * Math.PI * 2) * 4 : 0;
+        const rightLeg = isMoving ? -Math.sin(runPhase * Math.PI * 2) * 4 : 0;
+        const armBob = isMoving ? Math.sin(runPhase * Math.PI * 2) * 1 : 0;
+
+        const skinColor = isPlayer ? 0xdeb887 : 0xc9a66b;
+        const skinDark = isPlayer ? 0xc9a66b : 0xb8956e;
+        const shirtColor = isPlayer ? 0x885533 : 0x664422;
+
+        // Shadow
+        graphics.fillStyle(0x000000, 0.25);
+        graphics.fillEllipse(0, 12, 16, 6);
+
+        // Legs (thin, fast runner)
+        graphics.fillStyle(shirtColor, 1);
+        graphics.beginPath();
+        graphics.moveTo(-3, 4 + runBob);
+        graphics.lineTo(-4 + leftLeg, 11);
+        graphics.lineTo(-1 + leftLeg, 11);
+        graphics.lineTo(-1, 4 + runBob);
+        graphics.closePath();
+        graphics.fillPath();
+        graphics.beginPath();
+        graphics.moveTo(1, 4 + runBob);
+        graphics.lineTo(1 + rightLeg, 11);
+        graphics.lineTo(4 + rightLeg, 11);
+        graphics.lineTo(3, 4 + runBob);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Boots
+        graphics.fillStyle(0x3a2a1a, 1);
+        graphics.fillEllipse(-2.5 + leftLeg, 11.5, 4, 2);
+        graphics.fillEllipse(2.5 + rightLeg, 11.5, 4, 2);
+
+        // Torso (small, hunched forward from carrying)
+        graphics.fillStyle(shirtColor, 1);
+        graphics.beginPath();
+        graphics.moveTo(-6, -3 + runBob);
+        graphics.lineTo(6, -3 + runBob);
+        graphics.lineTo(5, 5 + runBob);
+        graphics.lineTo(-5, 5 + runBob);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Arms raised overhead holding barrel
+        graphics.fillStyle(skinColor, 1);
+        // Left arm (up)
+        graphics.beginPath();
+        graphics.moveTo(-6, -2 + runBob);
+        graphics.lineTo(-7, -12 + armBob);
+        graphics.lineTo(-4, -12 + armBob);
+        graphics.lineTo(-4, -2 + runBob);
+        graphics.closePath();
+        graphics.fillPath();
+        // Right arm (up)
+        graphics.beginPath();
+        graphics.moveTo(4, -2 + runBob);
+        graphics.lineTo(4, -12 + armBob);
+        graphics.lineTo(7, -12 + armBob);
+        graphics.lineTo(6, -2 + runBob);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Barrel of explosives (above head)
+        const barrelY = -18 + armBob;
+        // Barrel body (dark brown)
+        graphics.fillStyle(0x5a3a1a, 1);
+        graphics.fillEllipse(0, barrelY, 14, 10);
+        // Barrel highlight
+        graphics.fillStyle(0x6b4a2a, 1);
+        graphics.fillEllipse(0, barrelY - 1, 12, 7);
+        // Metal bands
+        graphics.lineStyle(1.5, 0x555555, 0.8);
+        graphics.strokeEllipse(0, barrelY, 14, 10);
+        graphics.lineStyle(1, 0x444444, 0.6);
+        graphics.lineBetween(-3, barrelY - 5, -3, barrelY + 5);
+        graphics.lineBetween(3, barrelY - 5, 3, barrelY + 5);
+
+        // Fuse (sticking out the top, sparking)
+        graphics.lineStyle(1.5, 0x3a3a2a, 1);
+        graphics.lineBetween(0, barrelY - 5, 2, barrelY - 10);
+        // Fuse spark
+        const sparkPhase = (now % 200) / 200;
+        const sparkAlpha = 0.5 + Math.sin(sparkPhase * Math.PI * 2) * 0.5;
+        graphics.fillStyle(0xffaa00, sparkAlpha);
+        graphics.fillCircle(2, barrelY - 10, 2);
+        graphics.fillStyle(0xff4400, sparkAlpha * 0.7);
+        graphics.fillCircle(2, barrelY - 10, 1);
+
+        // Head (small, determined face)
+        const headY = -7 + runBob;
+        graphics.fillStyle(skinDark, 1);
+        graphics.fillCircle(0, headY, 4.5);
+        graphics.fillStyle(skinColor, 1);
+        graphics.fillCircle(0, headY - 0.5, 4);
+
+        // Eyes (wide, determined)
+        graphics.fillStyle(0x000000, 0.8);
+        graphics.fillCircle(-1.5, headY - 1, 1);
+        graphics.fillCircle(1.5, headY - 1, 1);
+
+        // Headband
+        graphics.fillStyle(0xcc3333, 1);
+        graphics.fillRect(-4, headY - 4, 8, 2);
+
+        // Hands gripping barrel
+        graphics.fillStyle(skinDark, 1);
+        graphics.fillCircle(-5.5, -12 + armBob, 2);
+        graphics.fillCircle(5.5, -12 + armBob, 2);
     }
 }

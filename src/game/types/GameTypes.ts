@@ -49,7 +49,7 @@ export interface PlacedBuilding {
 
 export interface Troop {
     id: string;
-    type: 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'ram' | 'stormmage' | 'golem' | 'sharpshooter' | 'mobilemortar' | 'davincitank' | 'phalanx' | 'romanwarrior';
+    type: 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'ram' | 'stormmage' | 'golem' | 'sharpshooter' | 'mobilemortar' | 'davincitank' | 'phalanx' | 'romanwarrior' | 'wallbreaker';
     level: number;
     gameObject: Phaser.GameObjects.Graphics;
     healthBar: Phaser.GameObjects.Graphics;

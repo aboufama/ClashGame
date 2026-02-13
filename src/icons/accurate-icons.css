@@ -142,6 +142,47 @@
 
 
 
+/* WALL BREAKER - Small guy with barrel of explosives overhead */
+.wallbreaker-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #DEB887;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Barrel (brown, above head) */
+        -6px -22px #5A3A1A, -4px -22px #6B4A2A, -2px -22px #6B4A2A, 0 -22px #6B4A2A, 2px -22px #6B4A2A, 4px -22px #6B4A2A, 6px -22px #5A3A1A,
+        -8px -20px #5A3A1A, -6px -20px #6B4A2A, -4px -20px #7B5A3A, -2px -20px #6B4A2A, 0 -20px #7B5A3A, 2px -20px #6B4A2A, 4px -20px #7B5A3A, 6px -20px #6B4A2A, 8px -20px #5A3A1A,
+        -8px -18px #555555, -6px -18px #6B4A2A, -4px -18px #6B4A2A, -2px -18px #6B4A2A, 0 -18px #6B4A2A, 2px -18px #6B4A2A, 4px -18px #6B4A2A, 6px -18px #6B4A2A, 8px -18px #555555,
+        /* Fuse + spark */
+        0 -24px #3A3A2A, 0 -26px #FFAA00, 2px -26px #FF4400,
+        /* Arms reaching up */
+        -8px -16px #DEB887, -6px -16px #C9A66B, 6px -16px #C9A66B, 8px -16px #DEB887,
+        -8px -14px #DEB887, 8px -14px #DEB887,
+        /* Hands on barrel */
+        -6px -18px #C9A66B, 6px -18px #C9A66B,
+        /* Head (under barrel) */
+        -4px -12px #DEB887, -2px -12px #DEB887, 0 -12px #DEB887, 2px -12px #DEB887, 4px -12px #DEB887,
+        /* Headband */
+        -4px -14px #CC3333, -2px -14px #CC3333, 0 -14px #CC3333, 2px -14px #CC3333, 4px -14px #CC3333,
+        /* Eyes */
+        -2px -12px #1A1A1A, 2px -12px #1A1A1A,
+        /* Body (shirt) */
+        -6px -10px #885533, -4px -10px #885533, -2px -10px #885533, 0 -10px #885533, 2px -10px #885533, 4px -10px #885533, 6px -10px #885533,
+        -6px -8px #885533, -4px -8px #664422, -2px -8px #885533, 0 -8px #664422, 2px -8px #885533, 4px -8px #664422, 6px -8px #885533,
+        -6px -6px #885533, -4px -6px #885533, -2px -6px #885533, 0 -6px #885533, 2px -6px #885533, 4px -6px #885533, 6px -6px #885533,
+        /* Legs */
+        -4px -4px #664422, -2px -4px #664422, 2px -4px #664422, 4px -4px #664422,
+        -4px -2px #664422, -2px -2px #885533, 2px -2px #885533, 4px -2px #664422,
+        -4px 0 #664422, -2px 0 #664422, 2px 0 #664422, 4px 0 #664422,
+        /* Boots */
+        -6px 2px #3A2A1A, -4px 2px #3A2A1A, -2px 2px #3A2A1A,
+        2px 2px #3A2A1A, 4px 2px #3A2A1A, 6px 2px #3A2A1A;
+}
+
 /* WARD - Magical guardian with green shield aura, hooded */
 .ward-icon::before {
     content: '';

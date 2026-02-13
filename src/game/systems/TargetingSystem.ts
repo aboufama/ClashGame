@@ -34,16 +34,25 @@ export class TargetingSystem {
             // Prioritize Town Hall
             const th = enemies.find(b => b.type === 'town_hall');
             if (th) candidates = [th];
+        } else if (def.targetPriority === 'wall') {
+            // Prioritize Walls
+            const walls = enemies.filter(b => isWall(b));
+            if (walls.length > 0) {
+                candidates = walls;
+            }
         }
 
-        // 2. Fallback to General Targets (Non-Walls)
+        // 2. Fallback to General Targets (Non-Walls for non-wall-targeting, all for wall-targeting)
         if (candidates.length === 0) {
-            candidates = nonWalls;
+            candidates = def.targetPriority === 'wall' ? nonWalls : nonWalls;
         }
 
-        // 3. Fallback: If only walls remain, return null (battle over).
+        // 3. Fallback: If only walls remain, return null (battle over) — unless troop targets walls.
         if (candidates.length === 0) {
-            return null;
+            if (def.targetPriority === 'wall') {
+                candidates = enemies; // walls included
+            }
+            if (candidates.length === 0) return null;
         }
 
         // 4. Find Nearest Candidate

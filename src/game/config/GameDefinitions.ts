@@ -9,7 +9,7 @@ export type BuildingType =
 export type TroopType =
     | 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion'
     | 'ram' | 'stormmage' | 'golem' | 'sharpshooter' | 'mobilemortar'
-    | 'davincitank' | 'phalanx' | 'romanwarrior';
+    | 'davincitank' | 'phalanx' | 'romanwarrior' | 'wallbreaker';
 
 export type ObstacleType =
     | 'rock_small' | 'rock_large' | 'tree_oak' | 'tree_pine' | 'grass_patch';
@@ -340,7 +340,7 @@ export interface TroopDef {
     color: number;
     boostRadius?: number;
     boostAmount?: number;
-    targetPriority?: 'town_hall' | 'defense';  // Special targeting
+    targetPriority?: 'town_hall' | 'defense' | 'wall';  // Special targeting
     wallDamageMultiplier?: number;  // Extra damage to walls
     chainCount?: number;  // For chain attacks
     chainRange?: number;  // Range for chain to jump
@@ -368,7 +368,7 @@ export interface ObstacleDef {
 export const TROOP_DEFINITIONS: Record<TroopType, TroopDef> = {
     warrior: { id: 'warrior', name: 'Warrior', cost: 25, space: 1, desc: 'Fast melee fighter.', health: 100, range: 0.5, damage: 10, speed: 0.003, color: 0xffff00, attackDelay: 800 },
     archer: { id: 'archer', name: 'Archer', cost: 40, space: 1, desc: 'Ranged attacker.', health: 50, range: 2.7, damage: 14.0, speed: 0.0025, color: 0x00ffff, attackDelay: 900 },
-    giant: { id: 'giant', name: 'Giant', cost: 150, space: 5, desc: 'Tank targeting Defenses.', health: 1200, range: 0.5, damage: 16, speed: 0.001, color: 0xff6600, attackDelay: 950 },
+    giant: { id: 'giant', name: 'Giant', cost: 150, space: 5, desc: 'Tank targeting walls.', health: 1200, range: 0.5, damage: 16, speed: 0.001, color: 0xff6600, attackDelay: 950, targetPriority: 'wall', wallDamageMultiplier: 2 },
     ward: { id: 'ward', name: 'Ward', cost: 80, space: 6, desc: 'Heals friendly troops.', health: 100, range: 4.0, damage: 9, speed: 0.00125, color: 0x00ff00, healRadius: 7.0, healAmount: 5, attackDelay: 1000 },
     recursion: { id: 'recursion', name: 'Recursion', cost: 80, space: 3, desc: 'Splits into two copies on death.', health: 150, range: 0.5, damage: 12, speed: 0.003, color: 0xff00ff, attackDelay: 850 },
 
@@ -380,7 +380,8 @@ export const TROOP_DEFINITIONS: Record<TroopType, TroopDef> = {
     mobilemortar: { id: 'mobilemortar', name: 'Mobile Mortar', cost: 180, space: 8, desc: 'Portable mortar with splash damage.', health: 150, range: 6.75, damage: 200, speed: 0.0012, color: 0x555555, splashRadius: 2.2, attackDelay: 2200, firstAttackDelay: 1000 },
     davincitank: { id: 'davincitank', name: 'Da Vinci Tank', cost: 600, space: 30, desc: 'Leonardo\'s armored war machine. Spins and fires in all directions.', health: 8000, range: 4.0, damage: 80, speed: 0.0006, color: 0xb8956e, targetPriority: 'defense', attackDelay: 1800 },
     phalanx: { id: 'phalanx', name: 'Phalanx', cost: 350, space: 18, desc: 'Roman testudo formation. 3x3 shield wall with spears. Splits into 9 soldiers on death.', health: 3000, range: 0.6, damage: 45, speed: 0.0008, color: 0xc9a07a, attackDelay: 1400 },
-    romanwarrior: { id: 'romanwarrior', name: 'Roman Soldier', cost: 0, space: 1, desc: 'An individual soldier from a Phalanx formation.', health: 300, range: 0.5, damage: 15, speed: 0.0015, color: 0xcc3333, attackDelay: 900 }
+    romanwarrior: { id: 'romanwarrior', name: 'Roman Soldier', cost: 0, space: 1, desc: 'An individual soldier from a Phalanx formation.', health: 300, range: 0.5, damage: 15, speed: 0.0015, color: 0xcc3333, attackDelay: 900 },
+    wallbreaker: { id: 'wallbreaker', name: 'Wall Breaker', cost: 100, space: 4, desc: 'Suicidal bomber. Runs at walls and explodes for massive damage.', health: 60, range: 0.5, damage: 800, speed: 0.004, color: 0xff6633, targetPriority: 'wall', wallDamageMultiplier: 3, splashRadius: 2.5, attackDelay: 500 }
 };
 
 const TROOP_LEVEL_MULTIPLIERS: Record<number, number> = {

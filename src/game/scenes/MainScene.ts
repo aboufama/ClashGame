@@ -2317,11 +2317,40 @@ export class MainScene extends Phaser.Scene {
                                     this.destroyBuilding(targetBuilding);
                                     troop.target = null;
                                 }
+                            } else if (troop.type === 'wallbreaker') {
+                                // WALL BREAKER — Suicide explosion on first attack
+                                troop.lastAttackTime = time;
+                                const wallMult = troop.target.type === 'wall' ? ((stats as any).wallDamageMultiplier || 3) : 1;
+                                const explosionDamage = stats.damage * wallMult;
+                                const sRadius = (stats as any).splashRadius || 2.5;
+
+                                // Apply splash damage to all buildings in radius
+                                this.buildings.forEach(b => {
+                                    if (b.owner !== troop.owner && b.health > 0) {
+                                        const bInfo = BUILDINGS[b.type];
+                                        const bCenterX = b.gridX + bInfo.width / 2;
+                                        const bCenterY = b.gridY + bInfo.height / 2;
+                                        const bdist = Phaser.Math.Distance.Between(troop.gridX, troop.gridY, bCenterX, bCenterY);
+                                        if (bdist <= sRadius) {
+                                            const bMult = b.type === 'wall' ? wallMult : 1;
+                                            const dmg = bdist < 0.5 ? stats.damage * bMult : stats.damage * bMult * 0.6;
+                                            b.health -= dmg;
+                                            this.showHitEffect(b.graphics);
+                                            this.updateHealthBar(b);
+                                            if (b.health <= 0) {
+                                                this.destroyBuilding(b);
+                                            }
+                                        }
+                                    }
+                                });
+
+                                // Kill itself
+                                troop.health = 0;
                             } else {
                                 // Melee: immediate damage (Warrior, Giant, Ram)
                                 let finalDamage = stats.damage;
-                                if (troop.type === 'ram' && troop.target.type === 'wall') {
-                                    finalDamage *= (stats as any).wallDamageMultiplier || 4;
+                                if ((troop.type === 'ram' || troop.type === 'giant') && troop.target.type === 'wall') {
+                                    finalDamage *= (stats as any).wallDamageMultiplier || 1;
                                 }
 
                                 troop.target.health -= finalDamage;
@@ -4183,7 +4212,7 @@ export class MainScene extends Phaser.Scene {
     private updateTroops(delta: number) {
         this.troops.forEach(troop => {
             // Redraw animated troops every frame
-            if ((troop.type === 'warrior' || troop.type === 'archer' || troop.type === 'giant' || troop.type === 'ram' || troop.type === 'golem' || troop.type === 'sharpshooter' || troop.type === 'mobilemortar' || troop.type === 'davincitank' || troop.type === 'phalanx' || troop.type === 'romanwarrior') && troop.health > 0) {
+            if ((troop.type === 'warrior' || troop.type === 'archer' || troop.type === 'giant' || troop.type === 'ram' || troop.type === 'golem' || troop.type === 'sharpshooter' || troop.type === 'mobilemortar' || troop.type === 'davincitank' || troop.type === 'phalanx' || troop.type === 'romanwarrior' || troop.type === 'wallbreaker') && troop.health > 0) {
                 // Determine if troop is actually moving (not in attack range)
                 let isActuallyMoving = true;
                 if (troop.target) {
@@ -4733,6 +4762,51 @@ export class MainScene extends Phaser.Scene {
     private destroyTroop(t: Troop) {
         if (t.id === 'dummy_target') return; // Ignore dummy targets used for fun shooting
         const pos = IsoUtils.cartToIso(t.gridX, t.gridY);
+
+        // WALL BREAKER EXPLOSION: Big boom on death
+        if (t.type === 'wallbreaker') {
+            // Large explosion effect
+            const boom1 = this.add.circle(pos.x, pos.y - 5, 25, 0xff4400, 0.9);
+            boom1.setDepth(30002);
+            this.tweens.add({ targets: boom1, scale: 3, alpha: 0, duration: 300, onComplete: () => boom1.destroy() });
+            const boom2 = this.add.circle(pos.x, pos.y - 5, 15, 0xffaa00, 0.8);
+            boom2.setDepth(30003);
+            this.tweens.add({ targets: boom2, scale: 2.5, alpha: 0, duration: 250, onComplete: () => boom2.destroy() });
+            const boom3 = this.add.circle(pos.x, pos.y - 5, 8, 0xffff00, 0.9);
+            boom3.setDepth(30004);
+            this.tweens.add({ targets: boom3, scale: 2, alpha: 0, duration: 200, onComplete: () => boom3.destroy() });
+
+            // Screen shake
+            this.cameras.main.shake(80, 0.004);
+
+            // Debris particles
+            for (let i = 0; i < 10; i++) {
+                const debrisAngle = Math.random() * Math.PI * 2;
+                const debrisDist = 20 + Math.random() * 30;
+                const debris = this.add.graphics();
+                const debrisColor = [0x5a3a1a, 0x444444, 0x8b6b4a, 0xff6633][Math.floor(Math.random() * 4)];
+                debris.fillStyle(debrisColor, 0.9);
+                debris.fillCircle(0, 0, 1.5 + Math.random() * 2);
+                debris.setPosition(pos.x, pos.y - 5);
+                debris.setDepth(30001);
+                this.tweens.add({
+                    targets: debris,
+                    x: pos.x + Math.cos(debrisAngle) * debrisDist,
+                    y: pos.y - 5 + Math.sin(debrisAngle) * debrisDist * 0.5 - 15,
+                    alpha: 0,
+                    duration: 400 + Math.random() * 200,
+                    onComplete: () => debris.destroy()
+                });
+            }
+
+            // Smoke cloud
+            const smoke = this.add.graphics();
+            smoke.fillStyle(0x333333, 0.5);
+            smoke.fillCircle(0, 0, 20);
+            smoke.setPosition(pos.x, pos.y - 5);
+            smoke.setDepth(30000);
+            this.tweens.add({ targets: smoke, scale: 3, alpha: 0, duration: 800, onComplete: () => smoke.destroy() });
+        }
 
         // RECURSION SPLIT: Spawn two smaller recursions on death if generation < 2
         if (t.type === 'recursion' && (t.recursionGen ?? 0) < 2) {

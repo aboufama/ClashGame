@@ -555,8 +555,8 @@ function App() {
           setBattleStarted(false); // Reset when entering attack mode
 
           // Auto-select first available troop
-          const availableTroops: Array<'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'ram' | 'stormmage' | 'golem' | 'sharpshooter' | 'mobilemortar' | 'davincitank' | 'phalanx'> =
-            ['warrior', 'archer', 'giant', 'ward', 'recursion', 'ram', 'stormmage', 'golem', 'sharpshooter', 'mobilemortar', 'davincitank', 'phalanx'];
+          const availableTroops: Array<'warrior' | 'archer' | 'giant' | 'wallbreaker' | 'ward' | 'recursion' | 'ram' | 'stormmage' | 'golem' | 'sharpshooter' | 'mobilemortar' | 'davincitank' | 'phalanx'> =
+            ['warrior', 'archer', 'giant', 'wallbreaker', 'ward', 'recursion', 'ram', 'stormmage', 'golem', 'sharpshooter', 'mobilemortar', 'davincitank', 'phalanx'];
           const currentArmy = armyRef.current;
           const firstAvailable = availableTroops.find(type => currentArmy[type] > 0);
           if (firstAvailable) {
