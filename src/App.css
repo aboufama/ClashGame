@@ -748,17 +748,11 @@ button:disabled {
 }
 
 .troop-tooltip {
-    display: none;
-    position: absolute;
-    bottom: calc(100% + 8px);
-    left: 50%;
-    transform: translateX(-50%);
     background: rgba(15, 10, 5, 0.95);
     border: 2px solid var(--fantasy-gold);
     border-radius: 6px;
     padding: 8px 10px;
-    width: 180px;
-    z-index: 100;
+    width: 190px;
     pointer-events: none;
     box-shadow: 0 4px 12px rgba(0,0,0,0.6);
 }
@@ -771,10 +765,6 @@ button:disabled {
     transform: translateX(-50%);
     border: 6px solid transparent;
     border-top-color: var(--fantasy-gold);
-}
-
-.troop-grid-item:hover .troop-tooltip {
-    display: block;
 }
 
 .tooltip-flavor {

@@ -1,21 +1,22 @@
+import { useRef, useState } from 'react';
 import type { TroopDef, TroopType } from '../game/config/GameDefinitions';
 import { getTroopStats } from '../game/config/GameDefinitions';
 import { formatSol } from '../game/solana/Currency';
 
 const TROOP_FLAVOR: Record<string, string> = {
-    warrior: 'Cheap, cheerful, and surprisingly brave for someone with no armor.',
-    archer: 'Pew pew from a safe distance. Prefers not to get punched.',
-    giant: 'Big, slow, and really mad at defensive buildings.',
-    wallbreaker: 'Runs at walls with a bomb. Career expectancy: one attack.',
-    ward: 'Keeps everyone alive. Never gets a thank you.',
-    recursion: 'Kill it and it multiplies. Basically a work email.',
-    ram: 'Has one goal: smash the Town Hall. Very focused individual.',
-    stormmage: 'Zaps enemies in a chain. Shocking personality.',
-    golem: 'An ancient rock that woke up and chose violence.',
-    sharpshooter: 'Like an archer, but actually hits things from far away.',
-    mobilemortar: 'Portable splash damage. Sets up shop, then kaboom.',
-    davincitank: "Leonardo's finest. Spins and shoots in every direction.",
-    phalanx: 'A 3x3 squad of Romans. Splits into 9 angry soldiers on death.',
+    warrior: 'Fast melee fighter. Cheap to train and great in numbers.',
+    archer: 'Ranged attacker that picks off targets from a safe distance.',
+    giant: 'Slow, heavy-hitting tank that goes straight for defenses.',
+    wallbreaker: 'Sprints at walls and detonates on impact. One-way trip.',
+    ward: 'Support unit that heals nearby allies and chips away at buildings.',
+    recursion: 'Splits into two smaller copies on death. Hard to put down.',
+    ram: 'Armored battering ram that charges the Town Hall. 4x wall damage.',
+    stormmage: 'Chain lightning hits up to 4 targets per strike.',
+    golem: 'Massive stone titan. Nearly indestructible, targets defenses.',
+    sharpshooter: 'Elite archer with extended range and heavy single-target damage.',
+    mobilemortar: 'Sets up and lobs splash damage shells from long range.',
+    davincitank: "Armored war machine that fires cannons in all directions.",
+    phalanx: 'Shield formation that splits into 9 Roman soldiers on death.',
 };
 
 interface TrainingModalProps {
@@ -33,6 +34,12 @@ interface TrainingModalProps {
   onUntrainTroop: (type: string) => void | Promise<void>;
 }
 
+interface TooltipInfo {
+  id: string;
+  x: number;
+  y: number;
+}
+
 export function TrainingModal({
   isOpen,
   showCloudOverlay,
@@ -47,7 +54,25 @@ export function TrainingModal({
   onTrainTroop,
   onUntrainTroop
 }: TrainingModalProps) {
+  const [tooltip, setTooltip] = useState<TooltipInfo | null>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+
   if (!isOpen) return null;
+
+  const handleMouseEnter = (troopId: string, e: React.MouseEvent) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setTooltip({
+      id: troopId,
+      x: rect.left + rect.width / 2,
+      y: rect.top
+    });
+  };
+
+  const handleMouseLeave = () => setTooltip(null);
+
+  const tooltipTroop = tooltip ? troops.find(t => t.id === tooltip.id) : null;
+  const tooltipScaled = tooltipTroop ? getTroopStats(tooltipTroop.id as TroopType, troopLevel) : null;
+  const tooltipFlavor = tooltipTroop ? (TROOP_FLAVOR[tooltipTroop.id] || tooltipTroop.desc) : '';
 
   return (
     <div className={`modal-overlay ${showCloudOverlay ? 'hidden-ui' : ''}`} onClick={onClose}>
@@ -97,23 +122,15 @@ export function TrainingModal({
               const canAfford = resources.sol >= t.cost;
               const hasSpace = capacity.current + t.space <= capacity.max;
               const isAvailable = canAfford && hasSpace;
-              const scaled = getTroopStats(t.id as TroopType, troopLevel);
-              const flavor = TROOP_FLAVOR[t.id] || t.desc;
 
               return (
                 <div
                   key={t.id}
                   className={`troop-grid-item ${!isAvailable ? 'disabled' : ''}`}
                   onClick={() => isAvailable && onTrainTroop(t.id)}
+                  onMouseEnter={(e) => handleMouseEnter(t.id, e)}
+                  onMouseLeave={handleMouseLeave}
                 >
-                  <div className="troop-tooltip">
-                    <div className="tooltip-flavor">{flavor}</div>
-                    <div className="tooltip-stats">
-                      <span>♥ {scaled.health}</span>
-                      <span>⚔ {scaled.damage}</span>
-                      <span>◎ {t.space}</span>
-                    </div>
-                  </div>
                   <div className="level-badge">Lv{troopLevel}</div>
                   <div className={`icon ${t.id}-icon large`}></div>
                   <span className="name" style={{ fontSize: '0.7rem', fontWeight: 900 }}>{t.name}</span>
@@ -128,6 +145,27 @@ export function TrainingModal({
           </div>
         </div>
       </div>
+
+      {tooltip && tooltipTroop && tooltipScaled && (
+        <div
+          ref={tooltipRef}
+          className="troop-tooltip"
+          style={{
+            position: 'fixed',
+            left: tooltip.x,
+            top: tooltip.y,
+            transform: 'translate(-50%, calc(-100% - 10px))',
+            zIndex: 10000
+          }}
+        >
+          <div className="tooltip-flavor">{tooltipFlavor}</div>
+          <div className="tooltip-stats">
+            <span>♥ {tooltipScaled.health}</span>
+            <span>⚔ {tooltipScaled.damage}</span>
+            <span>◎ {tooltipTroop.space}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
