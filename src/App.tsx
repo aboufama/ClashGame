@@ -23,6 +23,11 @@ import './App.css';
 MobileUtils.setupMobileViewport();
 MobileUtils.preventDefaultTouchBehaviors();
 
+function hasRenderableWorldPayload(world: unknown): world is { buildings: unknown[] } {
+  if (!world || typeof world !== 'object') return false;
+  const maybe = world as { buildings?: unknown };
+  return Array.isArray(maybe.buildings) && maybe.buildings.length > 0;
+}
 
 
 function App() {
@@ -53,9 +58,12 @@ function App() {
   useEffect(() => {
     let cancelled = false;
     Auth.ensureUser()
-      .then(({ user: authUser, online }) => {
+      .then(({ user: authUser, online, world }) => {
         if (cancelled) return;
         if (authUser) {
+          if (hasRenderableWorldPayload(world)) {
+            Backend.primeWorldCache(authUser.id, world);
+          }
           setUser({ id: authUser.id, email: authUser.email, username: authUser.username, lastLogin: Date.now() });
         } else {
           setUser(null);
@@ -271,12 +279,16 @@ function App() {
         beginVillageLoadCloud(8);
         const userId = user.id || 'default_player';
 
-        // Always fetch fresh from server when online to avoid stale localStorage data.
-        // This prevents showing outdated building positions/levels after switching browsers.
+        // Hydrate from a known-good cached snapshot first (primed by auth/session when available).
+        const cachedWorld = Backend.getCachedWorld(userId);
         updateVillageLoadCloud(24);
-        let world = isOnline
-          ? await loadCloudWorldWithRetry(userId)
-          : Backend.getCachedWorld(userId);
+        let world = hasRenderableWorldPayload(cachedWorld)
+          ? cachedWorld
+          : (isOnline ? await loadCloudWorldWithRetry(userId) : cachedWorld);
+
+        if (!world && hasRenderableWorldPayload(cachedWorld)) {
+          world = cachedWorld;
+        }
 
         if (!world || !Array.isArray(world.buildings)) {
           console.error('Failed to load a valid world payload from cloud. Aborting init to avoid destructive fallback.');
@@ -410,9 +422,12 @@ function App() {
         await Backend.flushPendingSave();
         Backend.clearCacheForUser(existingId);
       }
-      const authUser = await Auth.login(identifier, password);
+      const { user: authUser, world } = await Auth.login(identifier, password);
       // Clear any stale cache for the NEW user from a previous session on this browser
       Backend.clearCacheForUser(authUser.id);
+      if (hasRenderableWorldPayload(world)) {
+        Backend.primeWorldCache(authUser.id, world);
+      }
       setUser({ id: authUser.id, email: authUser.email, username: authUser.username, lastLogin: Date.now() });
       setIsOnline(true);
       setIsAccountOpen(false);
@@ -431,9 +446,12 @@ function App() {
         await Backend.flushPendingSave();
         Backend.clearCacheForUser(existingId);
       }
-      const authUser = await Auth.register(email, username, password);
+      const { user: authUser, world } = await Auth.register(email, username, password);
       // Clear any stale cache for the NEW user from a previous session on this browser
       Backend.clearCacheForUser(authUser.id);
+      if (hasRenderableWorldPayload(world)) {
+        Backend.primeWorldCache(authUser.id, world);
+      }
       setUser({ id: authUser.id, email: authUser.email, username: authUser.username, lastLogin: Date.now() });
       setIsOnline(true);
       setIsAccountOpen(false);

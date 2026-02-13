@@ -13,7 +13,7 @@ import {
   releaseReservedAuthLookups,
   reserveUserAuthLookups
 } from '../_lib/auth.js';
-import { ensurePlayerState, materializeState } from '../_lib/game_state.js';
+import { resolveHomeWorld } from '../_lib/home_world.js';
 import { randomId, type UserRecord } from '../_lib/models.js';
 import { upsertUserIndex } from '../_lib/indexes.js';
 
@@ -113,27 +113,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await writeJson(`users/${user.id}.json`, user, { allowOverwrite: false });
 
       res.setHeader('Set-Cookie', createSessionCookie(session.token));
-      sendJson(res, 200, {
-        user: { id: user.id, email: user.email, username: user.username },
-        expiresAt: session.expiresAt
+      const resolved = await resolveHomeWorld(user.id, user.username, {
+        now,
+        source: 'register',
+        materializeAttempts: 8,
+        historyDepth: 12
+      }).catch(error => {
+        console.warn('register home world resolve failed; returning null world', { userId: user.id, error });
+        return null;
       });
 
-      // Best-effort state/index repair; registration success should not fail because of this.
-      void (async () => {
-        try {
-          await ensurePlayerState(user.id, user.username);
-          const state = await materializeState(user.id, user.username, now);
-          await upsertUserIndex({
-            id: user.id,
-            username: user.username,
-            buildingCount: state.world.buildings.length,
-            lastSeen: now,
-            trophies: user.trophies ?? 0
-          });
-        } catch (error) {
-          console.warn('register post-auth state sync failed', { userId: user.id, error });
-        }
-      })();
+      const world = resolved?.world ?? null;
+      const buildingCount = world?.buildings.length ?? 0;
+
+      await upsertUserIndex({
+        id: user.id,
+        username: user.username,
+        buildingCount,
+        lastSeen: now,
+        trophies: user.trophies ?? 0
+      }).catch(error => {
+        console.warn('register index sync failed', { userId: user.id, error });
+      });
+
+      sendJson(res, 200, {
+        user: { id: user.id, email: user.email, username: user.username },
+        expiresAt: session.expiresAt,
+        world
+      });
     } catch (createError) {
       await releaseReservedAuthLookups(lookupReservation.reservedPathnames);
       if (sessionToken) {

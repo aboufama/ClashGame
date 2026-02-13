@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, sendError, sendJson } from '../_lib/http.js';
 import { requireAuth } from '../_lib/auth.js';
-import { ensurePlayerState, materializeState } from '../_lib/game_state.js';
+import { resolveHomeWorld } from '../_lib/home_world.js';
 import { upsertUserIndex } from '../_lib/indexes.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -18,20 +18,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const now = Date.now();
     const { user } = auth;
 
-    await ensurePlayerState(user.id, user.username);
-    const state = await materializeState(user.id, user.username, now);
+    const resolved = await resolveHomeWorld(user.id, user.username, {
+      now,
+      source: 'bootstrap',
+      materializeAttempts: 8,
+      historyDepth: 12
+    });
+    const world = resolved.world;
 
     await upsertUserIndex({
       id: user.id,
       username: user.username,
-      buildingCount: state.world.buildings.length,
+      buildingCount: world.buildings.length,
       lastSeen: now,
       trophies: user.trophies ?? 0
     }).catch(error => {
       console.warn('bootstrap index update failed', { userId: user.id, error });
     });
 
-    sendJson(res, 200, { world: state.world });
+    sendJson(res, 200, { world });
   } catch (error) {
     console.error('bootstrap error', error);
     sendError(res, 500, 'Failed to bootstrap base');

@@ -211,6 +211,12 @@ export class Backend {
     }
   }
 
+  static primeWorldCache(userId: string, world: SerializedWorld | null | undefined) {
+    if (!world) return;
+    Backend.markConfirmedRemoteWorld(userId, world);
+    Backend.setCachedWorld(userId, world);
+  }
+
   private static scheduleSave(userId: string) {
     if (!Auth.isOnlineMode()) return;
     void Backend.saveImmediate(userId);

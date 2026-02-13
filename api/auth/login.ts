@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http.js';
 import { readJson, writeJson } from '../_lib/blob.js';
 import { createSession, createSessionCookie, findUserByIdentifier, getAuthSessionToken, hashPassword, upsertUserAuthLookups, verifyPassword } from '../_lib/auth.js';
-import { ensurePlayerState, materializeState } from '../_lib/game_state.js';
+import { resolveHomeWorld } from '../_lib/home_world.js';
 import type { SessionRecord, UserRecord } from '../_lib/models.js';
 import { upsertUserIndex } from '../_lib/indexes.js';
 
@@ -87,26 +87,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     res.setHeader('Set-Cookie', createSessionCookie(session.token));
 
-    // Best-effort state/index refresh. Auth success should not fail because of game-state repair.
-    void (async () => {
-      try {
-        await ensurePlayerState(updated.id, updated.username);
-        const state = await materializeState(updated.id, updated.username, now);
-        await upsertUserIndex({
-          id: updated.id,
-          username: updated.username,
-          buildingCount: state.world.buildings.length,
-          lastSeen: now,
-          trophies: updated.trophies ?? 0
-        });
-      } catch (error) {
-        console.warn('login post-auth state sync failed', { userId: updated.id, error });
-      }
-    })();
+    const resolved = await resolveHomeWorld(updated.id, updated.username, {
+      now,
+      source: 'login',
+      materializeAttempts: 8,
+      historyDepth: 12
+    }).catch(error => {
+      console.warn('login home world resolve failed; returning null world', { userId: updated.id, error });
+      return null;
+    });
+
+    const world = resolved?.world ?? null;
+    const buildingCount = world?.buildings.length ?? 0;
+
+    await upsertUserIndex({
+      id: updated.id,
+      username: updated.username,
+      buildingCount,
+      lastSeen: now,
+      trophies: updated.trophies ?? 0
+    }).catch(error => {
+      console.warn('login index sync failed', { userId: updated.id, error });
+    });
 
     sendJson(res, 200, {
       user: { id: updated.id, email: updated.email, username: updated.username },
-      expiresAt: session.expiresAt
+      expiresAt: session.expiresAt,
+      world
     });
   } catch (error) {
     console.error('login error', error);

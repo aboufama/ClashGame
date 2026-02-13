@@ -1,3 +1,5 @@
+import type { SerializedWorld } from '../data/Models';
+
 export interface AuthUser {
   id: string;
   email: string;
@@ -6,11 +8,13 @@ export interface AuthUser {
 
 interface AuthResponse {
   user: AuthUser;
+  world?: SerializedWorld | null;
 }
 
 interface SessionResponse {
   authenticated?: boolean;
   user?: AuthUser;
+  world?: SerializedWorld | null;
 }
 
 const STORAGE_KEY = 'clash.auth';
@@ -94,7 +98,7 @@ export class Auth {
     return Auth.online;
   }
 
-  static async ensureUser(): Promise<{ user: AuthUser | null; online: boolean }> {
+  static async ensureUser(): Promise<{ user: AuthUser | null; online: boolean; world: SerializedWorld | null }> {
     const stored = loadStoredUser();
     if (stored) {
       Auth.current = stored;
@@ -108,7 +112,7 @@ export class Auth {
       saveStoredUser(session.user);
       Auth.current = session.user;
       Auth.online = true;
-      return { user: session.user, online: true };
+      return { user: session.user, online: true, world: session.world ?? null };
     } catch (error) {
       const expectedUnauthenticated = error instanceof Error && (
         error.message.includes('401') ||
@@ -125,14 +129,14 @@ export class Auth {
       Auth.online = false;
       if (stored) {
         Auth.current = stored;
-        return { user: stored, online: false };
+        return { user: stored, online: false, world: null };
       }
       Auth.current = null;
-      return { user: null, online: false };
+      return { user: null, online: false, world: null };
     }
   }
 
-  static async login(identifier: string, password: string): Promise<AuthUser> {
+  static async login(identifier: string, password: string): Promise<{ user: AuthUser; world: SerializedWorld | null }> {
     const login = await postJson<AuthResponse>('/api/auth/login', {
       identifier,
       password
@@ -140,10 +144,13 @@ export class Auth {
     saveStoredUser(login.user);
     Auth.current = login.user;
     Auth.online = true;
-    return login.user;
+    return {
+      user: login.user,
+      world: login.world ?? null
+    };
   }
 
-  static async register(email: string, username: string, password: string): Promise<AuthUser> {
+  static async register(email: string, username: string, password: string): Promise<{ user: AuthUser; world: SerializedWorld | null }> {
     const registered = await postJson<AuthResponse>('/api/auth/register', {
       email,
       username,
@@ -152,7 +159,10 @@ export class Auth {
     saveStoredUser(registered.user);
     Auth.current = registered.user;
     Auth.online = true;
-    return registered.user;
+    return {
+      user: registered.user,
+      world: registered.world ?? null
+    };
   }
 
   static async logout(): Promise<void> {
