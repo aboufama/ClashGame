@@ -808,18 +808,18 @@ export class TroopRenderer {
         graphics.fillCircle(-6, -45 + bodySlam, 4);
         graphics.fillCircle(6, -45 + bodySlam, 4);
 
-        // Eyes only glow when attacking (not moving = in combat)
+        // Eyes: subtle steady glow when walking, pulsing bright glow when attacking
+        const eyeGlow = troopLevel >= 2 ? (isPlayer ? 0x2288dd : 0xdd2222) : glowColor;
+        const eyeBright = troopLevel >= 2 ? (isPlayer ? 0x66aaee : 0xee6666) : glowColorBright;
+        const eyePulse = !isMoving ? (0.7 + Math.sin(now / 200) * 0.3) : 0.3;
+        graphics.fillStyle(eyeGlow, eyePulse);
+        graphics.fillCircle(-6, -45 + bodySlam, 3);
+        graphics.fillCircle(6, -45 + bodySlam, 3);
         if (!isMoving) {
-            const eyePulse = 0.7 + Math.sin(now / 200) * 0.3;
-            const eyeGlow = troopLevel >= 2 ? (isPlayer ? 0x2288dd : 0xdd2222) : glowColor;
-            const eyeBright = troopLevel >= 2 ? (isPlayer ? 0x66aaee : 0xee6666) : glowColorBright;
-            graphics.fillStyle(eyeGlow, eyePulse);
-            graphics.fillCircle(-6, -45 + bodySlam, 3);
-            graphics.fillCircle(6, -45 + bodySlam, 3);
+            // Bright core + outer glow only when attacking
             graphics.fillStyle(eyeBright, eyePulse * 0.8);
             graphics.fillCircle(-6, -45 + bodySlam, 1.5);
             graphics.fillCircle(6, -45 + bodySlam, 1.5);
-            // Eye glow effect
             graphics.lineStyle(2, eyeGlow, eyePulse * 0.4);
             graphics.strokeCircle(-6, -45 + bodySlam, 5);
             graphics.strokeCircle(6, -45 + bodySlam, 5);
