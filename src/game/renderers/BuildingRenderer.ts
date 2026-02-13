@@ -4121,7 +4121,7 @@ export class BuildingRenderer {
             if (nE) addSegment(cx, cy, gridX + 1, cy);
             if (nW) addSegment(cx, cy, gridX, cy);
 
-            // Central post
+            // Central post with direction-aware faces for isometric corners
             const ps = wallThickness * 0.7;
             const hps = ps / 2;
             const pTL = IsoUtils.cartToIso(cx - hps, cy - hps);
@@ -4132,8 +4132,14 @@ export class BuildingRenderer {
             const ptTR = new Phaser.Math.Vector2(pTR.x, pTR.y - wallHeight);
             const ptBR = new Phaser.Math.Vector2(pBR.x, pBR.y - wallHeight);
             const ptBL = new Phaser.Math.Vector2(pBL.x, pBL.y - wallHeight);
-            sideFaces.push({ points: [pTR, pBR, ptBR, ptTR], color: woodSide });
-            sideFaces.push({ points: [pBR, pBL, ptBL, ptBR], color: woodFront });
+            // East face: visible when no east segment hides it
+            if (!nE) sideFaces.push({ points: [pTR, pBR, ptBR, ptTR], color: woodSide });
+            // South face: visible when no south segment hides it
+            if (!nS) sideFaces.push({ points: [pBR, pBL, ptBL, ptBR], color: woodFront });
+            // West face: inner face exposed when east segment exists
+            if (nE && !nW) sideFaces.push({ points: [pBL, pTL, ptTL, ptBL], color: woodSide });
+            // North face: inner face exposed when south segment exists
+            if (nS && !nN) sideFaces.push({ points: [pTL, pTR, ptTR, ptTL], color: woodFront });
             topFaces.push([ptTL, ptTR, ptBR, ptBL]);
         }
 
@@ -4162,35 +4168,43 @@ export class BuildingRenderer {
             const ptBR = new Phaser.Math.Vector2(pBR.x, pBR.y - wallHeight);
             const ptBL = new Phaser.Math.Vector2(pBL.x, pBL.y - wallHeight);
 
-            // Wood grain lines on front faces
+            // Wood grain lines on visible front faces
             const pcx = (ptTL.x + ptBR.x) / 2;
             const pcy = (ptTL.y + ptBR.y) / 2;
             graphics.lineStyle(1, 0x4a2a15, alpha * 0.4);
             graphics.lineBetween(pcx - 2, pcy + wallHeight * 0.3, pcx - 2, pcy + wallHeight * 0.8);
             graphics.lineBetween(pcx + 1, pcy + wallHeight * 0.2, pcx + 1, pcy + wallHeight * 0.7);
 
-            // Sharpened top (pointed stake)
+            // Sharpened top (pointed stake) — draw faces matching visible pillar sides
             const peakY = pcy - 6;
-            graphics.fillStyle(0x9b7b5a, alpha);
-            graphics.beginPath();
-            graphics.moveTo(pcx, peakY);
-            graphics.lineTo(ptTL.x, ptTL.y);
-            graphics.lineTo(ptTR.x, ptTR.y);
-            graphics.closePath();
-            graphics.fillPath();
-            graphics.beginPath();
-            graphics.moveTo(pcx, peakY);
-            graphics.lineTo(ptTR.x, ptTR.y);
-            graphics.lineTo(ptBR.x, ptBR.y);
-            graphics.closePath();
-            graphics.fillPath();
-            graphics.fillStyle(0x7b5b3a, alpha);
-            graphics.beginPath();
-            graphics.moveTo(pcx, peakY);
-            graphics.lineTo(ptBR.x, ptBR.y);
-            graphics.lineTo(ptBL.x, ptBL.y);
-            graphics.closePath();
-            graphics.fillPath();
+            // North face of peak (light)
+            if (!nN || (nS && !nN)) {
+                graphics.fillStyle(0x9b7b5a, alpha);
+                graphics.beginPath(); graphics.moveTo(pcx, peakY);
+                graphics.lineTo(ptTL.x, ptTL.y); graphics.lineTo(ptTR.x, ptTR.y);
+                graphics.closePath(); graphics.fillPath();
+            }
+            // East face of peak (medium)
+            if (!nE) {
+                graphics.fillStyle(0x9b7b5a, alpha);
+                graphics.beginPath(); graphics.moveTo(pcx, peakY);
+                graphics.lineTo(ptTR.x, ptTR.y); graphics.lineTo(ptBR.x, ptBR.y);
+                graphics.closePath(); graphics.fillPath();
+            }
+            // South face of peak (dark)
+            if (!nS) {
+                graphics.fillStyle(0x7b5b3a, alpha);
+                graphics.beginPath(); graphics.moveTo(pcx, peakY);
+                graphics.lineTo(ptBR.x, ptBR.y); graphics.lineTo(ptBL.x, ptBL.y);
+                graphics.closePath(); graphics.fillPath();
+            }
+            // West face of peak (medium)
+            if (nE && !nW) {
+                graphics.fillStyle(0x8b6b4a, alpha);
+                graphics.beginPath(); graphics.moveTo(pcx, peakY);
+                graphics.lineTo(ptBL.x, ptBL.y); graphics.lineTo(ptTL.x, ptTL.y);
+                graphics.closePath(); graphics.fillPath();
+            }
 
             // Rope binding
             const ropeY = pcy + 8;
@@ -4262,7 +4276,7 @@ export class BuildingRenderer {
             if (nE) addSegment(cx, cy, gridX + 1, cy);
             if (nW) addSegment(cx, cy, gridX, cy);
 
-            // Central pillar
+            // Central pillar with direction-aware faces
             const ps = wallThickness * 0.6;
             const hps = ps / 2;
             const pTL = IsoUtils.cartToIso(cx - hps, cy - hps);
@@ -4273,8 +4287,10 @@ export class BuildingRenderer {
             const ptTR = new Phaser.Math.Vector2(pTR.x, pTR.y - wallHeight);
             const ptBR = new Phaser.Math.Vector2(pBR.x, pBR.y - wallHeight);
             const ptBL = new Phaser.Math.Vector2(pBL.x, pBL.y - wallHeight);
-            sideFaces.push({ points: [pTR, pBR, ptBR, ptTR], color: stoneSide });
-            sideFaces.push({ points: [pBR, pBL, ptBL, ptBR], color: stoneFront });
+            if (!nE) sideFaces.push({ points: [pTR, pBR, ptBR, ptTR], color: stoneSide });
+            if (!nS) sideFaces.push({ points: [pBR, pBL, ptBL, ptBR], color: stoneFront });
+            if (nE && !nW) sideFaces.push({ points: [pBL, pTL, ptTL, ptBL], color: stoneSide });
+            if (nS && !nN) sideFaces.push({ points: [pTL, pTR, ptTR, ptTL], color: stoneFront });
             topFaces.push([ptTL, ptTR, ptBR, ptBL]);
         }
 
@@ -4376,7 +4392,7 @@ export class BuildingRenderer {
             if (nE) addSegment(cx, cy, gridX + 1, cy);
             if (nW) addSegment(cx, cy, gridX, cy);
 
-            // Central pillar (larger for fortified)
+            // Central pillar with direction-aware faces
             const ps = wallThickness * 0.7;
             const hps = ps / 2;
             const pTL = IsoUtils.cartToIso(cx - hps, cy - hps);
@@ -4387,8 +4403,10 @@ export class BuildingRenderer {
             const ptTR = new Phaser.Math.Vector2(pTR.x, pTR.y - wallHeight);
             const ptBR = new Phaser.Math.Vector2(pBR.x, pBR.y - wallHeight);
             const ptBL = new Phaser.Math.Vector2(pBL.x, pBL.y - wallHeight);
-            sideFaces.push({ points: [pTR, pBR, ptBR, ptTR], color: stoneSide });
-            sideFaces.push({ points: [pBR, pBL, ptBL, ptBR], color: stoneFront });
+            if (!nE) sideFaces.push({ points: [pTR, pBR, ptBR, ptTR], color: stoneSide });
+            if (!nS) sideFaces.push({ points: [pBR, pBL, ptBL, ptBR], color: stoneFront });
+            if (nE && !nW) sideFaces.push({ points: [pBL, pTL, ptTL, ptBL], color: stoneSide });
+            if (nS && !nN) sideFaces.push({ points: [pTL, pTR, ptTR, ptTL], color: stoneFront });
             topFaces.push([ptTL, ptTR, ptBR, ptBL]);
         }
 

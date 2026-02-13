@@ -1735,6 +1735,7 @@ button:disabled {
 /* Menu Inner Raid */
 .menu-inner.raid {
     padding: 4px;
+    position: relative;
 }
 
 /* ============================================

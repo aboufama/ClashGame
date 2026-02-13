@@ -160,6 +160,7 @@ export class MainScene extends Phaser.Scene {
     public villageNameLabel!: Phaser.GameObjects.Text;
     public attackModeSelectedBuilding: PlacedBuilding | null = null;
     public dummyTroop: Troop | null = null;
+    private _dummyLeaveHandler: (() => void) | null = null;
 
     // Online attack tracking
     public currentEnemyWorld: { id: string; username: string; isBot?: boolean; attackId?: string } | null = null;
@@ -549,6 +550,12 @@ export class MainScene extends Phaser.Scene {
         this.troops.push(troop);
         this.dummyTroop = troop;
         this.game.canvas.style.cursor = 'none';
+
+        // Auto-remove dummy when cursor leaves the canvas
+        this._dummyLeaveHandler = () => {
+            if (this.dummyTroop) this.removeDummyTroop();
+        };
+        this.game.canvas.addEventListener('mouseleave', this._dummyLeaveHandler);
     }
 
     public removeDummyTroop() {
@@ -559,6 +566,12 @@ export class MainScene extends Phaser.Scene {
         this.dummyTroop.healthBar.destroy();
         this.dummyTroop = null;
         this.game.canvas.style.cursor = '';
+
+        // Remove mouseleave listener
+        if (this._dummyLeaveHandler) {
+            this.game.canvas.removeEventListener('mouseleave', this._dummyLeaveHandler);
+            this._dummyLeaveHandler = null;
+        }
 
         // Clean up any active prism lasers
         this.buildings.forEach(b => {
@@ -1704,6 +1717,8 @@ export class MainScene extends Phaser.Scene {
     public updateHealthBar(item: PlacedBuilding | Troop) {
         if (!item.healthBar || !item.healthBar.scene) return; // Ignore destroyed or dummy health bars
         if ('isDestroyed' in item && item.isDestroyed) return;
+        // Never show health bar for the dummy scarecrow
+        if ('id' in item && (item as Troop).id === 'dummy_scarecrow') return;
         const bar = item.healthBar;
         bar.clear();
 
