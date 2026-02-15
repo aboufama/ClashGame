@@ -1216,16 +1216,6 @@ export class BuildingRenderer {
                 }
             }
 
-            // === MUZZLE SHROUD ===
-            const muzzleX = barrelTipX;
-            const muzzleY = barrelTipY;
-
-            // Heavy muzzle ring
-            graphics.fillStyle(0x4a4a5a, alpha);
-            graphics.fillEllipse(muzzleX, muzzleY, 8, 5);
-            graphics.fillStyle(0x5a5a6a, alpha);
-            graphics.fillEllipse(muzzleX, muzzleY, 6, 4);
-
             if (sin < 0) drawPivot();
         }
     }
@@ -1379,12 +1369,6 @@ export class BuildingRenderer {
             // Barrel highlight strip
             graphics.lineStyle(3, 0xeeeedd, alpha * 0.9);
             graphics.lineBetween(barrelBaseX, barrelBaseY - 2, tipX, tipY - 2);
-
-            // Muzzle ring
-            graphics.fillStyle(0xccccbb, alpha);
-            graphics.fillEllipse(tipX, tipY, 10, 6);
-            graphics.fillStyle(0xddddcc, alpha);
-            graphics.fillEllipse(tipX, tipY, 8, 5);
 
             if (sin < 0) drawPivot();
         }
