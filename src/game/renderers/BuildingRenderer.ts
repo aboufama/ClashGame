@@ -4402,8 +4402,8 @@ export class BuildingRenderer {
         // === HUGE VOLCANIC ROCKS ===
         const rockScale = scale;
 
-        // BACK-LEFT ROCK (huge, imposing)
-        graphics.fillStyle(basaltMid, alpha);
+        // BACK-LEFT ROCK (huge, imposing) — marble at L3
+        graphics.fillStyle(isLevel3 ? 0xccccbb : basaltMid, alpha);
         graphics.beginPath();
         graphics.moveTo(center.x - 48 * rockScale, center.y + 15);
         graphics.lineTo(center.x - 44 * rockScale, center.y - 25 * rockScale);
@@ -4415,7 +4415,7 @@ export class BuildingRenderer {
         graphics.fillPath();
 
         // Back-left rock highlight face
-        graphics.fillStyle(basaltLight, alpha * 0.8);
+        graphics.fillStyle(isLevel3 ? 0xddddcc : basaltLight, alpha * 0.8);
         graphics.beginPath();
         graphics.moveTo(center.x - 48 * rockScale, center.y + 15);
         graphics.lineTo(center.x - 44 * rockScale, center.y - 25 * rockScale);
@@ -4425,7 +4425,7 @@ export class BuildingRenderer {
         graphics.fillPath();
 
         // Back-left rock shadow face
-        graphics.fillStyle(basaltDark, alpha);
+        graphics.fillStyle(isLevel3 ? 0xbbbbaa : basaltDark, alpha);
         graphics.beginPath();
         graphics.moveTo(center.x - 18 * rockScale, center.y - 28 * rockScale);
         graphics.lineTo(center.x - 12 * rockScale, center.y - 8);
@@ -4434,8 +4434,8 @@ export class BuildingRenderer {
         graphics.closePath();
         graphics.fillPath();
 
-        // BACK-RIGHT ROCK (huge)
-        graphics.fillStyle(basaltDark, alpha);
+        // BACK-RIGHT ROCK (huge) — marble at L3
+        graphics.fillStyle(isLevel3 ? 0xbbbbaa : basaltDark, alpha);
         graphics.beginPath();
         graphics.moveTo(center.x + 46 * rockScale, center.y + 18);
         graphics.lineTo(center.x + 40 * rockScale, center.y - 20 * rockScale);
@@ -4446,8 +4446,8 @@ export class BuildingRenderer {
         graphics.closePath();
         graphics.fillPath();
 
-        // Back-right rock highlight — marble face
-        graphics.fillStyle(0xccccbb, alpha * 0.7);
+        // Back-right rock highlight
+        graphics.fillStyle(isLevel3 ? 0xddddcc : basaltMid, alpha * 0.7);
         graphics.beginPath();
         graphics.moveTo(center.x + 28 * rockScale, center.y - 30 * rockScale);
         graphics.lineTo(center.x + 40 * rockScale, center.y - 20 * rockScale);
@@ -4456,8 +4456,8 @@ export class BuildingRenderer {
         graphics.closePath();
         graphics.fillPath();
 
-        // FRONT ROCK (smaller, foreground) — marble white
-        graphics.fillStyle(0xccccbb, alpha);
+        // FRONT ROCK (smaller, foreground) — marble at L3 only
+        graphics.fillStyle(isLevel3 ? 0xccccbb : basaltMid, alpha);
         graphics.beginPath();
         graphics.moveTo(center.x + 8 * rockScale, center.y + 25);
         graphics.lineTo(center.x + 4 * rockScale, center.y + 12);
@@ -4466,7 +4466,7 @@ export class BuildingRenderer {
         graphics.closePath();
         graphics.fillPath();
 
-        graphics.fillStyle(0xddddcc, alpha * 0.6);
+        graphics.fillStyle(isLevel3 ? 0xddddcc : basaltHighlight, alpha * 0.6);
         graphics.beginPath();
         graphics.moveTo(center.x + 8 * rockScale, center.y + 25);
         graphics.lineTo(center.x + 4 * rockScale, center.y + 12);
@@ -5559,12 +5559,12 @@ export class BuildingRenderer {
                     const rocketWidth = 10;
                     const rocketHeight = podHeight - 4;
 
-                    // Rocket body (red with gold bands)
-                    graphics.fillStyle(0xcc2222, alpha);
+                    // Rocket body — L2: white/gold, L1: red/gold
+                    graphics.fillStyle(isLevel2 ? 0xeeeedd : 0xcc2222, alpha);
                     graphics.fillRect(tileCenter.x - rocketWidth / 2, topY, rocketWidth, rocketHeight);
 
-                    // Paper texture lines
-                    graphics.lineStyle(1, 0xaa1111, alpha * 0.5);
+                    // Texture lines
+                    graphics.lineStyle(1, isLevel2 ? 0xccccbb : 0xaa1111, alpha * 0.5);
                     for (let i = 1; i < 4; i++) {
                         const lineY = topY + (rocketHeight * i / 4);
                         graphics.lineBetween(tileCenter.x - rocketWidth / 2, lineY, tileCenter.x + rocketWidth / 2, lineY);
@@ -5577,15 +5577,15 @@ export class BuildingRenderer {
 
                     // Middle gold band with dragon motif
                     const midY = topY + rocketHeight / 2;
-                    graphics.fillStyle(0xb8860b, alpha);
+                    graphics.fillStyle(isLevel2 ? 0xdaa520 : 0xb8860b, alpha);
                     graphics.fillRect(tileCenter.x - rocketWidth / 2, midY - 2, rocketWidth, 4);
 
                     // Tiny dragon/swirl symbol
-                    graphics.fillStyle(0x880000, alpha);
+                    graphics.fillStyle(isLevel2 ? 0xb8860b : 0x880000, alpha);
                     graphics.fillCircle(tileCenter.x, midY, 2);
 
-                    // Rocket tip (conical - gold/brass)
-                    graphics.fillStyle(0xb8860b, alpha);
+                    // Rocket tip (conical - gold)
+                    graphics.fillStyle(isLevel2 ? 0xdaa520 : 0xb8860b, alpha);
                     graphics.beginPath();
                     graphics.moveTo(tileCenter.x, topY - 6);
                     graphics.lineTo(tileCenter.x - rocketWidth / 2, topY);
