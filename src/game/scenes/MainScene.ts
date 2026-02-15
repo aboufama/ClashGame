@@ -2048,12 +2048,20 @@ export class MainScene extends Phaser.Scene {
                 }
             }
 
+            const previousTargetId = (troop.target as any)?.id;
             if (!troop.target || troop.target.health <= 0) {
                 if (troop.type === 'ward') {
                     troop.target = this.findWardTarget(troop);
                 } else {
                     troop.target = TargetingSystem.findTarget(troop, this.buildings);
                 }
+            }
+            const nextTargetId = (troop.target as any)?.id;
+            if (previousTargetId !== nextTargetId) {
+                troop.path = undefined;
+                troop.nextPathTime = 0;
+                troop.lastTargetSwitchTime = time;
+                this.setTroopRetargetPause(troop, 60, 140);
             }
 
             if (troop.target) {
@@ -4297,13 +4305,123 @@ export class MainScene extends Phaser.Scene {
         TroopRenderer.drawTroopVisual(g, troop.type, troop.owner, troop.facingAngle, isMoving, troop.slamOffset || 0, troop.bowDrawProgress || 0, troop.mortarRecoil || 0, false, troop.phalanxSpearOffset || 0, troop.level || 1);
     }
 
+    private setTroopRetargetPause(troop: Troop, minMs: number = 70, maxMs: number = 180) {
+        const until = this.time.now + Phaser.Math.Between(minMs, maxMs);
+        troop.retargetPauseUntil = Math.max(troop.retargetPauseUntil ?? 0, until);
+    }
 
+    private rotateTroopToward(troop: Troop, desiredAngle: number, delta: number): boolean {
+        const turnRate = troop.type === 'golem' ? 0.004 : troop.type === 'ram' ? 0.006 : 0.01;
+        const maxStep = turnRate * Math.max(1, delta);
+        const before = troop.facingAngle || 0;
+        troop.facingAngle = Phaser.Math.Angle.RotateTo(before, desiredAngle, maxStep);
+        return Math.abs(Phaser.Math.Angle.Wrap(troop.facingAngle - before)) > 0.01;
+    }
 
+    private getTargetEdgeDistance(troop: Troop, target: PlacedBuilding | Troop): number {
+        const isBuilding = !!((target as any).type && BUILDINGS[(target as any).type]);
+        const tw = isBuilding ? BUILDINGS[(target as any).type].width : 0.5;
+        const th = isBuilding ? BUILDINGS[(target as any).type].height : 0.5;
+        const bx = isBuilding ? (target as any).gridX : (target as any).gridX - tw / 2;
+        const by = isBuilding ? (target as any).gridY : (target as any).gridY - th / 2;
+        const dx = Math.max(bx - troop.gridX, 0, troop.gridX - (bx + tw));
+        const dy = Math.max(by - troop.gridY, 0, troop.gridY - (by + th));
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    private findImmediateOpportunityTarget(troop: Troop, stats: any, currentDist: number, now: number): PlacedBuilding | null {
+        if (troop.type === 'ward') return null;
+        if (now < (troop.lastOpportunityScanTime ?? 0) + 220) return null;
+        troop.lastOpportunityScanTime = now;
+        if (now < (troop.lastTargetSwitchTime ?? 0) + 450) return null;
+
+        const priority = stats.targetPriority as ('town_hall' | 'defense' | 'wall' | undefined);
+        let candidates = this.buildings.filter(b => b.owner !== troop.owner && b.health > 0);
+
+        if (priority === 'wall') {
+            candidates = candidates.filter(b => b.type === 'wall');
+        } else if (priority === 'town_hall') {
+            candidates = candidates.filter(b => b.type === 'town_hall');
+        } else if (priority === 'defense') {
+            const defenses = candidates.filter(b => {
+                const info = BUILDINGS[b.type];
+                return info && info.category === 'defense' && b.type !== 'wall';
+            });
+            candidates = defenses.length > 0 ? defenses : candidates.filter(b => b.type !== 'wall');
+        } else {
+            candidates = candidates.filter(b => b.type !== 'wall');
+        }
+
+        const opportunityRange = stats.range + 1.4;
+        let best: PlacedBuilding | undefined;
+        let bestDist = Infinity;
+
+        for (const candidate of candidates) {
+            const d = this.getTargetEdgeDistance(troop, candidate);
+            if (d <= opportunityRange && d < bestDist) {
+                best = candidate;
+                bestDist = d;
+            }
+        }
+
+        if (!best) return null;
+        if (bestDist + 0.3 >= currentDist) return null;
+        if (troop.target && (troop.target as any).id === best.id) return null;
+        return best;
+    }
+
+    private handleStuckTroop(troop: Troop, now: number, distToTarget: number): boolean {
+        if (troop.lastProgressTime === undefined) {
+            troop.lastProgressTime = now;
+            troop.lastProgressX = troop.gridX;
+            troop.lastProgressY = troop.gridY;
+            troop.stuckTicks = 0;
+            return false;
+        }
+
+        if (now - troop.lastProgressTime < 450) return false;
+
+        const moved = Phaser.Math.Distance.Between(
+            troop.gridX,
+            troop.gridY,
+            troop.lastProgressX ?? troop.gridX,
+            troop.lastProgressY ?? troop.gridY
+        );
+
+        if (distToTarget > 0.6 && moved < 0.05) {
+            troop.stuckTicks = (troop.stuckTicks ?? 0) + 1;
+        } else {
+            troop.stuckTicks = 0;
+        }
+
+        troop.lastProgressX = troop.gridX;
+        troop.lastProgressY = troop.gridY;
+        troop.lastProgressTime = now;
+
+        if ((troop.stuckTicks ?? 0) < 2) return false;
+
+        troop.stuckTicks = 0;
+        troop.path = undefined;
+        troop.nextPathTime = now;
+        this.setTroopRetargetPause(troop, 60, 140);
+        return true;
+    }
 
     private updateTroops(delta: number) {
+        const now = this.time.now;
+
         this.troops.forEach(troop => {
+            if (troop.health <= 0) return;
+
+            if (troop.target && troop.target.health <= 0) {
+                troop.target = null;
+                troop.path = undefined;
+                troop.nextPathTime = now;
+                this.setTroopRetargetPause(troop, 80, 160);
+            }
+
             // Redraw animated troops every frame
-            if ((troop.type === 'warrior' || troop.type === 'archer' || troop.type === 'giant' || troop.type === 'ram' || troop.type === 'golem' || troop.type === 'sharpshooter' || troop.type === 'mobilemortar' || troop.type === 'davincitank' || troop.type === 'phalanx' || troop.type === 'romanwarrior' || troop.type === 'wallbreaker') && troop.health > 0) {
+            if (troop.type === 'warrior' || troop.type === 'archer' || troop.type === 'giant' || troop.type === 'ram' || troop.type === 'golem' || troop.type === 'sharpshooter' || troop.type === 'mobilemortar' || troop.type === 'davincitank' || troop.type === 'phalanx' || troop.type === 'romanwarrior' || troop.type === 'wallbreaker') {
                 // Determine if troop is actually moving (not in attack range)
                 let isActuallyMoving = true;
                 if (troop.target) {
@@ -4317,11 +4435,11 @@ export class MainScene extends Phaser.Scene {
                     const edy = Math.max(by - troop.gridY, 0, troop.gridY - (by + th));
                     const dist = Math.sqrt(edx * edx + edy * edy);
                     const stats = this.getTroopCombatStats(troop);
-                    isActuallyMoving = dist > stats.range;
+                    isActuallyMoving = dist > stats.range && now >= (troop.retargetPauseUntil ?? 0);
                 }
                 this.redrawTroopWithMovement(troop, isActuallyMoving);
             }
-            if (troop.target && troop.health > 0) {
+            if (troop.target) {
                 const b = troop.target;
                 const isBuilding = ('type' in b && BUILDINGS[b.type]);
                 const tw = isBuilding ? BUILDINGS[b.type].width : 0.5;
@@ -4338,18 +4456,33 @@ export class MainScene extends Phaser.Scene {
                 const dist = Math.sqrt(edx * edx + edy * edy);
                 const stats = this.getTroopCombatStats(troop);
 
-                if (dist > stats.range) {
-                    const time = this.time.now;
+                const opportunity = this.findImmediateOpportunityTarget(troop, stats, dist, now);
+                if (opportunity) {
+                    troop.target = opportunity;
+                    troop.path = undefined;
+                    troop.nextPathTime = now;
+                    troop.lastTargetSwitchTime = now;
+                    this.setTroopRetargetPause(troop, 40, 100);
+                    return;
+                }
 
+                if (now < (troop.retargetPauseUntil ?? 0)) {
+                    const currentPos = IsoUtils.cartToIso(troop.gridX, troop.gridY);
+                    const targetPos = IsoUtils.cartToIso(tx, ty);
+                    this.rotateTroopToward(troop, Math.atan2(targetPos.y - currentPos.y, targetPos.x - currentPos.x), delta);
+                    troop.velocityX = (troop.velocityX ?? 0) * 0.55;
+                    troop.velocityY = (troop.velocityY ?? 0) * 0.55;
+                    return;
+                }
+
+                if (dist > stats.range) {
                     // Pathfinding - Staggered updates & Fanning
                     // Ram skips A* pathfinding to "charge straight"
-                    if (troop.type !== 'ram' && (!troop.path || time >= (troop.nextPathTime || 0))) {
-                        let finalTarget: any = troop.target;
-
-                        troop.path = PathfindingSystem.findPath(troop, finalTarget, this.buildings, this.troops) || undefined;
-                        troop.lastPathTime = time;
-                        const interval = troop.type === 'ward' ? 250 : 500;
-                        troop.nextPathTime = time + interval + Math.random() * interval;
+                    if (troop.type !== 'ram' && (!troop.path || now >= (troop.nextPathTime || 0))) {
+                        troop.path = PathfindingSystem.findPath(troop, troop.target, this.buildings, this.troops) || undefined;
+                        troop.lastPathTime = now;
+                        const interval = troop.type === 'ward' ? 180 : 300;
+                        troop.nextPathTime = now + interval + Math.random() * interval;
                     } else if (troop.type === 'ram') {
                         troop.path = undefined;
                     }
@@ -4379,6 +4512,9 @@ export class MainScene extends Phaser.Scene {
                                 const nearby = this.findNearbyWallTarget(troop, nodeB);
                                 troop.target = nearby || nodeB;
                                 troop.path = undefined;
+                                troop.nextPathTime = now;
+                                troop.lastTargetSwitchTime = now;
+                                this.setTroopRetargetPause(troop, 90, 220);
                                 return;
                             }
                         }
@@ -4413,58 +4549,110 @@ export class MainScene extends Phaser.Scene {
 
                             if (wallAhead) {
                                 troop.target = wallAhead;
+                                troop.path = undefined;
+                                troop.nextPathTime = now;
+                                troop.lastTargetSwitchTime = now;
+                                this.setTroopRetargetPause(troop, 70, 150);
                                 return; // Stop moving this frame, start attacking next frame (since now dist <= range usually)
                             }
                         }
                     }
 
                     if (validMove) {
-                        // Separation
-                        let sepX = 0, sepY = 0;
+                        // Separation + sidestep steering to reduce clumping while preserving forward intent.
+                        const separation = new Phaser.Math.Vector2(0, 0);
+                        const sideStep = new Phaser.Math.Vector2(0, 0);
+                        const sideNormal = new Phaser.Math.Vector2(-moveDir.y, moveDir.x);
+
                         this.troops.forEach(other => {
-                            if (other === troop) return;
+                            if (other === troop || other.health <= 0) return;
                             const d = Phaser.Math.Distance.Between(troop.gridX, troop.gridY, other.gridX, other.gridY);
-                            if (d < 0.8) {
-                                sepX += (troop.gridX - other.gridX) * 0.2;
-                                sepY += (troop.gridY - other.gridY) * 0.2;
+                            if (d < 1.8 && d > 0.001) {
+                                const awayX = (troop.gridX - other.gridX) / d;
+                                const awayY = (troop.gridY - other.gridY) / d;
+                                const weight = (1.8 - d) / 1.8;
+                                separation.x += awayX * weight;
+                                separation.y += awayY * weight;
+                            }
+
+                            if (d < 1.4 && d > 0.001) {
+                                const towardX = other.gridX - troop.gridX;
+                                const towardY = other.gridY - troop.gridY;
+                                const forwardDot = ((towardX * moveDir.x) + (towardY * moveDir.y)) / d;
+                                if (forwardDot > 0.25) {
+                                    const lateral = (sideNormal.x * towardX) + (sideNormal.y * towardY);
+                                    const sideSign = lateral >= 0 ? -1 : 1;
+                                    const sideWeight = (1.4 - d) / 1.4;
+                                    sideStep.x += sideNormal.x * sideSign * sideWeight;
+                                    sideStep.y += sideNormal.y * sideSign * sideWeight;
+                                }
                             }
                         });
 
-                        const speed = stats.speed * troop.speedMult * delta;
-                        troop.gridX += (moveDir.x + sepX) * speed;
-                        troop.gridY += (moveDir.y + sepY) * speed;
+                        const desiredMove = moveDir
+                            .clone()
+                            .add(separation.scale(0.55))
+                            .add(sideStep.scale(0.35));
+
+                        if (desiredMove.lengthSq() < 0.0001) {
+                            desiredMove.copy(moveDir);
+                        } else {
+                            desiredMove.normalize();
+                        }
+
+                        const speed = stats.speed * troop.speedMult * delta * 1.12;
+                        const targetVx = ((desiredMove.x * 0.8) + (moveDir.x * 0.2)) * speed;
+                        const targetVy = ((desiredMove.y * 0.8) + (moveDir.y * 0.2)) * speed;
+                        troop.velocityX = Phaser.Math.Linear(troop.velocityX ?? targetVx, targetVx, 0.45);
+                        troop.velocityY = Phaser.Math.Linear(troop.velocityY ?? targetVy, targetVy, 0.45);
+
+                        const velMag = Math.hypot(troop.velocityX, troop.velocityY);
+                        const maxVel = speed * 1.35;
+                        if (velMag > maxVel && velMag > 0.0001) {
+                            const scale = maxVel / velMag;
+                            troop.velocityX *= scale;
+                            troop.velocityY *= scale;
+                        }
+
+                        troop.gridX += troop.velocityX;
+                        troop.gridY += troop.velocityY;
 
                         const pos = IsoUtils.cartToIso(troop.gridX, troop.gridY);
                         troop.gameObject.setPosition(pos.x, pos.y);
                         this.updateHealthBar(troop);
                         troop.gameObject.setDepth(depthForTroop(troop.gridX, troop.gridY, troop.type));
 
+                        if (this.handleStuckTroop(troop, now, dist)) return;
+
                         // Update facing angle for troops that need it (facing movement direction)
                         if (troop.type === 'archer' || troop.type === 'ram' || troop.type === 'golem' || troop.type === 'sharpshooter' || troop.type === 'mobilemortar' || troop.type === 'phalanx' || troop.type === 'romanwarrior') {
                             const targetPos = IsoUtils.cartToIso(tx, ty);
-                            const newFacing = Math.atan2(targetPos.y - pos.y, targetPos.x - pos.x);
-                            // Redraw troops that have direction-dependent visuals (check BEFORE updating facingAngle)
-                            if ((troop.type === 'sharpshooter' || troop.type === 'mobilemortar' || troop.type === 'phalanx' || troop.type === 'romanwarrior') && Math.abs(newFacing - troop.facingAngle) > 0.1) {
-                                troop.facingAngle = newFacing;
+                            const desiredFacing = Math.atan2(targetPos.y - pos.y, targetPos.x - pos.x);
+                            const rotated = this.rotateTroopToward(troop, desiredFacing, delta);
+                            // Redraw troops that have direction-dependent visuals
+                            if (rotated && (troop.type === 'sharpshooter' || troop.type === 'mobilemortar' || troop.type === 'phalanx' || troop.type === 'romanwarrior')) {
                                 this.redrawTroop(troop);
-                            } else {
-                                troop.facingAngle = newFacing;
                             }
                         }
                     }
                 } else {
+                    troop.velocityX = (troop.velocityX ?? 0) * 0.7;
+                    troop.velocityY = (troop.velocityY ?? 0) * 0.7;
+
                     // In range - update facing direction for ranged/directional troops
                     if ((troop.type === 'archer' || troop.type === 'sharpshooter' || troop.type === 'mobilemortar' || troop.type === 'phalanx' || troop.type === 'romanwarrior') && troop.target) {
                         const pos = IsoUtils.cartToIso(troop.gridX, troop.gridY);
                         const targetPos = IsoUtils.cartToIso(tx, ty);
-                        const newFacing = Math.atan2(targetPos.y - pos.y, targetPos.x - pos.x);
-                        if (Math.abs(newFacing - troop.facingAngle) > 0.1) {
-                            troop.facingAngle = newFacing;
+                        const desiredFacing = Math.atan2(targetPos.y - pos.y, targetPos.x - pos.x);
+                        const rotated = this.rotateTroopToward(troop, desiredFacing, delta);
+                        if (rotated) {
                             this.redrawTroop(troop);
                         }
                     }
-                    if (!troop.target) troop.target = TargetingSystem.findTarget(troop, this.buildings);
                 }
+            } else {
+                troop.velocityX = (troop.velocityX ?? 0) * 0.65;
+                troop.velocityY = (troop.velocityY ?? 0) * 0.65;
             }
         });
     }
@@ -4801,16 +4989,30 @@ export class MainScene extends Phaser.Scene {
 
         // Clear any troops still targeting this building
         this.troops.forEach(t => {
-            if (t.target && t.target.id === b.id) t.target = null;
+            if (t.target && t.target.id === b.id) {
+                t.target = null;
+                t.path = undefined;
+                t.nextPathTime = 0;
+                this.setTroopRetargetPause(t, 80, 180);
+            }
         });
 
         // If a wall is broken, force all troops to re-evaluate paths
         // This allows them to switch from attacking a wall to using a new gap
         if (b.type === 'wall') {
+            const breachX = b.gridX + info.width / 2;
+            const breachY = b.gridY + info.height / 2;
             this.troops.forEach(t => {
                 t.lastPathTime = 0;
                 t.nextPathTime = 0;
+                t.path = undefined;
                 if (t.target && t.target.type === 'wall') t.target = null;
+
+                // Nearby troops react instantly to fresh breaches.
+                const d = Phaser.Math.Distance.Between(t.gridX, t.gridY, breachX, breachY);
+                if (d < 6) {
+                    this.setTroopRetargetPause(t, 40, 120);
+                }
             });
             // Update neighbor walls to disconnect from destroyed wall
             this.refreshWallNeighbors(b.gridX, b.gridY, b.owner);

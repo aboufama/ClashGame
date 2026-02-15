@@ -68,6 +68,15 @@ export interface Troop {
     path?: Phaser.Math.Vector2[]; // Path of grid coordinates to follow
     lastPathTime?: number;
     nextPathTime?: number;
+    velocityX?: number;
+    velocityY?: number;
+    lastProgressX?: number;
+    lastProgressY?: number;
+    lastProgressTime?: number;
+    stuckTicks?: number;
+    retargetPauseUntil?: number;
+    lastTargetSwitchTime?: number;
+    lastOpportunityScanTime?: number;
     target: any; // PlacedBuilding | Troop | null
     // Special troop properties
     recursionGen?: number; // For recursion (0 = original, 1 = first split, 2 = final)
