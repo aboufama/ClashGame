@@ -50,11 +50,13 @@ interface ReplayWatchState {
     attackId: string;
     mode: ReplayWatchMode;
     playbackStartTime: number;
+    renderClockT: number;
     nextFrameIndex: number;
     lastAppliedFrameT: number;
     lastFetchedFrameT: number;
     status: 'live' | 'finished' | 'aborted';
     liveRenderDelayMs: number;
+    maxExtrapolationMs: number;
     pollInFlight: boolean;
     frames: ReplayFrameSnapshot[];
     pollEvent?: Phaser.Time.TimerEvent;
@@ -187,6 +189,7 @@ export class MainScene extends Phaser.Scene {
     private readonly REPLAY_PUSH_INTERVAL_MS = 160;
     private readonly REPLAY_LIVE_POLL_INTERVAL_MS = 160;
     private readonly REPLAY_LIVE_RENDER_DELAY_MS = 760;
+    private readonly REPLAY_MAX_EXTRAPOLATION_MS = 460;
     private readonly REPLAY_SIM_SPEED_LIVE = 1.85;
     private readonly REPLAY_SIM_SPEED_REPLAY = 1.6;
 
@@ -489,7 +492,7 @@ export class MainScene extends Phaser.Scene {
             this.replaySimulationTime += replayDelta;
 
             this.handleCameraMovement(delta);
-            this.updateReplayWatchPlayback(time);
+            this.updateReplayWatchPlayback(time, replayDelta);
             this.updateReplayTroopSmoothing(replayDelta);
             this.updateCombat(this.replaySimulationTime);
             this.updateSpikeZones();
@@ -7211,7 +7214,15 @@ export class MainScene extends Phaser.Scene {
             recursionGen: snapshot.recursionGen,
             replaySyncX: snapshot.gridX,
             replaySyncY: snapshot.gridY,
-            replaySyncHealth: Math.max(0, snapshot.health)
+            replaySyncHealth: Math.max(0, snapshot.health),
+            replayPrevSampleX: snapshot.gridX,
+            replayPrevSampleY: snapshot.gridY,
+            replayPrevSampleT: 0,
+            replaySampleX: snapshot.gridX,
+            replaySampleY: snapshot.gridY,
+            replaySampleT: 0,
+            replayVelX: 0,
+            replayVelY: 0
         };
         return troop;
     }
@@ -7243,6 +7254,7 @@ export class MainScene extends Phaser.Scene {
 
             const existingTroops = new Map(this.troops.map(troop => [troop.id, troop]));
             const nextTroops: Troop[] = [];
+            const frameT = Math.max(0, Math.floor(Number(frame.t) || 0));
             frame.troops.forEach(snapshot => {
                 const troopType = this.getReplayTroopType(snapshot.type);
                 if (!troopType) return;
@@ -7268,19 +7280,69 @@ export class MainScene extends Phaser.Scene {
                 if (!Number.isFinite(troop.lastAttackTime) || troop.lastAttackTime <= 0) {
                     troop.lastAttackTime = this.replaySimulationTime - troop.attackDelay;
                 }
-                troop.replaySyncX = snapshot.gridX;
-                troop.replaySyncY = snapshot.gridY;
-                troop.replaySyncHealth = troop.health;
 
-                const syncError = Phaser.Math.Distance.Between(troop.gridX, troop.gridY, snapshot.gridX, snapshot.gridY);
-                if (!wasExisting || syncError > 3.2) {
-                    troop.gridX = snapshot.gridX;
-                    troop.gridY = snapshot.gridY;
+                const sampleX = Number(snapshot.gridX) || 0;
+                const sampleY = Number(snapshot.gridY) || 0;
+                const prevSampleT = Number(troop.replaySampleT);
+                const hadPrevSample = Number.isFinite(prevSampleT) && prevSampleT >= 0;
+
+                if (!wasExisting || !hadPrevSample) {
+                    troop.gridX = sampleX;
+                    troop.gridY = sampleY;
+                    troop.replayPrevSampleX = sampleX;
+                    troop.replayPrevSampleY = sampleY;
+                    troop.replayPrevSampleT = frameT;
+                    troop.replaySampleX = sampleX;
+                    troop.replaySampleY = sampleY;
+                    troop.replaySampleT = frameT;
+                    troop.replayVelX = 0;
+                    troop.replayVelY = 0;
+                } else {
+                    const prevSampleX = Number.isFinite(troop.replaySampleX) ? Number(troop.replaySampleX) : troop.gridX;
+                    const prevSampleY = Number.isFinite(troop.replaySampleY) ? Number(troop.replaySampleY) : troop.gridY;
+                    const dt = frameT - prevSampleT;
+
+                    troop.replayPrevSampleX = prevSampleX;
+                    troop.replayPrevSampleY = prevSampleY;
+                    troop.replayPrevSampleT = prevSampleT;
+                    troop.replaySampleX = sampleX;
+                    troop.replaySampleY = sampleY;
+                    troop.replaySampleT = frameT;
+
+                    if (dt > 8) {
+                        const maxTilesPerMs = 6.5 / 1000;
+                        const instVelX = Phaser.Math.Clamp((sampleX - prevSampleX) / dt, -maxTilesPerMs, maxTilesPerMs);
+                        const instVelY = Phaser.Math.Clamp((sampleY - prevSampleY) / dt, -maxTilesPerMs, maxTilesPerMs);
+                        const prevVelX = Number.isFinite(troop.replayVelX) ? Number(troop.replayVelX) : instVelX;
+                        const prevVelY = Number.isFinite(troop.replayVelY) ? Number(troop.replayVelY) : instVelY;
+                        troop.replayVelX = Phaser.Math.Linear(prevVelX, instVelX, 0.82);
+                        troop.replayVelY = Phaser.Math.Linear(prevVelY, instVelY, 0.82);
+                    }
+
+                    const hardError = Phaser.Math.Distance.Between(troop.gridX, troop.gridY, sampleX, sampleY);
+                    if (hardError > 6.5) {
+                        troop.gridX = sampleX;
+                        troop.gridY = sampleY;
+                        troop.replayPrevSampleX = sampleX;
+                        troop.replayPrevSampleY = sampleY;
+                        troop.replayPrevSampleT = frameT;
+                        troop.replaySampleX = sampleX;
+                        troop.replaySampleY = sampleY;
+                        troop.replaySampleT = frameT;
+                        troop.replayVelX = 0;
+                        troop.replayVelY = 0;
+                    }
                 }
 
-                const pos = IsoUtils.cartToIso(troop.gridX, troop.gridY);
-                troop.gameObject.setPosition(pos.x, pos.y);
-                troop.gameObject.setDepth(depthForTroop(troop.gridX, troop.gridY, troop.type));
+                troop.replaySyncX = sampleX;
+                troop.replaySyncY = sampleY;
+                troop.replaySyncHealth = troop.health;
+
+                if (!wasExisting) {
+                    const pos = IsoUtils.cartToIso(troop.gridX, troop.gridY);
+                    troop.gameObject.setPosition(pos.x, pos.y);
+                    troop.gameObject.setDepth(depthForTroop(troop.gridX, troop.gridY, troop.type));
+                }
                 troop.gameObject.setVisible(troop.health > 0);
 
                 if (troop.health <= 0) {
@@ -7308,34 +7370,68 @@ export class MainScene extends Phaser.Scene {
 
     private updateReplayTroopSmoothing(delta: number) {
         if (this.mode !== 'REPLAY') return;
+        const replay = this.replayWatchState;
+        if (!replay) return;
 
         for (const troop of this.troops) {
             if (troop.health <= 0) continue;
 
-            const syncX = troop.replaySyncX;
-            const syncY = troop.replaySyncY;
-            if (!Number.isFinite(syncX) || !Number.isFinite(syncY)) continue;
+            const sampleX = troop.replaySampleX;
+            const sampleY = troop.replaySampleY;
+            const sampleT = troop.replaySampleT;
+            if (!Number.isFinite(sampleX) || !Number.isFinite(sampleY) || !Number.isFinite(sampleT)) continue;
 
-            const targetX = Number(syncX);
-            const targetY = Number(syncY);
-            const errorDist = Phaser.Math.Distance.Between(troop.gridX, troop.gridY, targetX, targetY);
+            const prevSampleX = Number.isFinite(troop.replayPrevSampleX) ? Number(troop.replayPrevSampleX) : Number(sampleX);
+            const prevSampleY = Number.isFinite(troop.replayPrevSampleY) ? Number(troop.replayPrevSampleY) : Number(sampleY);
+            const prevSampleT = Number.isFinite(troop.replayPrevSampleT) ? Number(troop.replayPrevSampleT) : Number(sampleT);
 
-            if (errorDist > 4.2) {
+            let targetX = Number(sampleX);
+            let targetY = Number(sampleY);
+            const renderT = replay.renderClockT;
+
+            if (Number(sampleT) > prevSampleT + 1 && renderT <= Number(sampleT)) {
+                const alpha = Phaser.Math.Clamp((renderT - prevSampleT) / (Number(sampleT) - prevSampleT), 0, 1);
+                targetX = Phaser.Math.Linear(prevSampleX, Number(sampleX), alpha);
+                targetY = Phaser.Math.Linear(prevSampleY, Number(sampleY), alpha);
+            } else {
+                const aheadMs = Phaser.Math.Clamp(renderT - Number(sampleT), 0, replay.maxExtrapolationMs);
+                const velX = Number.isFinite(troop.replayVelX) ? Number(troop.replayVelX) : 0;
+                const velY = Number.isFinite(troop.replayVelY) ? Number(troop.replayVelY) : 0;
+                targetX = Number(sampleX) + velX * aheadMs;
+                targetY = Number(sampleY) + velY * aheadMs;
+            }
+
+            const prevRenderX = troop.gridX;
+            const prevRenderY = troop.gridY;
+            const errorDist = Phaser.Math.Distance.Between(prevRenderX, prevRenderY, targetX, targetY);
+            if (errorDist > 5.8) {
                 troop.gridX = targetX;
                 troop.gridY = targetY;
             } else if (errorDist > 0.0001) {
-                const baseLerp = Phaser.Math.Clamp((delta / 1000) * 12, 0.1, 0.52);
-                const catchupBoost = Phaser.Math.Clamp(errorDist / 3.5, 0.0, 0.75);
-                const t = Phaser.Math.Clamp(baseLerp + catchupBoost * 0.22, 0.1, 0.72);
-                troop.gridX = Phaser.Math.Linear(troop.gridX, targetX, t);
-                troop.gridY = Phaser.Math.Linear(troop.gridY, targetY, t);
+                const baseFollow = 1 - Math.exp(-delta / 58);
+                const catchup = Phaser.Math.Clamp(errorDist / 1.8, 0, 0.75);
+                const t = Phaser.Math.Clamp(baseFollow + catchup * 0.18, 0.08, 0.9);
+                troop.gridX = Phaser.Math.Linear(prevRenderX, targetX, t);
+                troop.gridY = Phaser.Math.Linear(prevRenderY, targetY, t);
+            }
+
+            const motionDx = troop.gridX - prevRenderX;
+            const motionDy = troop.gridY - prevRenderY;
+            const motionDist = Math.sqrt(motionDx * motionDx + motionDy * motionDy);
+            if (motionDist > 0.0007) {
+                const desiredAngle = Math.atan2(motionDy, motionDx);
+                const currentAngle = Number.isFinite(troop.facingAngle) ? troop.facingAngle : desiredAngle;
+                let angleDiff = desiredAngle - currentAngle;
+                while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+                troop.facingAngle = currentAngle + angleDiff * 0.35;
             }
 
             const pos = IsoUtils.cartToIso(troop.gridX, troop.gridY);
             troop.gameObject.setPosition(pos.x, pos.y);
             troop.gameObject.setDepth(depthForTroop(troop.gridX, troop.gridY, troop.type));
 
-            const moving = errorDist > 0.07;
+            const moving = errorDist > 0.05 || motionDist > 0.001;
             if (
                 troop.type === 'warrior' ||
                 troop.type === 'archer' ||
@@ -7398,11 +7494,13 @@ export class MainScene extends Phaser.Scene {
             attackId: replay.attackId,
             mode,
             playbackStartTime: this.replaySimulationTime,
+            renderClockT: 0,
             nextFrameIndex: 0,
             lastAppliedFrameT: -1,
             lastFetchedFrameT: -1,
             status: replay.status,
             liveRenderDelayMs: mode === 'live' ? this.REPLAY_LIVE_RENDER_DELAY_MS : 0,
+            maxExtrapolationMs: mode === 'live' ? this.REPLAY_MAX_EXTRAPOLATION_MS : 220,
             pollInFlight: false,
             frames: []
         };
@@ -7421,6 +7519,7 @@ export class MainScene extends Phaser.Scene {
                 this.applyReplayFrame(watchState.frames[0]);
                 watchState.nextFrameIndex = 1;
                 watchState.lastAppliedFrameT = watchState.frames[0].t;
+                watchState.renderClockT = watchState.frames[0].t;
             } else {
                 this.queueReplayReturnHome(700);
             }
@@ -7440,6 +7539,7 @@ export class MainScene extends Phaser.Scene {
             this.applyReplayFrame(watchState.frames[0]);
             watchState.lastAppliedFrameT = watchState.frames[0].t;
             watchState.nextFrameIndex = 1;
+            watchState.renderClockT = watchState.frames[0].t;
         } else if (watchState.status !== 'live') {
             this.queueReplayReturnHome(700);
         }
@@ -7495,16 +7595,17 @@ export class MainScene extends Phaser.Scene {
         return true;
     }
 
-    private updateReplayWatchPlayback(time: number) {
+    private updateReplayWatchPlayback(time: number, replayDelta: number) {
         const replay = this.replayWatchState;
         if (!replay) return;
+        void time;
 
         if (replay.mode === 'replay') {
-            void time;
             const elapsed = Math.max(0, this.replaySimulationTime - replay.playbackStartTime);
+            replay.renderClockT = elapsed;
             while (replay.nextFrameIndex < replay.frames.length) {
                 const frame = replay.frames[replay.nextFrameIndex];
-                if (frame.t > elapsed) break;
+                if (frame.t > replay.renderClockT) break;
                 this.applyReplayFrame(frame);
                 replay.lastAppliedFrameT = frame.t;
                 replay.nextFrameIndex += 1;
@@ -7516,6 +7617,24 @@ export class MainScene extends Phaser.Scene {
             return;
         }
 
+        if (replay.frames.length > 0) {
+            const headT = replay.frames[replay.frames.length - 1].t;
+            const floorT = replay.lastAppliedFrameT >= 0 ? replay.lastAppliedFrameT : replay.frames[0].t;
+            replay.renderClockT = Math.max(floorT, replay.renderClockT + replayDelta);
+
+            // Softly steer toward desired render delay, while allowing controlled extrapolation.
+            const desiredRenderT = Math.max(0, headT - replay.liveRenderDelayMs);
+            const correction = Phaser.Math.Clamp(desiredRenderT - replay.renderClockT, -replayDelta * 0.38, replayDelta * 0.38);
+            replay.renderClockT += correction;
+
+            const maxRenderT = headT + replay.maxExtrapolationMs;
+            if (replay.renderClockT > maxRenderT) {
+                replay.renderClockT = maxRenderT;
+            }
+        } else {
+            replay.renderClockT += replayDelta;
+        }
+
         if (replay.frames.length === 0) {
             if (replay.status !== 'live') {
                 this.queueReplayReturnHome(900);
@@ -7523,11 +7642,9 @@ export class MainScene extends Phaser.Scene {
             return;
         }
 
-        const headT = replay.frames[replay.frames.length - 1].t;
-        const renderTargetT = Math.max(0, headT - replay.liveRenderDelayMs);
         while (replay.nextFrameIndex < replay.frames.length) {
             const frame = replay.frames[replay.nextFrameIndex];
-            if (frame.t > renderTargetT) break;
+            if (frame.t > replay.renderClockT) break;
             this.applyReplayFrame(frame);
             replay.lastAppliedFrameT = frame.t;
             replay.nextFrameIndex += 1;
@@ -7537,6 +7654,7 @@ export class MainScene extends Phaser.Scene {
             this.applyReplayFrame(replay.frames[0]);
             replay.lastAppliedFrameT = replay.frames[0].t;
             replay.nextFrameIndex = Math.max(replay.nextFrameIndex, 1);
+            replay.renderClockT = Math.max(replay.renderClockT, replay.frames[0].t);
         }
 
         if (replay.status !== 'live' && replay.nextFrameIndex >= replay.frames.length) {

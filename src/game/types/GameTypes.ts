@@ -91,6 +91,14 @@ export interface Troop {
     replaySyncX?: number;
     replaySyncY?: number;
     replaySyncHealth?: number;
+    replayPrevSampleX?: number;
+    replayPrevSampleY?: number;
+    replayPrevSampleT?: number;
+    replaySampleX?: number;
+    replaySampleY?: number;
+    replaySampleT?: number;
+    replayVelX?: number;
+    replayVelY?: number;
 }
 
 export interface PlacedObstacle {
