@@ -767,7 +767,7 @@ function App() {
         const maxLabLvl = labs.length > 0 ? Math.max(...labs.map((b: any) => b.level || 1)) : 0;
         if (!cancelled) {
           setBarracksLevel(maxBarracksLvl);
-          setTroopLevel(maxLabLvl >= 2 ? 2 : 1);
+          setTroopLevel(Math.max(1, Math.min(maxLabLvl, 3)));
         }
       } catch { /* ignore */ }
     })();

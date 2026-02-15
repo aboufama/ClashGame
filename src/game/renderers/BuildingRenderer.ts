@@ -198,8 +198,7 @@ export class BuildingRenderer {
         const level = building?.level ?? 1;
         // Visual tiers: L1-4 wooden, L5-8 stone, L9-13 iron-fortified
         const tier = level >= 9 ? 3 : level >= 5 ? 2 : 1;
-        const isLevel2 = tier >= 2;
-        const wallHeight = tier >= 3 ? 36 : tier >= 2 ? 34 : 28;
+        const wallHeight = tier >= 3 ? 36 : tier >= 2 ? 32 : 26;
         const g = baseGraphics || graphics;
 
         // Wall top corners
@@ -208,9 +207,28 @@ export class BuildingRenderer {
         const t3 = new Phaser.Math.Vector2(c3.x, c3.y - wallHeight);
         const t4 = new Phaser.Math.Vector2(c4.x, c4.y - wallHeight);
 
+        // Wall direction vectors (for isometric-aligned windows/details)
+        const rwDirX = c3.x - c2.x;
+        const rwDirY = c3.y - c2.y;
+        const lwDirX = c4.x - c3.x;
+        const lwDirY = c4.y - c3.y;
+
         if (!skipBase) {
-            if (isLevel2) {
-                // Level 2: Reinforced stone slab with iron edge trim
+            if (tier >= 3) {
+                // Tier 3: Dark reinforced stone slab
+                g.fillStyle(tint ?? 0x484048, alpha);
+                g.fillPoints([c1, c2, c3, c4], true);
+                g.lineStyle(2, 0x606060, alpha * 0.7);
+                g.lineBetween(c1.x, c1.y, c2.x, c2.y);
+                g.lineBetween(c3.x, c3.y, c4.x, c4.y);
+                // Iron rivets on foundation
+                g.fillStyle(0x707070, alpha * 0.6);
+                g.fillCircle(center.x - 12, center.y + 1, 2);
+                g.fillCircle(center.x + 10, center.y + 3, 2);
+                g.fillCircle(center.x - 2, center.y + 5, 2);
+                g.fillCircle(center.x + 14, center.y - 1, 1.5);
+            } else if (tier >= 2) {
+                // Tier 2: Cut stone slab
                 g.fillStyle(tint ?? 0x5a5058, alpha);
                 g.fillPoints([c1, c2, c3, c4], true);
                 g.lineStyle(2, 0x70706e, alpha * 0.7);
@@ -219,9 +237,8 @@ export class BuildingRenderer {
                 g.fillStyle(0x4a444e, alpha * 0.5);
                 g.fillCircle(center.x - 10, center.y + 2, 3);
                 g.fillCircle(center.x + 7, center.y + 4, 2.5);
-                g.fillCircle(center.x - 3, center.y + 6, 2);
-                g.fillCircle(center.x + 12, center.y, 2);
             } else {
+                // Tier 1: Wooden planks
                 g.fillStyle(tint ?? 0x7a6a5a, alpha);
                 g.fillPoints([c1, c2, c3, c4], true);
                 g.fillStyle(0x6a5a4a, alpha * 0.45);
@@ -231,23 +248,30 @@ export class BuildingRenderer {
         }
 
         if (!onlyBase) {
-            if (isLevel2) {
-                // Level 2: Dark iron-reinforced stone walls
-                graphics.fillStyle(tint ?? 0x5a4a4a, alpha);
+            // === WALLS ===
+            if (tier >= 3) {
+                // Dark iron-banded stone
+                graphics.fillStyle(tint ?? 0x4a3a3a, alpha);
                 graphics.fillPoints([c2, c3, t3, t2], true);
-                graphics.fillStyle(tint ?? 0x6e5858, alpha);
+                graphics.fillStyle(tint ?? 0x5a4848, alpha);
                 graphics.fillPoints([c3, c4, t4, t3], true);
-                // Stone block mortar lines
-                graphics.lineStyle(1, 0x8b3030, alpha * 0.35);
-                for (let i = 1; i <= 3; i++) {
-                    const frac = i / 4;
-                    const seY1 = c2.y + (t2.y - c2.y) * frac;
-                    const seY2 = c3.y + (t3.y - c3.y) * frac;
-                    graphics.lineBetween(c2.x, seY1, c3.x, seY2);
-                    const swY1 = c3.y + (t3.y - c3.y) * frac;
-                    const swY2 = c4.y + (t4.y - c4.y) * frac;
-                    graphics.lineBetween(c3.x, swY1, c4.x, swY2);
+                // Stone block mortar lines following isometric angles
+                graphics.lineStyle(1, 0x3a2020, alpha * 0.4);
+                for (let i = 1; i <= 4; i++) {
+                    const frac = i / 5;
+                    // Right wall: lines run parallel to c2->c3
+                    const y1 = c2.y + (t2.y - c2.y) * frac;
+                    const y2 = c3.y + (t3.y - c3.y) * frac;
+                    graphics.lineBetween(c2.x, y1, c3.x, y2);
+                    // Left wall: lines run parallel to c3->c4
+                    const y3 = c3.y + (t3.y - c3.y) * frac;
+                    const y4 = c4.y + (t4.y - c4.y) * frac;
+                    graphics.lineBetween(c3.x, y3, c4.x, y4);
                 }
+                // Iron bands
+                graphics.lineStyle(2, 0x555555, alpha * 0.7);
+                graphics.lineBetween(t2.x, t2.y + 2, t3.x, t3.y + 2);
+                graphics.lineBetween(t3.x, t3.y + 2, t4.x, t4.y + 2);
                 // Iron corner rivets
                 graphics.fillStyle(0x888888, alpha * 0.8);
                 graphics.fillCircle(c2.x, c2.y - 5, 2);
@@ -256,11 +280,25 @@ export class BuildingRenderer {
                 graphics.fillCircle(t2.x, t2.y + 4, 2);
                 graphics.fillCircle(t3.x, t3.y + 4, 2);
                 graphics.fillCircle(t4.x, t4.y + 4, 2);
-                // Iron band across top of walls
-                graphics.lineStyle(2, 0x666666, alpha * 0.7);
-                graphics.lineBetween(t2.x, t2.y + 1, t3.x, t3.y + 1);
-                graphics.lineBetween(t3.x, t3.y + 1, t4.x, t4.y + 1);
+            } else if (tier >= 2) {
+                // Cut stone walls
+                graphics.fillStyle(tint ?? 0x6a4a3a, alpha);
+                graphics.fillPoints([c2, c3, t3, t2], true);
+                graphics.fillStyle(tint ?? 0x7a5a48, alpha);
+                graphics.fillPoints([c3, c4, t4, t3], true);
+                // Mortar lines
+                graphics.lineStyle(1, 0x5a3020, alpha * 0.3);
+                for (let i = 1; i <= 3; i++) {
+                    const frac = i / 4;
+                    const y1 = c2.y + (t2.y - c2.y) * frac;
+                    const y2 = c3.y + (t3.y - c3.y) * frac;
+                    graphics.lineBetween(c2.x, y1, c3.x, y2);
+                    const y3 = c3.y + (t3.y - c3.y) * frac;
+                    const y4 = c4.y + (t4.y - c4.y) * frac;
+                    graphics.lineBetween(c3.x, y3, c4.x, y4);
+                }
             } else {
+                // Wooden walls
                 graphics.fillStyle(tint ?? 0x8b3030, alpha);
                 graphics.fillPoints([c2, c3, t3, t2], true);
                 graphics.fillStyle(tint ?? 0xa04040, alpha);
@@ -268,18 +306,56 @@ export class BuildingRenderer {
             }
 
             // Wall edge outlines
-            graphics.lineStyle(1, 0x4a1a1a, 0.6 * alpha);
+            graphics.lineStyle(1, tier >= 2 ? 0x3a2020 : 0x4a1a1a, 0.6 * alpha);
             graphics.lineBetween(c2.x, c2.y, t2.x, t2.y);
             graphics.lineBetween(c3.x, c3.y, t3.x, t3.y);
             graphics.lineBetween(c4.x, c4.y, t4.x, t4.y);
 
-            // === DOORWAY ===
-            const doorHeight = isLevel2 ? 18 : 16;
-            const wallDirX = (c4.x - c3.x);
-            const wallDirY = (c4.y - c3.y);
-            const wallLen = Math.sqrt(wallDirX * wallDirX + wallDirY * wallDirY);
-            const normX = wallDirX / wallLen;
-            const normY = wallDirY / wallLen;
+            // === ISOMETRIC WINDOWS (aligned to wall plane) ===
+            // Helper: draw a parallelogram window on a wall face
+            const drawIsoWindow = (wallBaseX: number, wallBaseY: number, dirX: number, dirY: number, wallH: number, posFrac: number, widthFrac: number, topFrac: number, botFrac: number, frameColor: number, glassColor: number) => {
+                const cx = wallBaseX + dirX * posFrac;
+                const cy = wallBaseY + dirY * posFrac;
+                const hw = dirX * widthFrac;
+                const hs = dirY * widthFrac;
+                const wt = cy - wallH * topFrac;
+                const wb = cy - wallH * botFrac;
+                // Frame
+                graphics.fillStyle(frameColor, alpha);
+                graphics.beginPath();
+                graphics.moveTo(cx - hw, wt - hs);
+                graphics.lineTo(cx + hw, wt + hs);
+                graphics.lineTo(cx + hw, wb + hs);
+                graphics.lineTo(cx - hw, wb - hs);
+                graphics.closePath();
+                graphics.fillPath();
+                // Glass
+                graphics.fillStyle(glassColor, alpha * 0.8);
+                graphics.beginPath();
+                graphics.moveTo(cx - hw + 1, wt - hs + 1);
+                graphics.lineTo(cx + hw - 1, wt + hs + 1);
+                graphics.lineTo(cx + hw - 1, wb + hs - 1);
+                graphics.lineTo(cx - hw + 1, wb - hs - 1);
+                graphics.closePath();
+                graphics.fillPath();
+            };
+
+            // Right wall window
+            const rwFrame = tier >= 3 ? 0x333333 : tier >= 2 ? 0x3a2515 : 0x4a2010;
+            const rwGlass = tier >= 3 ? 0x4466aa : tier >= 2 ? 0x4a6090 : 0x4169e1;
+            drawIsoWindow(c2.x, c2.y, rwDirX, rwDirY, wallHeight, 0.5, 0.1, 0.7, 0.35, rwFrame, rwGlass);
+
+            // Left wall windows (two smaller ones)
+            const lwFrame = tier >= 3 ? 0x333333 : tier >= 2 ? 0x3a2515 : 0x4a2010;
+            const lwGlass = tier >= 3 ? 0x4466aa : tier >= 2 ? 0x4a6090 : 0x4169e1;
+            drawIsoWindow(c3.x, c3.y, lwDirX, lwDirY, wallHeight, 0.3, 0.08, 0.7, 0.4, lwFrame, lwGlass);
+            drawIsoWindow(c3.x, c3.y, lwDirX, lwDirY, wallHeight, 0.7, 0.08, 0.7, 0.4, lwFrame, lwGlass);
+
+            // === DOORWAY on left wall ===
+            const doorHeight = tier >= 3 ? 20 : tier >= 2 ? 18 : 16;
+            const wallLen = Math.sqrt(lwDirX * lwDirX + lwDirY * lwDirY);
+            const normX = lwDirX / wallLen;
+            const normY = lwDirY / wallLen;
             const doorCenterX = (c3.x + c4.x) / 2;
             const doorCenterY = (c3.y + c4.y) / 2;
             const doorHalfWidth = 10;
@@ -296,13 +372,14 @@ export class BuildingRenderer {
                 new Phaser.Math.Vector2(dtl.x, dtl.y)
             ], true);
 
-            graphics.lineStyle(2, isLevel2 ? 0x777777 : 0x5d4e37, alpha);
+            const doorFrameColor = tier >= 3 ? 0x666666 : tier >= 2 ? 0x5d4e37 : 0x5d4e37;
+            graphics.lineStyle(2, doorFrameColor, alpha);
             graphics.lineBetween(dbl.x, dbl.y, dtl.x, dtl.y);
             graphics.lineBetween(dbr.x, dbr.y, dtr.x, dtr.y);
             graphics.lineBetween(dtl.x, dtl.y, dtr.x, dtr.y);
 
-            if (isLevel2) {
-                // Iron door studs
+            if (tier >= 2) {
+                // Door studs
                 graphics.fillStyle(0x999999, alpha * 0.8);
                 const doorMidX = (dbl.x + dbr.x) / 2;
                 const doorMidY = (dbl.y + dbr.y) / 2 - doorHeight / 2;
@@ -313,8 +390,8 @@ export class BuildingRenderer {
             }
 
             // === ISOMETRIC ROOF ===
-            const roofHeight = isLevel2 ? 20 : 18;
-            const roofOverhang = isLevel2 ? 5 : 4;
+            const roofHeight = tier >= 3 ? 22 : tier >= 2 ? 20 : 18;
+            const roofOverhang = tier >= 3 ? 6 : tier >= 2 ? 5 : 4;
             const r1 = new Phaser.Math.Vector2(t1.x, t1.y - roofOverhang);
             const r2 = new Phaser.Math.Vector2(t2.x + roofOverhang, t2.y);
             const r3 = new Phaser.Math.Vector2(t3.x, t3.y + roofOverhang);
@@ -322,8 +399,33 @@ export class BuildingRenderer {
             const peakFront = new Phaser.Math.Vector2(center.x + 10, center.y - wallHeight - roofHeight + 5);
             const peakBack = new Phaser.Math.Vector2(center.x - 10, center.y - wallHeight - roofHeight - 5);
 
-            if (isLevel2) {
-                // Dark slate roof with iron ridge cap
+            if (tier >= 3) {
+                // Dark steel roof
+                graphics.fillStyle(0x222028, alpha);
+                graphics.fillTriangle(r1.x, r1.y, r4.x, r4.y, peakBack.x, peakBack.y);
+                graphics.fillStyle(0x2a2832, alpha);
+                graphics.fillTriangle(r1.x, r1.y, r2.x, r2.y, peakBack.x, peakBack.y);
+                graphics.fillStyle(0x3a3640, alpha);
+                graphics.fillTriangle(r2.x, r2.y, r3.x, r3.y, peakFront.x, peakFront.y);
+                graphics.fillTriangle(r2.x, r2.y, peakBack.x, peakBack.y, peakFront.x, peakFront.y);
+                graphics.fillStyle(0x484450, alpha);
+                graphics.fillTriangle(r3.x, r3.y, r4.x, r4.y, peakFront.x, peakFront.y);
+                graphics.fillTriangle(r4.x, r4.y, peakBack.x, peakBack.y, peakFront.x, peakFront.y);
+                // Iron ridge cap
+                graphics.lineStyle(3, 0x707070, alpha * 0.9);
+                graphics.lineBetween(peakBack.x, peakBack.y, peakFront.x, peakFront.y);
+                graphics.fillStyle(0x888888, alpha);
+                graphics.fillCircle(peakFront.x, peakFront.y - 1, 3);
+                graphics.fillCircle(peakBack.x, peakBack.y - 1, 3);
+                // Banner on peak
+                graphics.fillStyle(0xcc2222, alpha * 0.8);
+                const bx = peakFront.x + 2;
+                const by = peakFront.y - 8;
+                graphics.fillTriangle(bx, by, bx + 7, by + 4, bx, by + 9);
+                graphics.lineStyle(1, 0x555555, alpha);
+                graphics.lineBetween(bx, by - 3, bx, by + 11);
+            } else if (tier >= 2) {
+                // Slate roof
                 graphics.fillStyle(0x2a2832, alpha);
                 graphics.fillTriangle(r1.x, r1.y, r4.x, r4.y, peakBack.x, peakBack.y);
                 graphics.fillStyle(0x3a3640, alpha);
@@ -334,13 +436,10 @@ export class BuildingRenderer {
                 graphics.fillStyle(0x56525e, alpha);
                 graphics.fillTriangle(r3.x, r3.y, r4.x, r4.y, peakFront.x, peakFront.y);
                 graphics.fillTriangle(r4.x, r4.y, peakBack.x, peakBack.y, peakFront.x, peakFront.y);
-                // Iron ridge cap
-                graphics.lineStyle(3, 0x707070, alpha * 0.9);
+                graphics.lineStyle(2, 0x555555, alpha * 0.6);
                 graphics.lineBetween(peakBack.x, peakBack.y, peakFront.x, peakFront.y);
-                graphics.fillStyle(0x888888, alpha);
-                graphics.fillCircle(peakFront.x, peakFront.y - 1, 3);
-                graphics.fillCircle(peakBack.x, peakBack.y - 1, 3);
             } else {
+                // Wooden thatch roof
                 graphics.fillStyle(0x3a2515, alpha);
                 graphics.fillTriangle(r1.x, r1.y, r4.x, r4.y, peakBack.x, peakBack.y);
                 graphics.fillStyle(0x4a3020, alpha);
@@ -355,38 +454,14 @@ export class BuildingRenderer {
                 graphics.lineBetween(peakBack.x, peakBack.y, peakFront.x, peakFront.y);
             }
 
-            graphics.lineStyle(1, isLevel2 ? 0x6a6a7a : 0x7a5a40, alpha * 0.6);
+            graphics.lineStyle(1, tier >= 2 ? 0x5a5a6a : 0x7a5a40, alpha * 0.6);
             graphics.lineBetween(r4.x, r4.y, peakFront.x, peakFront.y);
-
-            // Tier 3 (L9-13): Iron fortification details
-            if (tier >= 3) {
-                // Iron plate reinforcements on walls
-                graphics.fillStyle(0x555555, alpha * 0.6);
-                const plateMidX = (c2.x + c3.x) / 2;
-                const plateMidY = (c2.y + c3.y) / 2 - wallHeight * 0.5;
-                graphics.fillRect(plateMidX - 6, plateMidY - 4, 12, 8);
-                // Rivets on iron plates
-                graphics.fillStyle(0x999999, alpha * 0.9);
-                graphics.fillCircle(plateMidX - 4, plateMidY - 2, 1.5);
-                graphics.fillCircle(plateMidX + 4, plateMidY - 2, 1.5);
-                graphics.fillCircle(plateMidX - 4, plateMidY + 2, 1.5);
-                graphics.fillCircle(plateMidX + 4, plateMidY + 2, 1.5);
-                // Banner on roof
-                graphics.fillStyle(0xcc2222, alpha * 0.8);
-                const bannerX = peakFront.x + 2;
-                const bannerY = peakFront.y - 6;
-                graphics.fillTriangle(bannerX, bannerY, bannerX + 6, bannerY + 4, bannerX, bannerY + 8);
-                // Banner pole
-                graphics.lineStyle(1, 0x666666, alpha);
-                graphics.lineBetween(bannerX, bannerY - 2, bannerX, bannerY + 10);
-            }
         }
     }
 
     static drawLab(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, time: number = 0, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
         const level = building?.level ?? 1;
-        const isLevel2 = level >= 2;
-        const wallHeight = isLevel2 ? 36 : 30;
+        const wallHeight = level >= 3 ? 38 : level >= 2 ? 34 : 28;
         const g = baseGraphics || graphics;
 
         const t1 = new Phaser.Math.Vector2(c1.x, c1.y - wallHeight);
@@ -394,114 +469,230 @@ export class BuildingRenderer {
         const t3 = new Phaser.Math.Vector2(c3.x, c3.y - wallHeight);
         const t4 = new Phaser.Math.Vector2(c4.x, c4.y - wallHeight);
 
+        // Wall direction vectors for isometric-aligned details
+        const rwDirX = c3.x - c2.x;
+        const rwDirY = c3.y - c2.y;
+        const lwDirX = c4.x - c3.x;
+        const lwDirY = c4.y - c3.y;
+
         if (!skipBase) {
-            // Stone foundation
-            g.fillStyle(tint ?? 0x6a6a78, alpha);
+            // Stone foundation with chemical stains
+            const baseColor = level >= 3 ? 0x484058 : level >= 2 ? 0x5a5568 : 0x6a6a78;
+            g.fillStyle(tint ?? baseColor, alpha);
             g.fillPoints([c1, c2, c3, c4], true);
-            g.lineStyle(2, 0x555566, alpha * 0.7);
+            g.lineStyle(2, 0x444455, alpha * 0.7);
             g.lineBetween(c1.x, c1.y, c2.x, c2.y);
             g.lineBetween(c3.x, c3.y, c4.x, c4.y);
-            // Floor detail
-            g.fillStyle(0x5a5a68, alpha * 0.5);
-            g.fillCircle(center.x - 6, center.y + 3, 3);
-            g.fillCircle(center.x + 8, center.y + 2, 2.5);
+            // Acid stain splotches
+            const stainColor = level >= 3 ? 0x334433 : level >= 2 ? 0x445544 : 0x556655;
+            g.fillStyle(stainColor, alpha * 0.4);
+            g.fillCircle(center.x - 8, center.y + 4, 4);
+            g.fillCircle(center.x + 6, center.y + 2, 3);
+            if (level >= 2) g.fillCircle(center.x + 12, center.y - 1, 2.5);
         }
 
         if (!onlyBase) {
-            // Walls - dark stone workshop
-            const rightWallColor = isLevel2 ? 0x4a4458 : 0x5a5a6a;
-            const leftWallColor = isLevel2 ? 0x5a5468 : 0x6a6a7a;
-            graphics.fillStyle(tint ?? rightWallColor, alpha);
+            // === WALLS ===
+            const rwColor = level >= 3 ? 0x3a3448 : level >= 2 ? 0x4a4458 : 0x5a5a6a;
+            const lwColor = level >= 3 ? 0x4a4458 : level >= 2 ? 0x5a5468 : 0x6a6a7a;
+            graphics.fillStyle(tint ?? rwColor, alpha);
             graphics.fillPoints([c2, c3, t3, t2], true);
-            graphics.fillStyle(tint ?? leftWallColor, alpha);
+            graphics.fillStyle(tint ?? lwColor, alpha);
             graphics.fillPoints([c3, c4, t4, t3], true);
 
-            // Wall edges
-            graphics.lineStyle(1, 0x3a3a4a, 0.6 * alpha);
+            // Stone block lines following isometric angles
+            if (level >= 2) {
+                graphics.lineStyle(1, 0x2a2838, alpha * 0.3);
+                for (let i = 1; i <= 3; i++) {
+                    const frac = i / 4;
+                    graphics.lineBetween(c2.x, c2.y + (t2.y - c2.y) * frac, c3.x, c3.y + (t3.y - c3.y) * frac);
+                    graphics.lineBetween(c3.x, c3.y + (t3.y - c3.y) * frac, c4.x, c4.y + (t4.y - c4.y) * frac);
+                }
+            }
+
+            // Wall edge outlines
+            graphics.lineStyle(1, 0x2a2a3a, 0.6 * alpha);
             graphics.lineBetween(c2.x, c2.y, t2.x, t2.y);
             graphics.lineBetween(c3.x, c3.y, t3.x, t3.y);
             graphics.lineBetween(c4.x, c4.y, t4.x, t4.y);
 
-            // Glowing interior window on right wall
-            const rWallDirX = (c3.x - c2.x);
-            const rWallDirY = (c3.y - c2.y);
-            const rwMidX = c2.x + rWallDirX * 0.5;
-            const rwMidY = c2.y + rWallDirY * 0.5;
-            const windowGlow = 0.6 + Math.sin(time / 500) * 0.15;
-            // Window frame
-            graphics.fillStyle(0x1a1a2a, alpha);
-            const ww = rWallDirX * 0.12;
-            const ws = rWallDirY * 0.12;
-            const wTop = rwMidY - wallHeight * 0.65;
-            const wBot = rwMidY - wallHeight * 0.3;
-            graphics.beginPath();
-            graphics.moveTo(rwMidX - ww, wTop - ws);
-            graphics.lineTo(rwMidX + ww, wTop + ws);
-            graphics.lineTo(rwMidX + ww, wBot + ws);
-            graphics.lineTo(rwMidX - ww, wBot - ws);
-            graphics.closePath();
-            graphics.fillPath();
-            // Glow
-            const glowColor = isLevel2 ? 0x8844ff : 0x44cc88;
-            graphics.fillStyle(glowColor, alpha * windowGlow);
-            graphics.beginPath();
-            graphics.moveTo(rwMidX - ww + 2, wTop - ws + 2);
-            graphics.lineTo(rwMidX + ww - 2, wTop + ws + 2);
-            graphics.lineTo(rwMidX + ww - 2, wBot + ws - 2);
-            graphics.lineTo(rwMidX - ww + 2, wBot - ws - 2);
-            graphics.closePath();
-            graphics.fillPath();
+            // === ISOMETRIC WINDOWS (aligned to wall faces) ===
+            const drawIsoWindow = (bx: number, by: number, dirX: number, dirY: number, wh: number, pos: number, w: number, top: number, bot: number, frame: number, glass: number, glowAlpha: number = 0.8) => {
+                const cx = bx + dirX * pos;
+                const cy = by + dirY * pos;
+                const hw = dirX * w;
+                const hs = dirY * w;
+                const wt = cy - wh * top;
+                const wb = cy - wh * bot;
+                graphics.fillStyle(frame, alpha);
+                graphics.beginPath();
+                graphics.moveTo(cx - hw, wt - hs);
+                graphics.lineTo(cx + hw, wt + hs);
+                graphics.lineTo(cx + hw, wb + hs);
+                graphics.lineTo(cx - hw, wb - hs);
+                graphics.closePath();
+                graphics.fillPath();
+                graphics.fillStyle(glass, alpha * glowAlpha);
+                graphics.beginPath();
+                graphics.moveTo(cx - hw + 1.5, wt - hs + 1.5);
+                graphics.lineTo(cx + hw - 1.5, wt + hs + 1.5);
+                graphics.lineTo(cx + hw - 1.5, wb + hs - 1.5);
+                graphics.lineTo(cx - hw + 1.5, wb - hs - 1.5);
+                graphics.closePath();
+                graphics.fillPath();
+            };
 
-            // Flat isometric roof
-            const roofOverhang = 4;
+            // Glowing windows - color shifts by level
+            const windowGlow = 0.6 + Math.sin(time / 500) * 0.15;
+            const glowColor = level >= 3 ? 0xcc44ff : level >= 2 ? 0x8844ff : 0x44cc88;
+            // Right wall: large window
+            drawIsoWindow(c2.x, c2.y, rwDirX, rwDirY, wallHeight, 0.5, 0.12, 0.7, 0.3, 0x1a1a2a, glowColor, windowGlow);
+            // Left wall: two windows
+            drawIsoWindow(c3.x, c3.y, lwDirX, lwDirY, wallHeight, 0.3, 0.09, 0.7, 0.4, 0x1a1a2a, glowColor, windowGlow);
+            drawIsoWindow(c3.x, c3.y, lwDirX, lwDirY, wallHeight, 0.7, 0.09, 0.7, 0.4, 0x1a1a2a, glowColor, windowGlow);
+
+            // === FLAT ISOMETRIC ROOF ===
+            const roofOverhang = level >= 3 ? 5 : 4;
             const r1 = new Phaser.Math.Vector2(t1.x, t1.y - roofOverhang);
             const r2 = new Phaser.Math.Vector2(t2.x + roofOverhang, t2.y);
             const r3 = new Phaser.Math.Vector2(t3.x, t3.y + roofOverhang);
             const r4 = new Phaser.Math.Vector2(t4.x - roofOverhang, t4.y);
 
-            graphics.fillStyle(isLevel2 ? 0x3a3448 : 0x4a4a5a, alpha);
+            const roofColor = level >= 3 ? 0x2a2238 : level >= 2 ? 0x3a3448 : 0x4a4a5a;
+            graphics.fillStyle(roofColor, alpha);
             graphics.fillPoints([r1, r2, r3, r4], true);
-            graphics.lineStyle(1, 0x2a2a3a, alpha * 0.8);
+            graphics.lineStyle(1, 0x1a1a2a, alpha * 0.8);
             graphics.strokePoints([r1, r2, r3, r4], true, true);
 
-            // Chimney on right side
-            const chimneyX = (r2.x + r3.x) / 2;
-            const chimneyY = (r2.y + r3.y) / 2;
-            const chimneyH = 14;
-            graphics.fillStyle(0x5a5a5a, alpha);
-            graphics.fillRect(chimneyX - 3, chimneyY - chimneyH, 6, chimneyH);
-            graphics.lineStyle(1, 0x3a3a3a, alpha * 0.8);
-            graphics.strokeRect(chimneyX - 3, chimneyY - chimneyH, 6, chimneyH);
+            // === BIG SMOKESTACK (isometric chimney) ===
+            // Position on the right side of the roof
+            const stackFrac = 0.65;
+            const stackBaseX = r2.x + (r3.x - r2.x) * stackFrac;
+            const stackBaseY = r2.y + (r3.y - r2.y) * stackFrac;
+            const stackW = 7;
+            const stackH = level >= 3 ? 28 : level >= 2 ? 22 : 16;
 
-            // Smoke from chimney (animated)
-            const smokePhase = time / 800;
-            const smokeColor = isLevel2 ? 0x7744aa : 0x888888;
-            for (let i = 0; i < 3; i++) {
-                const sy = chimneyY - chimneyH - 4 - i * 6 - Math.sin(smokePhase + i) * 2;
-                const sx = chimneyX + Math.sin(smokePhase * 0.7 + i * 1.5) * 3;
-                graphics.fillStyle(smokeColor, alpha * (0.4 - i * 0.1));
-                graphics.fillCircle(sx, sy, 3 - i * 0.5);
+            // Chimney is an isometric column: right face and left face
+            const stackRightX = rwDirX / Math.sqrt(rwDirX * rwDirX + rwDirY * rwDirY);
+            const stackRightY = rwDirY / Math.sqrt(rwDirX * rwDirX + rwDirY * rwDirY);
+
+            // Right face of chimney
+            graphics.fillStyle(level >= 3 ? 0x444444 : level >= 2 ? 0x555555 : 0x606060, alpha);
+            graphics.beginPath();
+            graphics.moveTo(stackBaseX, stackBaseY);
+            graphics.lineTo(stackBaseX + stackRightX * stackW, stackBaseY + stackRightY * stackW);
+            graphics.lineTo(stackBaseX + stackRightX * stackW, stackBaseY + stackRightY * stackW - stackH);
+            graphics.lineTo(stackBaseX, stackBaseY - stackH);
+            graphics.closePath();
+            graphics.fillPath();
+            // Left face of chimney
+            graphics.fillStyle(level >= 3 ? 0x555555 : level >= 2 ? 0x666666 : 0x707070, alpha);
+            graphics.beginPath();
+            graphics.moveTo(stackBaseX, stackBaseY);
+            graphics.lineTo(stackBaseX - stackRightX * stackW * 0.6, stackBaseY - stackRightY * stackW * 0.6);
+            graphics.lineTo(stackBaseX - stackRightX * stackW * 0.6, stackBaseY - stackRightY * stackW * 0.6 - stackH);
+            graphics.lineTo(stackBaseX, stackBaseY - stackH);
+            graphics.closePath();
+            graphics.fillPath();
+            // Chimney top cap
+            const capY = stackBaseY - stackH;
+            graphics.fillStyle(0x3a3a3a, alpha);
+            graphics.beginPath();
+            graphics.moveTo(stackBaseX - stackRightX * stackW * 0.6, capY - stackRightY * stackW * 0.6);
+            graphics.lineTo(stackBaseX + stackRightX * stackW, capY + stackRightY * stackW);
+            graphics.lineTo(stackBaseX + stackRightX * stackW + 2, capY + stackRightY * stackW - 3);
+            graphics.lineTo(stackBaseX - stackRightX * stackW * 0.6 + 2, capY - stackRightY * stackW * 0.6 - 3);
+            graphics.closePath();
+            graphics.fillPath();
+            // Chimney outline
+            graphics.lineStyle(1, 0x2a2a2a, alpha * 0.8);
+            graphics.lineBetween(stackBaseX, stackBaseY, stackBaseX, stackBaseY - stackH);
+            graphics.lineBetween(stackBaseX + stackRightX * stackW, stackBaseY + stackRightY * stackW, stackBaseX + stackRightX * stackW, stackBaseY + stackRightY * stackW - stackH);
+
+            // === SMOKE (animated, bigger for higher levels) ===
+            const smokePhase = time / 700;
+            const smokeCount = level >= 3 ? 5 : level >= 2 ? 4 : 3;
+            const smokeBaseX = stackBaseX + stackRightX * stackW * 0.2;
+            const smokeBaseY = capY - 4;
+            for (let i = 0; i < smokeCount; i++) {
+                const sy = smokeBaseY - i * 7 - Math.sin(smokePhase + i * 0.8) * 3;
+                const sx = smokeBaseX + Math.sin(smokePhase * 0.6 + i * 1.2) * (3 + i * 0.8);
+                const smokeColor = level >= 3 ? 0x6633aa : level >= 2 ? 0x7744aa : 0x888888;
+                const smokeAlpha = (0.45 - i * 0.07);
+                const smokeRadius = 3.5 + i * 0.6;
+                graphics.fillStyle(smokeColor, alpha * Math.max(0.05, smokeAlpha));
+                graphics.fillCircle(sx, sy, smokeRadius);
             }
 
-            // Level 2: Glowing runes on walls
-            if (isLevel2) {
-                const runeGlow = 0.5 + Math.sin(time / 400) * 0.2;
-                graphics.fillStyle(0x9966ff, alpha * runeGlow);
-                // Runes on left wall
-                const lWallDirX = (c4.x - c3.x);
-                const lWallDirY = (c4.y - c3.y);
+            // === INTERIOR GLOW (bubbling cauldron visible through door) ===
+            // Door on left wall
+            const doorH = level >= 3 ? 18 : level >= 2 ? 16 : 14;
+            const lwLen = Math.sqrt(lwDirX * lwDirX + lwDirY * lwDirY);
+            const lwNormX = lwDirX / lwLen;
+            const lwNormY = lwDirY / lwLen;
+            const doorCX = (c3.x + c4.x) / 2;
+            const doorCY = (c3.y + c4.y) / 2;
+            const doorHW = 8;
+            const dbl = { x: doorCX - lwNormX * doorHW, y: doorCY - lwNormY * doorHW };
+            const dbr = { x: doorCX + lwNormX * doorHW, y: doorCY + lwNormY * doorHW };
+            const dtl = { x: dbl.x, y: dbl.y - doorH };
+            const dtr = { x: dbr.x, y: dbr.y - doorH };
+
+            // Dark interior
+            graphics.fillStyle(0x0a0a15, alpha);
+            graphics.fillPoints([
+                new Phaser.Math.Vector2(dbl.x, dbl.y),
+                new Phaser.Math.Vector2(dbr.x, dbr.y),
+                new Phaser.Math.Vector2(dtr.x, dtr.y),
+                new Phaser.Math.Vector2(dtl.x, dtl.y)
+            ], true);
+            // Interior glow (bubbling/flickering)
+            const interiorGlow = 0.3 + Math.sin(time / 300) * 0.1 + Math.sin(time / 170) * 0.05;
+            const interiorColor = level >= 3 ? 0xaa44ff : level >= 2 ? 0x6644cc : 0x33aa66;
+            graphics.fillStyle(interiorColor, alpha * interiorGlow);
+            const glowCX = (dbl.x + dbr.x) / 2;
+            const glowCY = (dbl.y + dbr.y) / 2 - doorH * 0.3;
+            graphics.fillCircle(glowCX, glowCY, 5);
+            // Bubbles
+            for (let i = 0; i < 3; i++) {
+                const bx = glowCX + Math.sin(time / 200 + i * 2.1) * 3;
+                const by = glowCY - 2 - Math.abs(Math.sin(time / 250 + i * 1.7)) * 4;
+                graphics.fillStyle(interiorColor, alpha * (0.4 + Math.sin(time / 150 + i) * 0.15));
+                graphics.fillCircle(bx, by, 1.5);
+            }
+            // Door frame
+            graphics.lineStyle(2, level >= 2 ? 0x555555 : 0x4a4a5a, alpha);
+            graphics.lineBetween(dbl.x, dbl.y, dtl.x, dtl.y);
+            graphics.lineBetween(dbr.x, dbr.y, dtr.x, dtr.y);
+            graphics.lineBetween(dtl.x, dtl.y, dtr.x, dtr.y);
+
+            // Level 2+: Glowing runes on walls
+            if (level >= 2) {
+                const runeGlow = 0.4 + Math.sin(time / 400) * 0.2;
+                const runeColor = level >= 3 ? 0xcc66ff : 0x9966ff;
+                graphics.fillStyle(runeColor, alpha * runeGlow);
                 for (let i = 0; i < 3; i++) {
-                    const frac = 0.25 + i * 0.25;
-                    const rx = c3.x + lWallDirX * frac;
-                    const ry = c3.y + lWallDirY * frac - wallHeight * 0.5;
+                    const frac = 0.2 + i * 0.3;
+                    const rx = c2.x + rwDirX * frac;
+                    const ry = c2.y + rwDirY * frac - wallHeight * 0.5;
                     graphics.fillCircle(rx, ry, 2);
-                    graphics.lineStyle(1, 0x9966ff, alpha * runeGlow * 0.7);
+                    graphics.lineStyle(1, runeColor, alpha * runeGlow * 0.6);
                     graphics.lineBetween(rx - 2, ry - 3, rx + 2, ry + 3);
                 }
-                // Reinforced wall bands
+            }
+
+            // Level 3: Extra reinforcement bands
+            if (level >= 3) {
                 graphics.lineStyle(2, 0x444466, alpha * 0.6);
-                const bandY = c3.y + (t3.y - c3.y) * 0.5;
-                graphics.lineBetween(c3.x, bandY, c4.x, c4.y + (t4.y - c4.y) * 0.5);
+                const bandFrac = 0.35;
+                graphics.lineBetween(
+                    c2.x, c2.y + (t2.y - c2.y) * bandFrac,
+                    c3.x, c3.y + (t3.y - c3.y) * bandFrac
+                );
+                graphics.lineBetween(
+                    c3.x, c3.y + (t3.y - c3.y) * bandFrac,
+                    c4.x, c4.y + (t4.y - c4.y) * bandFrac
+                );
             }
         }
     }

@@ -87,10 +87,11 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         category: 'military',
         maxCount: 1,
         color: 0x6644aa,
-        maxLevel: 2,
+        maxLevel: 3,
         levels: [
             { hp: 900, cost: 500 },
-            { hp: 1200, cost: 1200 }
+            { hp: 1200, cost: 1200 },
+            { hp: 1500, cost: 2400 }
         ]
     },
     cannon: {
@@ -443,7 +444,8 @@ export function getTroopUnlockLevel(troopType: TroopType): number {
 
 const TROOP_LEVEL_MULTIPLIERS: Record<number, number> = {
     1: 1,
-    2: 1.3
+    2: 1.3,
+    3: 1.65
 };
 
 const toScaledFloat = (value: number, multiplier: number, digits: number = 2) =>

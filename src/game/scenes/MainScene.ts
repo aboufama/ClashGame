@@ -261,7 +261,7 @@ export class MainScene extends Phaser.Scene {
 
     private getTroopLevelForOwner(owner: 'PLAYER' | 'ENEMY'): number {
         const labLevel = this.getLabLevelForOwner(owner);
-        return labLevel >= 2 ? 2 : 1;
+        return Math.max(1, Math.min(labLevel, 3));
     }
 
     private getTroopCombatStats(troop: Troop) {
