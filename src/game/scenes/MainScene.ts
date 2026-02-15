@@ -1461,9 +1461,7 @@ export class MainScene extends Phaser.Scene {
                 break;
             case 'cannon':
                 // Use level-based rendering for cannon
-                if (building && building.level >= 5) {
-                    BuildingRenderer.drawCannonLevel5(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, skipBase, onlyBase);
-                } else if (building && building.level >= 4) {
+                if (building && building.level >= 4) {
                     BuildingRenderer.drawCannonLevel4(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, skipBase, onlyBase);
                 } else if (building && building.level === 3) {
                     BuildingRenderer.drawCannonLevel3(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, skipBase, onlyBase);
@@ -2453,14 +2451,27 @@ export class MainScene extends Phaser.Scene {
 
         // Mortar shell - starts invisible, appears as it leaves barrel
         const ball = this.add.graphics();
-        ball.fillStyle(0x3a3a3a, 1);
-        ball.fillCircle(0, 0, shellRadius);
-        ball.fillStyle(0x5a5a5a, 1);
-        ball.fillCircle(-2 * shellScale, -2 * shellScale, 3 * shellScale);
-        // L3: Add highlight to shell
-        if (level >= 3) {
-            ball.fillStyle(0xaaaaaa, 0.6);
-            ball.fillCircle(-3 * shellScale, -3 * shellScale, 2);
+        if (level >= 4) {
+            // Gold-studded shell
+            ball.fillStyle(0xb8860b, 1);
+            ball.fillCircle(0, 0, shellRadius);
+            ball.fillStyle(0xdaa520, 1);
+            ball.fillCircle(-2 * shellScale, -2 * shellScale, 4 * shellScale);
+            // Gold studs
+            ball.fillStyle(0xffd700, 0.9);
+            ball.fillCircle(shellRadius * 0.5, -shellRadius * 0.3, 1.5);
+            ball.fillCircle(-shellRadius * 0.3, shellRadius * 0.5, 1.5);
+            ball.fillCircle(shellRadius * 0.4, shellRadius * 0.4, 1.5);
+            ball.fillCircle(-shellRadius * 0.6, -shellRadius * 0.1, 1.5);
+        } else {
+            ball.fillStyle(0x3a3a3a, 1);
+            ball.fillCircle(0, 0, shellRadius);
+            ball.fillStyle(0x5a5a5a, 1);
+            ball.fillCircle(-2 * shellScale, -2 * shellScale, 3 * shellScale);
+            if (level >= 3) {
+                ball.fillStyle(0xaaaaaa, 0.6);
+                ball.fillCircle(-3 * shellScale, -3 * shellScale, 2);
+            }
         }
         ball.setPosition(start.x, start.y - 35);
         ball.setDepth(5000);
@@ -2762,11 +2773,22 @@ export class MainScene extends Phaser.Scene {
         });
 
         // Cannonball (pixelated rectangle)
+        const cLevel = cannon.level ?? 1;
         const ball = this.add.graphics();
-        ball.fillStyle(0x1a1a1a, 1);
-        ball.fillRect(-7, -7, 14, 14);
-        ball.fillStyle(0x3a3a3a, 1);
-        ball.fillRect(-6, -6, 8, 8);
+        if (cLevel >= 4) {
+            // Gold cannonball with marble core
+            ball.fillStyle(0xb8860b, 1);
+            ball.fillRect(-7, -7, 14, 14);
+            ball.fillStyle(0xdaa520, 1);
+            ball.fillRect(-6, -6, 8, 8);
+            ball.fillStyle(0xffd700, 0.6);
+            ball.fillRect(-4, -4, 4, 4);
+        } else {
+            ball.fillStyle(0x1a1a1a, 1);
+            ball.fillRect(-7, -7, 14, 14);
+            ball.fillStyle(0x3a3a3a, 1);
+            ball.fillRect(-6, -6, 8, 8);
+        }
         ball.setPosition(barrelTipX, barrelTipY);
         ball.setDepth(ballDepth);
 
@@ -3915,18 +3937,20 @@ export class MainScene extends Phaser.Scene {
                 const bolt = this.add.graphics();
 
                 // Draw bolt shape (narrower)
-                bolt.fillStyle(0x5d4e37, 1);
+                const bLevel = ballista.level ?? 1;
+                // L3: gold bolt, L2: grey, L1: wood
+                bolt.fillStyle(bLevel >= 3 ? 0xb8860b : 0x5d4e37, 1);
                 bolt.fillRect(-16, -1.5, 32, 3);
-                // Arrowhead (smaller)
-                bolt.fillStyle(0x3a3a3a, 1);
+                // Arrowhead
+                bolt.fillStyle(bLevel >= 3 ? 0xdaa520 : 0x3a3a3a, 1);
                 bolt.beginPath();
                 bolt.moveTo(20, 0);
                 bolt.lineTo(14, -4);
                 bolt.lineTo(14, 4);
                 bolt.closePath();
                 bolt.fillPath();
-                // Fletching (smaller) - Grey for Level 2+, Red for Level 1
-                const fletchColor = (ballista.level && ballista.level >= 2) ? 0x444444 : 0xcc3333;
+                // Fletching - Gold for L3, Grey for L2, Red for L1
+                const fletchColor = bLevel >= 3 ? 0xffd700 : (bLevel >= 2 ? 0x444444 : 0xcc3333);
                 bolt.fillStyle(fletchColor, 1);
                 bolt.beginPath();
                 bolt.moveTo(-16, 0);
@@ -4114,19 +4138,21 @@ export class MainScene extends Phaser.Scene {
         });
 
         // Small, narrow arrow (shuttle)
+        const xbowLevel = xbow.level ?? 1;
         const arrow = this.add.graphics();
-        arrow.fillStyle(0x5d4e37, 1);
-        arrow.fillRect(-6, -0.8, 12, 1.6); // Much narrower
+        // L3: gold shaft, L2: grey, L1: wood
+        arrow.fillStyle(xbowLevel >= 3 ? 0xb8860b : 0x5d4e37, 1);
+        arrow.fillRect(-6, -0.8, 12, 1.6);
         // Small arrowhead
-        arrow.fillStyle(0x4a4a4a, 1);
+        arrow.fillStyle(xbowLevel >= 3 ? 0xdaa520 : 0x4a4a4a, 1);
         arrow.beginPath();
         arrow.moveTo(7, 0);
         arrow.lineTo(4, -2);
         arrow.lineTo(4, 2);
         arrow.closePath();
         arrow.fillPath();
-        // Fletching - Grey for Level 2+, Red for Level 1
-        const fletchColor = (xbow.level && xbow.level >= 2) ? 0x444444 : 0xcc4444;
+        // Fletching - Gold for L3, Grey for L2, Red for L1
+        const fletchColor = xbowLevel >= 3 ? 0xffd700 : (xbowLevel >= 2 ? 0x444444 : 0xcc4444);
         arrow.fillStyle(fletchColor, 0.8);
         arrow.beginPath();
         arrow.moveTo(-6, 0);
@@ -6770,7 +6796,7 @@ export class MainScene extends Phaser.Scene {
                 // Inner flash
                 const flash = this.add.graphics();
                 flash.fillStyle(0xffff00, 0.9);
-                flash.fillCircle(0, 0, 6);
+                flash.fillEllipse(0, 0, 12, 6);
                 flash.setPosition(end.x, end.y);
                 flash.setDepth(5002);
                 this.tweens.add({ targets: flash, alpha: 0, scale: 2, duration: 100, onComplete: () => flash.destroy() });
@@ -6834,33 +6860,52 @@ export class MainScene extends Phaser.Scene {
         const angle = Math.atan2(end.y - start.y, end.x - start.x);
         launcher.ballistaAngle = angle;
 
-        // SPIKY projectile - prominent metal spikes cluster
+        // SPIKY projectile - level-dependent appearance
         const bag = this.add.graphics();
+        const spikeScale = level >= 4 ? 1.3 : (level >= 3 ? 1.2 : 1.0);
+        let coreColor: number, spikeColor: number, highlightColor: number;
+        if (level >= 4) {
+            // White marble boulder with gold spikes
+            coreColor = 0xeeeedd;
+            spikeColor = 0xdaa520;
+            highlightColor = 0xffd700;
+        } else if (level >= 3) {
+            // Dark iron with red-hot tips
+            coreColor = 0x333333;
+            spikeColor = 0x888888;
+            highlightColor = 0xcc3300;
+        } else {
+            // Basic grey
+            coreColor = 0x555555;
+            spikeColor = 0xaaaaaa;
+            highlightColor = 0xcccccc;
+        }
         // Core/base
-        bag.fillStyle(0x555555, 1);
-        bag.fillCircle(0, 0, 6);
-        // LOTS of prominent spikes sticking out
-        bag.fillStyle(0xaaaaaa, 1);
+        bag.fillStyle(coreColor, 1);
+        bag.fillCircle(0, 0, 6 * spikeScale);
+        // Spikes
+        bag.fillStyle(spikeColor, 1);
+        const s = spikeScale;
         // Top spikes
-        bag.fillTriangle(0, -6, -3, -14, 3, -14);
-        bag.fillTriangle(-4, -5, -8, -12, -2, -10);
-        bag.fillTriangle(4, -5, 8, -12, 2, -10);
+        bag.fillTriangle(0, -6*s, -3*s, -14*s, 3*s, -14*s);
+        bag.fillTriangle(-4*s, -5*s, -8*s, -12*s, -2*s, -10*s);
+        bag.fillTriangle(4*s, -5*s, 8*s, -12*s, 2*s, -10*s);
         // Bottom spikes
-        bag.fillTriangle(0, 6, -3, 14, 3, 14);
-        bag.fillTriangle(-4, 5, -8, 12, -2, 10);
-        bag.fillTriangle(4, 5, 8, 12, 2, 10);
+        bag.fillTriangle(0, 6*s, -3*s, 14*s, 3*s, 14*s);
+        bag.fillTriangle(-4*s, 5*s, -8*s, 12*s, -2*s, 10*s);
+        bag.fillTriangle(4*s, 5*s, 8*s, 12*s, 2*s, 10*s);
         // Side spikes
-        bag.fillTriangle(-6, 0, -14, -3, -14, 3);
-        bag.fillTriangle(6, 0, 14, -3, 14, 3);
-        bag.fillTriangle(-5, -4, -12, -8, -10, -2);
-        bag.fillTriangle(5, -4, 12, -8, 10, -2);
-        bag.fillTriangle(-5, 4, -12, 8, -10, 2);
-        bag.fillTriangle(5, 4, 12, 8, 10, 2);
-        // Spike highlights
-        bag.fillStyle(0xcccccc, 0.8);
-        bag.fillTriangle(0, -7, -1, -12, 1, -12);
-        bag.fillTriangle(-6, -1, -12, 0, -12, 2);
-        bag.fillTriangle(6, -1, 12, 0, 12, 2);
+        bag.fillTriangle(-6*s, 0, -14*s, -3*s, -14*s, 3*s);
+        bag.fillTriangle(6*s, 0, 14*s, -3*s, 14*s, 3*s);
+        bag.fillTriangle(-5*s, -4*s, -12*s, -8*s, -10*s, -2*s);
+        bag.fillTriangle(5*s, -4*s, 12*s, -8*s, 10*s, -2*s);
+        bag.fillTriangle(-5*s, 4*s, -12*s, 8*s, -10*s, 2*s);
+        bag.fillTriangle(5*s, 4*s, 12*s, 8*s, 10*s, 2*s);
+        // Spike highlights / tips
+        bag.fillStyle(highlightColor, 0.8);
+        bag.fillTriangle(0, -7*s, -1*s, -12*s, 1*s, -12*s);
+        bag.fillTriangle(-6*s, -1*s, -12*s, 0, -12*s, 2*s);
+        bag.fillTriangle(6*s, -1*s, 12*s, 0, 12*s, 2*s);
 
         bag.setPosition(start.x, start.y - 40);
         bag.setDepth(5000);

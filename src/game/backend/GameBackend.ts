@@ -1041,7 +1041,7 @@ export class Backend {
       placeMany('solana_collector', 4, 2, supportZones, fullZones);
     } else if (difficulty === 'hard') {
       // Hard: layered walls, compartment defenses, stronger/high-tier mix.
-      wallLevel = chance(0.45) ? 3 : 2;
+      wallLevel = chance(0.45) ? 4 : 3;
       placeBuilding('town_hall', townHallX, townHallY, 1);
 
       const hardCoreZones: Zone[] = [{ ...coreRect, maxRadius: 6.0 }];
@@ -1085,7 +1085,7 @@ export class Backend {
       fillWallsTo(randInt(88, 96), [{ ...midRect, minRadius: 4.5, maxRadius: 12.5 }]);
     } else {
       // Crazy: maxed building levels, centered Dragon's Breath, dense layered layout.
-      wallLevel = 3;
+      wallLevel = 4;
       addWallRing({ minX: 4, minY: 4, maxX: 20, maxY: 20 }, 4, 3);
       addWallRing({ minX: 8, minY: 8, maxX: 16, maxY: 16 }, 2, 2);
       addWallRing({ minX: 9, minY: 9, maxX: 14, maxY: 14 }, 1, 2);

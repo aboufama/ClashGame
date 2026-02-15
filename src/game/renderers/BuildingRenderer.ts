@@ -1235,206 +1235,7 @@ export class BuildingRenderer {
     }
 
     static drawCannonLevel4(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
-        // LEVEL 4 CANNON: Dual-barrel reinforced cannon with gold/brass accents and glowing effects
-        const angle = building?.ballistaAngle ?? Math.PI / 4;
-        const cos = Math.cos(angle);
-        const sin = Math.sin(angle);
-        const g = baseGraphics || graphics;
-
-        const baseY = center.y - 3;
-        if (!skipBase) {
-            // === REINFORCED STEEL FOUNDATION ===
-            // Dark steel base with gold trim (isometric diamond)
-            g.fillStyle(tint ?? 0x4a4a5a, alpha);
-            g.fillPoints([c1, c2, c3, c4], true);
-
-            // Gold trim edges for premium look
-            g.lineStyle(3, 0xb8860b, alpha * 0.9);
-            g.lineBetween(c1.x, c1.y, c2.x, c2.y);
-            g.lineBetween(c1.x, c1.y, c4.x, c4.y);
-            g.lineStyle(2, 0x8b6914, alpha * 0.8);
-            g.lineBetween(c2.x, c2.y, c3.x, c3.y);
-            g.lineBetween(c3.x, c3.y, c4.x, c4.y);
-
-            // Decorative corner rivets (gold)
-            g.fillStyle(0xffd700, alpha * 0.9);
-            g.fillCircle(c1.x, c1.y, 3);
-            g.fillCircle(c2.x, c2.y, 2);
-            g.fillCircle(c3.x, c3.y, 2);
-            g.fillCircle(c4.x, c4.y, 2);
-
-            // === REINFORCED ROTATING BASE ===
-            const baseRadiusX = 24;
-            const baseRadiusY = 14;
-
-            // Shadow underneath
-            g.fillStyle(0x1a1008, alpha * 0.5);
-            g.fillEllipse(center.x + 2, baseY + 5, baseRadiusX + 2, baseRadiusY + 1);
-
-            // Main reinforced steel base with dark blue tint
-            g.fillStyle(0x3a3a4a, alpha);
-            g.fillEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-
-            // Inner steel ring
-            g.lineStyle(3, 0x2a2a3a, alpha * 0.8);
-            g.strokeEllipse(center.x, baseY, baseRadiusX - 5, baseRadiusY - 3);
-
-            // Glowing energy ring (orange/red for heat effect)
-            g.lineStyle(2, 0xff6600, alpha * 0.6);
-            g.strokeEllipse(center.x, baseY, baseRadiusX - 8, baseRadiusY - 5);
-            g.lineStyle(1, 0xff9900, alpha * 0.4);
-            g.strokeEllipse(center.x, baseY, baseRadiusX - 9, baseRadiusY - 6);
-
-            // Gold reinforcement outer ring
-            g.lineStyle(4, 0xb8860b, alpha);
-            g.strokeEllipse(center.x, baseY, baseRadiusX, baseRadiusY);
-            g.lineStyle(2, 0xffd700, alpha * 0.5);
-            g.strokeEllipse(center.x, baseY - 1, baseRadiusX - 1, baseRadiusY - 1);
-
-        }
-
-        if (!onlyBase) {
-            // === DUAL BARREL SETUP ===
-            const barrelHeight = -14;
-            const barrelLength = 30;  // Slightly longer barrels
-            const barrelWidth = 8;    // Slightly thinner for dual setup
-            const barrelSpacing = 5;  // Distance between the two barrels
-
-            // Recoil animation
-            const recoilAmount = (building?.cannonRecoilOffset ?? 0) * 10;
-            const recoilOffsetX = -cos * recoilAmount;
-            const recoilOffsetY = -sin * 0.5 * recoilAmount;
-
-            // Barrel perpendicular offset for dual barrels
-            const perpX = -sin * barrelSpacing;
-            const perpY = cos * 0.5 * barrelSpacing;
-
-            // Both barrel tip positions
-            const barrelTip1X = center.x + cos * barrelLength + recoilOffsetX + perpX;
-            const barrelTip1Y = center.y + barrelHeight + sin * 0.5 * barrelLength + recoilOffsetY + perpY;
-            const barrelTip2X = center.x + cos * barrelLength + recoilOffsetX - perpX;
-            const barrelTip2Y = center.y + barrelHeight + sin * 0.5 * barrelLength + recoilOffsetY - perpY;
-
-            // Barrel shadow on ground
-            g.fillStyle(0x1a1a1a, alpha * 0.4);
-            g.fillEllipse(center.x + cos * (barrelLength * 0.5) + 3, center.y + 5, barrelLength * 0.7, 6);
-
-            // === REINFORCED BARREL CARRIAGE ===
-            const supportOffsetX = -sin * 10;
-            const supportOffsetY = cos * 5;
-
-            // Left support (reinforced steel)
-            graphics.fillStyle(0x3a3a4a, alpha);
-            graphics.beginPath();
-            graphics.moveTo(center.x - supportOffsetX, baseY - supportOffsetY);
-            graphics.lineTo(center.x - supportOffsetX * 0.5, center.y + barrelHeight + 5);
-            graphics.lineTo(center.x + cos * 6 - supportOffsetX * 0.5, center.y + barrelHeight + sin * 3 + 5);
-            graphics.lineTo(center.x + cos * 6, center.y + barrelHeight + sin * 3);
-            graphics.closePath();
-            graphics.fillPath();
-
-            // Right support
-            graphics.fillStyle(0x2a2a3a, alpha);
-            graphics.beginPath();
-            graphics.moveTo(center.x + supportOffsetX, baseY + supportOffsetY);
-            graphics.lineTo(center.x + supportOffsetX * 0.5, center.y + barrelHeight + 5);
-            graphics.lineTo(center.x + cos * 6 + supportOffsetX * 0.5, center.y + barrelHeight + sin * 3 + 5);
-            graphics.lineTo(center.x + cos * 6, center.y + barrelHeight + sin * 3);
-            graphics.closePath();
-            graphics.fillPath();
-
-            // Gold trim on supports
-            graphics.lineStyle(1, 0xb8860b, alpha * 0.7);
-            graphics.lineBetween(center.x - supportOffsetX, baseY - supportOffsetY, center.x + cos * 6, center.y + barrelHeight + sin * 3);
-            graphics.lineBetween(center.x + supportOffsetX, baseY + supportOffsetY, center.x + cos * 6, center.y + barrelHeight + sin * 3);
-
-            // === CENTRAL PIVOT MECHANISM (ENHANCED) ===
-            const drawPivot = () => {
-                const pivotX = center.x + recoilOffsetX;
-                const pivotY = center.y + barrelHeight + 4 + recoilOffsetY;
-
-                // Larger reinforced pivot
-                graphics.fillStyle(0x2a2a2a, alpha);
-                graphics.fillCircle(pivotX, pivotY, 10);
-                graphics.fillStyle(0x3a3a4a, alpha);
-                graphics.fillCircle(pivotX, pivotY, 8);
-                // Gold center accent
-                graphics.fillStyle(0xb8860b, alpha);
-                graphics.fillCircle(pivotX, pivotY, 5);
-                graphics.fillStyle(0xffd700, alpha * 0.8);
-                graphics.fillCircle(pivotX - 1, pivotY - 1, 3);
-                // Glowing core
-                graphics.fillStyle(0xff6600, alpha * 0.5);
-                graphics.fillCircle(pivotX, pivotY, 2);
-            };
-
-            if (sin >= 0) drawPivot();
-
-            // === BARREL BASE JOINT (REINFORCED) ===
-            const baseJointX = center.x + cos * 4 + recoilOffsetX;
-            const baseJointY = center.y + barrelHeight + sin * 2 + recoilOffsetY;
-            graphics.fillStyle(0x4a4a5a, alpha);
-            graphics.fillEllipse(baseJointX, baseJointY, 16, 10);
-            graphics.fillStyle(0xb8860b, alpha * 0.8);
-            graphics.fillEllipse(baseJointX, baseJointY, 12, 7);
-            graphics.fillStyle(0x3a3a4a, alpha);
-            graphics.fillEllipse(baseJointX, baseJointY, 8, 5);
-
-            // === DUAL BARRELS ===
-            const drawBarrel = (tipX: number, tipY: number, offsetX: number, offsetY: number) => {
-                const barrelBaseX = center.x + recoilOffsetX + offsetX;
-                const barrelBaseY = center.y + barrelHeight + recoilOffsetY + offsetY;
-
-                // Barrel main body - dark steel with blue tint
-                graphics.lineStyle(barrelWidth, 0x2a2a3a, alpha);
-                graphics.lineBetween(barrelBaseX, barrelBaseY, tipX, tipY);
-
-                // Barrel highlight strip
-                graphics.lineStyle(barrelWidth - 3, 0x3a3a4a, alpha);
-                graphics.lineBetween(barrelBaseX, barrelBaseY - 1, tipX, tipY - 1);
-
-                // Bright highlight
-                graphics.lineStyle(2, 0x5a5a6a, alpha * 0.9);
-                graphics.lineBetween(barrelBaseX, barrelBaseY - 2, tipX, tipY - 2);
-
-                // === GOLD DECORATIVE BANDS ===
-                const bands = [0.2, 0.5, 0.8];
-                for (const t of bands) {
-                    const bandX = barrelBaseX + cos * barrelLength * t;
-                    const bandY = barrelBaseY + sin * 0.5 * barrelLength * t;
-
-                    // Gold bands with subtle depth
-                    graphics.fillStyle(0xb8860b, alpha);
-                    graphics.fillEllipse(bandX, bandY, 6, 3.5);
-                    graphics.fillStyle(0xb8860b, alpha * 0.7);
-                    graphics.fillCircle(bandX - 1, bandY - 1, 1.5);
-                    graphics.lineStyle(1, 0x8b6914, alpha);
-                    graphics.strokeEllipse(bandX, bandY, 6, 3.5);
-                }
-            };
-
-            // Draw both barrels
-            drawBarrel(barrelTip1X, barrelTip1Y, perpX, perpY);
-            drawBarrel(barrelTip2X, barrelTip2Y, -perpX, -perpY);
-
-            // === CONNECTING BRACE BETWEEN BARRELS ===
-            const braceT = 0.35;
-            const brace1X = center.x + cos * barrelLength * braceT + recoilOffsetX + perpX;
-            const brace1Y = center.y + barrelHeight + sin * 0.5 * barrelLength * braceT + recoilOffsetY + perpY;
-            const brace2X = center.x + cos * barrelLength * braceT + recoilOffsetX - perpX;
-            const brace2Y = center.y + barrelHeight + sin * 0.5 * barrelLength * braceT + recoilOffsetY - perpY;
-
-            graphics.lineStyle(3, 0x3a3a4a, alpha);
-            graphics.lineBetween(brace1X, brace1Y, brace2X, brace2Y);
-            graphics.lineStyle(1, 0xb8860b, alpha * 0.8);
-            graphics.lineBetween(brace1X, brace1Y, brace2X, brace2Y);
-
-            if (sin < 0) drawPivot();
-        }
-    }
-
-    static drawCannonLevel5(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
-        // LEVEL 5 CANNON: Marble & Gold — prestigious dual-barrel cannon
+        // LEVEL 4 CANNON: Dual-barrel cannon with marble & gold accents (max level)
         const angle = building?.ballistaAngle ?? Math.PI / 4;
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
@@ -1494,17 +1295,20 @@ export class BuildingRenderer {
         if (!onlyBase) {
             // === DUAL BARREL SETUP ===
             const barrelHeight = -14;
-            const barrelLength = 30;
-            const barrelWidth = 8;
-            const barrelSpacing = 5;
+            const barrelLength = 30;  // Slightly longer barrels
+            const barrelWidth = 8;    // Slightly thinner for dual setup
+            const barrelSpacing = 5;  // Distance between the two barrels
 
+            // Recoil animation
             const recoilAmount = (building?.cannonRecoilOffset ?? 0) * 10;
             const recoilOffsetX = -cos * recoilAmount;
             const recoilOffsetY = -sin * 0.5 * recoilAmount;
 
+            // Barrel perpendicular offset for dual barrels
             const perpX = -sin * barrelSpacing;
             const perpY = cos * 0.5 * barrelSpacing;
 
+            // Both barrel tip positions
             const barrelTip1X = center.x + cos * barrelLength + recoilOffsetX + perpX;
             const barrelTip1Y = center.y + barrelHeight + sin * 0.5 * barrelLength + recoilOffsetY + perpY;
             const barrelTip2X = center.x + cos * barrelLength + recoilOffsetX - perpX;
@@ -1543,7 +1347,7 @@ export class BuildingRenderer {
             graphics.lineBetween(center.x - supportOffsetX, baseY - supportOffsetY, center.x + cos * 6, center.y + barrelHeight + sin * 3);
             graphics.lineBetween(center.x + supportOffsetX, baseY + supportOffsetY, center.x + cos * 6, center.y + barrelHeight + sin * 3);
 
-            // === CENTRAL PIVOT MECHANISM (GOLD) ===
+            // === CENTRAL PIVOT MECHANISM (MARBLE & GOLD) ===
             const drawPivot = () => {
                 const pivotX = center.x + recoilOffsetX;
                 const pivotY = center.y + barrelHeight + 4 + recoilOffsetY;
@@ -1574,7 +1378,7 @@ export class BuildingRenderer {
             graphics.fillStyle(0xddddcc, alpha);
             graphics.fillEllipse(baseJointX, baseJointY, 8, 5);
 
-            // === DUAL GOLD BARRELS ===
+            // === DUAL BARRELS ===
             const drawBarrel = (tipX: number, tipY: number, offsetX: number, offsetY: number) => {
                 const barrelBaseX = center.x + recoilOffsetX + offsetX;
                 const barrelBaseY = center.y + barrelHeight + recoilOffsetY + offsetY;
@@ -1605,12 +1409,11 @@ export class BuildingRenderer {
                     graphics.strokeEllipse(bandX, bandY, 6, 3.5);
                 }
 
-                // Muzzle ring + bore (like other cannon levels)
+                // Muzzle ring + bore
                 graphics.fillStyle(0xdaa520, alpha);
                 graphics.fillEllipse(tipX, tipY, 8, 5);
                 graphics.fillStyle(0xffd700, alpha);
                 graphics.fillEllipse(tipX, tipY, 6, 4);
-                // Dark bore hole
                 graphics.fillStyle(0x1a1a1a, alpha);
                 graphics.fillEllipse(tipX + cos * 2, tipY + sin, 4, 2.5);
             };
@@ -1619,7 +1422,7 @@ export class BuildingRenderer {
             drawBarrel(barrelTip1X, barrelTip1Y, perpX, perpY);
             drawBarrel(barrelTip2X, barrelTip2Y, -perpX, -perpY);
 
-            // === CONNECTING BRACE BETWEEN BARRELS (gold) ===
+            // === CONNECTING BRACE BETWEEN BARRELS (marble & gold) ===
             const braceT = 0.35;
             const brace1X = center.x + cos * barrelLength * braceT + recoilOffsetX + perpX;
             const brace1Y = center.y + barrelHeight + sin * 0.5 * barrelLength * braceT + recoilOffsetY + perpY;
@@ -4475,9 +4278,9 @@ export class BuildingRenderer {
         const lavaOrange = 0xff5500;
         const lavaYellow = 0xffaa00;
         const lavaWhite = 0xffdd66;
-        const brassColor = tint ?? (isLevel3 ? 0xdaa520 : 0xc08040);
-        const brassLight = isLevel3 ? 0xffd700 : 0xdaa060;
-        const brassDark = isLevel3 ? 0xb8860b : 0x8b6030;
+        const brassColor = tint ?? (isLevel3 ? 0xdaa520 : 0x9a9a9a);
+        const brassLight = isLevel3 ? 0xffd700 : 0xc0c0c0;
+        const brassDark = isLevel3 ? 0xb8860b : 0x6a6a6a;
 
         // Pool position constants (used in both base and dynamic rendering)
         const poolY = center.y + 2;
@@ -4672,7 +4475,34 @@ export class BuildingRenderer {
         graphics.closePath();
         graphics.fillPath();
 
+        // White marble rocks (contrast against dark basalt)
+        graphics.fillStyle(0xddddcc, alpha * 0.9);
+        graphics.beginPath();
+        graphics.moveTo(center.x - 38 * rockScale, center.y + 20);
+        graphics.lineTo(center.x - 34 * rockScale, center.y + 10);
+        graphics.lineTo(center.x - 26 * rockScale, center.y + 14);
+        graphics.lineTo(center.x - 28 * rockScale, center.y + 22);
+        graphics.closePath();
+        graphics.fillPath();
+        // Highlight face
+        graphics.fillStyle(0xeeeedd, alpha * 0.7);
+        graphics.beginPath();
+        graphics.moveTo(center.x - 38 * rockScale, center.y + 20);
+        graphics.lineTo(center.x - 34 * rockScale, center.y + 10);
+        graphics.lineTo(center.x - 32 * rockScale, center.y + 14);
+        graphics.lineTo(center.x - 34 * rockScale, center.y + 20);
+        graphics.closePath();
+        graphics.fillPath();
 
+        // Second small white rock
+        graphics.fillStyle(0xccccbb, alpha * 0.85);
+        graphics.beginPath();
+        graphics.moveTo(center.x + 32 * rockScale, center.y + 22);
+        graphics.lineTo(center.x + 36 * rockScale, center.y + 14);
+        graphics.lineTo(center.x + 42 * rockScale, center.y + 18);
+        graphics.lineTo(center.x + 38 * rockScale, center.y + 24);
+        graphics.closePath();
+        graphics.fillPath();
 
         // Rock lava glow (reflected light when attacking)
         if (isAttacking) {

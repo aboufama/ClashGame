@@ -108,13 +108,12 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         color: 0x333333,
         fireRate: 2400,
         damage: 58,
-        maxLevel: 5,
+        maxLevel: 4,
         levels: [
             { hp: 820, damage: 58, fireRate: 2400, cost: 220 },
             { hp: 940, damage: 70, fireRate: 2200, cost: 360 },
             { hp: 1040, damage: 82, fireRate: 2050, cost: 520 },
-            { hp: 1150, damage: 95, fireRate: 1900, cost: 700 },
-            { hp: 1300, damage: 110, fireRate: 1750, cost: 1000 }
+            { hp: 1150, damage: 95, fireRate: 1900, cost: 700 }
         ]
     },
     ballista: {
