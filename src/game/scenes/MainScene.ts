@@ -156,6 +156,8 @@ export class MainScene extends Phaser.Scene {
     public hasDeployed = false;
     public raidEndScheduled = false; // Prevent multiple end calls
     public pendingSpawnCount = 0; // Prevent battle end during troop splits (phalanx/recursion)
+    private readonly HEALTH_BAR_IDLE_MS = 5000;
+    private readonly HEALTH_BAR_FADE_MS = 600;
 
     public villageNameLabel!: Phaser.GameObjects.Text;
     public attackModeSelectedBuilding: PlacedBuilding | null = null;
@@ -229,20 +231,6 @@ export class MainScene extends Phaser.Scene {
             return Math.max(max, Math.max(1, building.level || 1));
         }, 0);
         this.playerLabLevel = maxLab;
-    }
-
-    private getBarracksLevelForOwner(owner: 'PLAYER' | 'ENEMY'): number {
-        if (owner === 'PLAYER' && this.mode === 'ATTACK') {
-            return Math.max(1, this.playerBarracksLevel);
-        }
-        const maxBarracks = this.buildings.reduce((max, building) => {
-            if (building.owner !== owner || building.type !== 'barracks') return max;
-            return Math.max(max, Math.max(1, building.level || 1));
-        }, 1);
-        if (owner === 'PLAYER') {
-            this.playerBarracksLevel = Math.max(1, maxBarracks);
-        }
-        return Math.max(1, maxBarracks);
     }
 
     private getLabLevelForOwner(owner: 'PLAYER' | 'ENEMY'): number {
@@ -462,6 +450,7 @@ export class MainScene extends Phaser.Scene {
         this.updateSpikeZones();
         this.updateLavaZones();
         this.updateTroops(delta);
+        this.refreshBuildingHealthBars();
         this.updateResources(time);
         this.updateSelectionHighlight();
         this.updateDeploymentHighlight();
@@ -483,6 +472,14 @@ export class MainScene extends Phaser.Scene {
             this.dummyTroop.health = this.dummyTroop.maxHealth;
             this.dummyTroop.hasTakenDamage = false;
         }
+    }
+
+    private refreshBuildingHealthBars() {
+        this.buildings.forEach(building => {
+            if (building.isDestroyed) return;
+            if (building.health >= building.maxHealth && !building.healthBar.visible) return;
+            this.updateHealthBar(building);
+        });
     }
 
     private checkBattleEnd() {
@@ -647,10 +644,6 @@ export class MainScene extends Phaser.Scene {
         return getBuildingStats(def.type as BuildingType, def.level || 1);
     }
 
-    private getDefenseCenterGrid(def: PlacedBuilding) {
-        const stats = this.getDefenseStats(def);
-        return { x: def.gridX + stats.width / 2, y: def.gridY + stats.height / 2 };
-    }
 
 
 

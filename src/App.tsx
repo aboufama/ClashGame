@@ -52,7 +52,7 @@ function App() {
   const cloudHideTimerRef = useRef<number | null>(null);
   const [resources, setResources] = useState({ sol: 0 });
   const resourcesRef = useRef(resources);
-  const [army, setArmy] = useState({ warrior: 0, archer: 0, giant: 0, ward: 0, recursion: 0, ram: 0, stormmage: 0, golem: 0, sharpshooter: 0, mobilemortar: 0, davincitank: 0, phalanx: 0 });
+  const [army, setArmy] = useState({ warrior: 0, archer: 0, giant: 0, wallbreaker: 0, ward: 0, recursion: 0, ram: 0, stormmage: 0, golem: 0, sharpshooter: 0, mobilemortar: 0, davincitank: 0, phalanx: 0 });
   const [isMobile] = useState(() => MobileUtils.isMobile());
 
   useEffect(() => {
@@ -385,7 +385,7 @@ function App() {
     }
   }, [resources, army, user, loading, worldReady]);
   const [capacity, setCapacity] = useState({ current: 0, max: 30 });
-  const [selectedTroopType, setSelectedTroopType] = useState<'warrior' | 'archer' | 'giant' | 'ward' | 'recursion' | 'ram' | 'stormmage' | 'golem' | 'sharpshooter' | 'mobilemortar' | 'davincitank' | 'phalanx'>('warrior');
+  const [selectedTroopType, setSelectedTroopType] = useState<'warrior' | 'archer' | 'giant' | 'wallbreaker' | 'ward' | 'recursion' | 'ram' | 'stormmage' | 'golem' | 'sharpshooter' | 'mobilemortar' | 'davincitank' | 'phalanx'>('warrior');
   const [visibleTroops, setVisibleTroops] = useState<string[]>([]);
   const [isTrainingOpen, setIsTrainingOpen] = useState(false);
   const [isBuildingOpen, setIsBuildingOpen] = useState(false);

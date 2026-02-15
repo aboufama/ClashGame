@@ -45,6 +45,8 @@ export interface PlacedBuilding {
     lastSmokeTime?: number;     // For defensive smoke effects
     baseGraphics?: Phaser.GameObjects.Graphics; // Separate graphics for ground-level base (prevents clipping)
     isDestroyed?: boolean;
+    lastHealthBarValue?: number;
+    lastHealthChangeTime?: number;
 }
 
 export interface Troop {
@@ -74,6 +76,8 @@ export interface Troop {
     bowDrawProgress?: number; // For sharpshooter bow draw animation (0 = relaxed, 1 = fully drawn)
     mortarRecoil?: number; // For mobile mortar - recoil offset for the mortar only (not the soldier)
     phalanxSpearOffset?: number; // For phalanx - spear thrusting animation (0 = normal, 1 = full thrust)
+    lastHealthBarValue?: number;
+    lastHealthChangeTime?: number;
 }
 
 export interface PlacedObstacle {

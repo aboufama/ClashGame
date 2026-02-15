@@ -1226,10 +1226,6 @@ export class BuildingRenderer {
             graphics.fillStyle(0x5a5a6a, alpha);
             graphics.fillEllipse(muzzleX, muzzleY, 6, 4);
 
-            // Dark bore
-            graphics.fillStyle(0x1a1a1a, alpha);
-            graphics.fillEllipse(muzzleX + cos * 2, muzzleY + sin, 4, 2.5);
-
             if (sin < 0) drawPivot();
         }
     }
@@ -1384,27 +1380,11 @@ export class BuildingRenderer {
             graphics.lineStyle(3, 0xeeeedd, alpha * 0.9);
             graphics.lineBetween(barrelBaseX, barrelBaseY - 2, tipX, tipY - 2);
 
-            // === GOLD DECORATIVE BANDS ===
-            const bands = [0.15, 0.4, 0.65, 0.9];
-            for (const t of bands) {
-                const bandX = barrelBaseX + cos * barrelLength * t;
-                const bandY = barrelBaseY + sin * 0.5 * barrelLength * t;
-
-                graphics.fillStyle(0xdaa520, alpha);
-                graphics.fillEllipse(bandX, bandY, 9, 5);
-                graphics.fillStyle(0xffd700, alpha * 0.7);
-                graphics.fillCircle(bandX - 1, bandY - 1, 2);
-                graphics.lineStyle(1, 0xb8860b, alpha);
-                graphics.strokeEllipse(bandX, bandY, 9, 5);
-            }
-
-            // Muzzle ring + bore
-            graphics.fillStyle(0xdaa520, alpha);
+            // Muzzle ring
+            graphics.fillStyle(0xccccbb, alpha);
             graphics.fillEllipse(tipX, tipY, 10, 6);
-            graphics.fillStyle(0xffd700, alpha);
+            graphics.fillStyle(0xddddcc, alpha);
             graphics.fillEllipse(tipX, tipY, 8, 5);
-            graphics.fillStyle(0x1a1a1a, alpha);
-            graphics.fillEllipse(tipX + cos * 2, tipY + sin, 5, 3);
 
             if (sin < 0) drawPivot();
         }
@@ -1692,7 +1672,6 @@ export class BuildingRenderer {
         const level = building?.level ?? 1;
 
         const isL2 = level >= 2;
-        const isL3 = level >= 3;
         const isL4 = level >= 4;
 
         // Sequence: Move up, move down (slam), shake, move back up, pause
