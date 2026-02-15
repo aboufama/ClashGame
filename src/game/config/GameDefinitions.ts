@@ -252,12 +252,13 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         category: 'military',
         maxCount: 4,
         color: 0x884422,
-        maxLevel: 3,
+        maxLevel: 4,
         capacity: 20,
         levels: [
             { hp: 1000, capacity: 20, cost: 300 },    // Level 1 - Basic (20 space, no decor)
             { hp: 1200, capacity: 25, cost: 500 },    // Level 2 - Weapons rack
-            { hp: 1400, capacity: 30, cost: 700 }     // Level 3 - Full decor
+            { hp: 1400, capacity: 30, cost: 700 },    // Level 3 - Full decor
+            { hp: 1600, capacity: 35, cost: 1000 }    // Level 4 - Marble bricks
         ]
     },
     prism: {

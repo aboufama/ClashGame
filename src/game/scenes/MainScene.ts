@@ -6670,6 +6670,7 @@ export class MainScene extends Phaser.Scene {
 
     private shootDragonPod(db: PlacedBuilding, start: { x: number, y: number }, targetGridX: number, targetGridY: number, damage: number) {
         const end = IsoUtils.cartToIso(targetGridX, targetGridY);
+        const dbLevel = db.level ?? 1;
 
         // Create firecracker rocket graphics
         const pod = this.add.graphics();
@@ -6682,8 +6683,8 @@ export class MainScene extends Phaser.Scene {
         const drawRocket = () => {
             pod.clear();
 
-            // Rocket body (red)
-            pod.fillStyle(0xcc2222, 1);
+            // Rocket body — L2: white/gold, L1: red/gold
+            pod.fillStyle(dbLevel >= 2 ? 0xeeeedd : 0xcc2222, 1);
             pod.fillRect(-4, -10, 8, 18);
 
             // Gold bands
@@ -6692,7 +6693,7 @@ export class MainScene extends Phaser.Scene {
             pod.fillRect(-5, 5, 10, 3);
 
             // Gold tip
-            pod.fillStyle(0xb8860b, 1);
+            pod.fillStyle(dbLevel >= 2 ? 0xdaa520 : 0xb8860b, 1);
             pod.beginPath();
             pod.moveTo(0, -14);
             pod.lineTo(-4, -10);

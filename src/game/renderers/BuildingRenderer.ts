@@ -4446,8 +4446,8 @@ export class BuildingRenderer {
         graphics.closePath();
         graphics.fillPath();
 
-        // Back-right rock highlight
-        graphics.fillStyle(basaltMid, alpha * 0.7);
+        // Back-right rock highlight — marble face
+        graphics.fillStyle(0xccccbb, alpha * 0.7);
         graphics.beginPath();
         graphics.moveTo(center.x + 28 * rockScale, center.y - 30 * rockScale);
         graphics.lineTo(center.x + 40 * rockScale, center.y - 20 * rockScale);
@@ -4456,8 +4456,8 @@ export class BuildingRenderer {
         graphics.closePath();
         graphics.fillPath();
 
-        // FRONT ROCK (smaller, foreground)
-        graphics.fillStyle(basaltMid, alpha);
+        // FRONT ROCK (smaller, foreground) — marble white
+        graphics.fillStyle(0xccccbb, alpha);
         graphics.beginPath();
         graphics.moveTo(center.x + 8 * rockScale, center.y + 25);
         graphics.lineTo(center.x + 4 * rockScale, center.y + 12);
@@ -4466,41 +4466,12 @@ export class BuildingRenderer {
         graphics.closePath();
         graphics.fillPath();
 
-        graphics.fillStyle(basaltHighlight, alpha * 0.6);
+        graphics.fillStyle(0xddddcc, alpha * 0.6);
         graphics.beginPath();
         graphics.moveTo(center.x + 8 * rockScale, center.y + 25);
         graphics.lineTo(center.x + 4 * rockScale, center.y + 12);
         graphics.lineTo(center.x + 10 * rockScale, center.y + 14);
         graphics.lineTo(center.x + 12 * rockScale, center.y + 22);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // White marble rocks (contrast against dark basalt)
-        graphics.fillStyle(0xddddcc, alpha * 0.9);
-        graphics.beginPath();
-        graphics.moveTo(center.x - 38 * rockScale, center.y + 20);
-        graphics.lineTo(center.x - 34 * rockScale, center.y + 10);
-        graphics.lineTo(center.x - 26 * rockScale, center.y + 14);
-        graphics.lineTo(center.x - 28 * rockScale, center.y + 22);
-        graphics.closePath();
-        graphics.fillPath();
-        // Highlight face
-        graphics.fillStyle(0xeeeedd, alpha * 0.7);
-        graphics.beginPath();
-        graphics.moveTo(center.x - 38 * rockScale, center.y + 20);
-        graphics.lineTo(center.x - 34 * rockScale, center.y + 10);
-        graphics.lineTo(center.x - 32 * rockScale, center.y + 14);
-        graphics.lineTo(center.x - 34 * rockScale, center.y + 20);
-        graphics.closePath();
-        graphics.fillPath();
-
-        // Second small white rock
-        graphics.fillStyle(0xccccbb, alpha * 0.85);
-        graphics.beginPath();
-        graphics.moveTo(center.x + 32 * rockScale, center.y + 22);
-        graphics.lineTo(center.x + 36 * rockScale, center.y + 14);
-        graphics.lineTo(center.x + 42 * rockScale, center.y + 18);
-        graphics.lineTo(center.x + 38 * rockScale, center.y + 24);
         graphics.closePath();
         graphics.fillPath();
 
@@ -4702,6 +4673,7 @@ export class BuildingRenderer {
         const time = Date.now();
         const g = baseGraphics || graphics; // Ground-plane elements render here.
         const level = building?.level ?? 1;
+        const isLevel4 = level >= 4;
         const showWeaponRack = level >= 2;
         const showDummy = level >= 3;
 
@@ -4727,11 +4699,24 @@ export class BuildingRenderer {
                 g.fillCircle(center.x + ox, center.y + 5 + oy, 2 + (i % 2));
             }
 
-            // Decorative border - rope boundary (ground plane)
-            g.lineStyle(2, 0x8b7355, alpha * 0.7);
+            // Decorative border
+            g.lineStyle(2, isLevel4 ? 0xccccbb : 0x8b7355, alpha * 0.7);
             g.strokePoints([c1, c2, c3, c4], true, true);
 
-
+            // L4: Scattered white marble bricks around the edge
+            if (isLevel4) {
+                const brickColor1 = 0xddddcc;
+                const brickColor2 = 0xccccbb;
+                // A few small rectangular bricks along the perimeter
+                g.fillStyle(brickColor1, alpha * 0.8);
+                g.fillRect(center.x - 30, center.y + 12, 8, 4);
+                g.fillRect(center.x + 22, center.y + 10, 7, 4);
+                g.fillRect(center.x - 25, center.y - 10, 6, 3);
+                g.fillRect(center.x + 28, center.y - 8, 7, 3);
+                g.fillStyle(brickColor2, alpha * 0.7);
+                g.fillRect(center.x - 18, center.y + 14, 6, 3);
+                g.fillRect(center.x + 14, center.y - 12, 6, 3);
+            }
 
         }
 
@@ -4740,8 +4725,8 @@ export class BuildingRenderer {
             const fireX = center.x;
             const fireY = center.y + 8;
 
-            // Fire pit stones (ring)
-            graphics.fillStyle(0x555555, alpha);
+            // Fire pit stones (ring) — marble at L4
+            graphics.fillStyle(isLevel4 ? 0xccccbb : 0x555555, alpha);
             for (let i = 0; i < 8; i++) {
                 const angle = (i / 8) * Math.PI * 2;
                 const stoneX = fireX + Math.cos(angle) * 12;
@@ -4855,8 +4840,8 @@ export class BuildingRenderer {
                 graphics.fillStyle(0xa48040, alpha * 0.5);
                 graphics.fillCircle(dummyX + 1, dummyY - 32, 4);
 
-                // Dummy arms (wooden crossbar)
-                graphics.fillStyle(0x5d4e37, alpha);
+                // Dummy arms (wooden crossbar — marble at L4)
+                graphics.fillStyle(isLevel4 ? 0xccccbb : 0x5d4e37, alpha);
                 graphics.fillRect(dummyX - 10, dummyY - 22, 20, 3);
 
                 // Straw detail
@@ -6253,7 +6238,9 @@ export class BuildingRenderer {
                 graphics.fillStyle(0x5d4037, alpha);
                 graphics.fillRect(lx - 8, ly - 6, 2, 8);
             } else if (loaderCarrying) {
-                // CARRYING spike ball
+                // CARRYING spike ball — level-dependent colors
+                const carryCore = isLevel4 ? 0xeeeedd : (isLevel3 ? 0x333333 : 0x555555);
+                const carrySpike = isLevel4 ? 0xdaa520 : (isLevel3 ? 0x888888 : 0xaaaaaa);
                 graphics.fillStyle(0x8b6914, alpha);
                 graphics.fillRect(lx - 3, ly - 4, 6, 8);
                 graphics.fillStyle(0xdeb887, alpha);
@@ -6264,9 +6251,9 @@ export class BuildingRenderer {
                 graphics.fillStyle(0xdeb887, alpha);
                 graphics.fillRect(lx - 5, ly - 6, 2, 4);
                 graphics.fillRect(lx + 3, ly - 6, 2, 4);
-                graphics.fillStyle(0x555555, alpha);
+                graphics.fillStyle(carryCore, alpha);
                 graphics.fillCircle(lx, ly - 12, 3);
-                graphics.fillStyle(0xaaaaaa, alpha);
+                graphics.fillStyle(carrySpike, alpha);
                 graphics.fillTriangle(lx, ly - 15, lx - 1, ly - 18, lx + 1, ly - 18);
                 graphics.fillTriangle(lx - 3, ly - 12, lx - 6, ly - 13, lx - 6, ly - 11);
                 graphics.fillTriangle(lx + 3, ly - 12, lx + 6, ly - 13, lx + 6, ly - 11);
@@ -6286,17 +6273,17 @@ export class BuildingRenderer {
             }
         }
 
-        // ===== FLYING BALL (during throw animation) =====
+        // ===== FLYING BALL (during throw animation) — level-dependent =====
         if (showFlyingBall) {
             const bx = center.x + flyingBallX;
             const by = center.y + flyingBallY;
+            const flyCore = isLevel4 ? 0xeeeedd : (isLevel3 ? 0x333333 : 0x555555);
+            const flySpike = isLevel4 ? 0xdaa520 : (isLevel3 ? 0x888888 : 0xaaaaaa);
 
-            // Metal core
-            graphics.fillStyle(0x555555, alpha);
+            graphics.fillStyle(flyCore, alpha);
             graphics.fillCircle(bx, by, 3);
 
-            // Spikes
-            graphics.fillStyle(0xaaaaaa, alpha);
+            graphics.fillStyle(flySpike, alpha);
             graphics.fillTriangle(bx, by - 3, bx - 1, by - 7, bx + 1, by - 7);
             graphics.fillTriangle(bx, by + 3, bx - 1, by + 7, bx + 1, by + 7);
             graphics.fillTriangle(bx - 3, by, bx - 7, by - 1, bx - 7, by + 1);
