@@ -1302,10 +1302,15 @@ function App() {
 
       {view === 'REPLAY' && activeReplay && (
         <div className="replay-status-overlay">
-          <span className="label">
-            {activeReplay.live ? 'LIVE DEFENSE WATCH' : 'ATTACK REPLAY'}: {activeReplay.attackerName}
-          </span>
-          <button className="exit-btn" onClick={handleExitReplay}>EXIT</button>
+          <div className="replay-badge">
+            <span className="replay-icon">{activeReplay.live ? '\u25C9' : '\u25B6'}</span>
+            <span className="replay-mode">{activeReplay.live ? 'LIVE' : 'REPLAY'}</span>
+          </div>
+          <div className="replay-info">
+            <span className="replay-title">{activeReplay.live ? 'Defense Watch' : 'Attack Replay'}</span>
+            <span className="replay-attacker">{activeReplay.attackerName}</span>
+          </div>
+          <button className="replay-exit-btn" onClick={handleExitReplay}>RETREAT</button>
         </div>
       )}
 

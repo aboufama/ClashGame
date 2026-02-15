@@ -2563,33 +2563,82 @@ body.is-touch {
     top: 14px;
     transform: translateX(-50%);
     z-index: 120;
-    background: rgba(9, 11, 16, 0.9);
-    border: 2px solid rgba(255, 255, 255, 0.2);
-    border-radius: 999px;
-    padding: 8px 14px;
+    background: var(--panel-bg);
+    border: 3px solid var(--panel-border);
+    border-radius: 6px;
+    padding: 8px 12px;
     display: flex;
     align-items: center;
     gap: 10px;
+    box-shadow:
+        3px 3px 0 var(--panel-border-dark),
+        inset 1px 1px 0 var(--panel-border-light);
+    font-family: 'Press Start 2P', monospace;
+    animation: incoming-attack-pop 250ms ease-out;
 }
 
-.replay-status-overlay .label {
-    color: #ffe59a;
+.replay-badge {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--panel-accent);
+    border: 2px solid var(--panel-border);
+    border-radius: 4px;
+    padding: 4px 6px;
+}
+
+.replay-badge .replay-icon {
+    color: #ff6868;
     font-size: 8px;
+    animation: replay-pulse 1.5s ease-in-out infinite;
 }
 
-.replay-status-overlay .exit-btn {
-    background: rgba(255, 255, 255, 0.08);
-    border: 2px solid rgba(255, 255, 255, 0.25);
-    border-radius: 999px;
+.replay-badge .replay-mode {
+    color: var(--fantasy-gold);
+    font-size: 7px;
+    letter-spacing: 1px;
+}
+
+.replay-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.replay-info .replay-title {
+    color: var(--text-secondary);
+    font-size: 7px;
+    text-shadow: var(--text-shadow);
+}
+
+.replay-info .replay-attacker {
+    color: var(--text-primary);
+    font-size: 8px;
+    text-shadow: var(--text-shadow);
+}
+
+.replay-exit-btn {
+    background: linear-gradient(180deg, #8B0000 0%, #5a0000 100%);
+    border: 2px solid #aa3333;
+    border-radius: 4px;
     color: var(--text-primary);
     font-family: 'Press Start 2P', monospace;
-    font-size: 8px;
+    font-size: 7px;
     padding: 6px 10px;
     cursor: pointer;
+    box-shadow: 2px 2px 0 var(--panel-border-dark);
+    text-shadow: var(--text-shadow);
+    letter-spacing: 1px;
 }
 
-.replay-status-overlay .exit-btn:hover {
-    border-color: rgba(255, 255, 255, 0.5);
+.replay-exit-btn:hover {
+    background: linear-gradient(180deg, #aa1111 0%, #6a0000 100%);
+    border-color: #cc4444;
+}
+
+@keyframes replay-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
 }
 
 @keyframes incoming-attack-pop {

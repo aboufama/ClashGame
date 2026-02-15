@@ -461,238 +461,279 @@ export class BuildingRenderer {
 
     static drawLab(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, time: number = 0, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
         const level = building?.level ?? 1;
-        const wallHeight = level >= 3 ? 38 : level >= 2 ? 34 : 28;
         const g = baseGraphics || graphics;
 
-        const t1 = new Phaser.Math.Vector2(c1.x, c1.y - wallHeight);
-        const t2 = new Phaser.Math.Vector2(c2.x, c2.y - wallHeight);
-        const t3 = new Phaser.Math.Vector2(c3.x, c3.y - wallHeight);
-        const t4 = new Phaser.Math.Vector2(c4.x, c4.y - wallHeight);
+        // Octagon isometric building with huge centered smokestack
+        // Compute octagon vertices from the diamond corners
+        // Cut corners of the diamond to create 8 sides
+        const cut = 0.3; // how much to cut each corner
 
-        // Wall direction vectors for isometric-aligned details
-        const rwDirX = c3.x - c2.x;
-        const rwDirY = c3.y - c2.y;
-        const lwDirX = c4.x - c3.x;
-        const lwDirY = c4.y - c3.y;
+        // The 4 original corners become 8 points by cutting
+        // Going clockwise from top: c1(top) -> c2(right) -> c3(bottom) -> c4(left)
+        const o1 = { x: c1.x + (c2.x - c1.x) * cut, y: c1.y + (c2.y - c1.y) * cut }; // top-right of top
+        const o2 = { x: c2.x + (c1.x - c2.x) * cut, y: c2.y + (c1.y - c2.y) * cut }; // top of right
+        const o3 = { x: c2.x + (c3.x - c2.x) * cut, y: c2.y + (c3.y - c2.y) * cut }; // bottom of right
+        const o4 = { x: c3.x + (c2.x - c3.x) * cut, y: c3.y + (c2.y - c3.y) * cut }; // right of bottom
+        const o5 = { x: c3.x + (c4.x - c3.x) * cut, y: c3.y + (c4.y - c3.y) * cut }; // left of bottom
+        const o6 = { x: c4.x + (c3.x - c4.x) * cut, y: c4.y + (c3.y - c4.y) * cut }; // bottom of left
+        const o7 = { x: c4.x + (c1.x - c4.x) * cut, y: c4.y + (c1.y - c4.y) * cut }; // top of left
+        const o8 = { x: c1.x + (c4.x - c1.x) * cut, y: c1.y + (c4.y - c1.y) * cut }; // left of top
+
+        const wallHeight = level >= 3 ? 36 : level >= 2 ? 32 : 26;
 
         if (!skipBase) {
-            // Stone foundation with chemical stains
+            // Octagonal foundation
             const baseColor = level >= 3 ? 0x484058 : level >= 2 ? 0x5a5568 : 0x6a6a78;
             g.fillStyle(tint ?? baseColor, alpha);
-            g.fillPoints([c1, c2, c3, c4], true);
+            g.beginPath();
+            g.moveTo(o1.x, o1.y);
+            g.lineTo(o2.x, o2.y);
+            g.lineTo(o3.x, o3.y);
+            g.lineTo(o4.x, o4.y);
+            g.lineTo(o5.x, o5.y);
+            g.lineTo(o6.x, o6.y);
+            g.lineTo(o7.x, o7.y);
+            g.lineTo(o8.x, o8.y);
+            g.closePath();
+            g.fillPath();
+            // Foundation outline
             g.lineStyle(2, 0x444455, alpha * 0.7);
-            g.lineBetween(c1.x, c1.y, c2.x, c2.y);
-            g.lineBetween(c3.x, c3.y, c4.x, c4.y);
-            // Acid stain splotches
-            const stainColor = level >= 3 ? 0x334433 : level >= 2 ? 0x445544 : 0x556655;
-            g.fillStyle(stainColor, alpha * 0.4);
-            g.fillCircle(center.x - 8, center.y + 4, 4);
-            g.fillCircle(center.x + 6, center.y + 2, 3);
-            if (level >= 2) g.fillCircle(center.x + 12, center.y - 1, 2.5);
+            g.beginPath();
+            g.moveTo(o1.x, o1.y); g.lineTo(o2.x, o2.y); g.lineTo(o3.x, o3.y); g.lineTo(o4.x, o4.y);
+            g.lineTo(o5.x, o5.y); g.lineTo(o6.x, o6.y); g.lineTo(o7.x, o7.y); g.lineTo(o8.x, o8.y);
+            g.closePath();
+            g.strokePath();
         }
 
         if (!onlyBase) {
-            // === WALLS ===
-            const rwColor = level >= 3 ? 0x3a3448 : level >= 2 ? 0x4a4458 : 0x5a5a6a;
-            const lwColor = level >= 3 ? 0x4a4458 : level >= 2 ? 0x5a5468 : 0x6a6a7a;
-            graphics.fillStyle(tint ?? rwColor, alpha);
-            graphics.fillPoints([c2, c3, t3, t2], true);
-            graphics.fillStyle(tint ?? lwColor, alpha);
-            graphics.fillPoints([c3, c4, t4, t3], true);
+            // === OCTAGONAL WALLS ===
+            // Only draw the visible walls (right half of the building in isometric view)
+            // Visible wall segments: o2-o3, o3-o4, o4-o5, o5-o6
+            const rwColor = tint ?? (level >= 3 ? 0x3a3448 : level >= 2 ? 0x4a4458 : 0x5a5a6a);
+            const lwColor = tint ?? (level >= 3 ? 0x4a4458 : level >= 2 ? 0x5a5468 : 0x6a6a7a);
+            const darkColor = tint ?? (level >= 3 ? 0x2a2438 : level >= 2 ? 0x3a3448 : 0x4a4a5a);
 
-            // Stone block lines following isometric angles
-            if (level >= 2) {
-                graphics.lineStyle(1, 0x2a2838, alpha * 0.3);
-                for (let i = 1; i <= 3; i++) {
-                    const frac = i / 4;
-                    graphics.lineBetween(c2.x, c2.y + (t2.y - c2.y) * frac, c3.x, c3.y + (t3.y - c3.y) * frac);
-                    graphics.lineBetween(c3.x, c3.y + (t3.y - c3.y) * frac, c4.x, c4.y + (t4.y - c4.y) * frac);
-                }
-            }
-
-            // Wall edge outlines
-            graphics.lineStyle(1, 0x2a2a3a, 0.6 * alpha);
-            graphics.lineBetween(c2.x, c2.y, t2.x, t2.y);
-            graphics.lineBetween(c3.x, c3.y, t3.x, t3.y);
-            graphics.lineBetween(c4.x, c4.y, t4.x, t4.y);
-
-            // === ISOMETRIC WINDOWS (aligned to wall faces) ===
-            const drawIsoWindow = (bx: number, by: number, dirX: number, dirY: number, wh: number, pos: number, w: number, top: number, bot: number, frame: number, glass: number, glowAlpha: number = 0.8) => {
-                const cx = bx + dirX * pos;
-                const cy = by + dirY * pos;
-                const hw = dirX * w;
-                const hs = dirY * w;
-                const wt = cy - wh * top;
-                const wb = cy - wh * bot;
-                graphics.fillStyle(frame, alpha);
+            // Wall segment helper: draws a wall face from bottom edge to top edge
+            const drawWallSeg = (ax: number, ay: number, bx: number, by: number, color: number) => {
+                graphics.fillStyle(color, alpha);
                 graphics.beginPath();
-                graphics.moveTo(cx - hw, wt - hs);
-                graphics.lineTo(cx + hw, wt + hs);
-                graphics.lineTo(cx + hw, wb + hs);
-                graphics.lineTo(cx - hw, wb - hs);
-                graphics.closePath();
-                graphics.fillPath();
-                graphics.fillStyle(glass, alpha * glowAlpha);
-                graphics.beginPath();
-                graphics.moveTo(cx - hw + 1.5, wt - hs + 1.5);
-                graphics.lineTo(cx + hw - 1.5, wt + hs + 1.5);
-                graphics.lineTo(cx + hw - 1.5, wb + hs - 1.5);
-                graphics.lineTo(cx - hw + 1.5, wb - hs - 1.5);
+                graphics.moveTo(ax, ay);
+                graphics.lineTo(bx, by);
+                graphics.lineTo(bx, by - wallHeight);
+                graphics.lineTo(ax, ay - wallHeight);
                 graphics.closePath();
                 graphics.fillPath();
             };
 
-            // Glowing windows - color shifts by level
+            // Draw visible wall segments (back to front for layering)
+            // Back-right face (o2 -> o3)
+            drawWallSeg(o2.x, o2.y, o3.x, o3.y, rwColor);
+            // Right face (o3 -> o4) — brightest, most visible
+            drawWallSeg(o3.x, o3.y, o4.x, o4.y, rwColor);
+            // Front face (o4 -> o5) — transitions to left
+            drawWallSeg(o4.x, o4.y, o5.x, o5.y, darkColor);
+            // Front-left face (o5 -> o6)
+            drawWallSeg(o5.x, o5.y, o6.x, o6.y, lwColor);
+
+            // Wall edge outlines
+            graphics.lineStyle(1, 0x2a2a3a, 0.6 * alpha);
+            const visiblePts = [o2, o3, o4, o5, o6];
+            for (const p of visiblePts) {
+                graphics.lineBetween(p.x, p.y, p.x, p.y - wallHeight);
+            }
+
+            // Stone block lines on visible faces
+            if (level >= 2) {
+                graphics.lineStyle(1, 0x2a2838, alpha * 0.25);
+                for (let i = 1; i <= 3; i++) {
+                    const frac = i / 4;
+                    const yOff = -wallHeight * frac;
+                    // Draw horizontal mortar lines across visible segments
+                    for (let s = 0; s < visiblePts.length - 1; s++) {
+                        const pa = visiblePts[s];
+                        const pb = visiblePts[s + 1];
+                        graphics.lineBetween(pa.x, pa.y + yOff, pb.x, pb.y + yOff);
+                    }
+                }
+            }
+
+            // === GLOWING WINDOWS on right face (o3-o4) ===
             const windowGlow = 0.6 + Math.sin(time / 500) * 0.15;
             const glowColor = level >= 3 ? 0xcc44ff : level >= 2 ? 0x8844ff : 0x44cc88;
-            // Right wall: large window
-            drawIsoWindow(c2.x, c2.y, rwDirX, rwDirY, wallHeight, 0.5, 0.12, 0.7, 0.3, 0x1a1a2a, glowColor, windowGlow);
-            // Left wall: two windows
-            drawIsoWindow(c3.x, c3.y, lwDirX, lwDirY, wallHeight, 0.3, 0.09, 0.7, 0.4, 0x1a1a2a, glowColor, windowGlow);
-            drawIsoWindow(c3.x, c3.y, lwDirX, lwDirY, wallHeight, 0.7, 0.09, 0.7, 0.4, 0x1a1a2a, glowColor, windowGlow);
+            const wMidX = (o3.x + o4.x) / 2;
+            const wMidY = (o3.y + o4.y) / 2;
+            // Window frame
+            graphics.fillStyle(0x1a1a2a, alpha);
+            graphics.fillRect(wMidX - 4, wMidY - wallHeight * 0.7, 8, wallHeight * 0.35);
+            graphics.fillStyle(glowColor, alpha * windowGlow);
+            graphics.fillRect(wMidX - 3, wMidY - wallHeight * 0.68, 6, wallHeight * 0.31);
 
-            // === FLAT ISOMETRIC ROOF ===
-            const roofOverhang = level >= 3 ? 5 : 4;
-            const r1 = new Phaser.Math.Vector2(t1.x, t1.y - roofOverhang);
-            const r2 = new Phaser.Math.Vector2(t2.x + roofOverhang, t2.y);
-            const r3 = new Phaser.Math.Vector2(t3.x, t3.y + roofOverhang);
-            const r4 = new Phaser.Math.Vector2(t4.x - roofOverhang, t4.y);
+            // Small window on front-left face (o5-o6)
+            const w2MidX = (o5.x + o6.x) / 2;
+            const w2MidY = (o5.y + o6.y) / 2;
+            graphics.fillStyle(0x1a1a2a, alpha);
+            graphics.fillRect(w2MidX - 3, w2MidY - wallHeight * 0.65, 6, wallHeight * 0.25);
+            graphics.fillStyle(glowColor, alpha * windowGlow * 0.8);
+            graphics.fillRect(w2MidX - 2, w2MidY - wallHeight * 0.63, 4, wallHeight * 0.21);
+
+            // === DOOR on front face (o4-o5) ===
+            const doorMidX = (o4.x + o5.x) / 2;
+            const doorMidY = (o4.y + o5.y) / 2;
+            const doorW = 7;
+            const doorH = wallHeight * 0.55;
+            // Dark interior
+            graphics.fillStyle(0x0a0a15, alpha);
+            graphics.fillRect(doorMidX - doorW / 2, doorMidY - doorH, doorW, doorH);
+            // Interior glow
+            const interiorGlow = 0.3 + Math.sin(time / 300) * 0.1;
+            const interiorColor = level >= 3 ? 0xaa44ff : level >= 2 ? 0x6644cc : 0x33aa66;
+            graphics.fillStyle(interiorColor, alpha * interiorGlow);
+            graphics.fillCircle(doorMidX, doorMidY - doorH * 0.4, 3);
+            // Door frame
+            graphics.lineStyle(1.5, level >= 2 ? 0x555555 : 0x4a4a5a, alpha);
+            graphics.strokeRect(doorMidX - doorW / 2, doorMidY - doorH, doorW, doorH);
+
+            // === OCTAGONAL ROOF ===
+            const roofOverhang = 4;
+            // Roof is the octagon shape lifted to wall top, with slight overhang
+            const roofPts = [o1, o2, o3, o4, o5, o6, o7, o8].map(p => {
+                // Shift outward from center slightly for overhang
+                const dx = p.x - center.x;
+                const dy = p.y - center.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const scale = (dist + roofOverhang) / dist;
+                return new Phaser.Math.Vector2(
+                    center.x + dx * scale,
+                    center.y + dy * scale - wallHeight
+                );
+            });
 
             const roofColor = level >= 3 ? 0x2a2238 : level >= 2 ? 0x3a3448 : 0x4a4a5a;
             graphics.fillStyle(roofColor, alpha);
-            graphics.fillPoints([r1, r2, r3, r4], true);
+            graphics.fillPoints(roofPts, true);
             graphics.lineStyle(1, 0x1a1a2a, alpha * 0.8);
-            graphics.strokePoints([r1, r2, r3, r4], true, true);
+            graphics.strokePoints(roofPts, true, true);
 
-            // === BIG SMOKESTACK (isometric chimney) ===
-            // Position on the right side of the roof
-            const stackFrac = 0.65;
-            const stackBaseX = r2.x + (r3.x - r2.x) * stackFrac;
-            const stackBaseY = r2.y + (r3.y - r2.y) * stackFrac;
-            const stackW = 7;
-            const stackH = level >= 3 ? 28 : level >= 2 ? 22 : 16;
+            // Roof detail: radial lines from center to each vertex
+            if (level >= 2) {
+                const roofCenterY = center.y - wallHeight;
+                graphics.lineStyle(1, 0x222233, alpha * 0.4);
+                for (const rp of roofPts) {
+                    graphics.lineBetween(center.x, roofCenterY, rp.x, rp.y);
+                }
+            }
 
-            // Chimney is an isometric column: right face and left face
-            const stackRightX = rwDirX / Math.sqrt(rwDirX * rwDirX + rwDirY * rwDirY);
-            const stackRightY = rwDirY / Math.sqrt(rwDirX * rwDirX + rwDirY * rwDirY);
+            // === HUGE CENTERED SMOKESTACK ===
+            const stackRadius = level >= 3 ? 12 : level >= 2 ? 10 : 8;
+            const stackH = level >= 3 ? 40 : level >= 2 ? 32 : 24;
+            const stackBaseY = center.y - wallHeight;
+            const stackTopY = stackBaseY - stackH;
 
-            // Right face of chimney
-            graphics.fillStyle(level >= 3 ? 0x444444 : level >= 2 ? 0x555555 : 0x606060, alpha);
+            // Cylindrical smokestack rendered as isometric column
+            // Right face
+            graphics.fillStyle(level >= 3 ? 0x3a3a44 : level >= 2 ? 0x4a4a55 : 0x555566, alpha);
             graphics.beginPath();
-            graphics.moveTo(stackBaseX, stackBaseY);
-            graphics.lineTo(stackBaseX + stackRightX * stackW, stackBaseY + stackRightY * stackW);
-            graphics.lineTo(stackBaseX + stackRightX * stackW, stackBaseY + stackRightY * stackW - stackH);
-            graphics.lineTo(stackBaseX, stackBaseY - stackH);
+            graphics.moveTo(center.x, stackBaseY + stackRadius * 0.35);
+            graphics.lineTo(center.x + stackRadius, stackBaseY);
+            graphics.lineTo(center.x + stackRadius, stackTopY);
+            graphics.lineTo(center.x, stackTopY + stackRadius * 0.35);
             graphics.closePath();
             graphics.fillPath();
-            // Left face of chimney
-            graphics.fillStyle(level >= 3 ? 0x555555 : level >= 2 ? 0x666666 : 0x707070, alpha);
+            // Left face
+            graphics.fillStyle(level >= 3 ? 0x4a4a55 : level >= 2 ? 0x5a5a66 : 0x666677, alpha);
             graphics.beginPath();
-            graphics.moveTo(stackBaseX, stackBaseY);
-            graphics.lineTo(stackBaseX - stackRightX * stackW * 0.6, stackBaseY - stackRightY * stackW * 0.6);
-            graphics.lineTo(stackBaseX - stackRightX * stackW * 0.6, stackBaseY - stackRightY * stackW * 0.6 - stackH);
-            graphics.lineTo(stackBaseX, stackBaseY - stackH);
+            graphics.moveTo(center.x, stackBaseY + stackRadius * 0.35);
+            graphics.lineTo(center.x - stackRadius, stackBaseY);
+            graphics.lineTo(center.x - stackRadius, stackTopY);
+            graphics.lineTo(center.x, stackTopY + stackRadius * 0.35);
             graphics.closePath();
             graphics.fillPath();
-            // Chimney top cap
-            const capY = stackBaseY - stackH;
-            graphics.fillStyle(0x3a3a3a, alpha);
-            graphics.beginPath();
-            graphics.moveTo(stackBaseX - stackRightX * stackW * 0.6, capY - stackRightY * stackW * 0.6);
-            graphics.lineTo(stackBaseX + stackRightX * stackW, capY + stackRightY * stackW);
-            graphics.lineTo(stackBaseX + stackRightX * stackW + 2, capY + stackRightY * stackW - 3);
-            graphics.lineTo(stackBaseX - stackRightX * stackW * 0.6 + 2, capY - stackRightY * stackW * 0.6 - 3);
-            graphics.closePath();
-            graphics.fillPath();
-            // Chimney outline
-            graphics.lineStyle(1, 0x2a2a2a, alpha * 0.8);
-            graphics.lineBetween(stackBaseX, stackBaseY, stackBaseX, stackBaseY - stackH);
-            graphics.lineBetween(stackBaseX + stackRightX * stackW, stackBaseY + stackRightY * stackW, stackBaseX + stackRightX * stackW, stackBaseY + stackRightY * stackW - stackH);
 
-            // === SMOKE (animated, bigger for higher levels) ===
+            // Stack edge outlines
+            graphics.lineStyle(1, 0x2a2a33, alpha * 0.7);
+            graphics.lineBetween(center.x + stackRadius, stackBaseY, center.x + stackRadius, stackTopY);
+            graphics.lineBetween(center.x - stackRadius, stackBaseY, center.x - stackRadius, stackTopY);
+
+            // Horizontal band rings on smokestack
+            const bandColor = level >= 3 ? 0x555566 : level >= 2 ? 0x606070 : 0x6a6a7a;
+            graphics.lineStyle(2, bandColor, alpha * 0.6);
+            const bandCount = level >= 3 ? 4 : 3;
+            for (let i = 1; i <= bandCount; i++) {
+                const frac = i / (bandCount + 1);
+                const bandY = stackBaseY + (stackTopY - stackBaseY) * frac;
+                // Isometric ellipse band
+                graphics.strokeEllipse(center.x, bandY + stackRadius * 0.17, stackRadius * 2, stackRadius * 0.7);
+            }
+
+            // Chimney top cap (isometric ellipse)
+            graphics.fillStyle(level >= 3 ? 0x2a2a33 : level >= 2 ? 0x3a3a44 : 0x444455, alpha);
+            graphics.fillEllipse(center.x, stackTopY + stackRadius * 0.17, stackRadius * 2 + 4, stackRadius * 0.7 + 2);
+            // Inner opening
+            graphics.fillStyle(0x111118, alpha);
+            graphics.fillEllipse(center.x, stackTopY + stackRadius * 0.17, stackRadius * 1.4, stackRadius * 0.5);
+
+            // Interior glow from stack opening
+            const stackGlow = 0.25 + Math.sin(time / 350) * 0.1;
+            graphics.fillStyle(interiorColor, alpha * stackGlow);
+            graphics.fillEllipse(center.x, stackTopY + stackRadius * 0.17, stackRadius * 0.8, stackRadius * 0.3);
+
+            // === SMOKE (animated, rises from center) ===
             const smokePhase = time / 700;
-            const smokeCount = level >= 3 ? 5 : level >= 2 ? 4 : 3;
-            const smokeBaseX = stackBaseX + stackRightX * stackW * 0.2;
-            const smokeBaseY = capY - 4;
+            const smokeCount = level >= 3 ? 7 : level >= 2 ? 5 : 3;
             for (let i = 0; i < smokeCount; i++) {
-                const sy = smokeBaseY - i * 7 - Math.sin(smokePhase + i * 0.8) * 3;
-                const sx = smokeBaseX + Math.sin(smokePhase * 0.6 + i * 1.2) * (3 + i * 0.8);
-                const smokeColor = level >= 3 ? 0x6633aa : level >= 2 ? 0x7744aa : 0x888888;
-                const smokeAlpha = (0.45 - i * 0.07);
-                const smokeRadius = 3.5 + i * 0.6;
-                graphics.fillStyle(smokeColor, alpha * Math.max(0.05, smokeAlpha));
+                const t = (smokePhase + i * 0.7) % (smokeCount * 0.7);
+                const rise = t * 12;
+                const drift = Math.sin(smokePhase * 0.5 + i * 1.3) * (4 + rise * 0.15);
+                const sy = stackTopY - 4 - rise;
+                const sx = center.x + drift;
+                const smokeColor = level >= 3 ? 0x6633aa : level >= 2 ? 0x7744aa : 0x888899;
+                const smokeAlpha = Math.max(0.04, 0.4 - t * 0.06);
+                const smokeRadius = 3 + t * 1.2;
+                graphics.fillStyle(smokeColor, alpha * smokeAlpha);
                 graphics.fillCircle(sx, sy, smokeRadius);
             }
 
-            // === INTERIOR GLOW (bubbling cauldron visible through door) ===
-            // Door on left wall
-            const doorH = level >= 3 ? 18 : level >= 2 ? 16 : 14;
-            const lwLen = Math.sqrt(lwDirX * lwDirX + lwDirY * lwDirY);
-            const lwNormX = lwDirX / lwLen;
-            const lwNormY = lwDirY / lwLen;
-            const doorCX = (c3.x + c4.x) / 2;
-            const doorCY = (c3.y + c4.y) / 2;
-            const doorHW = 8;
-            const dbl = { x: doorCX - lwNormX * doorHW, y: doorCY - lwNormY * doorHW };
-            const dbr = { x: doorCX + lwNormX * doorHW, y: doorCY + lwNormY * doorHW };
-            const dtl = { x: dbl.x, y: dbl.y - doorH };
-            const dtr = { x: dbr.x, y: dbr.y - doorH };
-
-            // Dark interior
-            graphics.fillStyle(0x0a0a15, alpha);
-            graphics.fillPoints([
-                new Phaser.Math.Vector2(dbl.x, dbl.y),
-                new Phaser.Math.Vector2(dbr.x, dbr.y),
-                new Phaser.Math.Vector2(dtr.x, dtr.y),
-                new Phaser.Math.Vector2(dtl.x, dtl.y)
-            ], true);
-            // Interior glow (bubbling/flickering)
-            const interiorGlow = 0.3 + Math.sin(time / 300) * 0.1 + Math.sin(time / 170) * 0.05;
-            const interiorColor = level >= 3 ? 0xaa44ff : level >= 2 ? 0x6644cc : 0x33aa66;
-            graphics.fillStyle(interiorColor, alpha * interiorGlow);
-            const glowCX = (dbl.x + dbr.x) / 2;
-            const glowCY = (dbl.y + dbr.y) / 2 - doorH * 0.3;
-            graphics.fillCircle(glowCX, glowCY, 5);
-            // Bubbles
-            for (let i = 0; i < 3; i++) {
-                const bx = glowCX + Math.sin(time / 200 + i * 2.1) * 3;
-                const by = glowCY - 2 - Math.abs(Math.sin(time / 250 + i * 1.7)) * 4;
-                graphics.fillStyle(interiorColor, alpha * (0.4 + Math.sin(time / 150 + i) * 0.15));
-                graphics.fillCircle(bx, by, 1.5);
-            }
-            // Door frame
-            graphics.lineStyle(2, level >= 2 ? 0x555555 : 0x4a4a5a, alpha);
-            graphics.lineBetween(dbl.x, dbl.y, dtl.x, dtl.y);
-            graphics.lineBetween(dbr.x, dbr.y, dtr.x, dtr.y);
-            graphics.lineBetween(dtl.x, dtl.y, dtr.x, dtr.y);
-
-            // Level 2+: Glowing runes on walls
+            // === Level 2+: Glowing runes on walls ===
             if (level >= 2) {
                 const runeGlow = 0.4 + Math.sin(time / 400) * 0.2;
                 const runeColor = level >= 3 ? 0xcc66ff : 0x9966ff;
                 graphics.fillStyle(runeColor, alpha * runeGlow);
-                for (let i = 0; i < 3; i++) {
-                    const frac = 0.2 + i * 0.3;
-                    const rx = c2.x + rwDirX * frac;
-                    const ry = c2.y + rwDirY * frac - wallHeight * 0.5;
-                    graphics.fillCircle(rx, ry, 2);
-                    graphics.lineStyle(1, runeColor, alpha * runeGlow * 0.6);
-                    graphics.lineBetween(rx - 2, ry - 3, rx + 2, ry + 3);
+                // Runes on right face (o3-o4)
+                for (let i = 0; i < 2; i++) {
+                    const frac = 0.3 + i * 0.4;
+                    const rx = o3.x + (o4.x - o3.x) * frac;
+                    const ry = o3.y + (o4.y - o3.y) * frac - wallHeight * 0.35;
+                    graphics.fillCircle(rx, ry, 1.5);
+                    graphics.lineStyle(1, runeColor, alpha * runeGlow * 0.5);
+                    graphics.lineBetween(rx - 1.5, ry - 2.5, rx + 1.5, ry + 2.5);
+                    graphics.lineBetween(rx - 2, ry, rx + 2, ry);
                 }
+                // Runes on front-left face (o5-o6)
+                const rx2 = (o5.x + o6.x) / 2;
+                const ry2 = (o5.y + o6.y) / 2 - wallHeight * 0.35;
+                graphics.fillCircle(rx2, ry2, 1.5);
             }
 
-            // Level 3: Extra reinforcement bands
+            // === Level 3: Pipe details on walls ===
             if (level >= 3) {
-                graphics.lineStyle(2, 0x444466, alpha * 0.6);
-                const bandFrac = 0.35;
-                graphics.lineBetween(
-                    c2.x, c2.y + (t2.y - c2.y) * bandFrac,
-                    c3.x, c3.y + (t3.y - c3.y) * bandFrac
-                );
-                graphics.lineBetween(
-                    c3.x, c3.y + (t3.y - c3.y) * bandFrac,
-                    c4.x, c4.y + (t4.y - c4.y) * bandFrac
-                );
+                // Exposed pipes running down the right face
+                graphics.lineStyle(2, 0x555566, alpha * 0.7);
+                const pipeX1 = o3.x + (o4.x - o3.x) * 0.15;
+                const pipeY1 = o3.y + (o4.y - o3.y) * 0.15;
+                graphics.lineBetween(pipeX1, pipeY1, pipeX1, pipeY1 - wallHeight);
+                // Pipe connects to stack
+                graphics.lineBetween(pipeX1, pipeY1 - wallHeight, center.x + stackRadius - 2, stackBaseY - stackH * 0.3);
+
+                // Second pipe on left face
+                const pipeX2 = o5.x + (o6.x - o5.x) * 0.8;
+                const pipeY2 = o5.y + (o6.y - o5.y) * 0.8;
+                graphics.lineBetween(pipeX2, pipeY2, pipeX2, pipeY2 - wallHeight * 0.7);
+                graphics.lineBetween(pipeX2, pipeY2 - wallHeight * 0.7, center.x - stackRadius + 2, stackBaseY - stackH * 0.2);
+
+                // Pipe joints
+                graphics.fillStyle(0x666677, alpha);
+                graphics.fillCircle(pipeX1, pipeY1 - wallHeight, 2);
+                graphics.fillCircle(pipeX2, pipeY2 - wallHeight * 0.7, 2);
             }
         }
     }
