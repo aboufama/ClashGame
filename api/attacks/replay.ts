@@ -127,67 +127,12 @@ function sanitizeReplayFrame(frame: Partial<AttackReplayFrame> | null | undefine
       .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
     : [];
 
-  const troopPaths = Array.isArray((safeFrame as { troopPaths?: unknown }).troopPaths)
-    ? ((safeFrame as { troopPaths?: unknown }).troopPaths as Array<Record<string, unknown>>)
-      .map(track => {
-        const id = String(track.id ?? '').trim().slice(0, 96);
-        if (!id) return null;
-        const type = String(track.type ?? '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
-        if (!type) return null;
-        const ownerRaw = String(track.owner ?? 'PLAYER').toUpperCase();
-        const owner = ownerRaw === 'ENEMY' ? 'ENEMY' : 'PLAYER';
-        const pointsRaw = Array.isArray(track.points) ? track.points : [];
-        const byT = new Map<number, {
-          t: number;
-          gridX: number;
-          gridY: number;
-          health: number;
-          facingAngle?: number;
-          hasTakenDamage?: boolean;
-        }>();
-
-        for (const rawPoint of pointsRaw) {
-          const point = rawPoint as Record<string, unknown>;
-          const t = Math.max(0, Math.floor(Number(point.t) || 0));
-          byT.set(t, {
-            t,
-            gridX: Number(point.gridX ?? 0) || 0,
-            gridY: Number(point.gridY ?? 0) || 0,
-            health: Math.max(0, Number(point.health ?? 0) || 0),
-            facingAngle: Number.isFinite(Number(point.facingAngle))
-              ? Number(point.facingAngle)
-              : undefined,
-            hasTakenDamage: Boolean(point.hasTakenDamage)
-          });
-        }
-
-        const points = Array.from(byT.values())
-          .sort((a, b) => a.t - b.t)
-          .slice(0, 180);
-        if (points.length === 0) return null;
-
-        return {
-          id,
-          type,
-          level: Math.max(1, Math.floor(Number(track.level ?? 1) || 1)),
-          owner,
-          maxHealth: Math.max(1, Number(track.maxHealth ?? 1) || 1),
-          recursionGen: Number.isFinite(Number(track.recursionGen))
-            ? Math.max(0, Math.floor(Number(track.recursionGen)))
-            : undefined,
-          points
-        };
-      })
-      .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
-    : [];
-
   return {
     t: Math.max(0, Math.floor(Number(safeFrame.t ?? 0) || 0)),
     destruction: clamp(Number(safeFrame.destruction ?? 0), 0, 100),
     solLooted: Math.max(0, Math.floor(Number(safeFrame.solLooted ?? 0) || 0)),
     buildings,
-    troops,
-    troopPaths
+    troops
   };
 }
 

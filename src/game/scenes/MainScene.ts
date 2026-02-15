@@ -1,6 +1,6 @@
 
 import Phaser from 'phaser';
-import { Backend, type AttackReplayState, type ReplayFrameSnapshot, type ReplayTroopPathPointSnapshot, type ReplayTroopPathSnapshot, type ReplayTroopSnapshot } from '../backend/GameBackend';
+import { Backend, type AttackReplayState, type ReplayFrameSnapshot, type ReplayTroopSnapshot } from '../backend/GameBackend';
 import type { SerializedBuilding, SerializedWorld } from '../data/Models';
 import { BUILDING_DEFINITIONS, OBSTACLE_DEFINITIONS, TROOP_DEFINITIONS, getBuildingStats, getTroopStats, type BuildingType, type ObstacleType, type TroopType } from '../config/GameDefinitions';
 import { LootSystem } from '../systems/LootSystem';
@@ -36,23 +36,6 @@ interface EnemyInstantiationSummary {
 
 type ReplayWatchMode = 'live' | 'replay';
 
-interface ReplayCaptureTroopTrack {
-    id: string;
-    type: TroopType;
-    level: number;
-    owner: 'PLAYER' | 'ENEMY';
-    maxHealth: number;
-    recursionGen?: number;
-    points: ReplayTroopPathPointSnapshot[];
-    lastSampleAt: number;
-    lastX: number;
-    lastY: number;
-    lastHealth: number;
-    lastFacingAngle?: number;
-    lastTakenDamage?: boolean;
-    active: boolean;
-}
-
 interface ReplayCaptureState {
     attackId: string;
     victimId: string;
@@ -60,7 +43,6 @@ interface ReplayCaptureState {
     startedRemotely: boolean;
     framePushInFlight: boolean;
     lastFramePushAt: number;
-    tracksByTroopId: Map<string, ReplayCaptureTroopTrack>;
     ended: boolean;
 }
 
@@ -204,11 +186,10 @@ export class MainScene extends Phaser.Scene {
     public pendingSpawnCount = 0; // Prevent battle end during troop splits (phalanx/recursion)
     private readonly HEALTH_BAR_IDLE_MS = 5000;
     private readonly HEALTH_BAR_FADE_MS = 600;
-    private readonly REPLAY_PATH_SAMPLE_INTERVAL_MS = 500;
-    private readonly REPLAY_PUSH_INTERVAL_MS = 2200;
-    private readonly REPLAY_LIVE_POLL_INTERVAL_MS = 420;
-    private readonly REPLAY_LIVE_RENDER_DELAY_MS = 2600;
-    private readonly REPLAY_MAX_EXTRAPOLATION_MS = 900;
+    private readonly REPLAY_PUSH_INTERVAL_MS = 160;
+    private readonly REPLAY_LIVE_POLL_INTERVAL_MS = 160;
+    private readonly REPLAY_LIVE_RENDER_DELAY_MS = 760;
+    private readonly REPLAY_MAX_EXTRAPOLATION_MS = 460;
     private readonly REPLAY_SIM_SPEED_LIVE = 1.85;
     private readonly REPLAY_SIM_SPEED_REPLAY = 1.6;
 
@@ -7072,136 +7053,8 @@ export class MainScene extends Phaser.Scene {
         };
     }
 
-    private captureReplayTroopPathSamples(forceSampleNow: boolean = false) {
-        const state = this.replayCaptureState;
-        if (!state || state.ended) return;
-
-        const now = this.time.now;
-        const relT = Math.max(0, Math.floor(now - state.startedAt));
-        const aliveTroops = this.troops.filter(troop => troop.health > 0);
-        const seenIds = new Set<string>();
-
-        for (const troop of aliveTroops) {
-            seenIds.add(troop.id);
-            let track = state.tracksByTroopId.get(troop.id);
-            if (!track) {
-                track = {
-                    id: troop.id,
-                    type: troop.type,
-                    level: Math.max(1, Math.floor(troop.level || 1)),
-                    owner: troop.owner,
-                    maxHealth: Math.max(1, troop.maxHealth),
-                    recursionGen: troop.recursionGen,
-                    points: [],
-                    lastSampleAt: -Infinity,
-                    lastX: troop.gridX,
-                    lastY: troop.gridY,
-                    lastHealth: Math.max(0, troop.health),
-                    lastFacingAngle: troop.facingAngle,
-                    lastTakenDamage: troop.hasTakenDamage,
-                    active: true
-                };
-                state.tracksByTroopId.set(troop.id, track);
-            }
-
-            track.type = troop.type;
-            track.level = Math.max(1, Math.floor(troop.level || 1));
-            track.owner = troop.owner;
-            track.maxHealth = Math.max(1, troop.maxHealth);
-            track.recursionGen = troop.recursionGen;
-
-            const shouldSample = forceSampleNow || relT - track.lastSampleAt >= this.REPLAY_PATH_SAMPLE_INTERVAL_MS;
-            if (shouldSample) {
-                const nextPoint: ReplayTroopPathPointSnapshot = {
-                    t: relT,
-                    gridX: troop.gridX,
-                    gridY: troop.gridY,
-                    health: Math.max(0, troop.health),
-                    facingAngle: troop.facingAngle,
-                    hasTakenDamage: troop.hasTakenDamage
-                };
-                const lastPoint = track.points.length > 0 ? track.points[track.points.length - 1] : undefined;
-                if (!lastPoint || nextPoint.t > lastPoint.t) {
-                    track.points.push(nextPoint);
-                } else if (nextPoint.t === lastPoint.t) {
-                    track.points[track.points.length - 1] = nextPoint;
-                }
-                track.lastSampleAt = relT;
-            }
-
-            track.lastX = troop.gridX;
-            track.lastY = troop.gridY;
-            track.lastHealth = Math.max(0, troop.health);
-            track.lastFacingAngle = troop.facingAngle;
-            track.lastTakenDamage = troop.hasTakenDamage;
-            track.active = true;
-        }
-
-        state.tracksByTroopId.forEach(track => {
-            if (seenIds.has(track.id)) return;
-            if (!track.active) return;
-
-            const shouldSampleDeath = forceSampleNow || relT - track.lastSampleAt >= this.REPLAY_PATH_SAMPLE_INTERVAL_MS;
-            if (shouldSampleDeath) {
-                const deathPoint: ReplayTroopPathPointSnapshot = {
-                    t: relT,
-                    gridX: track.lastX,
-                    gridY: track.lastY,
-                    health: 0,
-                    facingAngle: track.lastFacingAngle,
-                    hasTakenDamage: true
-                };
-                const lastPoint = track.points.length > 0 ? track.points[track.points.length - 1] : undefined;
-                if (!lastPoint || deathPoint.t > lastPoint.t) {
-                    track.points.push(deathPoint);
-                } else if (deathPoint.t === lastPoint.t) {
-                    track.points[track.points.length - 1] = deathPoint;
-                }
-                track.lastSampleAt = relT;
-            }
-            track.lastHealth = 0;
-            track.active = false;
-        });
-    }
-
-    private takeReplayTroopPathChunks(state: ReplayCaptureState): ReplayTroopPathSnapshot[] {
-        const chunks: ReplayTroopPathSnapshot[] = [];
-        const retiredIds: string[] = [];
-
-        state.tracksByTroopId.forEach(track => {
-            if (track.points.length > 0) {
-                chunks.push({
-                    id: track.id,
-                    type: track.type,
-                    level: Math.max(1, Math.floor(track.level || 1)),
-                    owner: track.owner,
-                    maxHealth: Math.max(1, track.maxHealth),
-                    recursionGen: track.recursionGen,
-                    points: track.points.slice()
-                });
-                track.points = [];
-            }
-
-            if (!track.active && track.points.length === 0) {
-                retiredIds.push(track.id);
-            }
-        });
-
-        retiredIds.forEach(id => {
-            state.tracksByTroopId.delete(id);
-        });
-
-        return chunks;
-    }
-
-    private buildReplayFrameSnapshot(forceSampleNow: boolean = false): ReplayFrameSnapshot {
-        const captureState = this.replayCaptureState;
-        const startedAt = captureState?.startedAt ?? this.time.now;
-        this.captureReplayTroopPathSamples(forceSampleNow);
-        const troopPaths = captureState
-            ? this.takeReplayTroopPathChunks(captureState)
-            : [];
-
+    private buildReplayFrameSnapshot(): ReplayFrameSnapshot {
+        const startedAt = this.replayCaptureState?.startedAt ?? this.time.now;
         const { totalKnown } = this.getBattleTotals();
         const destruction = totalKnown > 0
             ? Math.min(100, Math.round((this.destroyedBuildings / totalKnown) * 100))
@@ -7218,8 +7071,21 @@ export class MainScene extends Phaser.Scene {
                     health: Math.max(0, Math.floor(building.health)),
                     isDestroyed: Boolean(building.isDestroyed || building.health <= 0)
                 })),
-            troops: [],
-            troopPaths
+            troops: this.troops
+                .filter(troop => troop.health > 0)
+                .map(troop => ({
+                    id: troop.id,
+                    type: troop.type,
+                    level: Math.max(1, Math.floor(troop.level || 1)),
+                    owner: troop.owner,
+                    gridX: troop.gridX,
+                    gridY: troop.gridY,
+                    health: Math.max(0, troop.health),
+                    maxHealth: Math.max(1, troop.maxHealth),
+                    recursionGen: troop.recursionGen,
+                    facingAngle: troop.facingAngle,
+                    hasTakenDamage: troop.hasTakenDamage
+                }))
         };
     }
 
@@ -7242,7 +7108,6 @@ export class MainScene extends Phaser.Scene {
             startedRemotely: false,
             framePushInFlight: false,
             lastFramePushAt: -Infinity,
-            tracksByTroopId: new Map<string, ReplayCaptureTroopTrack>(),
             ended: false
         };
         this.replayCaptureState = captureState;
@@ -7264,16 +7129,15 @@ export class MainScene extends Phaser.Scene {
 
     private maybePushReplayFrame(force: boolean = false) {
         const state = this.replayCaptureState;
-        if (!state || state.ended) return;
-        this.captureReplayTroopPathSamples(false);
-        if (!state.startedRemotely) return;
+        if (!state || state.ended || !state.startedRemotely) return;
         if (state.framePushInFlight) return;
+
         const now = this.time.now;
         if (!force && now - state.lastFramePushAt < this.REPLAY_PUSH_INTERVAL_MS) return;
 
         state.framePushInFlight = true;
         state.lastFramePushAt = now;
-        const frame = this.buildReplayFrameSnapshot(force);
+        const frame = this.buildReplayFrameSnapshot();
 
         void Backend.pushAttackReplayFrame(state.attackId, frame)
             .catch(error => {
@@ -7290,7 +7154,7 @@ export class MainScene extends Phaser.Scene {
         const state = this.replayCaptureState;
         if (!state || state.ended) return;
         state.ended = true;
-        const finalFrame = this.buildReplayFrameSnapshot(true);
+        const finalFrame = this.buildReplayFrameSnapshot();
         this.replayCaptureState = null;
 
         if (!state.startedRemotely) return;
@@ -7305,19 +7169,14 @@ export class MainScene extends Phaser.Scene {
             });
     }
 
-    private createReplayTroop(snapshot: ReplayTroopSnapshot, initialPathPoint?: ReplayTroopPathPointSnapshot): Troop | undefined {
+    private createReplayTroop(snapshot: ReplayTroopSnapshot): Troop | undefined {
         const troopType = this.getReplayTroopType(snapshot.type);
         if (!troopType) return undefined;
         const troopLevel = Math.max(1, Math.floor(snapshot.level || 1));
         const stats = getTroopStats(troopType, troopLevel);
         const attackDelay = stats.attackDelay ?? 900;
-        const startX = initialPathPoint ? initialPathPoint.gridX : snapshot.gridX;
-        const startY = initialPathPoint ? initialPathPoint.gridY : snapshot.gridY;
-        const initialHealth = initialPathPoint
-            ? Math.max(0, initialPathPoint.health)
-            : Math.max(0, snapshot.health);
 
-        const pos = IsoUtils.cartToIso(startX, startY);
+        const pos = IsoUtils.cartToIso(snapshot.gridX, snapshot.gridY);
         const troopGraphic = this.add.graphics();
         TroopRenderer.drawTroopVisual(
             troopGraphic,
@@ -7329,11 +7188,11 @@ export class MainScene extends Phaser.Scene {
             0,
             0,
             false,
-            initialPathPoint?.facingAngle ?? snapshot.facingAngle ?? 0,
+            snapshot.facingAngle ?? 0,
             snapshot.level
         );
         troopGraphic.setPosition(pos.x, pos.y);
-        troopGraphic.setDepth(depthForTroop(startX, startY, troopType));
+        troopGraphic.setDepth(depthForTroop(snapshot.gridX, snapshot.gridY, troopType));
 
         const troop: Troop = {
             id: snapshot.id,
@@ -7341,79 +7200,31 @@ export class MainScene extends Phaser.Scene {
             level: troopLevel,
             gameObject: troopGraphic,
             healthBar: this.add.graphics(),
-            gridX: startX,
-            gridY: startY,
-            health: initialHealth,
+            gridX: snapshot.gridX,
+            gridY: snapshot.gridY,
+            health: Math.max(0, snapshot.health),
             maxHealth: Math.max(1, snapshot.maxHealth),
             target: null,
             owner: snapshot.owner,
             lastAttackTime: this.replaySimulationTime - attackDelay,
             attackDelay,
             speedMult: 0,
-            hasTakenDamage: initialPathPoint?.hasTakenDamage ?? Boolean(snapshot.hasTakenDamage),
-            facingAngle: initialPathPoint?.facingAngle ?? snapshot.facingAngle ?? 0,
+            hasTakenDamage: Boolean(snapshot.hasTakenDamage),
+            facingAngle: snapshot.facingAngle ?? 0,
             recursionGen: snapshot.recursionGen,
-            replayPathPoints: initialPathPoint
-                ? [{
-                    t: initialPathPoint.t,
-                    gridX: initialPathPoint.gridX,
-                    gridY: initialPathPoint.gridY,
-                    health: initialPathPoint.health,
-                    facingAngle: initialPathPoint.facingAngle,
-                    hasTakenDamage: initialPathPoint.hasTakenDamage
-                }]
-                : [],
-            replayLastBufferedT: initialPathPoint ? initialPathPoint.t : undefined,
-            replayPathVelX: 0,
-            replayPathVelY: 0
+            replaySyncX: snapshot.gridX,
+            replaySyncY: snapshot.gridY,
+            replaySyncHealth: Math.max(0, snapshot.health),
+            replayPrevSampleX: snapshot.gridX,
+            replayPrevSampleY: snapshot.gridY,
+            replayPrevSampleT: 0,
+            replaySampleX: snapshot.gridX,
+            replaySampleY: snapshot.gridY,
+            replaySampleT: 0,
+            replayVelX: 0,
+            replayVelY: 0
         };
         return troop;
-    }
-
-    private enqueueReplayTroopPathPoints(troop: Troop, points: ReplayTroopPathPointSnapshot[]) {
-        if (!points || points.length === 0) return;
-        if (!troop.replayPathPoints) {
-            troop.replayPathPoints = [];
-        }
-
-        const sorted = points
-            .map(point => ({
-                t: Math.max(0, Math.floor(Number(point.t) || 0)),
-                gridX: Number(point.gridX) || 0,
-                gridY: Number(point.gridY) || 0,
-                health: Math.max(0, Number(point.health) || 0),
-                facingAngle: Number.isFinite(Number(point.facingAngle)) ? Number(point.facingAngle) : undefined,
-                hasTakenDamage: Boolean(point.hasTakenDamage)
-            }))
-            .sort((a, b) => a.t - b.t);
-
-        for (const point of sorted) {
-            const queue = troop.replayPathPoints;
-            if (queue.length === 0) {
-                queue.push(point);
-                troop.replayLastBufferedT = point.t;
-                continue;
-            }
-
-            const lastPoint = queue[queue.length - 1];
-            if (point.t > lastPoint.t) {
-                queue.push(point);
-                troop.replayLastBufferedT = point.t;
-            } else if (point.t === lastPoint.t) {
-                queue[queue.length - 1] = point;
-                troop.replayLastBufferedT = point.t;
-            }
-        }
-
-        const maxBufferedPoints = 180;
-        if (troop.replayPathPoints.length > maxBufferedPoints) {
-            troop.replayPathPoints.splice(0, troop.replayPathPoints.length - maxBufferedPoints);
-        }
-    }
-
-    private removeReplayWatchTroop(troop: Troop) {
-        troop.gameObject.destroy();
-        troop.healthBar.destroy();
     }
 
     private applyReplayFrame(frame: ReplayFrameSnapshot) {
@@ -7441,67 +7252,112 @@ export class MainScene extends Phaser.Scene {
                 this.updateHealthBar(building);
             }
 
-            const tracksFromFrame: ReplayTroopPathSnapshot[] = Array.isArray(frame.troopPaths) && frame.troopPaths.length > 0
-                ? frame.troopPaths
-                : frame.troops.map(snapshot => ({
-                    id: snapshot.id,
-                    type: snapshot.type,
-                    level: snapshot.level,
-                    owner: snapshot.owner,
-                    maxHealth: snapshot.maxHealth,
-                    recursionGen: snapshot.recursionGen,
-                    points: [{
-                        t: frame.t,
-                        gridX: snapshot.gridX,
-                        gridY: snapshot.gridY,
-                        health: snapshot.health,
-                        facingAngle: snapshot.facingAngle,
-                        hasTakenDamage: snapshot.hasTakenDamage
-                    }]
-                }));
+            const existingTroops = new Map(this.troops.map(troop => [troop.id, troop]));
+            const nextTroops: Troop[] = [];
+            const frameT = Math.max(0, Math.floor(Number(frame.t) || 0));
+            frame.troops.forEach(snapshot => {
+                const troopType = this.getReplayTroopType(snapshot.type);
+                if (!troopType) return;
 
-            const troopById = new Map(this.troops.map(troop => [troop.id, troop]));
-            for (const track of tracksFromFrame) {
-                const troopType = this.getReplayTroopType(track.type);
-                if (!troopType || !Array.isArray(track.points) || track.points.length === 0) continue;
-                const firstPoint = track.points[0];
-                if (!firstPoint) continue;
-
-                let troop = troopById.get(track.id);
+                let troop = existingTroops.get(snapshot.id);
+                const wasExisting = Boolean(troop);
                 if (!troop) {
-                    const snapshot: ReplayTroopSnapshot = {
-                        id: track.id,
-                        type: troopType,
-                        level: Math.max(1, Math.floor(track.level || 1)),
-                        owner: track.owner,
-                        gridX: firstPoint.gridX,
-                        gridY: firstPoint.gridY,
-                        health: Math.max(0, firstPoint.health),
-                        maxHealth: Math.max(1, track.maxHealth),
-                        recursionGen: track.recursionGen,
-                        facingAngle: firstPoint.facingAngle,
-                        hasTakenDamage: firstPoint.hasTakenDamage
-                    };
-                    troop = this.createReplayTroop(snapshot, firstPoint);
-                    if (!troop) continue;
-                    this.troops.push(troop);
-                    troopById.set(troop.id, troop);
+                    troop = this.createReplayTroop({ ...snapshot, type: troopType });
+                    if (!troop) return;
                 }
+                existingTroops.delete(snapshot.id);
 
                 troop.type = troopType;
-                troop.level = Math.max(1, Math.floor(track.level || 1));
-                troop.owner = track.owner;
-                troop.maxHealth = Math.max(1, Number(track.maxHealth) || 1);
-                troop.recursionGen = track.recursionGen;
-                troop.gameObject.setVisible(true);
+                troop.level = Math.max(1, Math.floor(snapshot.level || 1));
+                troop.owner = snapshot.owner;
+                troop.health = Math.max(0, snapshot.health);
+                troop.maxHealth = Math.max(1, snapshot.maxHealth);
+                troop.recursionGen = snapshot.recursionGen;
+                troop.hasTakenDamage = snapshot.hasTakenDamage ?? troop.health < troop.maxHealth;
+                troop.facingAngle = Number.isFinite(snapshot.facingAngle) ? Number(snapshot.facingAngle) : troop.facingAngle;
                 const troopStats = getTroopStats(troop.type, troop.level);
                 troop.attackDelay = troopStats.attackDelay ?? troop.attackDelay;
                 if (!Number.isFinite(troop.lastAttackTime) || troop.lastAttackTime <= 0) {
                     troop.lastAttackTime = this.replaySimulationTime - troop.attackDelay;
                 }
 
-                this.enqueueReplayTroopPathPoints(troop, track.points);
-            }
+                const sampleX = Number(snapshot.gridX) || 0;
+                const sampleY = Number(snapshot.gridY) || 0;
+                const prevSampleT = Number(troop.replaySampleT);
+                const hadPrevSample = Number.isFinite(prevSampleT) && prevSampleT >= 0;
+
+                if (!wasExisting || !hadPrevSample) {
+                    troop.gridX = sampleX;
+                    troop.gridY = sampleY;
+                    troop.replayPrevSampleX = sampleX;
+                    troop.replayPrevSampleY = sampleY;
+                    troop.replayPrevSampleT = frameT;
+                    troop.replaySampleX = sampleX;
+                    troop.replaySampleY = sampleY;
+                    troop.replaySampleT = frameT;
+                    troop.replayVelX = 0;
+                    troop.replayVelY = 0;
+                } else {
+                    const prevSampleX = Number.isFinite(troop.replaySampleX) ? Number(troop.replaySampleX) : troop.gridX;
+                    const prevSampleY = Number.isFinite(troop.replaySampleY) ? Number(troop.replaySampleY) : troop.gridY;
+                    const dt = frameT - prevSampleT;
+
+                    troop.replayPrevSampleX = prevSampleX;
+                    troop.replayPrevSampleY = prevSampleY;
+                    troop.replayPrevSampleT = prevSampleT;
+                    troop.replaySampleX = sampleX;
+                    troop.replaySampleY = sampleY;
+                    troop.replaySampleT = frameT;
+
+                    if (dt > 8) {
+                        const maxTilesPerMs = 6.5 / 1000;
+                        const instVelX = Phaser.Math.Clamp((sampleX - prevSampleX) / dt, -maxTilesPerMs, maxTilesPerMs);
+                        const instVelY = Phaser.Math.Clamp((sampleY - prevSampleY) / dt, -maxTilesPerMs, maxTilesPerMs);
+                        const prevVelX = Number.isFinite(troop.replayVelX) ? Number(troop.replayVelX) : instVelX;
+                        const prevVelY = Number.isFinite(troop.replayVelY) ? Number(troop.replayVelY) : instVelY;
+                        troop.replayVelX = Phaser.Math.Linear(prevVelX, instVelX, 0.82);
+                        troop.replayVelY = Phaser.Math.Linear(prevVelY, instVelY, 0.82);
+                    }
+
+                    const hardError = Phaser.Math.Distance.Between(troop.gridX, troop.gridY, sampleX, sampleY);
+                    if (hardError > 6.5) {
+                        troop.gridX = sampleX;
+                        troop.gridY = sampleY;
+                        troop.replayPrevSampleX = sampleX;
+                        troop.replayPrevSampleY = sampleY;
+                        troop.replayPrevSampleT = frameT;
+                        troop.replaySampleX = sampleX;
+                        troop.replaySampleY = sampleY;
+                        troop.replaySampleT = frameT;
+                        troop.replayVelX = 0;
+                        troop.replayVelY = 0;
+                    }
+                }
+
+                troop.replaySyncX = sampleX;
+                troop.replaySyncY = sampleY;
+                troop.replaySyncHealth = troop.health;
+
+                if (!wasExisting) {
+                    const pos = IsoUtils.cartToIso(troop.gridX, troop.gridY);
+                    troop.gameObject.setPosition(pos.x, pos.y);
+                    troop.gameObject.setDepth(depthForTroop(troop.gridX, troop.gridY, troop.type));
+                }
+                troop.gameObject.setVisible(troop.health > 0);
+
+                if (troop.health <= 0) {
+                    troop.healthBar.setVisible(false);
+                } else {
+                    this.updateHealthBar(troop);
+                }
+                nextTroops.push(troop);
+            });
+
+            existingTroops.forEach(troop => {
+                troop.gameObject.destroy();
+                troop.healthBar.destroy();
+            });
+            this.troops = nextTroops;
         } finally {
             this.isApplyingReplayFrame = false;
         }
@@ -7512,100 +7368,70 @@ export class MainScene extends Phaser.Scene {
         gameManager.updateBattleStats(destruction, this.solLooted);
     }
 
-    private updateReplayTroopSmoothing(_delta: number) {
+    private updateReplayTroopSmoothing(delta: number) {
         if (this.mode !== 'REPLAY') return;
         const replay = this.replayWatchState;
         if (!replay) return;
 
-        const renderT = replay.renderClockT;
-        const survivors: Troop[] = [];
-
         for (const troop of this.troops) {
-            const queue = troop.replayPathPoints ?? [];
-            if (queue.length === 0) {
-                if (troop.health <= 0) {
-                    this.removeReplayWatchTroop(troop);
-                    continue;
-                }
-                const pos = IsoUtils.cartToIso(troop.gridX, troop.gridY);
-                troop.gameObject.setPosition(pos.x, pos.y);
-                troop.gameObject.setDepth(depthForTroop(troop.gridX, troop.gridY, troop.type));
-                this.updateHealthBar(troop);
-                survivors.push(troop);
-                continue;
+            if (troop.health <= 0) continue;
+
+            const sampleX = troop.replaySampleX;
+            const sampleY = troop.replaySampleY;
+            const sampleT = troop.replaySampleT;
+            if (!Number.isFinite(sampleX) || !Number.isFinite(sampleY) || !Number.isFinite(sampleT)) continue;
+
+            const prevSampleX = Number.isFinite(troop.replayPrevSampleX) ? Number(troop.replayPrevSampleX) : Number(sampleX);
+            const prevSampleY = Number.isFinite(troop.replayPrevSampleY) ? Number(troop.replayPrevSampleY) : Number(sampleY);
+            const prevSampleT = Number.isFinite(troop.replayPrevSampleT) ? Number(troop.replayPrevSampleT) : Number(sampleT);
+
+            let targetX = Number(sampleX);
+            let targetY = Number(sampleY);
+            const renderT = replay.renderClockT;
+
+            if (Number(sampleT) > prevSampleT + 1 && renderT <= Number(sampleT)) {
+                const alpha = Phaser.Math.Clamp((renderT - prevSampleT) / (Number(sampleT) - prevSampleT), 0, 1);
+                targetX = Phaser.Math.Linear(prevSampleX, Number(sampleX), alpha);
+                targetY = Phaser.Math.Linear(prevSampleY, Number(sampleY), alpha);
+            } else {
+                const aheadMs = Phaser.Math.Clamp(renderT - Number(sampleT), 0, replay.maxExtrapolationMs);
+                const velX = Number.isFinite(troop.replayVelX) ? Number(troop.replayVelX) : 0;
+                const velY = Number.isFinite(troop.replayVelY) ? Number(troop.replayVelY) : 0;
+                targetX = Number(sampleX) + velX * aheadMs;
+                targetY = Number(sampleY) + velY * aheadMs;
             }
 
-            while (queue.length >= 2 && queue[1].t <= renderT) {
-                queue.shift();
+            const prevRenderX = troop.gridX;
+            const prevRenderY = troop.gridY;
+            const errorDist = Phaser.Math.Distance.Between(prevRenderX, prevRenderY, targetX, targetY);
+            if (errorDist > 5.8) {
+                troop.gridX = targetX;
+                troop.gridY = targetY;
+            } else if (errorDist > 0.0001) {
+                const baseFollow = 1 - Math.exp(-delta / 58);
+                const catchup = Phaser.Math.Clamp(errorDist / 1.8, 0, 0.75);
+                const t = Phaser.Math.Clamp(baseFollow + catchup * 0.18, 0.08, 0.9);
+                troop.gridX = Phaser.Math.Linear(prevRenderX, targetX, t);
+                troop.gridY = Phaser.Math.Linear(prevRenderY, targetY, t);
             }
 
-            const p0 = queue[0];
-            const p1 = queue.length >= 2 ? queue[1] : undefined;
-            if (!p0) {
-                survivors.push(troop);
-                continue;
-            }
-
-            let targetX = p0.gridX;
-            let targetY = p0.gridY;
-            let targetHealth = p0.health;
-            let targetFacing = Number.isFinite(p0.facingAngle) ? Number(p0.facingAngle) : troop.facingAngle;
-
-            if (p1) {
-                const dt = Math.max(1, p1.t - p0.t);
-                const alpha = Phaser.Math.Clamp((renderT - p0.t) / dt, 0, 1);
-                targetX = Phaser.Math.Linear(p0.gridX, p1.gridX, alpha);
-                targetY = Phaser.Math.Linear(p0.gridY, p1.gridY, alpha);
-                targetHealth = Phaser.Math.Linear(p0.health, p1.health, alpha);
-                troop.replayPathVelX = (p1.gridX - p0.gridX) / dt;
-                troop.replayPathVelY = (p1.gridY - p0.gridY) / dt;
-
-                if (Number.isFinite(p0.facingAngle) && Number.isFinite(p1.facingAngle)) {
-                    let diff = Number(p1.facingAngle) - Number(p0.facingAngle);
-                    while (diff > Math.PI) diff -= Math.PI * 2;
-                    while (diff < -Math.PI) diff += Math.PI * 2;
-                    targetFacing = Number(p0.facingAngle) + diff * alpha;
-                } else if (Number.isFinite(p1.facingAngle)) {
-                    targetFacing = Number(p1.facingAngle);
-                }
-            } else if (renderT > p0.t) {
-                const aheadMs = Phaser.Math.Clamp(renderT - p0.t, 0, replay.maxExtrapolationMs);
-                const velX = Number.isFinite(troop.replayPathVelX) ? Number(troop.replayPathVelX) : 0;
-                const velY = Number.isFinite(troop.replayPathVelY) ? Number(troop.replayPathVelY) : 0;
-                targetX = p0.gridX + velX * aheadMs;
-                targetY = p0.gridY + velY * aheadMs;
-                targetHealth = p0.health;
-                if (Number.isFinite(p0.facingAngle)) {
-                    targetFacing = Number(p0.facingAngle);
-                }
-            }
-
-            const deathPoint = p1 && p1.health <= 0 ? p1 : (p0.health <= 0 ? p0 : undefined);
-            if (deathPoint && renderT >= deathPoint.t) {
-                this.removeReplayWatchTroop(troop);
-                continue;
-            }
-
-            const prevX = troop.gridX;
-            const prevY = troop.gridY;
-            troop.gridX = targetX;
-            troop.gridY = targetY;
-            troop.health = Math.max(0, targetHealth);
-            troop.hasTakenDamage = Boolean(p1?.hasTakenDamage ?? p0.hasTakenDamage ?? troop.hasTakenDamage);
-
-            if (Number.isFinite(targetFacing)) {
-                const currentFacing = Number.isFinite(troop.facingAngle) ? troop.facingAngle : Number(targetFacing);
-                let diff = Number(targetFacing) - currentFacing;
-                while (diff > Math.PI) diff -= Math.PI * 2;
-                while (diff < -Math.PI) diff += Math.PI * 2;
-                troop.facingAngle = currentFacing + diff * 0.4;
+            const motionDx = troop.gridX - prevRenderX;
+            const motionDy = troop.gridY - prevRenderY;
+            const motionDist = Math.sqrt(motionDx * motionDx + motionDy * motionDy);
+            if (motionDist > 0.0007) {
+                const desiredAngle = Math.atan2(motionDy, motionDx);
+                const currentAngle = Number.isFinite(troop.facingAngle) ? troop.facingAngle : desiredAngle;
+                let angleDiff = desiredAngle - currentAngle;
+                while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+                troop.facingAngle = currentAngle + angleDiff * 0.35;
             }
 
             const pos = IsoUtils.cartToIso(troop.gridX, troop.gridY);
             troop.gameObject.setPosition(pos.x, pos.y);
             troop.gameObject.setDepth(depthForTroop(troop.gridX, troop.gridY, troop.type));
 
-            const moving = Phaser.Math.Distance.Between(prevX, prevY, troop.gridX, troop.gridY) > 0.008;
+            const moving = errorDist > 0.05 || motionDist > 0.001;
             if (
                 troop.type === 'warrior' ||
                 troop.type === 'archer' ||
@@ -7625,10 +7451,7 @@ export class MainScene extends Phaser.Scene {
             }
 
             this.updateHealthBar(troop);
-            survivors.push(troop);
         }
-
-        this.troops = survivors;
     }
 
     private async startReplayWatch(attackId: string, mode: ReplayWatchMode): Promise<boolean> {

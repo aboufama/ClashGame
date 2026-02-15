@@ -97,32 +97,12 @@ export interface AttackReplayTroopState {
   hasTakenDamage?: boolean;
 }
 
-export interface AttackReplayTroopPathPoint {
-  t: number;
-  gridX: number;
-  gridY: number;
-  health: number;
-  facingAngle?: number;
-  hasTakenDamage?: boolean;
-}
-
-export interface AttackReplayTroopPath {
-  id: string;
-  type: string;
-  level: number;
-  owner: 'PLAYER' | 'ENEMY';
-  maxHealth: number;
-  recursionGen?: number;
-  points: AttackReplayTroopPathPoint[];
-}
-
 export interface AttackReplayFrame {
   t: number;
   destruction: number;
   solLooted: number;
   buildings: AttackReplayBuildingState[];
   troops: AttackReplayTroopState[];
-  troopPaths?: AttackReplayTroopPath[];
 }
 
 export interface AttackReplayFinalResult {
