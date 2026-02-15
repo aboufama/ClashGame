@@ -2292,10 +2292,10 @@ export class MainScene extends Phaser.Scene {
                                     duration: 200,  // Faster flight
                                     ease: 'Quad.easeIn',
                                     onComplete: () => {
-                                        // Impact effect - smaller
+                                        // Impact effect - isometric oval
                                         const impact = this.add.graphics();
                                         impact.fillStyle(0xff6600, 0.6);
-                                        impact.fillCircle(0, 0, 8);
+                                        impact.fillEllipse(0, 0, 16, 8);
                                         impact.setPosition(targetPos.x, targetPos.y - 10);
                                         impact.setDepth(5000);
                                         this.tweens.add({
@@ -2563,15 +2563,18 @@ export class MainScene extends Phaser.Scene {
             this.tweens.add({ targets: cracks, alpha: 0, duration: 3000, delay: 800, onComplete: () => cracks.destroy() });
         }
 
-        // Initial flash
-        const flash = this.add.circle(x, y, 5 * scale, 0xffffcc, 1);
+        // Initial flash (isometric oval)
+        const flash = this.add.graphics();
+        flash.fillStyle(0xffffcc, 1);
+        flash.fillEllipse(0, 0, 10 * scale, 5 * scale);
+        flash.setPosition(x, y);
         flash.setDepth(10001);
-        this.tweens.add({ targets: flash, radius: 50 * scale, alpha: 0, duration: 100, onComplete: () => flash.destroy() });
+        this.tweens.add({ targets: flash, alpha: 0, scaleX: 10, scaleY: 10, duration: 100, onComplete: () => flash.destroy() });
 
-        // Primary shockwave ring
+        // Primary shockwave ring (isometric oval)
         const shock = this.add.graphics();
         shock.lineStyle(4, 0xff6600, 0.8);
-        shock.strokeCircle(x, y, 10 * scale);
+        shock.strokeEllipse(x, y, 20 * scale, 10 * scale);
         shock.setDepth(10000);
         this.tweens.add({
             targets: shock, alpha: 0, duration: 400,
@@ -2579,23 +2582,24 @@ export class MainScene extends Phaser.Scene {
                 shock.clear();
                 const r = 10 * scale + tween.progress * 70 * scale;
                 shock.lineStyle(4 - tween.progress * 3, 0xff6600, 0.8 - tween.progress * 0.8);
-                shock.strokeCircle(x, y, r);
+                shock.strokeEllipse(x, y, r * 2, r);
             },
             onComplete: () => shock.destroy()
         });
 
-        // Secondary shockwave
+        // Secondary shockwave (isometric oval)
         this.time.delayedCall(50, () => {
             const shock2 = this.add.graphics();
             shock2.lineStyle(2, 0xffaa00, 0.5);
-            shock2.strokeCircle(x, y, 15 * scale);
+            shock2.strokeEllipse(x, y, 30 * scale, 15 * scale);
             shock2.setDepth(9999);
             this.tweens.add({
                 targets: shock2, alpha: 0, duration: 350,
                 onUpdate: (tween) => {
                     shock2.clear();
+                    const r2 = 15 * scale + tween.progress * 60 * scale;
                     shock2.lineStyle(2, 0xffaa00, 0.5 - tween.progress * 0.5);
-                    shock2.strokeCircle(x, y, 15 * scale + tween.progress * 60 * scale);
+                    shock2.strokeEllipse(x, y, r2 * 2, r2);
                 },
                 onComplete: () => shock2.destroy()
             });
@@ -3634,11 +3638,11 @@ export class MainScene extends Phaser.Scene {
 
                         const explosion = particleManager.getPooledGraphic();
                         explosion.fillStyle(0xff4400, 0.8);
-                        explosion.fillCircle(0, 0, 20);
+                        explosion.fillEllipse(0, 0, 40, 20);
                         explosion.fillStyle(0xff8800, 0.6);
-                        explosion.fillCircle(0, 0, 12);
+                        explosion.fillEllipse(0, 0, 24, 12);
                         explosion.fillStyle(0xffcc00, 0.4);
-                        explosion.fillCircle(0, 0, 6);
+                        explosion.fillEllipse(0, 0, 12, 6);
                         explosion.setPosition(end.x, endY);
                         explosion.setDepth(5000);
                         this.tweens.add({
@@ -4059,12 +4063,12 @@ export class MainScene extends Phaser.Scene {
                             });
                         }
 
-                        // Main impact glow
+                        // Main impact glow (isometric oval)
                         const impact = this.add.graphics();
                         impact.fillStyle(0xff4400, 0.8);
-                        impact.fillCircle(0, 0, 12);
+                        impact.fillEllipse(0, 0, 24, 12);
                         impact.fillStyle(0xffcc00, 0.6);
-                        impact.fillCircle(0, 0, 6);
+                        impact.fillEllipse(0, 0, 12, 6);
                         impact.setPosition(end.x, end.y);
                         impact.setDepth(19999);
                         this.tweens.add({
@@ -5171,10 +5175,10 @@ export class MainScene extends Phaser.Scene {
                 });
             }
 
-            // Debris dust
+            // Debris dust (isometric oval)
             const dust = this.add.graphics();
             dust.fillStyle(0x888888, 0.3);
-            dust.fillCircle(0, 0, 20);
+            dust.fillEllipse(0, 0, 40, 20);
             dust.setPosition(pos.x, pos.y);
             dust.setDepth(5);
             this.tweens.add({
@@ -6755,10 +6759,10 @@ export class MainScene extends Phaser.Scene {
             onComplete: () => {
                 pod.destroy();
 
-                // Explosion effect
+                // Explosion effect (isometric oval)
                 const boom = this.add.graphics();
                 boom.fillStyle(0xff4400, 0.8);
-                boom.fillCircle(0, 0, 12);
+                boom.fillEllipse(0, 0, 24, 12);
                 boom.setPosition(end.x, end.y);
                 boom.setDepth(5001);
                 this.tweens.add({ targets: boom, alpha: 0, scale: 2.5, duration: 200, onComplete: () => boom.destroy() });

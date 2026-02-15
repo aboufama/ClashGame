@@ -836,10 +836,6 @@ export class BuildingRenderer {
             const barrelBaseX = center.x + recoilOffsetX;
             const barrelBaseY = center.y + barrelHeight + recoilOffsetY;
 
-            // Barrel outer shadow
-            graphics.lineStyle(barrelWidth + 4, 0x1a1a1a, alpha);
-            graphics.lineBetween(barrelBaseX, barrelBaseY + 2, barrelTipX, barrelTipY + 2);
-
             // Barrel main body - dark iron
             graphics.lineStyle(barrelWidth, 0x2a2a2a, alpha);
             graphics.lineBetween(barrelBaseX, barrelBaseY, barrelTipX, barrelTipY);
@@ -1005,10 +1001,6 @@ export class BuildingRenderer {
             // === MAIN BARREL BODY (reinforced) ===
             const barrelBaseX = center.x + recoilOffsetX;
             const barrelBaseY = center.y + barrelHeight + recoilOffsetY;
-
-            // Barrel outer shadow
-            graphics.lineStyle(barrelWidth + 4, 0x1a1a1a, alpha);
-            graphics.lineBetween(barrelBaseX, barrelBaseY + 2, barrelTipX, barrelTipY + 2);
 
             // Barrel main body - dark iron
             graphics.lineStyle(barrelWidth, 0x2a2a2a, alpha);
@@ -1187,10 +1179,6 @@ export class BuildingRenderer {
             // === FORTIFIED BARREL ===
             const barrelBaseX = center.x + recoilOffsetX;
             const barrelBaseY = center.y + barrelHeight + recoilOffsetY;
-
-            // Barrel outer shadow
-            graphics.lineStyle(barrelWidth + 3, 0x1a1a1a, alpha);
-            graphics.lineBetween(barrelBaseX, barrelBaseY + 2, barrelTipX, barrelTipY + 2);
 
             // Barrel main body - dark steel
             graphics.lineStyle(barrelWidth, 0x3a3a4a, alpha);
@@ -1397,10 +1385,6 @@ export class BuildingRenderer {
                 const barrelBaseX = center.x + recoilOffsetX + offsetX;
                 const barrelBaseY = center.y + barrelHeight + recoilOffsetY + offsetY;
 
-                // Barrel outer shadow
-                graphics.lineStyle(barrelWidth + 3, 0x1a1a1a, alpha);
-                graphics.lineBetween(barrelBaseX, barrelBaseY + 2, tipX, tipY + 2);
-
                 // Barrel main body - dark steel with blue tint
                 graphics.lineStyle(barrelWidth, 0x2a2a3a, alpha);
                 graphics.lineBetween(barrelBaseX, barrelBaseY, tipX, tipY);
@@ -1595,10 +1579,6 @@ export class BuildingRenderer {
                 const barrelBaseX = center.x + recoilOffsetX + offsetX;
                 const barrelBaseY = center.y + barrelHeight + recoilOffsetY + offsetY;
 
-                // Barrel outer shadow
-                graphics.lineStyle(barrelWidth + 3, 0x1a1a1a, alpha);
-                graphics.lineBetween(barrelBaseX, barrelBaseY + 2, tipX, tipY + 2);
-
                 // Barrel main body - gold
                 graphics.lineStyle(barrelWidth, 0xb8860b, alpha);
                 graphics.lineBetween(barrelBaseX, barrelBaseY, tipX, tipY);
@@ -1625,11 +1605,14 @@ export class BuildingRenderer {
                     graphics.strokeEllipse(bandX, bandY, 6, 3.5);
                 }
 
-                // Gold tip cap
+                // Muzzle ring + bore (like other cannon levels)
+                graphics.fillStyle(0xdaa520, alpha);
+                graphics.fillEllipse(tipX, tipY, 8, 5);
                 graphics.fillStyle(0xffd700, alpha);
-                graphics.fillCircle(tipX, tipY, 4);
-                graphics.fillStyle(0xdaa520, alpha * 0.7);
-                graphics.fillCircle(tipX, tipY, 2.5);
+                graphics.fillEllipse(tipX, tipY, 6, 4);
+                // Dark bore hole
+                graphics.fillStyle(0x1a1a1a, alpha);
+                graphics.fillEllipse(tipX + cos * 2, tipY + sin, 4, 2.5);
             };
 
             // Draw both barrels
@@ -1934,6 +1917,8 @@ export class BuildingRenderer {
         const level = building?.level ?? 1;
 
         const isL2 = level >= 2;
+        const isL3 = level >= 3;
+        const isL4 = level >= 4;
 
         // Sequence: Move up, move down (slam), shake, move back up, pause
         const cycleLength = 8000;
@@ -1989,14 +1974,14 @@ export class BuildingRenderer {
             g.fillCircle(center.x - 8, center.y - 4, 5);
 
             // Border
-            g.lineStyle(2, 0x3a2a1a, alpha * 0.6);
+            g.lineStyle(2, isL4 ? 0x8b7530 : 0x3a2a1a, alpha * 0.6);
             g.strokePoints([c1, c2, c3, c4], true, true);
 
             // === JAGGED ROCKS in the center ===
-            // L2 rocks are darker and denser
-            const rockDark = isL2 ? 0x2a2a2a : 0x4a4a4a;
-            const rockMid = isL2 ? 0x3a3a3a : 0x5a5a5a;
-            const rockLight = isL2 ? 0x4a4a4a : 0x6a6a6a;
+            // L4 marble rocks, L2 darker, L1 grey
+            const rockDark = isL4 ? 0xccccbb : (isL2 ? 0x2a2a2a : 0x4a4a4a);
+            const rockMid = isL4 ? 0xddddcc : (isL2 ? 0x3a3a3a : 0x5a5a5a);
+            const rockLight = isL4 ? 0xeeeedd : (isL2 ? 0x4a4a4a : 0x6a6a6a);
 
             // Large base rocks
             g.fillStyle(rockDark, alpha);
@@ -2029,7 +2014,7 @@ export class BuildingRenderer {
             g.fillCircle(center.x + 13, center.y - 1, 3);
 
             // Jagged sharp edges (small triangular shapes via tiny circles)
-            g.fillStyle(isL2 ? 0x353535 : 0x555555, alpha * 0.9);
+            g.fillStyle(isL4 ? 0xbbbbaa : (isL2 ? 0x353535 : 0x555555), alpha * 0.9);
             g.fillCircle(center.x - 10, center.y - 4, 2);
             g.fillCircle(center.x + 11, center.y - 3, 2);
             g.fillCircle(center.x - 5, center.y + 9, 2);
@@ -2038,15 +2023,24 @@ export class BuildingRenderer {
             g.fillCircle(center.x + 17, center.y + 3, 2);
 
             // Dark crevices between rocks
-            g.fillStyle(0x1a1a1a, alpha * 0.8);
+            g.fillStyle(isL4 ? 0xaaaaaa : 0x1a1a1a, alpha * (isL4 ? 0.4 : 0.8));
             g.fillCircle(center.x, center.y + 1, 3);
             g.fillCircle(center.x - 4, center.y + 3, 2);
             g.fillCircle(center.x + 4, center.y - 1, 2);
             g.fillCircle(center.x - 10, center.y + 2, 2);
             g.fillCircle(center.x + 11, center.y + 3, 2);
 
+            // L4: Subtle gold veins in marble rocks
+            if (isL4) {
+                g.fillStyle(0xdaa520, alpha * 0.4);
+                g.fillCircle(center.x - 7, center.y + 2, 1.5);
+                g.fillCircle(center.x + 10, center.y - 1, 1.5);
+                g.fillCircle(center.x + 3, center.y + 6, 1);
+                g.fillCircle(center.x - 13, center.y - 1, 1);
+            }
+
             // L2: Tiny bright Solana-colored dots in the rocks
-            if (isL2) {
+            if (isL2 && !isL4) {
                 const gPulse = 0.5 + Math.sin(time / 800) * 0.3;
                 g.fillStyle(solGreen, alpha * gPulse * 0.8);
                 g.fillCircle(center.x - 6, center.y, 1.5);
@@ -2056,9 +2050,9 @@ export class BuildingRenderer {
         }
 
         if (!onlyBase) {
-            // === A-FRAME (wood for L1, wood+metal for L2) ===
-            const legColor = isL2 ? metalDark : woodDark;
-            const legHighlight = isL2 ? metalLight : woodHighlight;
+            // === A-FRAME (wood for L1, wood+metal for L2, metal+gold for L4) ===
+            const legColor = isL4 ? 0x3a3a3a : (isL2 ? metalDark : woodDark);
+            const legHighlight = isL4 ? 0xb8860b : (isL2 ? metalLight : woodHighlight);
 
             // Left leg
             graphics.fillStyle(legColor, alpha);
@@ -2072,9 +2066,10 @@ export class BuildingRenderer {
             graphics.fillStyle(legHighlight, alpha * 0.4);
             graphics.fillRect(center.x + 22, center.y - 50, 2, 54);
 
-            // L2: Metal reinforcement bands on legs
+            // L2+: Metal reinforcement bands on legs (gold at L4)
             if (isL2) {
-                graphics.fillStyle(metalHighlight, alpha * 0.5);
+                const bandColor = isL4 ? 0xdaa520 : metalHighlight;
+                graphics.fillStyle(bandColor, alpha * 0.5);
                 graphics.fillRect(center.x - 26, center.y - 42, 5, 2);
                 graphics.fillRect(center.x - 26, center.y - 20, 5, 2);
                 graphics.fillRect(center.x + 21, center.y - 42, 5, 2);
@@ -2082,8 +2077,8 @@ export class BuildingRenderer {
             }
 
             // Top crossbeam
-            const beamColor = isL2 ? metalMid : woodMid;
-            const beamHighlight = isL2 ? metalLight : woodLight;
+            const beamColor = isL4 ? 0x5a5a5a : (isL2 ? metalMid : woodMid);
+            const beamHighlight = isL4 ? 0xdaa520 : (isL2 ? metalLight : woodLight);
             graphics.fillStyle(beamColor, alpha);
             graphics.fillRect(center.x - 26, center.y - 54, 52, 6);
             graphics.fillStyle(beamHighlight, alpha * 0.6);
@@ -2093,9 +2088,9 @@ export class BuildingRenderer {
             graphics.fillStyle(beamColor, alpha);
             graphics.fillRect(center.x - 24, center.y - 30, 48, 4);
 
-            // L2: Rivets on crossbeams
+            // L2+: Rivets on crossbeams (gold at L4)
             if (isL2) {
-                graphics.fillStyle(metalHighlight, alpha * 0.7);
+                graphics.fillStyle(isL4 ? 0xffd700 : metalHighlight, alpha * 0.7);
                 graphics.fillCircle(center.x - 22, center.y - 51, 1.5);
                 graphics.fillCircle(center.x + 22, center.y - 51, 1.5);
                 graphics.fillCircle(center.x - 20, center.y - 28, 1.5);
@@ -2190,9 +2185,9 @@ export class BuildingRenderer {
             graphics.fillPath();
 
             // === FRONT ROCKS — drawn over the drill to hide the bottom ===
-            const fRockDark = isL2 ? 0x2a2a2a : 0x4a4a4a;
-            const fRockMid = isL2 ? 0x3a3a3a : 0x5a5a5a;
-            const fRockLight = isL2 ? 0x4a4a4a : 0x6a6a6a;
+            const fRockDark = isL4 ? 0xccccbb : (isL2 ? 0x2a2a2a : 0x4a4a4a);
+            const fRockMid = isL4 ? 0xddddcc : (isL2 ? 0x3a3a3a : 0x5a5a5a);
+            const fRockLight = isL4 ? 0xeeeedd : (isL2 ? 0x4a4a4a : 0x6a6a6a);
 
             graphics.fillStyle(fRockDark, alpha);
             graphics.fillCircle(center.x - 10, center.y + 5, 8);
@@ -2211,8 +2206,15 @@ export class BuildingRenderer {
             graphics.fillCircle(center.x - 9, center.y + 1, 3);
             graphics.fillCircle(center.x + 8, center.y + 1, 3);
 
-            // L2: Tiny bright Solana dots on front rocks
-            if (isL2) {
+            // L4: Subtle gold veins on front rocks
+            if (isL4) {
+                graphics.fillStyle(0xdaa520, alpha * 0.4);
+                graphics.fillCircle(center.x - 9, center.y + 3, 1.5);
+                graphics.fillCircle(center.x + 8, center.y + 2, 1);
+            }
+
+            // L2/L3: Tiny bright Solana dots on front rocks
+            if (isL2 && !isL4) {
                 const gPulse = 0.5 + Math.sin(time / 800) * 0.3;
                 graphics.fillStyle(solGreen, alpha * gPulse * 0.8);
                 graphics.fillCircle(center.x - 8, center.y + 4, 1);
@@ -2236,11 +2238,12 @@ export class BuildingRenderer {
                 }
             }
 
-            // === SOLANA GREEN ACCENT — small lantern on left leg ===
+            // === ACCENT — small lantern on left leg ===
             const flicker = 0.6 + Math.sin(time / 400) * 0.4;
-            graphics.fillStyle(solGreen, alpha * flicker * 0.6);
+            const lanternColor = isL4 ? 0xffd700 : solGreen;
+            graphics.fillStyle(lanternColor, alpha * flicker * 0.6);
             graphics.fillCircle(center.x - 23, center.y - 40, 3);
-            graphics.fillStyle(solGreen, alpha * flicker * 0.2);
+            graphics.fillStyle(lanternColor, alpha * flicker * 0.2);
             graphics.fillCircle(center.x - 23, center.y - 40, 6);
         }
     }
@@ -2866,11 +2869,6 @@ export class BuildingRenderer {
             const rightArmX = center.x + (sin) * armLength;
             const rightArmY = center.y + bowHeight + (-cos * 0.5) * armLength;
 
-            // Outer shadow
-            graphics.lineStyle(armWidth + 4, 0x1a0a05, alpha);
-            graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
-            graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
-
             // Dark wood arm
             graphics.lineStyle(armWidth + 2, 0x3a2515, alpha);
             graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
@@ -2928,13 +2926,11 @@ export class BuildingRenderer {
             const railBackX = center.x + cos * (-14);
             const railBackY = center.y + bowHeight + sin * 0.5 * (-14);
 
-            graphics.lineStyle(12, 0x1a0a05, alpha);
-            graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
             graphics.lineStyle(10, 0x2a1510, alpha);
             graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
             graphics.lineStyle(6, 0x3a2515, alpha);
             graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
-            graphics.lineStyle(2, 0x1a0a05, alpha * 0.7);
+            graphics.lineStyle(2, 0x4a3525, alpha * 0.7);
             graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
 
             // Dark grey rail plates
@@ -3138,11 +3134,6 @@ export class BuildingRenderer {
             const rightArmX = center.x + (sin) * armLength;
             const rightArmY = center.y + bowHeight + (-cos * 0.5) * armLength;
 
-            // Outer shadow
-            graphics.lineStyle(armWidth + 4, 0x1a0a05, alpha);
-            graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
-            graphics.lineBetween(center.x, center.y + bowHeight, rightArmX, rightArmY);
-
             // Marble arm
             graphics.lineStyle(armWidth + 2, 0xccccbb, alpha);
             graphics.lineBetween(center.x, center.y + bowHeight, leftArmX, leftArmY);
@@ -3200,8 +3191,6 @@ export class BuildingRenderer {
             const railBackX = center.x + cos * (-14);
             const railBackY = center.y + bowHeight + sin * 0.5 * (-14);
 
-            graphics.lineStyle(12, 0x1a0a05, alpha);
-            graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
             graphics.lineStyle(10, 0xccccbb, alpha);
             graphics.lineBetween(railBackX, railBackY, railEndX, railEndY);
             graphics.lineStyle(6, 0xddddcc, alpha);
@@ -3794,11 +3783,6 @@ export class BuildingRenderer {
             const rArmX = mountX - armX;
             const rArmY = mountY - armY;
 
-            // Shadow
-            graphics.lineStyle(7, 0x1a1a2a, alpha);
-            graphics.lineBetween(mountX, mountY, lArmX, lArmY);
-            graphics.lineBetween(mountX, mountY, rArmX, rArmY);
-
             // Marble arms
             graphics.lineStyle(5, 0xddddcc, alpha);
             graphics.lineBetween(mountX, mountY, lArmX, lArmY);
@@ -4005,8 +3989,8 @@ export class BuildingRenderer {
         graphics.strokeEllipse(center.x + tiltAmount * 0.25, barrelY + 8 * size * recoilScale, barrelWidth * 0.85, barrelWidth * 0.38);
         graphics.strokeEllipse(center.x + tiltAmount * 0.5, barrelY, barrelWidth * 1.1, barrelWidth * 0.5);
 
-        // Level 2+: Extra reinforcement band
-        if (isLevel2) {
+        // Level 2-3: Extra reinforcement band (skip at L4 — overlaps wrong with gold barrel)
+        if (isLevel2 && !isLevel4) {
             graphics.lineStyle(2, 0x2a2a2a, alpha);
             graphics.strokeEllipse(center.x + tiltAmount * 0.4, barrelY + 4 * size * recoilScale, barrelWidth * 0.95, barrelWidth * 0.43);
         }
@@ -4483,10 +4467,11 @@ export class BuildingRenderer {
         const attackPower = isAttacking ? Math.sin(attackProgress * Math.PI) : 0;
 
         // === COLOR PALETTE ===
-        const basaltDark = isLevel3 ? 0xccccbb : 0x1a1a1f;
-        const basaltMid = isLevel3 ? 0xddddcc : 0x2a2a32;
-        const basaltLight = isLevel3 ? 0xeeeedd : 0x3a3a45;
-        const basaltHighlight = isLevel3 ? 0xeeeedd : 0x4a4a55;
+        // L3: rocks stay dark/volcanic, only brass accents become gold
+        const basaltDark = 0x1a1a1f;
+        const basaltMid = 0x2a2a32;
+        const basaltLight = 0x3a3a45;
+        const basaltHighlight = 0x4a4a55;
         const lavaOrange = 0xff5500;
         const lavaYellow = 0xffaa00;
         const lavaWhite = 0xffdd66;
@@ -4501,13 +4486,13 @@ export class BuildingRenderer {
 
         // === BASE LAYER (baked to ground texture) ===
         if (!skipBase) {
-            // === GROUND BASE ===
-            g.fillStyle(isLevel3 ? 0xeeeedd : 0x1a1410, alpha);
+            // === GROUND BASE === (always dark volcanic)
+            g.fillStyle(0x1a1410, alpha);
             g.fillPoints([c1, c2, c3, c4], true);
 
-            // L3: Gold border
+            // L3: Gold border accent
             if (isLevel3) {
-                g.lineStyle(2, 0xdaa520, alpha * 0.8);
+                g.lineStyle(2, 0xdaa520, alpha * 0.6);
                 g.strokePoints([c1, c2, c3, c4], true, true);
             }
 
@@ -4887,26 +4872,19 @@ export class BuildingRenderer {
         const time = Date.now();
         const g = baseGraphics || graphics; // Ground-plane elements render here.
         const level = building?.level ?? 1;
-        const isLevel4 = level >= 4;
         const showWeaponRack = level >= 2;
         const showDummy = level >= 3;
 
         // === TRAINING GROUND BASE ===
         if (!skipBase) {
-            // Packed dirt/sand arena floor — L4 marble
-            g.fillStyle(tint ?? (isLevel4 ? 0xeeeedd : 0xb8a080), alpha);
+            // Packed dirt/sand arena floor
+            g.fillStyle(tint ?? 0xb8a080, alpha);
             g.fillPoints([c1, c2, c3, c4], true);
 
-            if (isLevel4) {
-                g.lineStyle(2, 0xdaa520, alpha * 0.8);
-                g.strokePoints([c1, c2, c3, c4], true, true);
-            }
-
             // Inner training circle (worn area)
-            g.lineStyle(2, isLevel4 ? 0xdaa520 : 0xa89070, 0.5 * alpha);
-            // Note: Using a fixed radius scale for the classic look
+            g.lineStyle(2, 0xa89070, 0.5 * alpha);
             g.strokeEllipse(center.x, center.y, 45, 22.5);
-            g.fillStyle(isLevel4 ? 0xddddcc : 0xa89070, 0.3 * alpha);
+            g.fillStyle(0xa89070, 0.3 * alpha);
             g.fillEllipse(center.x, center.y, 45, 22.5);
 
             // Ground texture - packed earth patterns
@@ -4919,11 +4897,9 @@ export class BuildingRenderer {
                 g.fillCircle(center.x + ox, center.y + 5 + oy, 2 + (i % 2));
             }
 
-            // Decorative border - rope boundary (ground plane) — L4 gold border
-            if (!isLevel4) {
-                g.lineStyle(2, 0x8b7355, alpha * 0.7);
-                g.strokePoints([c1, c2, c3, c4], true, true);
-            }
+            // Decorative border - rope boundary (ground plane)
+            g.lineStyle(2, 0x8b7355, alpha * 0.7);
+            g.strokePoints([c1, c2, c3, c4], true, true);
 
 
 
@@ -4934,8 +4910,8 @@ export class BuildingRenderer {
             const fireX = center.x;
             const fireY = center.y + 8;
 
-            // Fire pit stones (ring) — L4 gold-trimmed marble
-            graphics.fillStyle(isLevel4 ? 0xddddcc : 0x555555, alpha);
+            // Fire pit stones (ring)
+            graphics.fillStyle(0x555555, alpha);
             for (let i = 0; i < 8; i++) {
                 const angle = (i / 8) * Math.PI * 2;
                 const stoneX = fireX + Math.cos(angle) * 12;
@@ -5031,10 +5007,10 @@ export class BuildingRenderer {
                 const dummyX = center.x - 35;
                 const dummyY = center.y - 5;
 
-                // Dummy post — L4 gold
-                graphics.fillStyle(isLevel4 ? 0xddddcc : 0x5d4e37, alpha);
+                // Dummy post
+                graphics.fillStyle(0x5d4e37, alpha);
                 graphics.fillRect(dummyX - 2, dummyY - 25, 4, 30);
-                graphics.fillStyle(isLevel4 ? 0xccccbb : 0x3d2e17, alpha);
+                graphics.fillStyle(0x3d2e17, alpha);
                 graphics.fillRect(dummyX + 1, dummyY - 25, 1, 30);
 
                 // Dummy body (straw-stuffed sack)
@@ -5049,8 +5025,8 @@ export class BuildingRenderer {
                 graphics.fillStyle(0xa48040, alpha * 0.5);
                 graphics.fillCircle(dummyX + 1, dummyY - 32, 4);
 
-                // Dummy arms (wooden crossbar) — L4 marble
-                graphics.fillStyle(isLevel4 ? 0xddddcc : 0x5d4e37, alpha);
+                // Dummy arms (wooden crossbar)
+                graphics.fillStyle(0x5d4e37, alpha);
                 graphics.fillRect(dummyX - 10, dummyY - 22, 20, 3);
 
                 // Straw detail
@@ -5065,10 +5041,8 @@ export class BuildingRenderer {
                 const rackX = center.x + 35;
                 const rackY = center.y;
 
-                // Rack frame (A-frame) — L4 marble
-                const rackWood = isLevel4 ? 0xeeeedd : 0x5d4e37;
-                const rackWoodDark = isLevel4 ? 0xddddcc : 0x3d2e17;
-                graphics.fillStyle(rackWood, alpha);
+                // Rack frame (A-frame)
+                graphics.fillStyle(0x5d4e37, alpha);
                 // Left leg
                 graphics.beginPath();
                 graphics.moveTo(rackX - 10, rackY + 5);
@@ -5089,40 +5063,30 @@ export class BuildingRenderer {
 
                 // Cross bar
                 graphics.fillRect(rackX - 9, rackY - 18, 18, 3);
-                graphics.fillStyle(rackWoodDark, alpha);
+                graphics.fillStyle(0x3d2e17, alpha);
                 graphics.fillRect(rackX - 9, rackY - 16, 18, 1);
 
-                if (isLevel4) {
-                    // Gold trim on rack
-                    graphics.lineStyle(1, 0xdaa520, alpha * 0.7);
-                    graphics.lineBetween(rackX - 9, rackY - 18, rackX + 9, rackY - 18);
-                }
-
-                // Weapons on rack — L4 golden blades
-                const bladeColor = isLevel4 ? 0xdaa520 : 0x888888;
-                const blade2Color = isLevel4 ? 0xb8860b : 0x777777;
-                const handleColor = isLevel4 ? 0xeeeedd : 0x5d4e37;
-                const guardColor = isLevel4 ? 0xffd700 : 0xccaa00;
+                // Weapons on rack
                 // Sword 1
-                graphics.fillStyle(bladeColor, alpha);
+                graphics.fillStyle(0x888888, alpha);
                 graphics.fillRect(rackX - 7, rackY - 30, 2, 14);
-                graphics.fillStyle(handleColor, alpha);
+                graphics.fillStyle(0x5d4e37, alpha);
                 graphics.fillRect(rackX - 8, rackY - 17, 4, 3);
-                graphics.fillStyle(guardColor, alpha);
+                graphics.fillStyle(0xccaa00, alpha);
                 graphics.fillRect(rackX - 7, rackY - 17, 2, 1);
 
                 // Sword 2
-                graphics.fillStyle(blade2Color, alpha);
+                graphics.fillStyle(0x777777, alpha);
                 graphics.fillRect(rackX + 1, rackY - 28, 2, 12);
-                graphics.fillStyle(handleColor, alpha);
+                graphics.fillStyle(0x5d4e37, alpha);
                 graphics.fillRect(rackX, rackY - 17, 4, 3);
-                graphics.fillStyle(guardColor, alpha);
+                graphics.fillStyle(0xccaa00, alpha);
                 graphics.fillRect(rackX + 1, rackY - 17, 2, 1);
 
                 // Axe
-                graphics.fillStyle(handleColor, alpha);
+                graphics.fillStyle(0x5d4e37, alpha);
                 graphics.fillRect(rackX + 6, rackY - 32, 2, 16);
-                graphics.fillStyle(isLevel4 ? 0xdaa520 : 0x666666, alpha);
+                graphics.fillStyle(0x666666, alpha);
                 graphics.beginPath();
                 graphics.moveTo(rackX + 5, rackY - 32);
                 graphics.lineTo(rackX + 11, rackY - 30);
@@ -6265,35 +6229,89 @@ export class BuildingRenderer {
         if (showProjectile) {
             const spX = armTipX;
             const spY = armTipY + slingDrop + 5;
-            const spikeScale = isLevel3 ? 1.2 : 1.0;
-            const coreColor = isLevel3 ? 0x333333 : 0x555555;
-            const spikeColor = isLevel3 ? 0x888888 : 0xaaaaaa;
-            const highlightColor = isLevel3 ? 0xbbbbbb : 0xcccccc;
-            const sp = (v: number) => Math.round(v * spikeScale);
 
-            graphics.fillStyle(coreColor, alpha);
-            graphics.fillCircle(spX, spY, 4 * spikeScale);
+            if (isLevel4) {
+                // L4: White marble boulder with gold spikes
+                const spikeScale = 1.3;
+                const sp = (v: number) => Math.round(v * spikeScale);
 
-            graphics.fillStyle(spikeColor, alpha);
-            graphics.fillTriangle(spX, spY - sp(4), spX - sp(2), spY - sp(10), spX + sp(2), spY - sp(10));
-            graphics.fillTriangle(spX, spY + sp(4), spX - sp(2), spY + sp(10), spX + sp(2), spY + sp(10));
-            graphics.fillTriangle(spX - sp(4), spY, spX - sp(10), spY - sp(2), spX - sp(10), spY + sp(2));
-            graphics.fillTriangle(spX + sp(4), spY, spX + sp(10), spY - sp(2), spX + sp(10), spY + sp(2));
-            graphics.fillTriangle(spX - sp(3), spY - sp(3), spX - sp(7), spY - sp(7), spX - sp(5), spY - sp(5));
-            graphics.fillTriangle(spX + sp(3), spY - sp(3), spX + sp(7), spY - sp(7), spX + sp(5), spY - sp(5));
-            graphics.fillTriangle(spX - sp(3), spY + sp(3), spX - sp(7), spY + sp(7), spX - sp(5), spY + sp(5));
-            graphics.fillTriangle(spX + sp(3), spY + sp(3), spX + sp(7), spY + sp(7), spX + sp(5), spY + sp(5));
+                // White marble core
+                graphics.fillStyle(0xeeeedd, alpha);
+                graphics.fillCircle(spX, spY, 5 * spikeScale);
+                graphics.fillStyle(0xddddcc, alpha * 0.6);
+                graphics.fillCircle(spX + 1, spY + 1, 3 * spikeScale);
 
-            graphics.fillStyle(highlightColor, alpha * 0.8);
-            graphics.fillTriangle(spX - 1, spY - sp(5), spX, spY - sp(9), spX + 1, spY - sp(9));
-            graphics.fillTriangle(spX - sp(5), spY - 1, spX - sp(9), spY, spX - sp(9), spY + 1);
+                // Gold spikes
+                graphics.fillStyle(0xdaa520, alpha);
+                graphics.fillTriangle(spX, spY - sp(5), spX - sp(2), spY - sp(11), spX + sp(2), spY - sp(11));
+                graphics.fillTriangle(spX, spY + sp(5), spX - sp(2), spY + sp(11), spX + sp(2), spY + sp(11));
+                graphics.fillTriangle(spX - sp(5), spY, spX - sp(11), spY - sp(2), spX - sp(11), spY + sp(2));
+                graphics.fillTriangle(spX + sp(5), spY, spX + sp(11), spY - sp(2), spX + sp(11), spY + sp(2));
+                graphics.fillTriangle(spX - sp(3), spY - sp(3), spX - sp(8), spY - sp(8), spX - sp(5), spY - sp(5));
+                graphics.fillTriangle(spX + sp(3), spY - sp(3), spX + sp(8), spY - sp(8), spX + sp(5), spY - sp(5));
+                graphics.fillTriangle(spX - sp(3), spY + sp(3), spX - sp(8), spY + sp(8), spX - sp(5), spY + sp(5));
+                graphics.fillTriangle(spX + sp(3), spY + sp(3), spX + sp(8), spY + sp(8), spX + sp(5), spY + sp(5));
 
-            if (isLevel3) {
+                // Gold spike highlights
+                graphics.fillStyle(0xffd700, alpha * 0.8);
+                graphics.fillTriangle(spX - 1, spY - sp(6), spX, spY - sp(10), spX + 1, spY - sp(10));
+                graphics.fillTriangle(spX - sp(6), spY - 1, spX - sp(10), spY, spX - sp(10), spY + 1);
+
+                // Gold tips
+                graphics.fillStyle(0xffd700, alpha * 0.7);
+                graphics.fillCircle(spX, spY - sp(11), 1.5);
+                graphics.fillCircle(spX, spY + sp(11), 1.5);
+                graphics.fillCircle(spX - sp(11), spY, 1.5);
+                graphics.fillCircle(spX + sp(11), spY, 1.5);
+            } else if (isLevel3) {
+                // L3: Dark iron reinforced with red-hot tips
+                const spikeScale = 1.2;
+                const sp = (v: number) => Math.round(v * spikeScale);
+
+                graphics.fillStyle(0x333333, alpha);
+                graphics.fillCircle(spX, spY, 4 * spikeScale);
+
+                graphics.fillStyle(0x888888, alpha);
+                graphics.fillTriangle(spX, spY - sp(4), spX - sp(2), spY - sp(10), spX + sp(2), spY - sp(10));
+                graphics.fillTriangle(spX, spY + sp(4), spX - sp(2), spY + sp(10), spX + sp(2), spY + sp(10));
+                graphics.fillTriangle(spX - sp(4), spY, spX - sp(10), spY - sp(2), spX - sp(10), spY + sp(2));
+                graphics.fillTriangle(spX + sp(4), spY, spX + sp(10), spY - sp(2), spX + sp(10), spY + sp(2));
+                graphics.fillTriangle(spX - sp(3), spY - sp(3), spX - sp(7), spY - sp(7), spX - sp(5), spY - sp(5));
+                graphics.fillTriangle(spX + sp(3), spY - sp(3), spX + sp(7), spY - sp(7), spX + sp(5), spY - sp(5));
+                graphics.fillTriangle(spX - sp(3), spY + sp(3), spX - sp(7), spY + sp(7), spX - sp(5), spY + sp(5));
+                graphics.fillTriangle(spX + sp(3), spY + sp(3), spX + sp(7), spY + sp(7), spX + sp(5), spY + sp(5));
+
+                graphics.fillStyle(0xbbbbbb, alpha * 0.8);
+                graphics.fillTriangle(spX - 1, spY - sp(5), spX, spY - sp(9), spX + 1, spY - sp(9));
+                graphics.fillTriangle(spX - sp(5), spY - 1, spX - sp(9), spY, spX - sp(9), spY + 1);
+
+                // Red-hot spike tips
                 graphics.fillStyle(0xcc3300, alpha * 0.6);
                 graphics.fillCircle(spX, spY - sp(10), 1.5);
                 graphics.fillCircle(spX, spY + sp(10), 1.5);
                 graphics.fillCircle(spX - sp(10), spY, 1.5);
                 graphics.fillCircle(spX + sp(10), spY, 1.5);
+            } else {
+                // L1-L2: Basic grey spike ball
+                const spikeScale = 1.0;
+                const sp = (v: number) => Math.round(v * spikeScale);
+
+                graphics.fillStyle(0x555555, alpha);
+                graphics.fillCircle(spX, spY, 4);
+
+                graphics.fillStyle(0xaaaaaa, alpha);
+                graphics.fillTriangle(spX, spY - sp(4), spX - sp(2), spY - sp(10), spX + sp(2), spY - sp(10));
+                graphics.fillTriangle(spX, spY + sp(4), spX - sp(2), spY + sp(10), spX + sp(2), spY + sp(10));
+                graphics.fillTriangle(spX - sp(4), spY, spX - sp(10), spY - sp(2), spX - sp(10), spY + sp(2));
+                graphics.fillTriangle(spX + sp(4), spY, spX + sp(10), spY - sp(2), spX + sp(10), spY + sp(2));
+                graphics.fillTriangle(spX - sp(3), spY - sp(3), spX - sp(7), spY - sp(7), spX - sp(5), spY - sp(5));
+                graphics.fillTriangle(spX + sp(3), spY - sp(3), spX + sp(7), spY - sp(7), spX + sp(5), spY - sp(5));
+                graphics.fillTriangle(spX - sp(3), spY + sp(3), spX - sp(7), spY + sp(7), spX - sp(5), spY + sp(5));
+                graphics.fillTriangle(spX + sp(3), spY + sp(3), spX + sp(7), spY + sp(7), spX + sp(5), spY + sp(5));
+
+                graphics.fillStyle(0xcccccc, alpha * 0.8);
+                graphics.fillTriangle(spX - 1, spY - sp(5), spX, spY - sp(9), spX + 1, spY - sp(9));
+                graphics.fillTriangle(spX - sp(5), spY - 1, spX - sp(9), spY, spX - sp(9), spY + 1);
             }
         }
 

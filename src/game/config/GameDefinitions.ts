@@ -171,11 +171,12 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         maxCount: 16,
         color: 0x14f195,
         productionRate: 5.0,
-        maxLevel: 3,
+        maxLevel: 4,
         levels: [
             { hp: 700, productionRate: 5.0, cost: 300 },     // Level 1 - Wooden drill rig
             { hp: 900, productionRate: 8.0, cost: 600 },     // Level 2 - Metal-reinforced, Solana veins
-            { hp: 1150, productionRate: 11.0, cost: 1000 }   // Level 3 - Marble & Gold
+            { hp: 1150, productionRate: 11.0, cost: 1000 },  // Level 3 - Previous top tier
+            { hp: 1400, productionRate: 14.0, cost: 1500 }   // Level 4 - Marble rocks, gold accents
         ]
     },
     mortar: {
@@ -252,13 +253,12 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         category: 'military',
         maxCount: 4,
         color: 0x884422,
-        maxLevel: 4,
+        maxLevel: 3,
         capacity: 20,
         levels: [
             { hp: 1000, capacity: 20, cost: 300 },    // Level 1 - Basic (20 space, no decor)
             { hp: 1200, capacity: 25, cost: 500 },    // Level 2 - Weapons rack
-            { hp: 1400, capacity: 30, cost: 700 },    // Level 3 - Full decor
-            { hp: 1700, capacity: 35, cost: 1100 }    // Level 4 - Marble & Gold
+            { hp: 1400, capacity: 30, cost: 700 }     // Level 3 - Full decor
         ]
     },
     prism: {
