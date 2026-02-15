@@ -4,6 +4,7 @@ import { formatSol } from '../game/solana/Currency';
 
 interface Notification {
   id: string;
+  attackId?: string;
   attackerName: string;
   solLost?: number;
   goldLost?: number;
@@ -11,14 +12,16 @@ interface Notification {
   destruction: number;
   timestamp: number;
   read: boolean;
+  replayAvailable?: boolean;
 }
 
 interface NotificationsPanelProps {
   userId: string;
   isOnline: boolean;
+  onWatchReplay?: (attackId: string, attackerName: string) => void;
 }
 
-export function NotificationsPanel({ userId, isOnline }: NotificationsPanelProps) {
+export function NotificationsPanel({ userId, isOnline, onWatchReplay }: NotificationsPanelProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
@@ -96,6 +99,7 @@ export function NotificationsPanel({ userId, isOnline }: NotificationsPanelProps
                 const solLost = typeof notif.solLost === 'number'
                   ? notif.solLost
                   : (notif.goldLost || 0) + (notif.elixirLost || 0);
+                const replayAttackId = notif.attackId;
                 return (
                 <div key={notif.id} className={`notification-item ${!notif.read ? 'unread' : ''}`}>
                   <div className="attacker">{notif.attackerName} raided you!</div>
@@ -107,6 +111,17 @@ export function NotificationsPanel({ userId, isOnline }: NotificationsPanelProps
                     <span>{notif.destruction}% destroyed</span>
                   </div>
                   <div className="timestamp">{formatTimeAgo(notif.timestamp)}</div>
+                  {onWatchReplay && replayAttackId && (notif.replayAvailable ?? true) && (
+                    <button
+                      className="watch-replay-btn"
+                      onClick={() => {
+                        onWatchReplay(replayAttackId, notif.attackerName);
+                        handleClose();
+                      }}
+                    >
+                      WATCH REPLAY
+                    </button>
+                  )}
                 </div>
               );
             })

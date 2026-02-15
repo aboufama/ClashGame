@@ -61,16 +61,81 @@ export interface WalletRecord {
 
 export interface NotificationRecord {
   id: string;
+  attackId?: string;
   attackerId: string;
   attackerName: string;
   solLost: number;
   destruction: number;
   time: number;
   read: boolean;
+  replayAvailable?: boolean;
 }
 
 export interface NotificationStore {
   items: NotificationRecord[];
+}
+
+export type AttackReplayStatus = 'live' | 'finished' | 'aborted';
+
+export interface AttackReplayBuildingState {
+  id: string;
+  health: number;
+  isDestroyed: boolean;
+}
+
+export interface AttackReplayTroopState {
+  id: string;
+  type: string;
+  level: number;
+  owner: 'PLAYER' | 'ENEMY';
+  gridX: number;
+  gridY: number;
+  health: number;
+  maxHealth: number;
+  recursionGen?: number;
+  facingAngle?: number;
+  hasTakenDamage?: boolean;
+}
+
+export interface AttackReplayFrame {
+  t: number;
+  destruction: number;
+  solLooted: number;
+  buildings: AttackReplayBuildingState[];
+  troops: AttackReplayTroopState[];
+}
+
+export interface AttackReplayFinalResult {
+  destruction: number;
+  solLooted: number;
+}
+
+export interface AttackReplayRecord {
+  attackId: string;
+  attackerId: string;
+  attackerName: string;
+  victimId: string;
+  victimName?: string;
+  status: AttackReplayStatus;
+  startedAt: number;
+  updatedAt: number;
+  endedAt?: number;
+  enemyWorld: SerializedWorld;
+  frames: AttackReplayFrame[];
+  finalResult?: AttackReplayFinalResult;
+}
+
+export interface LiveAttackSession {
+  attackId: string;
+  attackerId: string;
+  attackerName: string;
+  victimId: string;
+  startedAt: number;
+  updatedAt: number;
+}
+
+export interface LiveAttackStore {
+  sessions: LiveAttackSession[];
 }
 
 export interface UserIndexEntry {

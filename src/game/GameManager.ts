@@ -28,6 +28,8 @@ type SceneCommands = {
     startOnlineAttack: () => void;
     startAttackOnUser: (userId: string, username: string) => void;
     startScoutOnUser: (userId: string, username: string) => void;
+    watchLiveAttack: (attackId: string) => void;
+    watchReplay: (attackId: string) => void;
     findNewMap: () => void;
     deleteSelectedBuilding: () => void;
     moveSelectedBuilding: () => void;
@@ -146,6 +148,14 @@ class GameManager {
 
     startScoutOnUser(userId: string, username: string) {
         this.sceneCommands.startScoutOnUser?.(userId, username);
+    }
+
+    watchLiveAttack(attackId: string) {
+        this.sceneCommands.watchLiveAttack?.(attackId);
+    }
+
+    watchReplay(attackId: string) {
+        this.sceneCommands.watchReplay?.(attackId);
     }
 
     findNewMap() {

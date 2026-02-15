@@ -1,8 +1,8 @@
 
 import Phaser from 'phaser';
-import { Backend } from '../backend/GameBackend';
+import { Backend, type AttackReplayState, type ReplayFrameSnapshot, type ReplayTroopSnapshot } from '../backend/GameBackend';
 import type { SerializedBuilding, SerializedWorld } from '../data/Models';
-import { BUILDING_DEFINITIONS, OBSTACLE_DEFINITIONS, getBuildingStats, getTroopStats, type BuildingType, type ObstacleType, type TroopType } from '../config/GameDefinitions';
+import { BUILDING_DEFINITIONS, OBSTACLE_DEFINITIONS, TROOP_DEFINITIONS, getBuildingStats, getTroopStats, type BuildingType, type ObstacleType, type TroopType } from '../config/GameDefinitions';
 import { LootSystem } from '../systems/LootSystem';
 import type { PlacedBuilding, Troop, PlacedObstacle } from '../types/GameTypes';
 import { BuildingRenderer } from '../renderers/BuildingRenderer';
@@ -32,6 +32,29 @@ interface EnemyInstantiationSummary {
     skippedUnknownType: number;
     skippedOutOfBounds: number;
     failedInstantiation: number;
+}
+
+type ReplayWatchMode = 'live' | 'replay';
+
+interface ReplayCaptureState {
+    attackId: string;
+    victimId: string;
+    startedAt: number;
+    startedRemotely: boolean;
+    framePushInFlight: boolean;
+    lastFramePushAt: number;
+    ended: boolean;
+}
+
+interface ReplayWatchState {
+    attackId: string;
+    mode: ReplayWatchMode;
+    playbackStartTime: number;
+    nextFrameIndex: number;
+    lastAppliedFrameT: number;
+    pollInFlight: boolean;
+    frames: ReplayFrameSnapshot[];
+    pollEvent?: Phaser.Time.TimerEvent;
 }
 
 
@@ -158,6 +181,7 @@ export class MainScene extends Phaser.Scene {
     public pendingSpawnCount = 0; // Prevent battle end during troop splits (phalanx/recursion)
     private readonly HEALTH_BAR_IDLE_MS = 5000;
     private readonly HEALTH_BAR_FADE_MS = 600;
+    private readonly REPLAY_PUSH_INTERVAL_MS = 700;
 
     public villageNameLabel!: Phaser.GameObjects.Text;
     public attackModeSelectedBuilding: PlacedBuilding | null = null;
@@ -170,6 +194,8 @@ export class MainScene extends Phaser.Scene {
     public playerLabLevel = 1;
     private needsDefaultBase = false;
     private sceneReadyForBaseLoad = false;
+    private replayCaptureState: ReplayCaptureState | null = null;
+    private replayWatchState: ReplayWatchState | null = null;
 
     public get userId(): string {
         try {
@@ -355,6 +381,8 @@ export class MainScene extends Phaser.Scene {
 
         this.events.once('shutdown', () => {
             this.sceneReadyForBaseLoad = false;
+            this.endAttackReplayCapture('aborted');
+            this.clearReplayWatchState();
             gameManager.clearScene();
             particleManager.clearAll();
         });
@@ -443,6 +471,15 @@ export class MainScene extends Phaser.Scene {
         PixelatePipeline.zoom = this.cameras.main.zoom;
         PixelatePipeline.scroll.set(this.cameras.main.scrollX, this.cameras.main.scrollY);
 
+        if (this.mode === 'REPLAY') {
+            this.handleCameraMovement(delta);
+            this.updateReplayWatchPlayback(time);
+            this.refreshBuildingHealthBars();
+            this.updateObstacleAnimations(time);
+            this.updateRubbleAnimations(time);
+            return;
+        }
+
         this.checkBattleEnd();
 
         this.handleCameraMovement(delta);
@@ -450,6 +487,7 @@ export class MainScene extends Phaser.Scene {
         this.updateSpikeZones();
         this.updateLavaZones();
         this.updateTroops(delta);
+        this.maybePushReplayFrame();
         this.refreshBuildingHealthBars();
         this.updateResources(time);
         this.updateSelectionHighlight();
@@ -505,6 +543,7 @@ export class MainScene extends Phaser.Scene {
         const noEnemiesRemaining = remaining === 0 && (this.destroyedBuildings > 0 || this.initialEnemyBuildings > 0);
         if ((armyRemaining <= 0 && activeTroops === 0 && this.pendingSpawnCount === 0) || noEnemiesRemaining) {
             this.raidEndScheduled = true;
+            this.endAttackReplayCapture('finished');
 
             // 2-second delay to let final animations play / player realize what happened
             this.time.delayedCall(2000, () => {
@@ -5802,6 +5841,7 @@ export class MainScene extends Phaser.Scene {
         this.hasDeployed = true;
         if (owner === 'PLAYER' && this.mode === 'ATTACK' && !this.isScouting) {
             this.setVillageNameVisible(false);
+            this.beginAttackReplayCapture();
         }
         this.updateHealthBar(troop);
         troop.target = TargetingSystem.findTarget(troop, this.buildings);
@@ -6416,6 +6456,38 @@ export class MainScene extends Phaser.Scene {
                     this.updateBattleStats();
                 });
             },
+            watchLiveAttack: (attackId: string) => {
+                this.showCloudTransition(async () => {
+                    await this.flushPendingSaveForTransition();
+                    gameManager.setGameMode('REPLAY');
+                    this.mode = 'REPLAY';
+                    this.isScouting = true;
+                    this.clearScene();
+
+                    const loaded = await this.startReplayWatch(attackId, 'live');
+                    if (!loaded) {
+                        await this.goHome();
+                        return;
+                    }
+                    this.centerCamera();
+                });
+            },
+            watchReplay: (attackId: string) => {
+                this.showCloudTransition(async () => {
+                    await this.flushPendingSaveForTransition();
+                    gameManager.setGameMode('REPLAY');
+                    this.mode = 'REPLAY';
+                    this.isScouting = true;
+                    this.clearScene();
+
+                    const loaded = await this.startReplayWatch(attackId, 'replay');
+                    if (!loaded) {
+                        await this.goHome();
+                        return;
+                    }
+                    this.centerCamera();
+                });
+            },
             findNewMap: () => {
                 // Only allow if no troops have been deployed yet
                 const deployedTroops = this.troops.filter(t => t.owner === 'PLAYER').length;
@@ -6516,6 +6588,10 @@ export class MainScene extends Phaser.Scene {
     }
 
     public async goHome() {
+        if (this.mode === 'ATTACK') {
+            this.endAttackReplayCapture('aborted');
+        }
+        this.clearReplayWatchState();
         this.cancelPlacement();
         gameManager.setGameMode('HOME');
         this.mode = 'HOME';
@@ -6526,6 +6602,8 @@ export class MainScene extends Phaser.Scene {
 
 
     private clearScene() {
+        this.clearReplayWatchState();
+
         // Clear all buildings and their associated graphics
         this.buildings.forEach(b => {
             b.graphics.destroy();
@@ -6831,6 +6909,421 @@ export class MainScene extends Phaser.Scene {
             });
         }
         return summary.playablePlaced > 0;
+    }
+
+    private getReplayTroopType(type: string): TroopType | null {
+        const normalized = String(type || '').trim().toLowerCase();
+        if (!normalized) return null;
+        if (Object.prototype.hasOwnProperty.call(TROOP_DEFINITIONS, normalized)) {
+            return normalized as TroopType;
+        }
+        return null;
+    }
+
+    private clearReplayWatchState() {
+        if (this.replayWatchState?.pollEvent) {
+            this.replayWatchState.pollEvent.remove(false);
+        }
+        this.replayWatchState = null;
+    }
+
+    private buildReplayEnemyWorldSnapshot(victimId: string, victimName: string): SerializedWorld | null {
+        const enemyBuildings = this.buildings
+            .filter(building => building.owner === 'ENEMY')
+            .map(building => ({
+                id: building.id,
+                type: building.type as BuildingType,
+                gridX: Math.floor(building.gridX),
+                gridY: Math.floor(building.gridY),
+                level: Math.max(1, Math.floor(building.level || 1))
+            }));
+
+        if (enemyBuildings.length === 0) return null;
+
+        return {
+            id: `replay_${victimId}_${Date.now().toString(36)}`,
+            ownerId: victimId,
+            username: victimName || 'Enemy',
+            buildings: enemyBuildings,
+            obstacles: [],
+            resources: { sol: 0 },
+            army: {},
+            wallLevel: Math.max(1, this.preferredWallLevel || 1),
+            lastSaveTime: Date.now(),
+            revision: 1
+        };
+    }
+
+    private buildReplayFrameSnapshot(): ReplayFrameSnapshot {
+        const startedAt = this.replayCaptureState?.startedAt ?? this.time.now;
+        const { totalKnown } = this.getBattleTotals();
+        const destruction = totalKnown > 0
+            ? Math.min(100, Math.round((this.destroyedBuildings / totalKnown) * 100))
+            : 0;
+
+        return {
+            t: Math.max(0, Math.floor(this.time.now - startedAt)),
+            destruction,
+            solLooted: Math.max(0, Math.floor(this.solLooted)),
+            buildings: this.buildings
+                .filter(building => building.owner === 'ENEMY')
+                .map(building => ({
+                    id: building.id,
+                    health: Math.max(0, Math.floor(building.health)),
+                    isDestroyed: Boolean(building.isDestroyed || building.health <= 0)
+                })),
+            troops: this.troops
+                .filter(troop => troop.health > 0)
+                .map(troop => ({
+                    id: troop.id,
+                    type: troop.type,
+                    level: Math.max(1, Math.floor(troop.level || 1)),
+                    owner: troop.owner,
+                    gridX: troop.gridX,
+                    gridY: troop.gridY,
+                    health: Math.max(0, troop.health),
+                    maxHealth: Math.max(1, troop.maxHealth),
+                    recursionGen: troop.recursionGen,
+                    facingAngle: troop.facingAngle,
+                    hasTakenDamage: troop.hasTakenDamage
+                }))
+        };
+    }
+
+    private beginAttackReplayCapture() {
+        if (!Auth.isOnlineMode()) return;
+        if (this.mode !== 'ATTACK' || this.isScouting) return;
+        if (!this.currentEnemyWorld || this.currentEnemyWorld.isBot || !this.currentEnemyWorld.attackId) return;
+        if (this.replayCaptureState && this.replayCaptureState.attackId === this.currentEnemyWorld.attackId) return;
+
+        const user = Auth.getCurrentUser();
+        if (!user) return;
+
+        const replayWorld = this.buildReplayEnemyWorldSnapshot(this.currentEnemyWorld.id, this.currentEnemyWorld.username);
+        if (!replayWorld) return;
+
+        const captureState: ReplayCaptureState = {
+            attackId: this.currentEnemyWorld.attackId,
+            victimId: this.currentEnemyWorld.id,
+            startedAt: this.time.now,
+            startedRemotely: false,
+            framePushInFlight: false,
+            lastFramePushAt: -Infinity,
+            ended: false
+        };
+        this.replayCaptureState = captureState;
+
+        void Backend.startAttackReplaySession(
+            captureState.attackId,
+            captureState.victimId,
+            user.id,
+            user.username,
+            replayWorld
+        ).then(() => {
+            if (!this.replayCaptureState || this.replayCaptureState.attackId !== captureState.attackId) return;
+            this.replayCaptureState.startedRemotely = true;
+            this.maybePushReplayFrame(true);
+        }).catch(error => {
+            console.warn('Replay capture start failed:', error);
+        });
+    }
+
+    private maybePushReplayFrame(force: boolean = false) {
+        const state = this.replayCaptureState;
+        if (!state || state.ended || !state.startedRemotely) return;
+        if (state.framePushInFlight) return;
+
+        const now = this.time.now;
+        if (!force && now - state.lastFramePushAt < this.REPLAY_PUSH_INTERVAL_MS) return;
+
+        state.framePushInFlight = true;
+        state.lastFramePushAt = now;
+        const frame = this.buildReplayFrameSnapshot();
+
+        void Backend.pushAttackReplayFrame(state.attackId, frame)
+            .catch(error => {
+                console.warn('Replay frame push failed:', error);
+            })
+            .finally(() => {
+                if (this.replayCaptureState && this.replayCaptureState.attackId === state.attackId) {
+                    this.replayCaptureState.framePushInFlight = false;
+                }
+            });
+    }
+
+    private endAttackReplayCapture(status: 'finished' | 'aborted') {
+        const state = this.replayCaptureState;
+        if (!state || state.ended) return;
+        state.ended = true;
+        const finalFrame = this.buildReplayFrameSnapshot();
+        this.replayCaptureState = null;
+
+        if (!state.startedRemotely) return;
+
+        void Promise.resolve()
+            .then(async () => {
+                await Backend.pushAttackReplayFrame(state.attackId, finalFrame).catch(() => undefined);
+                await Backend.endAttackReplaySession(state.attackId, status, finalFrame.destruction, finalFrame.solLooted);
+            })
+            .catch(error => {
+                console.warn('Replay capture end failed:', error);
+            });
+    }
+
+    private createReplayTroop(snapshot: ReplayTroopSnapshot): Troop | undefined {
+        const troopType = this.getReplayTroopType(snapshot.type);
+        if (!troopType) return undefined;
+
+        const pos = IsoUtils.cartToIso(snapshot.gridX, snapshot.gridY);
+        const troopGraphic = this.add.graphics();
+        TroopRenderer.drawTroopVisual(
+            troopGraphic,
+            troopType,
+            snapshot.owner,
+            this.time.now,
+            true,
+            0,
+            0,
+            0,
+            false,
+            snapshot.facingAngle ?? 0,
+            snapshot.level
+        );
+        troopGraphic.setPosition(pos.x, pos.y);
+        troopGraphic.setDepth(depthForTroop(snapshot.gridX, snapshot.gridY, troopType));
+
+        const troop: Troop = {
+            id: snapshot.id,
+            type: troopType,
+            level: Math.max(1, Math.floor(snapshot.level || 1)),
+            gameObject: troopGraphic,
+            healthBar: this.add.graphics(),
+            gridX: snapshot.gridX,
+            gridY: snapshot.gridY,
+            health: Math.max(0, snapshot.health),
+            maxHealth: Math.max(1, snapshot.maxHealth),
+            target: null,
+            owner: snapshot.owner,
+            lastAttackTime: 0,
+            attackDelay: 999999,
+            speedMult: 0,
+            hasTakenDamage: Boolean(snapshot.hasTakenDamage),
+            facingAngle: snapshot.facingAngle ?? 0,
+            recursionGen: snapshot.recursionGen
+        };
+        return troop;
+    }
+
+    private applyReplayFrame(frame: ReplayFrameSnapshot) {
+        const buildingById = new Map(frame.buildings.map(entry => [entry.id, entry]));
+        this.buildings.forEach(building => {
+            if (building.owner !== 'ENEMY') return;
+            const state = buildingById.get(building.id);
+            if (!state) return;
+
+            const nextHealth = Math.max(0, Math.min(building.maxHealth, Math.floor(state.health)));
+            const isDestroyed = Boolean(state.isDestroyed || nextHealth <= 0);
+            building.health = nextHealth;
+            building.isDestroyed = isDestroyed;
+
+            building.graphics.setVisible(!isDestroyed);
+            building.baseGraphics?.setVisible(!isDestroyed);
+            building.barrelGraphics?.setVisible(!isDestroyed);
+            building.prismLaserGraphics?.setVisible(!isDestroyed);
+            building.prismLaserCore?.setVisible(!isDestroyed);
+            if (isDestroyed) {
+                building.healthBar.setVisible(false);
+            } else {
+                this.updateHealthBar(building);
+            }
+        });
+
+        const existingTroops = new Map(this.troops.map(troop => [troop.id, troop]));
+        const nextTroops: Troop[] = [];
+        frame.troops.forEach(snapshot => {
+            const troopType = this.getReplayTroopType(snapshot.type);
+            if (!troopType) return;
+
+            let troop = existingTroops.get(snapshot.id);
+            if (!troop) {
+                troop = this.createReplayTroop({ ...snapshot, type: troopType });
+                if (!troop) return;
+            }
+            existingTroops.delete(snapshot.id);
+
+            troop.type = troopType;
+            troop.level = Math.max(1, Math.floor(snapshot.level || 1));
+            troop.owner = snapshot.owner;
+            troop.gridX = snapshot.gridX;
+            troop.gridY = snapshot.gridY;
+            troop.health = Math.max(0, snapshot.health);
+            troop.maxHealth = Math.max(1, snapshot.maxHealth);
+            troop.recursionGen = snapshot.recursionGen;
+            troop.hasTakenDamage = snapshot.hasTakenDamage ?? troop.health < troop.maxHealth;
+            troop.facingAngle = Number.isFinite(snapshot.facingAngle) ? Number(snapshot.facingAngle) : troop.facingAngle;
+            troop.target = null;
+            troop.path = undefined;
+
+            const pos = IsoUtils.cartToIso(troop.gridX, troop.gridY);
+            troop.gameObject.setPosition(pos.x, pos.y);
+            troop.gameObject.setDepth(depthForTroop(troop.gridX, troop.gridY, troop.type));
+            troop.gameObject.setVisible(troop.health > 0);
+            troop.gameObject.clear();
+            TroopRenderer.drawTroopVisual(
+                troop.gameObject,
+                troop.type,
+                troop.owner,
+                this.time.now,
+                true,
+                0,
+                0,
+                0,
+                false,
+                troop.facingAngle,
+                troop.level
+            );
+
+            if (troop.health <= 0) {
+                troop.healthBar.setVisible(false);
+            } else {
+                this.updateHealthBar(troop);
+            }
+            nextTroops.push(troop);
+        });
+
+        existingTroops.forEach(troop => {
+            troop.gameObject.destroy();
+            troop.healthBar.destroy();
+        });
+        this.troops = nextTroops;
+
+        const destruction = Math.max(0, Math.min(100, Math.floor(frame.destruction)));
+        this.solLooted = Math.max(0, Math.floor(frame.solLooted));
+        this.destroyedBuildings = Math.max(0, Math.round((destruction / 100) * Math.max(1, this.initialEnemyBuildings)));
+        gameManager.updateBattleStats(destruction, this.solLooted);
+    }
+
+    private async startReplayWatch(attackId: string, mode: ReplayWatchMode): Promise<boolean> {
+        let replay: AttackReplayState | null = mode === 'live'
+            ? await Backend.getLiveAttackState(attackId)
+            : await Backend.getAttackReplay(attackId);
+
+        if (!replay && mode === 'live') {
+            replay = await Backend.getAttackReplay(attackId);
+        }
+
+        if (!replay || !replay.enemyWorld || !Array.isArray(replay.enemyWorld.buildings) || replay.enemyWorld.buildings.length === 0) {
+            return false;
+        }
+
+        this.clearReplayWatchState();
+
+        const summary = this.instantiateEnemyWorld(replay.enemyWorld, {
+            id: replay.victimId,
+            username: replay.victimName || replay.enemyWorld.username || 'Village',
+            isBot: true,
+            attackId: replay.attackId
+        });
+        if (summary.playablePlaced === 0) return false;
+
+        this.mode = 'REPLAY';
+        this.isScouting = true;
+        this.hasDeployed = false;
+        this.raidEndScheduled = false;
+        this.pendingSpawnCount = 0;
+        this.initialEnemyBuildings = this.getAttackEnemyBuildings().length;
+        this.destroyedBuildings = 0;
+        this.solLooted = 0;
+        gameManager.updateBattleStats(0, 0);
+        this.setVillageNameVisible(true);
+        this.updateVillageName();
+
+        const replayFrames = mode === 'replay'
+            ? (replay.frames ?? [])
+            : [];
+        const replayTimeOffset = replayFrames.length > 0 ? replayFrames[0].t : 0;
+        const normalizedFrames = replayFrames.map(frame => ({
+            ...frame,
+            t: Math.max(0, frame.t - replayTimeOffset)
+        }));
+
+        const watchState: ReplayWatchState = {
+            attackId: replay.attackId,
+            mode,
+            playbackStartTime: this.time.now,
+            nextFrameIndex: 0,
+            lastAppliedFrameT: -1,
+            pollInFlight: false,
+            frames: normalizedFrames
+        };
+        this.replayWatchState = watchState;
+
+        if (mode === 'replay') {
+            if (watchState.frames.length > 0) {
+                this.applyReplayFrame(watchState.frames[0]);
+                watchState.nextFrameIndex = 1;
+                watchState.lastAppliedFrameT = watchState.frames[0].t;
+            }
+            return true;
+        }
+
+        if (replay.latestFrame) {
+            this.applyReplayFrame(replay.latestFrame);
+            watchState.lastAppliedFrameT = replay.latestFrame.t;
+        }
+
+        watchState.pollEvent = this.time.addEvent({
+            delay: 900,
+            loop: true,
+            callback: () => {
+                const current = this.replayWatchState;
+                if (!current || current.attackId !== watchState.attackId || current.mode !== 'live') return;
+                if (current.pollInFlight) return;
+                current.pollInFlight = true;
+
+                void Backend.getLiveAttackState(current.attackId)
+                    .then(next => {
+                        const active = this.replayWatchState;
+                        if (!active || active.attackId !== current.attackId || active.mode !== 'live') return;
+                        if (!next) return;
+
+                        if (next.latestFrame && next.latestFrame.t > active.lastAppliedFrameT) {
+                            this.applyReplayFrame(next.latestFrame);
+                            active.lastAppliedFrameT = next.latestFrame.t;
+                        }
+
+                        if (next.status !== 'live' && active.pollEvent) {
+                            active.pollEvent.remove(false);
+                            active.pollEvent = undefined;
+                        }
+                    })
+                    .catch(error => {
+                        console.warn('Live replay poll failed:', error);
+                    })
+                    .finally(() => {
+                        const active = this.replayWatchState;
+                        if (active && active.attackId === current.attackId) {
+                            active.pollInFlight = false;
+                        }
+                    });
+            }
+        });
+
+        return true;
+    }
+
+    private updateReplayWatchPlayback(time: number) {
+        const replay = this.replayWatchState;
+        if (!replay || replay.mode !== 'replay') return;
+
+        const elapsed = Math.max(0, time - replay.playbackStartTime);
+        while (replay.nextFrameIndex < replay.frames.length) {
+            const frame = replay.frames[replay.nextFrameIndex];
+            if (frame.t > elapsed) break;
+            this.applyReplayFrame(frame);
+            replay.lastAppliedFrameT = frame.t;
+            replay.nextFrameIndex += 1;
+        }
     }
 
 

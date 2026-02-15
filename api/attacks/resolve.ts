@@ -3,7 +3,7 @@ import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http.j
 import { readJson, writeJson } from '../_lib/blob.js';
 import { requireAuth, sanitizeId } from '../_lib/auth.js';
 import { appendResourceDeltaEvent, ensurePlayerState, materializeState } from '../_lib/game_state.js';
-import { clamp, type NotificationStore, type UserRecord } from '../_lib/models.js';
+import { clamp, type AttackReplayRecord, type LiveAttackStore, type NotificationStore, type UserRecord } from '../_lib/models.js';
 
 interface ResolveBody {
   victimId?: string;
@@ -22,6 +22,35 @@ interface AttackResult {
 
 function attackEventKey(attackId: string, side: 'victim' | 'attacker') {
   return `attack:${attackId}:${side}`;
+}
+
+async function finalizeReplayResult(
+  attackId: string,
+  victimId: string,
+  lootApplied: number,
+  destruction: number
+) {
+  const replayPath = `attack_replays/${attackId}.json`;
+  const replay = await readJson<AttackReplayRecord>(replayPath);
+  if (replay && replay.victimId === victimId) {
+    const now = Date.now();
+    replay.status = 'finished';
+    replay.updatedAt = now;
+    replay.endedAt = now;
+    replay.finalResult = {
+      destruction: clamp(Number(destruction), 0, 100),
+      solLooted: Math.max(0, Math.floor(Number(lootApplied) || 0))
+    };
+    await writeJson(replayPath, replay);
+  }
+
+  const livePath = `attack_live/${victimId}.json`;
+  const live = await readJson<LiveAttackStore>(livePath);
+  if (!live || !Array.isArray(live.sessions)) return;
+  const next = live.sessions.filter(session => session.attackId !== attackId);
+  if (next.length === live.sessions.length) return;
+  live.sessions = next;
+  await writeJson(livePath, live);
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -99,6 +128,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const attackerAfter = await materializeState(attackerId, auth.user.username, Date.now());
 
+    const destruction = clamp(Number(body.destruction ?? 0), 0, 100);
+
+    if (attackId) {
+      await finalizeReplayResult(attackId, victimId, lootApplied, destruction).catch(error => {
+        console.warn('Failed to finalize replay state during resolve', { attackId, victimId, error });
+      });
+    }
+
     const notifPath = `notifications/${victimId}.json`;
     const notifications = (await readJson<NotificationStore>(notifPath)) ?? { items: [] };
     const notificationId = attackId || `atk_${Date.now().toString(36)}`;
@@ -107,12 +144,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!alreadyExists) {
       notifications.items.unshift({
         id: notificationId,
+        attackId: attackId || notificationId,
         attackerId,
         attackerName: body.attackerName?.trim() || auth.user.username || 'Unknown',
         solLost: lootApplied,
-        destruction: clamp(Number(body.destruction ?? 0), 0, 100),
+        destruction,
         time: Date.now(),
-        read: false
+        read: false,
+        replayAvailable: Boolean(attackId)
       });
 
       if (notifications.items.length > 50) {

@@ -81,7 +81,8 @@ export function Hud({
     const def = TROOP_DEFINITIONS[type as TroopType];
     return def?.name || type;
   };
-  const showAttackTroopBar = !(isScouting && visibleTroops.length === 0);
+  const isAttackView = view === 'ATTACK';
+  const showAttackTroopBar = isAttackView && !(isScouting && visibleTroops.length === 0);
 
   // Auto-dismiss hotkey hint
   const [showHotkeyHint, setShowHotkeyHint] = useState(true);

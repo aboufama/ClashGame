@@ -1,1 +1,1 @@
-export type GameMode = 'HOME' | 'ATTACK';
+export type GameMode = 'HOME' | 'ATTACK' | 'REPLAY';

@@ -5,8 +5,9 @@ import { Auth } from './Auth';
 const CACHE_PREFIX = 'clash.base.';
 
 type ResourceDeltaResult = { applied: boolean; sol: number };
-type AttackNotification = {
+export type AttackNotification = {
   id: string;
+  attackId?: string;
   attackerName: string;
   solLost?: number;
   goldLost?: number;
@@ -14,10 +15,68 @@ type AttackNotification = {
   destruction: number;
   timestamp: number;
   read: boolean;
+  replayAvailable?: boolean;
 };
 
 type NotificationListItem = Record<string, unknown> & Partial<AttackNotification> & {
   time?: number;
+};
+
+export type ReplayBuildingSnapshot = {
+  id: string;
+  health: number;
+  isDestroyed: boolean;
+};
+
+export type ReplayTroopSnapshot = {
+  id: string;
+  type: string;
+  level: number;
+  owner: 'PLAYER' | 'ENEMY';
+  gridX: number;
+  gridY: number;
+  health: number;
+  maxHealth: number;
+  recursionGen?: number;
+  facingAngle?: number;
+  hasTakenDamage?: boolean;
+};
+
+export type ReplayFrameSnapshot = {
+  t: number;
+  destruction: number;
+  solLooted: number;
+  buildings: ReplayBuildingSnapshot[];
+  troops: ReplayTroopSnapshot[];
+};
+
+export type IncomingAttackSession = {
+  attackId: string;
+  attackerId: string;
+  attackerName: string;
+  victimId: string;
+  startedAt: number;
+  updatedAt: number;
+};
+
+export type AttackReplayState = {
+  attackId: string;
+  attackerId: string;
+  attackerName: string;
+  victimId: string;
+  victimName?: string;
+  status: 'live' | 'finished' | 'aborted';
+  startedAt: number;
+  updatedAt: number;
+  endedAt?: number;
+  enemyWorld: SerializedWorld;
+  finalResult?: {
+    destruction: number;
+    solLooted: number;
+  };
+  frameCount: number;
+  latestFrame: ReplayFrameSnapshot | null;
+  frames?: ReplayFrameSnapshot[];
 };
 
 function getCacheKey(userId: string) {
@@ -720,7 +779,7 @@ export class Backend {
       difficultyRoll < 0.40 ? 'easy' :
       difficultyRoll < 0.85 ? 'intermediate' :
       difficultyRoll < 0.95 ? 'hard' :
-      'crazy';
+      'crazy'; // Keep "insane" (crazy) at 5%.
 
     const botNameByDifficulty: Record<Difficulty, string> = {
       easy: 'Bot Easy Base',
@@ -758,6 +817,68 @@ export class Backend {
 
     const maxLevelFor = (type: BuildingType) => BUILDING_DEFINITIONS[type].maxLevel ?? 1;
     const normalizeLevel = (type: BuildingType, level: number) => clamp(level, 1, maxLevelFor(type));
+    const isDefenseType = (type: BuildingType) => {
+      const info = BUILDING_DEFINITIONS[type];
+      return info.category === 'defense' && type !== 'wall';
+    };
+    const advancedDefenseTypes = new Set<BuildingType>([
+      'prism',
+      'magmavent',
+      'dragons_breath',
+      'spike_launcher'
+    ]);
+    const clampRect = (rect: Rect): Rect => {
+      const minX = clamp(rect.minX, margin, mapSize - margin - 3);
+      const minY = clamp(rect.minY, margin, mapSize - margin - 3);
+      const maxX = clamp(rect.maxX, minX + 2, mapSize - margin - 1);
+      const maxY = clamp(rect.maxY, minY + 2, mapSize - margin - 1);
+      return { minX, minY, maxX, maxY };
+    };
+    const insetRect = (rect: Rect, inset: number): Rect => {
+      const safeInset = Math.max(0, Math.floor(inset));
+      return clampRect({
+        minX: rect.minX + safeInset,
+        minY: rect.minY + safeInset,
+        maxX: rect.maxX - safeInset,
+        maxY: rect.maxY - safeInset
+      });
+    };
+    const defenseLevelFactory = (type: BuildingType): (() => number) => {
+      const max = maxLevelFor(type);
+      if (!isDefenseType(type) || max <= 1) return () => 1;
+
+      return () => {
+        let minLevel = 1;
+        let maxLevel = max;
+
+        if (difficulty === 'easy') {
+          maxLevel = Math.min(max, 2);
+        } else if (difficulty === 'intermediate') {
+          maxLevel = Math.min(max, 3);
+          minLevel = maxLevel >= 2 && chance(0.55) ? 2 : 1;
+        } else if (difficulty === 'hard') {
+          maxLevel = Math.min(max, 4);
+          minLevel = Math.max(1, Math.min(maxLevel, 2));
+        } else {
+          minLevel = Math.max(1, max - 1);
+          maxLevel = max;
+        }
+
+        if (advancedDefenseTypes.has(type)) {
+          if (difficulty === 'intermediate') {
+            minLevel = Math.max(minLevel, Math.max(1, maxLevel - 1));
+          } else if (difficulty === 'hard') {
+            minLevel = Math.max(minLevel, Math.max(1, maxLevel - 1));
+            if (chance(0.35)) return maxLevel;
+          } else if (difficulty === 'crazy') {
+            minLevel = Math.max(minLevel, maxLevel - 1);
+            if (chance(0.7)) return maxLevel;
+          }
+        }
+
+        return randInt(minLevel, maxLevel);
+      };
+    };
 
     const inBounds = (x: number, y: number, width: number, height: number) => {
       return x >= margin && y >= margin && x + width <= mapSize - margin && y + height <= mapSize - margin;
@@ -1003,110 +1124,151 @@ export class Backend {
     const townHallY = centerY - Math.floor(townHallDef.height / 2);
 
     if (difficulty === 'easy') {
-      // Easy: no walls, simple starter-style base under 10 buildings.
-      const easyCompactRect: Rect = {
-        minX: centerX - 4,
-        minY: centerY - 4,
-        maxX: centerX + 4,
-        maxY: centerY + 4
-      };
-      const easyCompactZones: Zone[] = [{ ...easyCompactRect, maxRadius: 6.8 }];
+      // Easy: compact, lightly defended, still procedural.
+      const easyHalf = randInt(4, 5);
+      const easyCompactRect = clampRect({
+        minX: centerX - easyHalf + randInt(-1, 1),
+        minY: centerY - easyHalf + randInt(-1, 1),
+        maxX: centerX + easyHalf + randInt(-1, 1),
+        maxY: centerY + easyHalf + randInt(-1, 1)
+      });
+      const easyCompactZones: Zone[] = [{ ...easyCompactRect, maxRadius: 6.4 + Math.random() * 0.9 }];
 
       placeBuilding('town_hall', townHallX, townHallY, 1);
-      placeMany('cannon', 2, 1, easyCompactZones, easyCompactZones);
-      if (chance(0.55)) placeMany('mortar', 1, 1, easyCompactZones, easyCompactZones);
-      if (chance(0.40)) placeMany('tesla', 1, 1, easyCompactZones, easyCompactZones);
+      placeMany('cannon', 2, defenseLevelFactory('cannon'), easyCompactZones, easyCompactZones);
+      if (chance(0.55)) placeMany('mortar', 1, defenseLevelFactory('mortar'), easyCompactZones, easyCompactZones);
+      if (chance(0.4)) placeMany('tesla', 1, defenseLevelFactory('tesla'), easyCompactZones, easyCompactZones);
 
       placeMany('army_camp', 1, 1, easyCompactZones, easyCompactZones);
       placeMany('barracks', 1, 5, easyCompactZones, easyCompactZones);
-      placeMany('solana_collector', 2, 1, easyCompactZones, easyCompactZones);
+      placeMany('solana_collector', randInt(2, 3), 1, easyCompactZones, easyCompactZones);
     } else if (difficulty === 'intermediate') {
-      // Intermediate: one outer wall ring and level 2 where available.
+      // Intermediate: full wall ring + varied defense levels.
       wallLevel = 2;
       placeBuilding('town_hall', townHallX, townHallY, 2);
-      addWallRing({ minX: 6, minY: 6, maxX: 18, maxY: 18 }, 2, 2);
 
-      const defenseZones: Zone[] = [{ minX: 7, minY: 7, maxX: 17, maxY: 17, maxRadius: 9.2 }];
-      const supportZones: Zone[] = [{ ...fullRect, minRadius: 7.2 }];
+      const mediumRingRect = clampRect({
+        minX: centerX - randInt(6, 7) + randInt(-1, 1),
+        minY: centerY - randInt(6, 7) + randInt(-1, 1),
+        maxX: centerX + randInt(6, 7) + randInt(-1, 1),
+        maxY: centerY + randInt(6, 7) + randInt(-1, 1)
+      });
+      addWallRing(mediumRingRect, 0, 1); // Fully closed wall ring for medium bases.
 
-      placeMany('ballista', 1, 2, defenseZones, innerZones);
-      placeMany('xbow', 1, 2, defenseZones, innerZones);
-      placeMany('mortar', 2, 2, defenseZones, innerZones);
-      placeMany('cannon', 4, 2, defenseZones, midZones);
-      placeMany('tesla', 2, 2, defenseZones, innerZones);
+      const mediumInnerRect = insetRect(mediumRingRect, 1);
+      const defenseZones: Zone[] = [{ ...mediumInnerRect, maxRadius: 8.8 + Math.random() * 0.8 }];
+      const supportZones: Zone[] = [{ ...fullRect, minRadius: 6.8 + Math.random() * 1.2 }];
+
+      placeMany('ballista', 1, defenseLevelFactory('ballista'), defenseZones, innerZones);
+      placeMany('xbow', 1, defenseLevelFactory('xbow'), defenseZones, innerZones);
+      placeMany('mortar', randInt(1, 2), defenseLevelFactory('mortar'), defenseZones, innerZones);
+      placeMany('cannon', randInt(3, 4), defenseLevelFactory('cannon'), defenseZones, midZones);
+      placeMany('tesla', randInt(1, 2), defenseLevelFactory('tesla'), defenseZones, innerZones);
 
       placeMany('army_camp', 2, 2, supportZones, midZones);
       placeMany('barracks', 1, 8, supportZones, midZones);
       placeMany('lab', 1, 1, supportZones, midZones);
-      placeMany('solana_collector', 4, 2, supportZones, fullZones);
+      placeMany('solana_collector', randInt(4, 5), 2, supportZones, fullZones);
     } else if (difficulty === 'hard') {
-      // Hard: layered walls, compartment defenses, stronger/high-tier mix.
-      wallLevel = chance(0.45) ? 4 : 3;
-      placeBuilding('town_hall', townHallX, townHallY, 1);
+      // Hard: layered procedural walls and heavier advanced-defense presence.
+      wallLevel = chance(0.5) ? 4 : 3;
+      placeBuilding('town_hall', townHallX, townHallY, 2);
 
-      const hardCoreZones: Zone[] = [{ ...coreRect, maxRadius: 6.0 }];
-      const hardDefenseZones: Zone[] = [{ ...innerRect, maxRadius: 9.5 }];
-      const hardSupportZones: Zone[] = [{ ...fullRect, minRadius: 7.0 }];
+      const hardOuterRing = clampRect({
+        minX: 5 + randInt(-1, 1),
+        minY: 5 + randInt(-1, 1),
+        maxX: 19 + randInt(-1, 1),
+        maxY: 19 + randInt(-1, 1)
+      });
+      const hardMidRing = insetRect(hardOuterRing, randInt(3, 4));
+      const hardInnerRing = insetRect(hardMidRing, randInt(2, 3));
+      const hardCoreRect = insetRect(hardInnerRing, 1);
 
-      placeAtPreferred(
+      const hardCoreZones: Zone[] = [{ ...hardCoreRect, maxRadius: 6.0 + Math.random() * 1.0 }];
+      const hardDefenseZones: Zone[] = [{ ...insetRect(hardOuterRing, 1), maxRadius: 9.0 + Math.random() * 1.2 }];
+      const hardSupportZones: Zone[] = [{ ...fullRect, minRadius: 6.6 + Math.random() * 1.2 }];
+
+      const magmaventPlaced = placeAtPreferred(
         'magmavent',
-        2,
+        defenseLevelFactory('magmavent'),
         [
-          { x: centerX - 5, y: centerY - 1 },
-          { x: centerX + 2, y: centerY - 1 },
-          { x: centerX - 1, y: centerY - 5 },
-          { x: centerX - 1, y: centerY + 2 }
+          { x: centerX - 5 + randInt(-1, 1), y: centerY - 1 + randInt(-1, 1) },
+          { x: centerX + 2 + randInt(-1, 1), y: centerY - 1 + randInt(-1, 1) },
+          { x: centerX - 1 + randInt(-1, 1), y: centerY - 5 + randInt(-1, 1) },
+          { x: centerX - 1 + randInt(-1, 1), y: centerY + 2 + randInt(-1, 1) }
         ],
         hardDefenseZones
       );
 
-      addWallRing({ minX: 5, minY: 5, maxX: 19, maxY: 19 }, 3, 2);
-      addWallRing({ minX: 8, minY: 8, maxX: 16, maxY: 16 }, 2, 2);
-      addWallRing({ minX: 10, minY: 10, maxX: 14, maxY: 14 }, 1, 2);
-      addVerticalDivider(centerX, 9, 15, centerY, 1);
-      addHorizontalDivider(centerY, 9, 15, centerX, 1);
+      addWallRing(hardOuterRing, randInt(2, 3), 2);
+      addWallRing(hardMidRing, randInt(1, 2), 2);
+      addWallRing(hardInnerRing, chance(0.45) ? 1 : 0, 2);
 
-      if (getPlacedCount('magmavent') === 0) {
-        placeMany('magmavent', 1, 2, hardDefenseZones, fullZones, 1200);
+      const dividerX = clamp(centerX + randInt(-1, 1), hardInnerRing.minX + 1, hardInnerRing.maxX - 1);
+      const dividerY = clamp(centerY + randInt(-1, 1), hardInnerRing.minY + 1, hardInnerRing.maxY - 1);
+      addVerticalDivider(dividerX, hardInnerRing.minY + 1, hardInnerRing.maxY - 1, dividerY, 1);
+      addHorizontalDivider(dividerY, hardInnerRing.minX + 1, hardInnerRing.maxX - 1, dividerX, 1);
+
+      let advancedPlaced = 0;
+      if (magmaventPlaced) advancedPlaced++;
+      if (!magmaventPlaced && placeMany('magmavent', 1, defenseLevelFactory('magmavent'), hardDefenseZones, fullZones, 1200) > 0) {
+        advancedPlaced++;
       }
-      placeMany('spike_launcher', chance(0.60) ? 2 : 1, 1, hardDefenseZones, midZones);
-      if (chance(0.50)) placeMany('prism', 1, 1, hardCoreZones, hardDefenseZones, 500);
-      placeMany('xbow', 2, 2, hardDefenseZones, innerZones);
-      placeMany('ballista', 2, 2, hardDefenseZones, innerZones);
-      placeMany('mortar', 3, () => randInt(2, 3), hardDefenseZones, innerZones);
-      placeMany('tesla', 3, 2, hardDefenseZones, innerZones);
-      placeMany('cannon', 5, () => randInt(3, 4), hardDefenseZones, midZones);
+      if (chance(0.35)) {
+        advancedPlaced += placeMany('dragons_breath', 1, defenseLevelFactory('dragons_breath'), hardCoreZones, hardDefenseZones, 900) > 0 ? 1 : 0;
+      }
+      advancedPlaced += placeMany('spike_launcher', chance(0.75) ? 2 : 1, defenseLevelFactory('spike_launcher'), hardDefenseZones, midZones) > 0 ? 1 : 0;
+      advancedPlaced += placeMany('prism', 1, defenseLevelFactory('prism'), hardCoreZones, hardDefenseZones, 700) > 0 ? 1 : 0;
+      if (advancedPlaced < 2) {
+        if (placeMany('dragons_breath', 1, defenseLevelFactory('dragons_breath'), hardDefenseZones, fullZones, 1200) > 0) advancedPlaced++;
+        if (advancedPlaced < 2 && placeMany('prism', 1, defenseLevelFactory('prism'), hardDefenseZones, fullZones, 1200) > 0) advancedPlaced++;
+      }
+
+      placeMany('xbow', randInt(2, 3), defenseLevelFactory('xbow'), hardDefenseZones, innerZones);
+      placeMany('ballista', randInt(2, 3), defenseLevelFactory('ballista'), hardDefenseZones, innerZones);
+      placeMany('mortar', randInt(2, 3), defenseLevelFactory('mortar'), hardDefenseZones, innerZones);
+      placeMany('tesla', randInt(2, 3), defenseLevelFactory('tesla'), hardDefenseZones, innerZones);
+      placeMany('cannon', randInt(4, 5), defenseLevelFactory('cannon'), hardDefenseZones, midZones);
 
       placeMany('army_camp', 4, 3, hardSupportZones, midZones);
       placeMany('barracks', 1, 11, hardSupportZones, midZones);
       placeMany('lab', 1, 2, hardSupportZones, midZones);
-      placeMany('solana_collector', randInt(6, 8), 2, hardSupportZones, outerZones);
+      placeMany('solana_collector', randInt(6, 9), 2, hardSupportZones, outerZones);
 
-      fillWallsTo(randInt(88, 96), [{ ...midRect, minRadius: 4.5, maxRadius: 12.5 }]);
+      fillWallsTo(randInt(90, 98), [{ ...insetRect(hardOuterRing, 1), minRadius: 4.2, maxRadius: 12.8 }]);
     } else {
-      // Crazy: maxed building levels, centered Dragon's Breath, dense layered layout.
+      // Crazy (5%): still insane, but procedural layout and slight level variation.
       wallLevel = 4;
-      addWallRing({ minX: 4, minY: 4, maxX: 20, maxY: 20 }, 4, 3);
-      addWallRing({ minX: 8, minY: 8, maxX: 16, maxY: 16 }, 2, 2);
-      addWallRing({ minX: 9, minY: 9, maxX: 14, maxY: 14 }, 1, 2);
+      const crazyOuterRing = clampRect({
+        minX: 4 + randInt(-1, 1),
+        minY: 4 + randInt(-1, 1),
+        maxX: 20 + randInt(-1, 1),
+        maxY: 20 + randInt(-1, 1)
+      });
+      const crazyMidRing = insetRect(crazyOuterRing, randInt(3, 4));
+      const crazyInnerRing = insetRect(crazyMidRing, randInt(1, 2));
 
-      const dragonX = centerX - 2;
-      const dragonY = centerY - 2;
-      if (!placeBuilding('dragons_breath', dragonX, dragonY, maxLevelFor('dragons_breath'))) {
-        placeMany('dragons_breath', 1, maxLevelFor('dragons_breath'), coreZones, innerZones, 900);
+      addWallRing(crazyOuterRing, randInt(3, 4), randInt(2, 3));
+      addWallRing(crazyMidRing, randInt(1, 2), 2);
+      addWallRing(crazyInnerRing, chance(0.5) ? 1 : 0, 2);
+
+      const dragonX = clamp(centerX - 2 + randInt(-1, 1), margin, mapSize - margin - BUILDING_DEFINITIONS.dragons_breath.width);
+      const dragonY = clamp(centerY - 2 + randInt(-1, 1), margin, mapSize - margin - BUILDING_DEFINITIONS.dragons_breath.height);
+      if (!placeBuilding('dragons_breath', dragonX, dragonY, defenseLevelFactory('dragons_breath')())) {
+        placeMany('dragons_breath', 1, defenseLevelFactory('dragons_breath'), coreZones, innerZones, 900);
       }
 
-      const crazyDefenseZones: Zone[] = [{ minX: 6, minY: 6, maxX: 18, maxY: 18 }];
+      const crazyDefenseZones: Zone[] = [{ ...insetRect(crazyOuterRing, 2) }];
       const crazySupportZones: Zone[] = [{ ...fullRect }];
 
       placeAtPreferred(
         'town_hall',
         maxLevelFor('town_hall'),
         [
-          { x: centerX - 1, y: centerY + 3 },
-          { x: centerX - 1, y: centerY - 6 },
-          { x: centerX + 3, y: centerY - 1 },
-          { x: centerX - 6, y: centerY - 1 }
+          { x: centerX - 1 + randInt(-1, 1), y: centerY + 3 + randInt(-1, 1) },
+          { x: centerX - 1 + randInt(-1, 1), y: centerY - 6 + randInt(-1, 1) },
+          { x: centerX + 3 + randInt(-1, 1), y: centerY - 1 + randInt(-1, 1) },
+          { x: centerX - 6 + randInt(-1, 1), y: centerY - 1 + randInt(-1, 1) }
         ],
         crazyDefenseZones
       );
@@ -1116,30 +1278,30 @@ export class Backend {
 
       placeAtPreferred(
         'magmavent',
-        maxLevelFor('magmavent'),
+        defenseLevelFactory('magmavent'),
         [
-          { x: centerX - 5, y: centerY - 1 },
-          { x: centerX + 2, y: centerY - 1 },
-          { x: centerX - 1, y: centerY - 5 },
-          { x: centerX - 1, y: centerY + 2 }
+          { x: centerX - 5 + randInt(-1, 1), y: centerY - 1 + randInt(-1, 1) },
+          { x: centerX + 2 + randInt(-1, 1), y: centerY - 1 + randInt(-1, 1) },
+          { x: centerX - 1 + randInt(-1, 1), y: centerY - 5 + randInt(-1, 1) },
+          { x: centerX - 1 + randInt(-1, 1), y: centerY + 2 + randInt(-1, 1) }
         ],
         crazyDefenseZones
       );
       if (getPlacedCount('magmavent') === 0) {
-        placeMany('magmavent', 1, maxLevelFor('magmavent'), crazyDefenseZones, fullZones, 1200);
+        placeMany('magmavent', 1, defenseLevelFactory('magmavent'), crazyDefenseZones, fullZones, 1200);
       }
 
-      placeMany('spike_launcher', BUILDING_DEFINITIONS.spike_launcher.maxCount, maxLevelFor('spike_launcher'), crazyDefenseZones, fullZones);
-      placeMany('xbow', BUILDING_DEFINITIONS.xbow.maxCount, maxLevelFor('xbow'), crazyDefenseZones, fullZones);
-      placeMany('ballista', BUILDING_DEFINITIONS.ballista.maxCount, maxLevelFor('ballista'), crazyDefenseZones, fullZones);
-      placeMany('mortar', BUILDING_DEFINITIONS.mortar.maxCount, maxLevelFor('mortar'), crazyDefenseZones, fullZones);
+      placeMany('spike_launcher', BUILDING_DEFINITIONS.spike_launcher.maxCount, defenseLevelFactory('spike_launcher'), crazyDefenseZones, fullZones);
+      placeMany('xbow', BUILDING_DEFINITIONS.xbow.maxCount, defenseLevelFactory('xbow'), crazyDefenseZones, fullZones);
+      placeMany('ballista', BUILDING_DEFINITIONS.ballista.maxCount, defenseLevelFactory('ballista'), crazyDefenseZones, fullZones);
+      placeMany('mortar', BUILDING_DEFINITIONS.mortar.maxCount, defenseLevelFactory('mortar'), crazyDefenseZones, fullZones);
       placeMany('army_camp', BUILDING_DEFINITIONS.army_camp.maxCount, maxLevelFor('army_camp'), crazySupportZones, fullZones);
-      placeMany('solana_collector', 10, maxLevelFor('solana_collector'), crazySupportZones, fullZones);
+      placeMany('solana_collector', randInt(9, 11), maxLevelFor('solana_collector'), crazySupportZones, fullZones);
       placeMany('barracks', 1, maxLevelFor('barracks'), crazySupportZones, fullZones);
       placeMany('lab', 1, maxLevelFor('lab'), crazySupportZones, fullZones);
-      placeMany('cannon', BUILDING_DEFINITIONS.cannon.maxCount, maxLevelFor('cannon'), crazySupportZones, fullZones);
-      placeMany('tesla', BUILDING_DEFINITIONS.tesla.maxCount, maxLevelFor('tesla'), crazySupportZones, fullZones);
-      placeMany('prism', BUILDING_DEFINITIONS.prism.maxCount, maxLevelFor('prism'), crazyDefenseZones, fullZones);
+      placeMany('cannon', BUILDING_DEFINITIONS.cannon.maxCount, defenseLevelFactory('cannon'), crazySupportZones, fullZones);
+      placeMany('tesla', BUILDING_DEFINITIONS.tesla.maxCount, defenseLevelFactory('tesla'), crazySupportZones, fullZones);
+      placeMany('prism', BUILDING_DEFINITIONS.prism.maxCount, defenseLevelFactory('prism'), crazyDefenseZones, fullZones);
 
       fillWallsTo(BUILDING_DEFINITIONS.wall.maxCount, [
         { ...fullRect, minRadius: 4.0, maxRadius: 13.5 },
@@ -1208,6 +1370,192 @@ export class Backend {
     return response;
   }
 
+  private static normalizeReplayFrame(input: Partial<ReplayFrameSnapshot> | null | undefined): ReplayFrameSnapshot | null {
+    if (!input) return null;
+
+    const buildings = Array.isArray(input.buildings)
+      ? input.buildings
+        .map(item => {
+          const id = typeof item?.id === 'string' ? item.id : '';
+          if (!id) return null;
+          return {
+            id,
+            health: Math.max(0, Math.floor(Number(item.health) || 0)),
+            isDestroyed: Boolean(item.isDestroyed)
+          };
+        })
+        .filter((item): item is ReplayBuildingSnapshot => item !== null)
+      : [];
+
+    const troops = Array.isArray(input.troops)
+      ? input.troops
+        .map(item => {
+          const id = typeof item?.id === 'string' ? item.id : '';
+          const type = typeof item?.type === 'string' ? item.type : '';
+          if (!id || !type) return null;
+          return {
+            id,
+            type,
+            level: Math.max(1, Math.floor(Number(item.level) || 1)),
+            owner: item.owner === 'ENEMY' ? 'ENEMY' : 'PLAYER',
+            gridX: Number(item.gridX) || 0,
+            gridY: Number(item.gridY) || 0,
+            health: Math.max(0, Number(item.health) || 0),
+            maxHealth: Math.max(1, Number(item.maxHealth) || 1),
+            recursionGen: Number.isFinite(Number(item.recursionGen)) ? Math.max(0, Math.floor(Number(item.recursionGen))) : undefined,
+            facingAngle: Number.isFinite(Number(item.facingAngle)) ? Number(item.facingAngle) : undefined,
+            hasTakenDamage: Boolean(item.hasTakenDamage)
+          } as ReplayTroopSnapshot;
+        })
+        .filter((item): item is ReplayTroopSnapshot => item !== null)
+      : [];
+
+    return {
+      t: Math.max(0, Math.floor(Number(input.t) || 0)),
+      destruction: Math.max(0, Math.min(100, Number(input.destruction) || 0)),
+      solLooted: Math.max(0, Math.floor(Number(input.solLooted) || 0)),
+      buildings,
+      troops
+    };
+  }
+
+  private static normalizeAttackReplayState(input: Record<string, unknown> | null | undefined): AttackReplayState | null {
+    if (!input) return null;
+    const attackId = typeof input.attackId === 'string' ? input.attackId : '';
+    const attackerId = typeof input.attackerId === 'string' ? input.attackerId : '';
+    const attackerName = typeof input.attackerName === 'string' ? input.attackerName : 'Unknown';
+    const victimId = typeof input.victimId === 'string' ? input.victimId : '';
+    const statusRaw = typeof input.status === 'string' ? input.status : 'live';
+    const status = statusRaw === 'finished' || statusRaw === 'aborted' ? statusRaw : 'live';
+    const enemyWorld = input.enemyWorld as SerializedWorld | undefined;
+    if (!attackId || !attackerId || !victimId || !enemyWorld || !Array.isArray(enemyWorld.buildings)) return null;
+
+    const rawFrames = Array.isArray(input.frames) ? input.frames : [];
+    const frames = rawFrames
+      .map(frame => Backend.normalizeReplayFrame(frame as Partial<ReplayFrameSnapshot> | null | undefined))
+      .filter((frame): frame is ReplayFrameSnapshot => frame !== null);
+    const latestFrame = Backend.normalizeReplayFrame(input.latestFrame as Partial<ReplayFrameSnapshot> | null | undefined)
+      ?? (frames.length > 0 ? frames[frames.length - 1] : null);
+
+    const finalResultRaw = (input.finalResult as Record<string, unknown> | undefined) ?? undefined;
+    const finalResult = finalResultRaw
+      ? {
+        destruction: Math.max(0, Math.min(100, Number(finalResultRaw.destruction) || 0)),
+        solLooted: Math.max(0, Math.floor(Number(finalResultRaw.solLooted) || 0))
+      }
+      : undefined;
+
+    return {
+      attackId,
+      attackerId,
+      attackerName,
+      victimId,
+      victimName: typeof input.victimName === 'string' ? input.victimName : undefined,
+      status,
+      startedAt: Math.max(0, Math.floor(Number(input.startedAt) || Date.now())),
+      updatedAt: Math.max(0, Math.floor(Number(input.updatedAt) || Date.now())),
+      endedAt: Number.isFinite(Number(input.endedAt)) ? Math.max(0, Math.floor(Number(input.endedAt))) : undefined,
+      enemyWorld,
+      finalResult,
+      frameCount: Math.max(0, Math.floor(Number(input.frameCount) || frames.length || (latestFrame ? 1 : 0))),
+      latestFrame,
+      frames: frames.length > 0 ? frames : undefined
+    };
+  }
+
+  static async startAttackReplaySession(
+    attackId: string,
+    victimId: string,
+    attackerId: string,
+    attackerName: string,
+    enemyWorld: SerializedWorld
+  ): Promise<boolean> {
+    if (!Auth.isOnlineMode()) return false;
+    if (!attackId || !victimId || !attackerId) return false;
+    await Backend.apiPost('/api/attacks/replay', {
+      action: 'start',
+      attackId,
+      victimId,
+      attackerId,
+      attackerName,
+      enemyWorld
+    });
+    return true;
+  }
+
+  static async pushAttackReplayFrame(
+    attackId: string,
+    frame: ReplayFrameSnapshot
+  ): Promise<number> {
+    if (!Auth.isOnlineMode()) return 0;
+    if (!attackId) return 0;
+    const response = await Backend.apiPost<{ ok?: boolean; frameCount?: number }>('/api/attacks/replay', {
+      action: 'frame',
+      attackId,
+      frame
+    });
+    return Math.max(0, Math.floor(Number(response.frameCount) || 0));
+  }
+
+  static async endAttackReplaySession(
+    attackId: string,
+    status: 'finished' | 'aborted',
+    destruction: number,
+    solLooted: number
+  ): Promise<void> {
+    if (!Auth.isOnlineMode()) return;
+    if (!attackId) return;
+    await Backend.apiPost('/api/attacks/replay', {
+      action: 'end',
+      attackId,
+      status,
+      destruction,
+      solLooted
+    });
+  }
+
+  static async getIncomingAttacks(userId: string): Promise<IncomingAttackSession[]> {
+    void userId;
+    if (!Auth.isOnlineMode()) return [];
+    const response = await Backend.apiPost<{ sessions?: Array<Record<string, unknown>> }>('/api/attacks/replay', { action: 'incoming' });
+    return (response.sessions ?? [])
+      .map(item => {
+        const attackId = typeof item.attackId === 'string' ? item.attackId : '';
+        const attackerId = typeof item.attackerId === 'string' ? item.attackerId : '';
+        const victimId = typeof item.victimId === 'string' ? item.victimId : '';
+        if (!attackId || !attackerId || !victimId) return null;
+        return {
+          attackId,
+          attackerId,
+          attackerName: typeof item.attackerName === 'string' && item.attackerName ? item.attackerName : 'Unknown',
+          victimId,
+          startedAt: Math.max(0, Math.floor(Number(item.startedAt) || Date.now())),
+          updatedAt: Math.max(0, Math.floor(Number(item.updatedAt) || Date.now()))
+        } as IncomingAttackSession;
+      })
+      .filter((item): item is IncomingAttackSession => item !== null);
+  }
+
+  static async getLiveAttackState(attackId: string): Promise<AttackReplayState | null> {
+    if (!Auth.isOnlineMode()) return null;
+    if (!attackId) return null;
+    const response = await Backend.apiPost<{ replay?: Record<string, unknown> }>('/api/attacks/replay', {
+      action: 'state',
+      attackId
+    });
+    return Backend.normalizeAttackReplayState(response.replay ?? null);
+  }
+
+  static async getAttackReplay(attackId: string): Promise<AttackReplayState | null> {
+    if (!Auth.isOnlineMode()) return null;
+    if (!attackId) return null;
+    const response = await Backend.apiPost<{ replay?: Record<string, unknown> }>('/api/attacks/replay', {
+      action: 'replay',
+      attackId
+    });
+    return Backend.normalizeAttackReplayState(response.replay ?? null);
+  }
+
   static async getUnreadNotificationCount(userId: string): Promise<number> {
     void userId;
     if (!Auth.isOnlineMode()) return 0;
@@ -1223,13 +1571,17 @@ export class Backend {
       const timestamp = Math.max(0, Math.floor(Number(item.timestamp ?? item.time ?? Date.now()) || Date.now()));
       return {
         id: typeof item.id === 'string' && item.id ? item.id : makeRequestId('notif'),
+        attackId: typeof item.attackId === 'string'
+          ? item.attackId
+          : (typeof item.id === 'string' && item.id ? item.id : undefined),
         attackerName: typeof item.attackerName === 'string' && item.attackerName ? item.attackerName : 'Unknown',
         solLost: typeof item.solLost === 'number' ? item.solLost : undefined,
         goldLost: typeof item.goldLost === 'number' ? item.goldLost : undefined,
         elixirLost: typeof item.elixirLost === 'number' ? item.elixirLost : undefined,
         destruction: Math.max(0, Math.floor(Number(item.destruction) || 0)),
         timestamp,
-        read: Boolean(item.read)
+        read: Boolean(item.read),
+        replayAvailable: Boolean(item.replayAvailable) || typeof item.attackId === 'string'
       };
     });
   }

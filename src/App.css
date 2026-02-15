@@ -2457,6 +2457,25 @@ body.is-touch {
     color: #666;
 }
 
+.watch-replay-btn {
+    margin-top: 8px;
+    background: linear-gradient(180deg, #3d3d3d 0%, #232323 100%);
+    border: 2px solid var(--panel-border);
+    color: var(--text-primary);
+    font-size: 8px;
+    font-family: 'Press Start 2P', monospace;
+    padding: 7px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    width: 100%;
+    text-align: center;
+}
+
+.watch-replay-btn:hover {
+    border-color: var(--fantasy-gold);
+    color: var(--fantasy-gold);
+}
+
 .no-notifications {
     padding: 20px;
     text-align: center;
@@ -2472,6 +2491,117 @@ body.is-touch {
     height: 100vh;
     background: transparent;
     z-index: 99;
+}
+
+.incoming-attack-popup {
+    position: fixed;
+    right: 20px;
+    top: 78px;
+    width: min(320px, calc(100vw - 24px));
+    background: rgba(12, 14, 22, 0.96);
+    border: 3px solid #ff6868;
+    border-radius: 8px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+    padding: 12px;
+    z-index: 130;
+    animation: incoming-attack-pop 250ms ease-out;
+}
+
+.incoming-attack-popup .title {
+    color: #ff9191;
+    font-size: 9px;
+    margin-bottom: 8px;
+}
+
+.incoming-attack-popup .body {
+    color: var(--text-primary);
+    font-size: 8px;
+    line-height: 1.5;
+    margin-bottom: 10px;
+}
+
+.incoming-attack-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.incoming-attack-actions .watch-btn {
+    flex: 1;
+    background: linear-gradient(180deg, #ff7c4e 0%, #cc4a1d 100%);
+    border: 2px solid #ff9a6f;
+    color: #fff;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    padding: 9px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.incoming-attack-actions .dismiss-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    color: var(--text-secondary);
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    padding: 9px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.incoming-attack-actions .watch-btn:hover {
+    filter: brightness(1.08);
+}
+
+.incoming-attack-actions .dismiss-btn:hover {
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+.replay-status-overlay {
+    position: fixed;
+    left: 50%;
+    top: 14px;
+    transform: translateX(-50%);
+    z-index: 120;
+    background: rgba(9, 11, 16, 0.9);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 999px;
+    padding: 8px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.replay-status-overlay .label {
+    color: #ffe59a;
+    font-size: 8px;
+}
+
+.replay-status-overlay .exit-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    border-radius: 999px;
+    color: var(--text-primary);
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+}
+
+.replay-status-overlay .exit-btn:hover {
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+@keyframes incoming-attack-pop {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* Attack Online Button */

@@ -4,7 +4,7 @@ import Phaser from 'phaser';
 import { GameConfig } from './game/GameConfig';
 import type { GameMode } from './game/types/GameMode';
 import { BUILDING_DEFINITIONS, TROOP_DEFINITIONS, type BuildingType, getBuildingStats } from './game/config/GameDefinitions';
-import { Backend } from './game/backend/GameBackend';
+import { Backend, type IncomingAttackSession } from './game/backend/GameBackend';
 import { Auth } from './game/backend/Auth';
 import { gameManager } from './game/GameManager';
 import { MobileUtils } from './game/utils/MobileUtils';
@@ -384,6 +384,7 @@ function App() {
       }
     }
   }, [resources, army, user, loading, worldReady]);
+
   const [capacity, setCapacity] = useState({ current: 0, max: 30 });
   const [selectedTroopType, setSelectedTroopType] = useState<'warrior' | 'archer' | 'giant' | 'wallbreaker' | 'ward' | 'recursion' | 'ram' | 'stormmage' | 'golem' | 'sharpshooter' | 'mobilemortar' | 'davincitank' | 'phalanx'>('warrior');
   const [visibleTroops, setVisibleTroops] = useState<string[]>([]);
@@ -403,10 +404,54 @@ function App() {
   const [isDebugOpen, setIsDebugOpen] = useState(false);
   const [isDummyActive, setIsDummyActive] = useState(false);
   const [scoutTarget, setScoutTarget] = useState<{ userId: string; username: string } | null>(null);
+  const [incomingAttack, setIncomingAttack] = useState<IncomingAttackSession | null>(null);
+  const [dismissedIncomingAttackId, setDismissedIncomingAttackId] = useState<string | null>(null);
+  const [activeReplay, setActiveReplay] = useState<{ attackId: string; attackerName: string; live: boolean } | null>(null);
   const selectedInMapRef = useRef<string | null>(null);
   const armyRef = useRef(army);
   const selectedTroopTypeRef = useRef(selectedTroopType);
   const battleStatsRef = useRef(battleStats);
+
+  useEffect(() => {
+    if (!user || !isOnline || view !== 'HOME') {
+      setIncomingAttack(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const refreshIncoming = async () => {
+      try {
+        const sessions = await Backend.getIncomingAttacks(user.id);
+        if (cancelled) return;
+        const latest = sessions[0] ?? null;
+        if (!latest) {
+          setIncomingAttack(null);
+          setDismissedIncomingAttackId(null);
+          return;
+        }
+        if (latest.attackId === dismissedIncomingAttackId) {
+          setIncomingAttack(null);
+          return;
+        }
+        setIncomingAttack(latest);
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('Failed to fetch incoming attacks:', error);
+        }
+      }
+    };
+
+    void refreshIncoming();
+    const interval = window.setInterval(() => {
+      void refreshIncoming();
+    }, 2500);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [user, isOnline, view, dismissedIncomingAttackId]);
 
   useEffect(() => {
     selectedInMapRef.current = selectedInMap;
@@ -550,8 +595,12 @@ function App() {
         setIsDummyActive(false);
         if (mode === 'HOME') {
           setScoutTarget(null);
+          setActiveReplay(null);
+          setBattleStarted(false);
+          setIncomingAttack(null);
         }
         if (mode === 'ATTACK') {
+          setActiveReplay(null);
           setBattleStats({ destruction: 0, solLooted: 0 });
           setBattleStarted(false); // Reset when entering attack mode
 
@@ -566,6 +615,12 @@ function App() {
           // Snapshot troops for Battle Bar stability
           const battleTroops = availableTroops.filter(t => currentArmy[t] > 0);
           setVisibleTroops(battleTroops);
+        }
+        if (mode === 'REPLAY') {
+          setScoutTarget(null);
+          setVisibleTroops([]);
+          setBattleStats({ destruction: 0, solLooted: 0 });
+          setBattleStarted(true);
         }
       },
       updateBattleStats: (destruction: number, sol: number) => {
@@ -919,6 +974,10 @@ function App() {
     }
   }, []);
 
+  const handleExitReplay = useCallback(() => {
+    transitionHome();
+  }, [transitionHome]);
+
   const handleToggleDummy = () => {
     gameManager.toggleDummyTroop();
     setIsDummyActive(prev => !prev);
@@ -990,6 +1049,20 @@ function App() {
     setScoutTarget(null);
     gameManager.startAttackOnUser(userId, username);
   };
+
+  const handleWatchLiveAttack = useCallback((attackId: string, attackerName: string) => {
+    if (!attackId) return;
+    setDismissedIncomingAttackId(attackId);
+    setIncomingAttack(null);
+    setActiveReplay({ attackId, attackerName, live: true });
+    gameManager.watchLiveAttack(attackId);
+  }, []);
+
+  const handleWatchReplay = useCallback((attackId: string, attackerName: string) => {
+    if (!attackId) return;
+    setActiveReplay({ attackId, attackerName, live: false });
+    gameManager.watchReplay(attackId);
+  }, []);
 
   const handleBattleResultsGoHome = () => {
     setShowBattleResults(false);
@@ -1193,7 +1266,46 @@ function App() {
             onAttackUser={handleAttackUser}
             onScoutUser={handleScoutUser}
           />
-          <NotificationsPanel userId={user.id} isOnline={isOnline} />
+          <NotificationsPanel
+            userId={user.id}
+            isOnline={isOnline}
+            onWatchReplay={handleWatchReplay}
+          />
+        </div>
+      )}
+
+      {view === 'HOME' && incomingAttack && (
+        <div className="incoming-attack-popup">
+          <div className="title">YOUR BASE IS UNDER ATTACK</div>
+          <div className="body">
+            {incomingAttack.attackerName} is raiding your village right now.
+          </div>
+          <div className="incoming-attack-actions">
+            <button
+              className="watch-btn"
+              onClick={() => handleWatchLiveAttack(incomingAttack.attackId, incomingAttack.attackerName)}
+            >
+              WATCH
+            </button>
+            <button
+              className="dismiss-btn"
+              onClick={() => {
+                setDismissedIncomingAttackId(incomingAttack.attackId);
+                setIncomingAttack(null);
+              }}
+            >
+              LATER
+            </button>
+          </div>
+        </div>
+      )}
+
+      {view === 'REPLAY' && activeReplay && (
+        <div className="replay-status-overlay">
+          <span className="label">
+            {activeReplay.live ? 'LIVE DEFENSE WATCH' : 'ATTACK REPLAY'}: {activeReplay.attackerName}
+          </span>
+          <button className="exit-btn" onClick={handleExitReplay}>EXIT</button>
         </div>
       )}
 
