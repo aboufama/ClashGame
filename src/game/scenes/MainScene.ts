@@ -1754,6 +1754,12 @@ export class MainScene extends Phaser.Scene {
         if ('id' in item && (item as Troop).id === 'dummy_scarecrow') return;
         const bar = item.healthBar;
         bar.clear();
+        const now = this.time.now;
+
+        if (item.lastHealthBarValue === undefined || item.lastHealthBarValue !== item.health) {
+            item.lastHealthBarValue = item.health;
+            item.lastHealthChangeTime = now;
+        }
 
         // Only show health bar if damage has been taken
         const hasDamage = item.health < item.maxHealth;
@@ -1762,9 +1768,26 @@ export class MainScene extends Phaser.Scene {
 
         if (!showBar) {
             bar.setVisible(false);
+            bar.setAlpha(1);
             return;
         }
+
+        const lastChangeTime = item.lastHealthChangeTime ?? now;
+        const elapsedSinceChange = Math.max(0, now - lastChangeTime);
+        let alpha = 1;
+        if (elapsedSinceChange > this.HEALTH_BAR_IDLE_MS) {
+            const fadeElapsed = elapsedSinceChange - this.HEALTH_BAR_IDLE_MS;
+            alpha = Phaser.Math.Clamp(1 - (fadeElapsed / this.HEALTH_BAR_FADE_MS), 0, 1);
+        }
+
+        if (alpha <= 0) {
+            bar.setVisible(false);
+            bar.setAlpha(1);
+            return;
+        }
+
         bar.setVisible(true);
+        bar.setAlpha(alpha);
 
         let x: number, y: number, width: number, height: number;
         const isBuilding = 'graphics' in item;
