@@ -88,6 +88,9 @@ export interface Troop {
     phalanxSpearOffset?: number; // For phalanx - spear thrusting animation (0 = normal, 1 = full thrust)
     lastHealthBarValue?: number;
     lastHealthChangeTime?: number;
+    replaySyncX?: number;
+    replaySyncY?: number;
+    replaySyncHealth?: number;
 }
 
 export interface PlacedObstacle {

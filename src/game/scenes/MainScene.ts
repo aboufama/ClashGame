@@ -201,6 +201,7 @@ export class MainScene extends Phaser.Scene {
     private replayWatchState: ReplayWatchState | null = null;
     private replaySimulationTime = 0;
     private isApplyingReplayFrame = false;
+    private replayAutoExitQueued = false;
 
     public get userId(): string {
         try {
@@ -484,11 +485,11 @@ export class MainScene extends Phaser.Scene {
             this.replaySimulationTime += replayDelta;
 
             this.handleCameraMovement(delta);
+            this.updateReplayWatchPlayback(time);
+            this.updateReplayTroopSmoothing(replayDelta);
             this.updateCombat(this.replaySimulationTime);
             this.updateSpikeZones();
             this.updateLavaZones();
-            this.updateTroops(replayDelta);
-            this.updateReplayWatchPlayback(time);
             this.refreshBuildingHealthBars();
             this.updateBuildingAnimations(time);
             this.updateObstacleAnimations(time);
@@ -6962,6 +6963,23 @@ export class MainScene extends Phaser.Scene {
         this.replayWatchState = null;
         this.replaySimulationTime = this.time.now;
         this.isApplyingReplayFrame = false;
+        this.replayAutoExitQueued = false;
+    }
+
+    private queueReplayReturnHome(delayMs = 900) {
+        if (this.replayAutoExitQueued) return;
+        this.replayAutoExitQueued = true;
+
+        this.time.delayedCall(delayMs, () => {
+            if (this.mode !== 'REPLAY') {
+                this.replayAutoExitQueued = false;
+                return;
+            }
+
+            this.showCloudTransition(async () => {
+                await this.goHome();
+            });
+        });
     }
 
     private buildReplayEnemyWorldSnapshot(victimId: string, victimName: string): SerializedWorld | null {
@@ -7110,6 +7128,9 @@ export class MainScene extends Phaser.Scene {
     private createReplayTroop(snapshot: ReplayTroopSnapshot): Troop | undefined {
         const troopType = this.getReplayTroopType(snapshot.type);
         if (!troopType) return undefined;
+        const troopLevel = Math.max(1, Math.floor(snapshot.level || 1));
+        const stats = getTroopStats(troopType, troopLevel);
+        const attackDelay = stats.attackDelay ?? 900;
 
         const pos = IsoUtils.cartToIso(snapshot.gridX, snapshot.gridY);
         const troopGraphic = this.add.graphics();
@@ -7132,7 +7153,7 @@ export class MainScene extends Phaser.Scene {
         const troop: Troop = {
             id: snapshot.id,
             type: troopType,
-            level: Math.max(1, Math.floor(snapshot.level || 1)),
+            level: troopLevel,
             gameObject: troopGraphic,
             healthBar: this.add.graphics(),
             gridX: snapshot.gridX,
@@ -7141,12 +7162,15 @@ export class MainScene extends Phaser.Scene {
             maxHealth: Math.max(1, snapshot.maxHealth),
             target: null,
             owner: snapshot.owner,
-            lastAttackTime: 0,
-            attackDelay: 999999,
+            lastAttackTime: this.replaySimulationTime - attackDelay,
+            attackDelay,
             speedMult: 0,
             hasTakenDamage: Boolean(snapshot.hasTakenDamage),
             facingAngle: snapshot.facingAngle ?? 0,
-            recursionGen: snapshot.recursionGen
+            recursionGen: snapshot.recursionGen,
+            replaySyncX: snapshot.gridX,
+            replaySyncY: snapshot.gridY,
+            replaySyncHealth: Math.max(0, snapshot.health)
         };
         return troop;
     }
@@ -7183,6 +7207,7 @@ export class MainScene extends Phaser.Scene {
                 if (!troopType) return;
 
                 let troop = existingTroops.get(snapshot.id);
+                const wasExisting = Boolean(troop);
                 if (!troop) {
                     troop = this.createReplayTroop({ ...snapshot, type: troopType });
                     if (!troop) return;
@@ -7192,34 +7217,30 @@ export class MainScene extends Phaser.Scene {
                 troop.type = troopType;
                 troop.level = Math.max(1, Math.floor(snapshot.level || 1));
                 troop.owner = snapshot.owner;
-                troop.gridX = snapshot.gridX;
-                troop.gridY = snapshot.gridY;
                 troop.health = Math.max(0, snapshot.health);
                 troop.maxHealth = Math.max(1, snapshot.maxHealth);
                 troop.recursionGen = snapshot.recursionGen;
                 troop.hasTakenDamage = snapshot.hasTakenDamage ?? troop.health < troop.maxHealth;
                 troop.facingAngle = Number.isFinite(snapshot.facingAngle) ? Number(snapshot.facingAngle) : troop.facingAngle;
-                troop.target = null;
-                troop.path = undefined;
+                const troopStats = getTroopStats(troop.type, troop.level);
+                troop.attackDelay = troopStats.attackDelay ?? troop.attackDelay;
+                if (!Number.isFinite(troop.lastAttackTime) || troop.lastAttackTime <= 0) {
+                    troop.lastAttackTime = this.replaySimulationTime - troop.attackDelay;
+                }
+                troop.replaySyncX = snapshot.gridX;
+                troop.replaySyncY = snapshot.gridY;
+                troop.replaySyncHealth = troop.health;
+
+                const syncError = Phaser.Math.Distance.Between(troop.gridX, troop.gridY, snapshot.gridX, snapshot.gridY);
+                if (!wasExisting || syncError > 3.2) {
+                    troop.gridX = snapshot.gridX;
+                    troop.gridY = snapshot.gridY;
+                }
 
                 const pos = IsoUtils.cartToIso(troop.gridX, troop.gridY);
                 troop.gameObject.setPosition(pos.x, pos.y);
                 troop.gameObject.setDepth(depthForTroop(troop.gridX, troop.gridY, troop.type));
                 troop.gameObject.setVisible(troop.health > 0);
-                troop.gameObject.clear();
-                TroopRenderer.drawTroopVisual(
-                    troop.gameObject,
-                    troop.type,
-                    troop.owner,
-                    this.time.now,
-                    true,
-                    0,
-                    0,
-                    0,
-                    false,
-                    troop.facingAngle,
-                    troop.level
-                );
 
                 if (troop.health <= 0) {
                     troop.healthBar.setVisible(false);
@@ -7242,6 +7263,58 @@ export class MainScene extends Phaser.Scene {
         this.solLooted = Math.max(0, Math.floor(frame.solLooted));
         this.destroyedBuildings = Math.max(0, Math.round((destruction / 100) * Math.max(1, this.initialEnemyBuildings)));
         gameManager.updateBattleStats(destruction, this.solLooted);
+    }
+
+    private updateReplayTroopSmoothing(delta: number) {
+        if (this.mode !== 'REPLAY') return;
+
+        for (const troop of this.troops) {
+            if (troop.health <= 0) continue;
+
+            const syncX = troop.replaySyncX;
+            const syncY = troop.replaySyncY;
+            if (!Number.isFinite(syncX) || !Number.isFinite(syncY)) continue;
+
+            const targetX = Number(syncX);
+            const targetY = Number(syncY);
+            const errorDist = Phaser.Math.Distance.Between(troop.gridX, troop.gridY, targetX, targetY);
+
+            if (errorDist > 4.2) {
+                troop.gridX = targetX;
+                troop.gridY = targetY;
+            } else if (errorDist > 0.0001) {
+                const baseLerp = Phaser.Math.Clamp((delta / 1000) * 12, 0.1, 0.52);
+                const catchupBoost = Phaser.Math.Clamp(errorDist / 3.5, 0.0, 0.75);
+                const t = Phaser.Math.Clamp(baseLerp + catchupBoost * 0.22, 0.1, 0.72);
+                troop.gridX = Phaser.Math.Linear(troop.gridX, targetX, t);
+                troop.gridY = Phaser.Math.Linear(troop.gridY, targetY, t);
+            }
+
+            const pos = IsoUtils.cartToIso(troop.gridX, troop.gridY);
+            troop.gameObject.setPosition(pos.x, pos.y);
+            troop.gameObject.setDepth(depthForTroop(troop.gridX, troop.gridY, troop.type));
+
+            const moving = errorDist > 0.07;
+            if (
+                troop.type === 'warrior' ||
+                troop.type === 'archer' ||
+                troop.type === 'giant' ||
+                troop.type === 'ram' ||
+                troop.type === 'golem' ||
+                troop.type === 'sharpshooter' ||
+                troop.type === 'mobilemortar' ||
+                troop.type === 'davincitank' ||
+                troop.type === 'phalanx' ||
+                troop.type === 'romanwarrior' ||
+                troop.type === 'wallbreaker'
+            ) {
+                this.redrawTroopWithMovement(troop, moving);
+            } else if (moving) {
+                this.redrawTroop(troop);
+            }
+
+            this.updateHealthBar(troop);
+        }
     }
 
     private async startReplayWatch(attackId: string, mode: ReplayWatchMode): Promise<boolean> {
@@ -7305,6 +7378,8 @@ export class MainScene extends Phaser.Scene {
                 this.applyReplayFrame(watchState.frames[0]);
                 watchState.nextFrameIndex = 1;
                 watchState.lastAppliedFrameT = watchState.frames[0].t;
+            } else {
+                this.queueReplayReturnHome(700);
             }
             return true;
         }
@@ -7312,6 +7387,8 @@ export class MainScene extends Phaser.Scene {
         if (replay.latestFrame) {
             this.applyReplayFrame(replay.latestFrame);
             watchState.lastAppliedFrameT = replay.latestFrame.t;
+        } else if (replay.status !== 'live') {
+            this.queueReplayReturnHome(700);
         }
 
         watchState.pollEvent = this.time.addEvent({
@@ -7327,7 +7404,10 @@ export class MainScene extends Phaser.Scene {
                     .then(next => {
                         const active = this.replayWatchState;
                         if (!active || active.attackId !== current.attackId || active.mode !== 'live') return;
-                        if (!next) return;
+                        if (!next) {
+                            this.queueReplayReturnHome(900);
+                            return;
+                        }
 
                         if (next.latestFrame && next.latestFrame.t > active.lastAppliedFrameT) {
                             this.applyReplayFrame(next.latestFrame);
@@ -7337,6 +7417,7 @@ export class MainScene extends Phaser.Scene {
                         if (next.status !== 'live' && active.pollEvent) {
                             active.pollEvent.remove(false);
                             active.pollEvent = undefined;
+                            this.queueReplayReturnHome(900);
                         }
                     })
                     .catch(error => {
@@ -7366,6 +7447,10 @@ export class MainScene extends Phaser.Scene {
             this.applyReplayFrame(frame);
             replay.lastAppliedFrameT = frame.t;
             replay.nextFrameIndex += 1;
+        }
+
+        if (replay.nextFrameIndex >= replay.frames.length && replay.frames.length > 0) {
+            this.queueReplayReturnHome(1200);
         }
     }
 
