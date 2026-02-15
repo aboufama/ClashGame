@@ -1058,12 +1058,6 @@ function App() {
     gameManager.watchLiveAttack(attackId);
   }, []);
 
-  const handleWatchReplay = useCallback((attackId: string, attackerName: string) => {
-    if (!attackId) return;
-    setActiveReplay({ attackId, attackerName, live: false });
-    gameManager.watchReplay(attackId);
-  }, []);
-
   const handleBattleResultsGoHome = () => {
     setShowBattleResults(false);
     transitionHome(Math.max(0, battleStatsRef.current.solLooted));
@@ -1269,7 +1263,8 @@ function App() {
           <NotificationsPanel
             userId={user.id}
             isOnline={isOnline}
-            onWatchReplay={handleWatchReplay}
+            incomingAttack={incomingAttack}
+            onWatchLive={handleWatchLiveAttack}
           />
         </div>
       )}

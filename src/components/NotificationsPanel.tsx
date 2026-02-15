@@ -18,10 +18,11 @@ interface Notification {
 interface NotificationsPanelProps {
   userId: string;
   isOnline: boolean;
-  onWatchReplay?: (attackId: string, attackerName: string) => void;
+  incomingAttack?: { attackId: string; attackerName: string } | null;
+  onWatchLive?: (attackId: string, attackerName: string) => void;
 }
 
-export function NotificationsPanel({ userId, isOnline, onWatchReplay }: NotificationsPanelProps) {
+export function NotificationsPanel({ userId, isOnline, incomingAttack, onWatchLive }: NotificationsPanelProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
@@ -90,7 +91,23 @@ export function NotificationsPanel({ userId, isOnline, onWatchReplay }: Notifica
               )}
             </div>
 
-            {notifications.length === 0 ? (
+            {incomingAttack && onWatchLive && (
+              <div className="notification-item live-attack">
+                <div className="live-indicator">LIVE</div>
+                <div className="attacker">{incomingAttack.attackerName} is attacking!</div>
+                <button
+                  className="watch-live-btn"
+                  onClick={() => {
+                    onWatchLive(incomingAttack.attackId, incomingAttack.attackerName);
+                    handleClose();
+                  }}
+                >
+                  WATCH LIVE
+                </button>
+              </div>
+            )}
+
+            {notifications.length === 0 && !incomingAttack ? (
               <div className="no-notifications">
                 No attacks yet. Your base is safe!
               </div>
@@ -99,7 +116,6 @@ export function NotificationsPanel({ userId, isOnline, onWatchReplay }: Notifica
                 const solLost = typeof notif.solLost === 'number'
                   ? notif.solLost
                   : (notif.goldLost || 0) + (notif.elixirLost || 0);
-                const replayAttackId = notif.attackId;
                 return (
                 <div key={notif.id} className={`notification-item ${!notif.read ? 'unread' : ''}`}>
                   <div className="attacker">{notif.attackerName} raided you!</div>
@@ -111,17 +127,6 @@ export function NotificationsPanel({ userId, isOnline, onWatchReplay }: Notifica
                     <span>{notif.destruction}% destroyed</span>
                   </div>
                   <div className="timestamp">{formatTimeAgo(notif.timestamp)}</div>
-                  {onWatchReplay && replayAttackId && (notif.replayAvailable ?? true) && (
-                    <button
-                      className="watch-replay-btn"
-                      onClick={() => {
-                        onWatchReplay(replayAttackId, notif.attackerName);
-                        handleClose();
-                      }}
-                    >
-                      WATCH REPLAY
-                    </button>
-                  )}
                 </div>
               );
             })

@@ -2457,23 +2457,37 @@ body.is-touch {
     color: #666;
 }
 
-.watch-replay-btn {
-    margin-top: 8px;
-    background: linear-gradient(180deg, #3d3d3d 0%, #232323 100%);
-    border: 2px solid var(--panel-border);
-    color: var(--text-primary);
-    font-size: 8px;
+.notification-item.live-attack {
+    border: 2px solid #ff6868;
+    background: rgba(139, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.live-indicator {
+    font-size: 7px;
+    color: #ff6868;
+    letter-spacing: 2px;
+    animation: replay-pulse 1.5s ease-in-out infinite;
+}
+
+.watch-live-btn {
+    background: linear-gradient(180deg, #ff7c4e 0%, #cc4a1d 100%);
+    border: 2px solid #ff9a6f;
+    color: #fff;
     font-family: 'Press Start 2P', monospace;
+    font-size: 7px;
     padding: 7px 8px;
     border-radius: 4px;
     cursor: pointer;
     width: 100%;
     text-align: center;
+    letter-spacing: 1px;
 }
 
-.watch-replay-btn:hover {
-    border-color: var(--fantasy-gold);
-    color: var(--fantasy-gold);
+.watch-live-btn:hover {
+    filter: brightness(1.1);
 }
 
 .no-notifications {
