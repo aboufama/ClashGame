@@ -566,14 +566,18 @@ export class TroopRenderer {
         const armSwing = isMoving ? Math.sin(walkPhase * Math.PI * 2) * 0.3 : 0;
         const shoulderRoll = isMoving ? Math.sin(walkPhase * Math.PI) * 2 : 0;
 
-        // Stone colors with ancient weathering
-        const stoneBase = isPlayer ? 0x5a6a7a : 0x6a5a5a;
-        const stoneDark = isPlayer ? 0x3a4a5a : 0x4a3a3a;
-        const stoneLight = isPlayer ? 0x7a8a9a : 0x8a7a7a;
-        const stoneAccent = isPlayer ? 0x4a5a6a : 0x5a4a4a;
+        // Stone colors with ancient weathering — L3 is darker, more corrupted
+        const stoneBase = troopLevel >= 3 ? (isPlayer ? 0x3a4a5a : 0x4a3a3a) : (isPlayer ? 0x5a6a7a : 0x6a5a5a);
+        const stoneDark = troopLevel >= 3 ? (isPlayer ? 0x222e3a : 0x2e2222) : (isPlayer ? 0x3a4a5a : 0x4a3a3a);
+        const stoneLight = troopLevel >= 3 ? (isPlayer ? 0x5a6a7a : 0x6a5a5a) : (isPlayer ? 0x7a8a9a : 0x8a7a7a);
+        const stoneAccent = troopLevel >= 3 ? (isPlayer ? 0x2a3a4a : 0x3a2a2a) : (isPlayer ? 0x4a5a6a : 0x5a4a4a);
         const mossColor = isPlayer ? 0x4a6a3a : 0x5a4a3a;
         const glowColor = isPlayer ? 0x44aaff : 0xff4444;
         const glowColorBright = isPlayer ? 0x88ccff : 0xff8888;
+        // L3 gem colors
+        const gemColor = isPlayer ? 0x22ddaa : 0xdd22aa;
+        const gemBright = isPlayer ? 0x66ffcc : 0xff66cc;
+        const gemDark = isPlayer ? 0x118866 : 0x881166;
 
         // MASSIVE shadow
         graphics.fillStyle(0x000000, 0.45);
@@ -691,9 +695,84 @@ export class TroopRenderer {
         graphics.lineBetween(-8, -8 + bodySlam, -3, -12 + bodySlam);
         graphics.lineBetween(5, -6 + bodySlam, 10, -10 + bodySlam);
 
-        // Moss patches
-        graphics.fillStyle(mossColor, 0.7);
-        graphics.fillCircle(-14, -16 + bodySlam, 3);
+        // L3: Many more deep cracks across the body
+        if (troopLevel >= 3) {
+            graphics.lineStyle(1.5, 0x111111, 0.7);
+            // Deep diagonal cracks
+            graphics.lineBetween(-18, -14 + bodySlam, -6, -6 + bodySlam);
+            graphics.lineBetween(14, -22 + bodySlam, 6, -14 + bodySlam);
+            graphics.lineBetween(-12, -28 + bodySlam, -18, -20 + bodySlam);
+            graphics.lineBetween(8, -8 + bodySlam, 16, -4 + bodySlam);
+            // Branching cracks
+            graphics.lineStyle(1, 0x111111, 0.5);
+            graphics.lineBetween(-12, -10 + bodySlam, -14, -6 + bodySlam);
+            graphics.lineBetween(10, -18 + bodySlam, 14, -14 + bodySlam);
+            graphics.lineBetween(-6, -6 + bodySlam, -8, -2 + bodySlam);
+            graphics.lineBetween(6, -14 + bodySlam, 4, -10 + bodySlam);
+            // Gem veins glowing through cracks
+            graphics.lineStyle(1, gemColor, 0.4);
+            graphics.lineBetween(-18, -14 + bodySlam, -12, -10 + bodySlam);
+            graphics.lineBetween(14, -22 + bodySlam, 10, -18 + bodySlam);
+
+            // Large chest gem (embedded in the rune area)
+            graphics.fillStyle(gemDark, 1);
+            graphics.beginPath();
+            graphics.moveTo(0, -24 + bodySlam);
+            graphics.lineTo(-5, -20 + bodySlam);
+            graphics.lineTo(0, -15 + bodySlam);
+            graphics.lineTo(5, -20 + bodySlam);
+            graphics.closePath();
+            graphics.fillPath();
+            graphics.fillStyle(gemColor, 0.9);
+            graphics.beginPath();
+            graphics.moveTo(0, -23 + bodySlam);
+            graphics.lineTo(-3, -20 + bodySlam);
+            graphics.lineTo(0, -16 + bodySlam);
+            graphics.lineTo(3, -20 + bodySlam);
+            graphics.closePath();
+            graphics.fillPath();
+            graphics.fillStyle(gemBright, 0.7);
+            graphics.fillCircle(-1, -21 + bodySlam, 1.5);
+
+            // Side body gems
+            graphics.fillStyle(gemDark, 1);
+            graphics.beginPath();
+            graphics.moveTo(-15, -16 + bodySlam);
+            graphics.lineTo(-18, -12 + bodySlam);
+            graphics.lineTo(-14, -10 + bodySlam);
+            graphics.lineTo(-12, -14 + bodySlam);
+            graphics.closePath();
+            graphics.fillPath();
+            graphics.fillStyle(gemColor, 0.8);
+            graphics.beginPath();
+            graphics.moveTo(-15, -15 + bodySlam);
+            graphics.lineTo(-17, -12 + bodySlam);
+            graphics.lineTo(-14, -11 + bodySlam);
+            graphics.lineTo(-13, -14 + bodySlam);
+            graphics.closePath();
+            graphics.fillPath();
+
+            graphics.fillStyle(gemDark, 1);
+            graphics.beginPath();
+            graphics.moveTo(13, -10 + bodySlam);
+            graphics.lineTo(16, -6 + bodySlam);
+            graphics.lineTo(12, -4 + bodySlam);
+            graphics.lineTo(10, -8 + bodySlam);
+            graphics.closePath();
+            graphics.fillPath();
+            graphics.fillStyle(gemColor, 0.8);
+            graphics.beginPath();
+            graphics.moveTo(13, -9 + bodySlam);
+            graphics.lineTo(15, -6 + bodySlam);
+            graphics.lineTo(12, -5 + bodySlam);
+            graphics.lineTo(11, -8 + bodySlam);
+            graphics.closePath();
+            graphics.fillPath();
+        }
+
+        // Moss patches (less moss on L3 — replaced by crystals)
+        graphics.fillStyle(mossColor, troopLevel >= 3 ? 0.3 : 0.7);
+        graphics.fillCircle(-14, -16 + bodySlam, troopLevel >= 3 ? 2 : 3);
         graphics.fillCircle(16, -12 + bodySlam, 2.5);
         graphics.fillCircle(-8, -4 + bodySlam, 2);
 
@@ -874,26 +953,193 @@ export class TroopRenderer {
         graphics.lineBetween(0, -54 + bodySlam, 0, -50 + bodySlam);
 
         // Shoulder spikes/crystals
-        graphics.fillStyle(stoneLight, 1);
-        // Left spike
-        graphics.beginPath();
-        graphics.moveTo(-20, -26 + bodySlam);
-        graphics.lineTo(-26, -34 + bodySlam);
-        graphics.lineTo(-18, -30 + bodySlam);
-        graphics.closePath();
-        graphics.fillPath();
-        // Right spike
-        graphics.beginPath();
-        graphics.moveTo(20, -26 + bodySlam);
-        graphics.lineTo(26, -34 + bodySlam);
-        graphics.lineTo(18, -30 + bodySlam);
-        graphics.closePath();
-        graphics.fillPath();
+        if (troopLevel >= 3) {
+            // L3: Huge gem crystal clusters on shoulders
+            // Left shoulder — large main crystal + smaller shards
+            graphics.fillStyle(gemDark, 1);
+            graphics.beginPath();
+            graphics.moveTo(-20, -26 + bodySlam);
+            graphics.lineTo(-28, -42 + bodySlam);
+            graphics.lineTo(-22, -40 + bodySlam);
+            graphics.lineTo(-16, -30 + bodySlam);
+            graphics.closePath();
+            graphics.fillPath();
+            graphics.fillStyle(gemColor, 0.9);
+            graphics.beginPath();
+            graphics.moveTo(-21, -28 + bodySlam);
+            graphics.lineTo(-27, -40 + bodySlam);
+            graphics.lineTo(-23, -38 + bodySlam);
+            graphics.lineTo(-18, -30 + bodySlam);
+            graphics.closePath();
+            graphics.fillPath();
+            graphics.fillStyle(gemBright, 0.6);
+            graphics.fillCircle(-24, -36 + bodySlam, 1.5);
+            // Secondary shard
+            graphics.fillStyle(gemDark, 1);
+            graphics.beginPath();
+            graphics.moveTo(-18, -28 + bodySlam);
+            graphics.lineTo(-22, -36 + bodySlam);
+            graphics.lineTo(-16, -32 + bodySlam);
+            graphics.closePath();
+            graphics.fillPath();
+            graphics.fillStyle(gemColor, 0.8);
+            graphics.beginPath();
+            graphics.moveTo(-18, -29 + bodySlam);
+            graphics.lineTo(-21, -35 + bodySlam);
+            graphics.lineTo(-17, -32 + bodySlam);
+            graphics.closePath();
+            graphics.fillPath();
+            // Third small shard
+            graphics.fillStyle(gemColor, 0.7);
+            graphics.beginPath();
+            graphics.moveTo(-24, -28 + bodySlam);
+            graphics.lineTo(-27, -34 + bodySlam);
+            graphics.lineTo(-23, -30 + bodySlam);
+            graphics.closePath();
+            graphics.fillPath();
 
-        // Glowing crystal cores in spikes
-        graphics.fillStyle(glowColor, eyePulse * 0.7);
-        graphics.fillCircle(-22, -30 + bodySlam, 2);
-        graphics.fillCircle(22, -30 + bodySlam, 2);
+            // Right shoulder — large main crystal + smaller shards
+            graphics.fillStyle(gemDark, 1);
+            graphics.beginPath();
+            graphics.moveTo(20, -26 + bodySlam);
+            graphics.lineTo(28, -42 + bodySlam);
+            graphics.lineTo(22, -40 + bodySlam);
+            graphics.lineTo(16, -30 + bodySlam);
+            graphics.closePath();
+            graphics.fillPath();
+            graphics.fillStyle(gemColor, 0.9);
+            graphics.beginPath();
+            graphics.moveTo(21, -28 + bodySlam);
+            graphics.lineTo(27, -40 + bodySlam);
+            graphics.lineTo(23, -38 + bodySlam);
+            graphics.lineTo(18, -30 + bodySlam);
+            graphics.closePath();
+            graphics.fillPath();
+            graphics.fillStyle(gemBright, 0.6);
+            graphics.fillCircle(24, -36 + bodySlam, 1.5);
+            // Secondary shard
+            graphics.fillStyle(gemDark, 1);
+            graphics.beginPath();
+            graphics.moveTo(18, -28 + bodySlam);
+            graphics.lineTo(22, -36 + bodySlam);
+            graphics.lineTo(16, -32 + bodySlam);
+            graphics.closePath();
+            graphics.fillPath();
+            graphics.fillStyle(gemColor, 0.8);
+            graphics.beginPath();
+            graphics.moveTo(18, -29 + bodySlam);
+            graphics.lineTo(21, -35 + bodySlam);
+            graphics.lineTo(17, -32 + bodySlam);
+            graphics.closePath();
+            graphics.fillPath();
+            // Third small shard
+            graphics.fillStyle(gemColor, 0.7);
+            graphics.beginPath();
+            graphics.moveTo(24, -28 + bodySlam);
+            graphics.lineTo(27, -34 + bodySlam);
+            graphics.lineTo(23, -30 + bodySlam);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Gem glow on shoulder crystals
+            graphics.fillStyle(gemBright, eyePulse * 0.5);
+            graphics.fillCircle(-24, -35 + bodySlam, 3);
+            graphics.fillCircle(24, -35 + bodySlam, 3);
+
+            // === FALLING CRYSTAL DEBRIS (only while moving) ===
+            if (isMoving) {
+                const debrisCount = 4;
+                for (let i = 0; i < debrisCount; i++) {
+                    // Each debris has its own phase offset
+                    const debrisPhase = ((now + i * 370) % 1200) / 1200;
+                    const debrisAlpha = 1 - debrisPhase; // fade out as they fall
+                    if (debrisAlpha > 0.1) {
+                        // Scatter from shoulder areas, fall downward
+                        const side = i % 2 === 0 ? -1 : 1;
+                        const baseX = side * (16 + (i * 3));
+                        const debrisX = baseX + Math.sin(debrisPhase * 4 + i) * 3;
+                        const debrisY = -26 + bodySlam + debrisPhase * 40; // fall from shoulders to ground
+                        const size = 1.5 + (1 - debrisPhase) * 1.5; // shrink as they fall
+
+                        graphics.fillStyle(gemColor, debrisAlpha * 0.8);
+                        // Small crystal shard shape
+                        graphics.beginPath();
+                        graphics.moveTo(debrisX, debrisY - size);
+                        graphics.lineTo(debrisX - size * 0.7, debrisY);
+                        graphics.lineTo(debrisX, debrisY + size * 0.5);
+                        graphics.lineTo(debrisX + size * 0.7, debrisY);
+                        graphics.closePath();
+                        graphics.fillPath();
+                    }
+                }
+            }
+        } else {
+            // L1/L2: Original stone spikes
+            graphics.fillStyle(stoneLight, 1);
+            // Left spike
+            graphics.beginPath();
+            graphics.moveTo(-20, -26 + bodySlam);
+            graphics.lineTo(-26, -34 + bodySlam);
+            graphics.lineTo(-18, -30 + bodySlam);
+            graphics.closePath();
+            graphics.fillPath();
+            // Right spike
+            graphics.beginPath();
+            graphics.moveTo(20, -26 + bodySlam);
+            graphics.lineTo(26, -34 + bodySlam);
+            graphics.lineTo(18, -30 + bodySlam);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Glowing crystal cores in spikes
+            graphics.fillStyle(glowColor, eyePulse * 0.7);
+            graphics.fillCircle(-22, -30 + bodySlam, 2);
+            graphics.fillCircle(22, -30 + bodySlam, 2);
+        }
+
+        // L3: Gems embedded in head
+        if (troopLevel >= 3) {
+            // Forehead gem
+            graphics.fillStyle(gemDark, 1);
+            graphics.beginPath();
+            graphics.moveTo(0, -53 + bodySlam);
+            graphics.lineTo(-3, -50 + bodySlam);
+            graphics.lineTo(0, -48 + bodySlam);
+            graphics.lineTo(3, -50 + bodySlam);
+            graphics.closePath();
+            graphics.fillPath();
+            graphics.fillStyle(gemColor, 0.9);
+            graphics.beginPath();
+            graphics.moveTo(0, -52.5 + bodySlam);
+            graphics.lineTo(-2, -50 + bodySlam);
+            graphics.lineTo(0, -48.5 + bodySlam);
+            graphics.lineTo(2, -50 + bodySlam);
+            graphics.closePath();
+            graphics.fillPath();
+            graphics.fillStyle(gemBright, 0.7);
+            graphics.fillCircle(0, -50.5 + bodySlam, 1);
+
+            // Small gem shards on jaw
+            graphics.fillStyle(gemColor, 0.6);
+            graphics.beginPath();
+            graphics.moveTo(-10, -38 + bodySlam);
+            graphics.lineTo(-12, -42 + bodySlam);
+            graphics.lineTo(-8, -40 + bodySlam);
+            graphics.closePath();
+            graphics.fillPath();
+            graphics.fillStyle(gemColor, 0.6);
+            graphics.beginPath();
+            graphics.moveTo(10, -38 + bodySlam);
+            graphics.lineTo(12, -42 + bodySlam);
+            graphics.lineTo(8, -40 + bodySlam);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Head cracks glow with gem color
+            graphics.lineStyle(1, gemColor, 0.3);
+            graphics.lineBetween(-10, -52 + bodySlam, -8, -46 + bodySlam);
+            graphics.lineBetween(12, -50 + bodySlam, 10, -44 + bodySlam);
+        }
     }
 
     private static drawSharpshooter(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean, facingAngle: number, bowDrawProgress: number, troopLevel: number = 1) {
@@ -2220,12 +2466,12 @@ export class TroopRenderer {
         const marchPhase = isMoving ? (now % 600) / 600 : 0;
         const legPhase = (marchPhase + stagger) % 1;
 
-        // Colors - Roman legion colors
-        const shieldMain = isPlayer ? 0xcc3333 : 0x554433;
-        const shieldTrim = isPlayer ? 0xd4a84b : 0x8b7355;
-        const shieldBoss = isPlayer ? 0xffd700 : 0xaa9977;
-        const tunicColor = isPlayer ? 0xbb2222 : 0x443322;
-        const armorColor = isPlayer ? 0x888899 : 0x777788;
+        // Colors - Roman legion colors, L3 switches to blue
+        const shieldMain = troopLevel >= 3 ? (isPlayer ? 0x2244aa : 0x334466) : (isPlayer ? 0xcc3333 : 0x554433);
+        const shieldTrim = troopLevel >= 3 ? (isPlayer ? 0x6688cc : 0x5577aa) : (isPlayer ? 0xd4a84b : 0x8b7355);
+        const shieldBoss = troopLevel >= 3 ? (isPlayer ? 0x88bbff : 0x7799cc) : (isPlayer ? 0xffd700 : 0xaa9977);
+        const tunicColor = troopLevel >= 3 ? (isPlayer ? 0x1a3388 : 0x223355) : (isPlayer ? 0xbb2222 : 0x443322);
+        const armorColor = troopLevel >= 3 ? (isPlayer ? 0x99aacc : 0x8899bb) : (isPlayer ? 0x888899 : 0x777788);
         const skinColor = 0xd4a574;
         const spearWood = 0x5d4e37;
         const spearTip = 0x555566;
@@ -2267,9 +2513,9 @@ export class TroopRenderer {
         // Helmet
         graphics.fillStyle(armorColor, 1);
         graphics.fillRect(sx - 4, currentSy - 14, 8, 4);
-        graphics.fillStyle(0x666677, 1);
+        graphics.fillStyle(troopLevel >= 3 ? 0x6677aa : 0x666677, 1);
         graphics.fillRect(sx - 1, currentSy - 16, 2, 3); // Crest base
-        graphics.fillStyle(0xcc2222, 1);
+        graphics.fillStyle(troopLevel >= 3 ? 0x3366cc : 0xcc2222, 1);
         graphics.fillRect(sx - 1, currentSy - 19, 2, 4);
 
         // === SPEAR ===
@@ -2316,15 +2562,27 @@ export class TroopRenderer {
             graphics.fillCircle(shieldX, shieldY, 2.5);
         }
 
-        // L2: Gold helmet plume + gold shoulder pauldrons
+        // L2+: Taller helmet plume + shoulder pauldrons
         if (troopLevel >= 2) {
-            // Taller gold crest
-            graphics.fillStyle(0xffd700, 1);
+            const crestColor = troopLevel >= 3 ? 0x3366cc : 0xffd700;
+            const pauldronColor = troopLevel >= 3 ? 0x4477bb : 0xdaa520;
+            // Taller crest
+            graphics.fillStyle(crestColor, 1);
             graphics.fillRect(sx - 1, currentSy - 21, 2, 6);
-            // Gold shoulder pauldrons
-            graphics.fillStyle(0xdaa520, 0.8);
+            // Shoulder pauldrons
+            graphics.fillStyle(pauldronColor, 0.8);
             graphics.fillCircle(sx - 5, currentSy - 5, 2);
             graphics.fillCircle(sx + 5, currentSy - 5, 2);
+        }
+        // L3: Blue shield emblem cross
+        if (troopLevel >= 3) {
+            if (!isTestudo) {
+                const shieldX = sx + Math.cos(facingAngle) * 6;
+                const shieldY = currentSy - 4 + Math.sin(facingAngle) * 3;
+                graphics.lineStyle(1, 0x88bbff, 0.7);
+                graphics.lineBetween(shieldX, shieldY - 6, shieldX, shieldY + 6);
+                graphics.lineBetween(shieldX - 3, shieldY, shieldX + 3, shieldY);
+            }
         }
     }
 
@@ -2365,29 +2623,97 @@ export class TroopRenderer {
         // Banner/Standard (center back)
         const bannerX = -Math.cos(facingAngle) * 15;
         const bannerY = -Math.sin(facingAngle) * 7.5 - 5;
-        graphics.lineStyle(2, 0x5d4e37, 1);
-        graphics.lineBetween(bannerX, bannerY, bannerX, bannerY - 25);
-        graphics.fillStyle(isPlayer ? 0xcc3333 : 0x554433, 1);
-        graphics.fillRect(bannerX - 5, bannerY - 25, 10, 8);
-        graphics.lineStyle(1.5, isPlayer ? 0xd4a84b : 0x8b7355, 1);
-        graphics.strokeRect(bannerX - 5, bannerY - 25, 10, 8);
+        const bannerPoleTop = troopLevel >= 3 ? bannerY - 35 : bannerY - 25;
 
-        // L2: Eagle standard on banner pole + gold trim
-        if (troopLevel >= 2) {
-            // Eagle finial on banner pole
-            graphics.fillStyle(0xffd700, 1);
+        graphics.lineStyle(2, troopLevel >= 3 ? 0x4a5a6a : 0x5d4e37, 1);
+        graphics.lineBetween(bannerX, bannerY, bannerX, bannerPoleTop);
+
+        if (troopLevel >= 3) {
+            // L3: Large elaborate blue banner with flowing tails
+            const bannerColor = isPlayer ? 0x2244aa : 0x334466;
+            const trimColor = isPlayer ? 0x88bbff : 0x7799cc;
+            const flagWave = isMoving ? Math.sin(Date.now() / 300) * 2 : 0;
+
+            // Main banner (larger)
+            graphics.fillStyle(bannerColor, 1);
             graphics.beginPath();
-            graphics.moveTo(bannerX, bannerY - 28);
-            graphics.lineTo(bannerX - 3, bannerY - 25);
-            graphics.lineTo(bannerX + 3, bannerY - 25);
+            graphics.moveTo(bannerX - 1, bannerPoleTop);
+            graphics.lineTo(bannerX + 12 + flagWave, bannerPoleTop + 2);
+            graphics.lineTo(bannerX + 10 + flagWave * 0.5, bannerPoleTop + 14);
+            graphics.lineTo(bannerX - 1, bannerPoleTop + 12);
             graphics.closePath();
             graphics.fillPath();
-            // Eagle wings
-            graphics.lineBetween(bannerX - 3, bannerY - 27, bannerX - 7, bannerY - 29);
-            graphics.lineBetween(bannerX + 3, bannerY - 27, bannerX + 7, bannerY - 29);
-            // Gold emblem on banner
-            graphics.fillStyle(0xffd700, 0.8);
-            graphics.fillCircle(bannerX, bannerY - 21, 2);
+
+            // Banner trim
+            graphics.lineStyle(1, trimColor, 1);
+            graphics.strokeRect(bannerX, bannerPoleTop + 1, 11 + flagWave * 0.5, 11);
+
+            // Banner emblem — star
+            graphics.fillStyle(trimColor, 0.9);
+            const embX = bannerX + 5 + flagWave * 0.3;
+            const embY = bannerPoleTop + 7;
+            graphics.beginPath();
+            graphics.moveTo(embX, embY - 3);
+            graphics.lineTo(embX + 1.5, embY - 1);
+            graphics.lineTo(embX + 3, embY);
+            graphics.lineTo(embX + 1.5, embY + 1);
+            graphics.lineTo(embX, embY + 3);
+            graphics.lineTo(embX - 1.5, embY + 1);
+            graphics.lineTo(embX - 3, embY);
+            graphics.lineTo(embX - 1.5, embY - 1);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Flowing banner tails
+            graphics.fillStyle(bannerColor, 0.9);
+            graphics.beginPath();
+            graphics.moveTo(bannerX + 3 + flagWave * 0.3, bannerPoleTop + 12);
+            graphics.lineTo(bannerX + 5 + flagWave, bannerPoleTop + 18);
+            graphics.lineTo(bannerX + 7 + flagWave * 0.3, bannerPoleTop + 12);
+            graphics.closePath();
+            graphics.fillPath();
+            graphics.beginPath();
+            graphics.moveTo(bannerX + 7 + flagWave * 0.3, bannerPoleTop + 12);
+            graphics.lineTo(bannerX + 9 + flagWave, bannerPoleTop + 18);
+            graphics.lineTo(bannerX + 11 + flagWave * 0.3, bannerPoleTop + 12);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Ornate pole finial — blue crystal
+            graphics.fillStyle(0x88bbff, 1);
+            graphics.beginPath();
+            graphics.moveTo(bannerX, bannerPoleTop - 4);
+            graphics.lineTo(bannerX - 2, bannerPoleTop);
+            graphics.lineTo(bannerX + 2, bannerPoleTop);
+            graphics.closePath();
+            graphics.fillPath();
+            graphics.fillStyle(0xaaddff, 0.8);
+            graphics.fillCircle(bannerX, bannerPoleTop - 1, 1);
+        } else {
+            // L1-L2 banner
+            graphics.fillStyle(isPlayer ? 0xcc3333 : 0x554433, 1);
+            graphics.fillRect(bannerX - 5, bannerPoleTop, 10, 8);
+            graphics.lineStyle(1.5, isPlayer ? 0xd4a84b : 0x8b7355, 1);
+            graphics.strokeRect(bannerX - 5, bannerPoleTop, 10, 8);
+
+            // L2: Eagle standard on banner pole + gold trim
+            if (troopLevel >= 2) {
+                // Eagle finial on banner pole
+                graphics.fillStyle(0xffd700, 1);
+                graphics.beginPath();
+                graphics.moveTo(bannerX, bannerPoleTop - 3);
+                graphics.lineTo(bannerX - 3, bannerPoleTop);
+                graphics.lineTo(bannerX + 3, bannerPoleTop);
+                graphics.closePath();
+                graphics.fillPath();
+                // Eagle wings
+                graphics.lineStyle(1, 0xffd700, 1);
+                graphics.lineBetween(bannerX - 3, bannerPoleTop - 2, bannerX - 7, bannerPoleTop - 4);
+                graphics.lineBetween(bannerX + 3, bannerPoleTop - 2, bannerX + 7, bannerPoleTop - 4);
+                // Gold emblem on banner
+                graphics.fillStyle(0xffd700, 0.8);
+                graphics.fillCircle(bannerX, bannerPoleTop + 4, 2);
+            }
         }
     }
 
