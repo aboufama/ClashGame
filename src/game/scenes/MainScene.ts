@@ -1907,10 +1907,54 @@ export class MainScene extends Phaser.Scene {
             return info && info.category === 'defense' && b.type !== 'wall' && b.health > 0;
         });
         defenses.forEach(defense => {
-            let nearestTroop: Troop | null = null;
             const stats = getBuildingStats(defense.type as BuildingType, defense.level || 1);
-            let minDist = stats.range || 7;
+            const maxRange = stats.range || 7;
             const interval = stats.fireRate || 2500;
+            const bWidth = stats.width || 1;
+            const bHeight = stats.height || 1;
+            const centerX = defense.gridX + bWidth / 2;
+            const centerY = defense.gridY + bHeight / 2;
+            const usesTargetLock =
+                defense.type !== 'dragons_breath' &&
+                defense.type !== 'mortar' &&
+                defense.type !== 'magmavent' &&
+                defense.type !== 'spike_launcher';
+
+            const isTargetInRange = (troop: Troop | null | undefined): troop is Troop => {
+                if (!troop || troop.health <= 0 || troop.owner === defense.owner) return false;
+                const dist = Phaser.Math.Distance.Between(centerX, centerY, troop.gridX, troop.gridY);
+                if (dist > maxRange) return false;
+                if (stats.minRange && dist < stats.minRange) return false;
+                return true;
+            };
+
+            const findNearestTarget = (): Troop | null => {
+                let nearestTroop: Troop | null = null;
+                let minDist = maxRange;
+                this.troops.forEach(troop => {
+                    if (!isTargetInRange(troop)) return;
+                    const dist = Phaser.Math.Distance.Between(centerX, centerY, troop.gridX, troop.gridY);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        nearestTroop = troop;
+                    }
+                });
+                return nearestTroop;
+            };
+
+            if (!usesTargetLock && defense.lockedTargetId) {
+                defense.lockedTargetId = undefined;
+            }
+
+            let lockedTarget: Troop | null = null;
+            if (usesTargetLock && defense.lockedTargetId) {
+                const existing = this.troops.find(t => t.id === defense.lockedTargetId);
+                if (isTargetInRange(existing)) {
+                    lockedTarget = existing;
+                } else {
+                    defense.lockedTargetId = undefined;
+                }
+            }
 
             // Initial delay for non-continuous defenses (not prism laser)
             const needsInitialDelay = defense.type !== 'prism' && defense.type !== 'magmavent';
@@ -1923,9 +1967,16 @@ export class MainScene extends Phaser.Scene {
             if (defense.type === 'tesla') {
                 // If currently charging, check if charge is complete (800ms)
                 if (defense.teslaCharging && defense.teslaChargeStart) {
+                    const chargeTarget = defense.teslaChargeTarget;
+                    if (!isTargetInRange(chargeTarget)) {
+                        defense.teslaCharging = false;
+                        defense.teslaChargeTarget = undefined;
+                        if (usesTargetLock) defense.lockedTargetId = undefined;
+                        return;
+                    }
                     if (time >= defense.teslaChargeStart + 800) {
                         // Charge complete — fire!
-                        const target = defense.teslaChargeTarget;
+                        const target = chargeTarget;
                         if (target && target.health > 0) {
                             this.fireDefenseAtTarget(defense, target, time);
                         }
@@ -1933,6 +1984,7 @@ export class MainScene extends Phaser.Scene {
                         defense.teslaCharged = true;
                         defense.lastFireTime = time;
                         defense.teslaChargeTarget = undefined;
+                        if (usesTargetLock && target) defense.lockedTargetId = target.id;
                     }
                     return; // Don't look for new targets while charging
                 }
@@ -1945,26 +1997,15 @@ export class MainScene extends Phaser.Scene {
                 // Check cooldown before starting new charge
                 if (time < (defense.lastFireTime || 0) + interval) return;
 
-                // Find target and start charging
-                const bWidth = stats.width || 1;
-                const bHeight = stats.height || 1;
-                const centerX = defense.gridX + bWidth / 2;
-                const centerY = defense.gridY + bHeight / 2;
+                const targetToCharge = lockedTarget ?? findNearestTarget();
 
-                this.troops.forEach(troop => {
-                    if (troop.owner !== defense.owner && troop.health > 0) {
-                        const dist = Phaser.Math.Distance.Between(centerX, centerY, troop.gridX, troop.gridY);
-                        if (dist < minDist) {
-                            if (stats.minRange && dist < stats.minRange) return;
-                            minDist = dist; nearestTroop = troop;
-                        }
-                    }
-                });
-
-                if (nearestTroop) {
+                if (targetToCharge) {
                     defense.teslaCharging = true;
                     defense.teslaChargeStart = time;
-                    defense.teslaChargeTarget = nearestTroop;
+                    defense.teslaChargeTarget = targetToCharge;
+                    if (usesTargetLock) defense.lockedTargetId = targetToCharge.id;
+                } else if (usesTargetLock) {
+                    defense.lockedTargetId = undefined;
                 }
                 return;
             }
@@ -1972,25 +2013,14 @@ export class MainScene extends Phaser.Scene {
             // Check if enough time has passed since last shot
             if (time < (defense.lastFireTime || 0) + interval) return;
 
-            const bWidth = stats.width || 1;
-            const bHeight = stats.height || 1;
-            const centerX = defense.gridX + bWidth / 2;
-            const centerY = defense.gridY + bHeight / 2;
+            const targetToFire = lockedTarget ?? findNearestTarget();
 
-            this.troops.forEach(troop => {
-                if (troop.owner !== defense.owner && troop.health > 0) {
-                    const dist = Phaser.Math.Distance.Between(centerX, centerY, troop.gridX, troop.gridY);
-                    if (dist < minDist) {
-                        if (stats.minRange && dist < stats.minRange) return; // Dead zone check
-                        minDist = dist; nearestTroop = troop;
-                    }
-                }
-            });
-
-            if (nearestTroop) {
+            if (targetToFire) {
+                if (usesTargetLock) defense.lockedTargetId = targetToFire.id;
                 defense.lastFireTime = time;
-                this.fireDefenseAtTarget(defense, nearestTroop, time);
+                this.fireDefenseAtTarget(defense, targetToFire, time);
             } else {
+                if (usesTargetLock) defense.lockedTargetId = undefined;
                 // No target - clean up prism laser if it exists
                 if (defense.type === 'prism') {
                     this.cleanupPrismLaser(defense);
@@ -4306,7 +4336,10 @@ export class MainScene extends Phaser.Scene {
     }
 
     private setTroopRetargetPause(troop: Troop, minMs: number = 70, maxMs: number = 180) {
-        const until = this.time.now + Phaser.Math.Between(minMs, maxMs);
+        const pauseScale = 1.15; // Slightly longer hesitation for clearer "decision" feel.
+        const scaledMin = Math.max(0, Math.round(minMs * pauseScale));
+        const scaledMax = Math.max(scaledMin, Math.round(maxMs * pauseScale));
+        const until = this.time.now + Phaser.Math.Between(scaledMin, scaledMax);
         troop.retargetPauseUntil = Math.max(troop.retargetPauseUntil ?? 0, until);
     }
 

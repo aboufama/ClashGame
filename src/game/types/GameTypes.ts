@@ -37,6 +37,7 @@ export interface PlacedBuilding {
     teslaChargeStart?: number;
     teslaCharged?: boolean;
     teslaChargeTarget?: Troop;
+    lockedTargetId?: string;
     // Range indicator
     rangeIndicator?: Phaser.GameObjects.Graphics;
     prismTrailLastPos?: { x: number, y: number }; // Track last scorch position for connected trail
