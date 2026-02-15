@@ -2630,11 +2630,11 @@ export class TroopRenderer {
         const marchPhase = isMoving ? (now % 600) / 600 : 0;
         const legPhase = (marchPhase + stagger) % 1;
 
-        // Colors - Roman legion colors, L3 is white & gold royal elite
-        const shieldMain = troopLevel >= 3 ? (isPlayer ? 0xeeeedd : 0xbbaa99) : (isPlayer ? 0xcc3333 : 0x554433);
+        // Colors - Roman legion colors, L3 keeps red but with gold elite trim
+        const shieldMain = isPlayer ? 0xcc3333 : 0x554433;
         const shieldTrim = troopLevel >= 3 ? (isPlayer ? 0xdaa520 : 0xb8960b) : (isPlayer ? 0xd4a84b : 0x8b7355);
-        const shieldBoss = troopLevel >= 3 ? (isPlayer ? 0xffd700 : 0xdaa520) : (isPlayer ? 0xffd700 : 0xaa9977);
-        const tunicColor = troopLevel >= 3 ? (isPlayer ? 0xddddcc : 0xaa9988) : (isPlayer ? 0xbb2222 : 0x443322);
+        const shieldBoss = isPlayer ? 0xffd700 : 0xaa9977;
+        const tunicColor = troopLevel >= 3 ? (isPlayer ? 0x991111 : 0x443322) : (isPlayer ? 0xbb2222 : 0x443322);
         const armorColor = troopLevel >= 3 ? (isPlayer ? 0xdaa520 : 0xb8960b) : (isPlayer ? 0x888899 : 0x777788);
         const skinColor = 0xd4a574;
         const spearWood = 0x5d4e37;
@@ -2679,7 +2679,7 @@ export class TroopRenderer {
         graphics.fillRect(sx - 4, currentSy - 14, 8, 4);
         graphics.fillStyle(troopLevel >= 3 ? 0xdaa520 : 0x666677, 1);
         graphics.fillRect(sx - 1, currentSy - 16, 2, 3); // Crest base
-        graphics.fillStyle(troopLevel >= 3 ? 0xffeedd : 0xcc2222, 1);
+        graphics.fillStyle(0xcc2222, 1);
         graphics.fillRect(sx - 1, currentSy - 19, 2, 4);
 
         // === SPEAR ===
@@ -2728,20 +2728,32 @@ export class TroopRenderer {
 
         // L2+: Taller helmet plume + shoulder pauldrons
         if (troopLevel >= 2) {
-            // Taller crest — L3 is white plume, L2 is gold
-            graphics.fillStyle(troopLevel >= 3 ? 0xffeedd : 0xffd700, 1);
+            // Taller red crest plume
+            graphics.fillStyle(0xcc2222, 1);
             graphics.fillRect(sx - 1, currentSy - 21, 2, 6);
-            // Shoulder pauldrons — L3 gold, L2 gold
+            // Shoulder pauldrons
             graphics.fillStyle(0xdaa520, 0.8);
             graphics.fillCircle(sx - 5, currentSy - 5, 2);
             graphics.fillCircle(sx + 5, currentSy - 5, 2);
         }
-        // L3: Gold eagle emblem on shield
+        // L3: Gold spear tip + gold shield trim details + gold sandal buckles
         if (troopLevel >= 3) {
+            // Gold spear tip replaces iron
+            const thrust = spearOffset * 15;
+            const spearEndX3 = sx + Math.cos(facingAngle) * (28 + thrust);
+            const spearEndY3 = currentSy - 8 + Math.sin(facingAngle) * (28 + thrust) * 0.5;
+            graphics.fillStyle(0xffd700, 1);
+            graphics.beginPath();
+            graphics.moveTo(spearEndX3 + Math.cos(facingAngle) * 6, spearEndY3 + Math.sin(facingAngle) * 3);
+            graphics.lineTo(spearEndX3 + Math.cos(facingAngle + 2.5) * 3, spearEndY3 + Math.sin(facingAngle + 2.5) * 1.5);
+            graphics.lineTo(spearEndX3 + Math.cos(facingAngle - 2.5) * 3, spearEndY3 + Math.sin(facingAngle - 2.5) * 1.5);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Gold eagle emblem on shield
             if (!isTestudo) {
                 const shieldX = sx + Math.cos(facingAngle) * 6;
                 const shieldY = currentSy - 4 + Math.sin(facingAngle) * 3;
-                // Small gold eagle silhouette
                 graphics.fillStyle(0xdaa520, 0.8);
                 graphics.beginPath();
                 graphics.moveTo(shieldX, shieldY - 3);
@@ -2752,7 +2764,23 @@ export class TroopRenderer {
                 graphics.lineTo(shieldX + 3, shieldY);
                 graphics.closePath();
                 graphics.fillPath();
+            } else {
+                // Gold cross on testudo shield top
+                graphics.fillStyle(0xdaa520, 0.7);
+                graphics.fillRect(sx - 0.5, currentSy - 18, 1, 5);
+                graphics.fillRect(sx - 2, currentSy - 16.5, 4, 1);
             }
+
+            // Gold sandal buckles
+            graphics.fillStyle(0xdaa520, 0.9);
+            const legSpread3 = isMoving ? Math.sin(legPhase * Math.PI * 2) * 3 : 0;
+            graphics.fillCircle(sx - 2.5 + legSpread3, currentSy + 9, 1);
+            graphics.fillCircle(sx + 2.5 - legSpread3, currentSy + 9, 1);
+
+            // Gold wrist guards
+            graphics.fillStyle(0xdaa520, 0.9);
+            graphics.fillRect(sx - 7, currentSy + 0, 3, 2);
+            graphics.fillRect(sx + 4, currentSy + 0, 3, 2);
         }
     }
 
@@ -2799,90 +2827,130 @@ export class TroopRenderer {
         graphics.lineBetween(bannerX, bannerY, bannerX, bannerPoleTop);
 
         if (troopLevel >= 3) {
-            // L3: Royal white & gold eagle banner
-            const bannerColor = isPlayer ? 0xeeeedd : 0xccbbaa;
-            const trimColor = 0xdaa520;
+            // L3: Grand crimson & gold imperial banner
+            const bannerColor = isPlayer ? 0xcc3333 : 0x554433;
+            const bannerDark = isPlayer ? 0x991111 : 0x3a2a1a;
             const flagWave = isMoving ? Math.sin(Date.now() / 300) * 2 : 0;
+            const flagWave2 = isMoving ? Math.sin(Date.now() / 250 + 1) * 1.5 : 0;
 
-            // Main banner (larger white/cream)
+            // === GRAND EAGLE FINIAL (larger, more detailed) ===
+            // Eagle body
+            graphics.fillStyle(0xffd700, 1);
+            graphics.beginPath();
+            graphics.moveTo(bannerX, bannerPoleTop - 9);
+            graphics.lineTo(bannerX - 3, bannerPoleTop - 4);
+            graphics.lineTo(bannerX + 3, bannerPoleTop - 4);
+            graphics.closePath();
+            graphics.fillPath();
+            // Eagle wings spread wide with feather tips
+            graphics.lineStyle(2, 0xffd700, 1);
+            graphics.lineBetween(bannerX - 3, bannerPoleTop - 6, bannerX - 8, bannerPoleTop - 10);
+            graphics.lineBetween(bannerX + 3, bannerPoleTop - 6, bannerX + 8, bannerPoleTop - 10);
+            // Wing feather tips
+            graphics.lineStyle(1.5, 0xdaa520, 1);
+            graphics.lineBetween(bannerX - 8, bannerPoleTop - 10, bannerX - 10, bannerPoleTop - 8);
+            graphics.lineBetween(bannerX - 7, bannerPoleTop - 9, bannerX - 9, bannerPoleTop - 6);
+            graphics.lineBetween(bannerX + 8, bannerPoleTop - 10, bannerX + 10, bannerPoleTop - 8);
+            graphics.lineBetween(bannerX + 7, bannerPoleTop - 9, bannerX + 9, bannerPoleTop - 6);
+            // Eagle head
+            graphics.fillStyle(0xffd700, 1);
+            graphics.fillCircle(bannerX, bannerPoleTop - 9, 2);
+            // Eagle eye
+            graphics.fillStyle(0xb8860b, 1);
+            graphics.fillCircle(bannerX + 0.5, bannerPoleTop - 9.5, 0.5);
+
+            // === MAIN BANNER — large, crimson red ===
             graphics.fillStyle(bannerColor, 1);
             graphics.beginPath();
             graphics.moveTo(bannerX - 1, bannerPoleTop);
-            graphics.lineTo(bannerX + 13 + flagWave, bannerPoleTop + 2);
-            graphics.lineTo(bannerX + 11 + flagWave * 0.5, bannerPoleTop + 15);
-            graphics.lineTo(bannerX - 1, bannerPoleTop + 13);
+            graphics.lineTo(bannerX + 15 + flagWave, bannerPoleTop + 2);
+            graphics.lineTo(bannerX + 13 + flagWave * 0.5, bannerPoleTop + 18);
+            graphics.lineTo(bannerX - 1, bannerPoleTop + 16);
             graphics.closePath();
             graphics.fillPath();
 
-            // Gold border trim
-            graphics.lineStyle(1.5, trimColor, 1);
+            // Darker red inner panel
+            graphics.fillStyle(bannerDark, 0.5);
+            graphics.beginPath();
+            graphics.moveTo(bannerX + 1, bannerPoleTop + 3);
+            graphics.lineTo(bannerX + 13 + flagWave * 0.8, bannerPoleTop + 4);
+            graphics.lineTo(bannerX + 11 + flagWave * 0.4, bannerPoleTop + 15);
+            graphics.lineTo(bannerX + 1, bannerPoleTop + 14);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Gold border trim (thick)
+            graphics.lineStyle(2, 0xdaa520, 1);
             graphics.beginPath();
             graphics.moveTo(bannerX - 1, bannerPoleTop);
-            graphics.lineTo(bannerX + 13 + flagWave, bannerPoleTop + 2);
-            graphics.lineTo(bannerX + 11 + flagWave * 0.5, bannerPoleTop + 15);
-            graphics.lineTo(bannerX - 1, bannerPoleTop + 13);
+            graphics.lineTo(bannerX + 15 + flagWave, bannerPoleTop + 2);
+            graphics.lineTo(bannerX + 13 + flagWave * 0.5, bannerPoleTop + 18);
+            graphics.lineTo(bannerX - 1, bannerPoleTop + 16);
             graphics.closePath();
             graphics.strokePath();
 
-            // Gold eagle emblem on banner
-            const embX = bannerX + 5 + flagWave * 0.3;
-            const embY = bannerPoleTop + 7;
-            // Eagle body
-            graphics.fillStyle(0xdaa520, 0.9);
+            // Gold eagle emblem on banner (larger)
+            const embX = bannerX + 6 + flagWave * 0.3;
+            const embY = bannerPoleTop + 9;
+            graphics.fillStyle(0xffd700, 0.9);
             graphics.beginPath();
-            graphics.moveTo(embX, embY - 4);
-            graphics.lineTo(embX + 2, embY - 2);
-            graphics.lineTo(embX + 5, embY - 3); // right wing tip
-            graphics.lineTo(embX + 3, embY);
-            graphics.lineTo(embX + 2, embY + 3);  // right talon
-            graphics.lineTo(embX, embY + 1);
-            graphics.lineTo(embX - 2, embY + 3);  // left talon
-            graphics.lineTo(embX - 3, embY);
-            graphics.lineTo(embX - 5, embY - 3); // left wing tip
-            graphics.lineTo(embX - 2, embY - 2);
+            graphics.moveTo(embX, embY - 5);
+            graphics.lineTo(embX + 3, embY - 2);
+            graphics.lineTo(embX + 6, embY - 4);
+            graphics.lineTo(embX + 4, embY);
+            graphics.lineTo(embX + 3, embY + 4);
+            graphics.lineTo(embX, embY + 2);
+            graphics.lineTo(embX - 3, embY + 4);
+            graphics.lineTo(embX - 4, embY);
+            graphics.lineTo(embX - 6, embY - 4);
+            graphics.lineTo(embX - 3, embY - 2);
             graphics.closePath();
             graphics.fillPath();
-            // Eagle head dot
+            // Eagle head highlight
             graphics.fillStyle(0xffd700, 1);
-            graphics.fillCircle(embX, embY - 3, 1);
+            graphics.fillCircle(embX, embY - 4, 1.5);
 
-            // Flowing banner tails (white/cream with gold tips)
+            // Gold horizontal bar across banner (like a laurel divider)
+            graphics.lineStyle(1, 0xdaa520, 0.7);
+            graphics.lineBetween(bannerX + 1, bannerPoleTop + 4, bannerX + 13 + flagWave * 0.7, bannerPoleTop + 5);
+            graphics.lineBetween(bannerX + 1, bannerPoleTop + 14, bannerX + 11 + flagWave * 0.4, bannerPoleTop + 15);
+
+            // === THREE FLOWING TAILS (crimson with gold tips) ===
+            // Left tail
             graphics.fillStyle(bannerColor, 0.9);
             graphics.beginPath();
-            graphics.moveTo(bannerX + 2 + flagWave * 0.3, bannerPoleTop + 13);
-            graphics.lineTo(bannerX + 4 + flagWave, bannerPoleTop + 20);
-            graphics.lineTo(bannerX + 6 + flagWave * 0.3, bannerPoleTop + 13);
+            graphics.moveTo(bannerX + 1, bannerPoleTop + 16);
+            graphics.lineTo(bannerX + 2 + flagWave2 * 0.5, bannerPoleTop + 24);
+            graphics.lineTo(bannerX + 5, bannerPoleTop + 16);
             graphics.closePath();
             graphics.fillPath();
+            // Center tail
             graphics.beginPath();
-            graphics.moveTo(bannerX + 6 + flagWave * 0.3, bannerPoleTop + 13);
-            graphics.lineTo(bannerX + 8 + flagWave, bannerPoleTop + 20);
-            graphics.lineTo(bannerX + 10 + flagWave * 0.3, bannerPoleTop + 13);
+            graphics.moveTo(bannerX + 5, bannerPoleTop + 16);
+            graphics.lineTo(bannerX + 6 + flagWave2, bannerPoleTop + 26);
+            graphics.lineTo(bannerX + 9, bannerPoleTop + 16);
             graphics.closePath();
             graphics.fillPath();
-            // Gold tips on tails
-            graphics.fillStyle(0xdaa520, 0.8);
-            graphics.fillCircle(bannerX + 4 + flagWave, bannerPoleTop + 19, 1);
-            graphics.fillCircle(bannerX + 8 + flagWave, bannerPoleTop + 19, 1);
+            // Right tail
+            graphics.beginPath();
+            graphics.moveTo(bannerX + 9, bannerPoleTop + 16);
+            graphics.lineTo(bannerX + 10 + flagWave2 * 0.7, bannerPoleTop + 23);
+            graphics.lineTo(bannerX + 13 + flagWave * 0.5, bannerPoleTop + 17);
+            graphics.closePath();
+            graphics.fillPath();
 
-            // Grand golden eagle finial on pole top
+            // Gold tips on tails
+            graphics.fillStyle(0xffd700, 0.9);
+            graphics.fillCircle(bannerX + 2 + flagWave2 * 0.5, bannerPoleTop + 23, 1.5);
+            graphics.fillCircle(bannerX + 6 + flagWave2, bannerPoleTop + 25, 1.5);
+            graphics.fillCircle(bannerX + 10 + flagWave2 * 0.7, bannerPoleTop + 22, 1.5);
+
+            // Gold crossbar at top of banner
+            graphics.lineStyle(2, 0xdaa520, 1);
+            graphics.lineBetween(bannerX - 2, bannerPoleTop, bannerX + 15 + flagWave, bannerPoleTop + 2);
+            // Gold ball on crossbar end
             graphics.fillStyle(0xffd700, 1);
-            // Eagle body
-            graphics.beginPath();
-            graphics.moveTo(bannerX, bannerPoleTop - 7);
-            graphics.lineTo(bannerX - 2, bannerPoleTop - 3);
-            graphics.lineTo(bannerX + 2, bannerPoleTop - 3);
-            graphics.closePath();
-            graphics.fillPath();
-            // Eagle wings spread wide
-            graphics.lineStyle(1.5, 0xffd700, 1);
-            graphics.lineBetween(bannerX - 2, bannerPoleTop - 5, bannerX - 6, bannerPoleTop - 8);
-            graphics.lineBetween(bannerX + 2, bannerPoleTop - 5, bannerX + 6, bannerPoleTop - 8);
-            graphics.lineBetween(bannerX - 6, bannerPoleTop - 8, bannerX - 8, bannerPoleTop - 6);
-            graphics.lineBetween(bannerX + 6, bannerPoleTop - 8, bannerX + 8, bannerPoleTop - 6);
-            // Eagle head
-            graphics.fillStyle(0xffd700, 1);
-            graphics.fillCircle(bannerX, bannerPoleTop - 7, 1.5);
+            graphics.fillCircle(bannerX + 15 + flagWave, bannerPoleTop + 2, 2);
         } else {
             // L1-L2 banner
             graphics.fillStyle(isPlayer ? 0xcc3333 : 0x554433, 1);
