@@ -42,12 +42,32 @@ export type ReplayTroopSnapshot = {
   hasTakenDamage?: boolean;
 };
 
+export type ReplayTroopPathPointSnapshot = {
+  t: number;
+  gridX: number;
+  gridY: number;
+  health: number;
+  facingAngle?: number;
+  hasTakenDamage?: boolean;
+};
+
+export type ReplayTroopPathSnapshot = {
+  id: string;
+  type: string;
+  level: number;
+  owner: 'PLAYER' | 'ENEMY';
+  maxHealth: number;
+  recursionGen?: number;
+  points: ReplayTroopPathPointSnapshot[];
+};
+
 export type ReplayFrameSnapshot = {
   t: number;
   destruction: number;
   solLooted: number;
   buildings: ReplayBuildingSnapshot[];
   troops: ReplayTroopSnapshot[];
+  troopPaths?: ReplayTroopPathSnapshot[];
 };
 
 export type IncomingAttackSession = {
@@ -1410,12 +1430,49 @@ export class Backend {
         .filter((item): item is ReplayTroopSnapshot => item !== null)
       : [];
 
+    const troopPaths = Array.isArray((input as { troopPaths?: unknown }).troopPaths)
+      ? ((input as { troopPaths?: unknown }).troopPaths as Array<Partial<ReplayTroopPathSnapshot>>)
+        .map(track => {
+          const id = typeof track?.id === 'string' ? track.id : '';
+          const type = typeof track?.type === 'string' ? track.type : '';
+          if (!id || !type) return null;
+          const pointsRaw = Array.isArray(track.points) ? track.points : [];
+          const byT = new Map<number, ReplayTroopPathPointSnapshot>();
+          for (const point of pointsRaw) {
+            const t = Math.max(0, Math.floor(Number(point?.t) || 0));
+            byT.set(t, {
+              t,
+              gridX: Number(point?.gridX) || 0,
+              gridY: Number(point?.gridY) || 0,
+              health: Math.max(0, Number(point?.health) || 0),
+              facingAngle: Number.isFinite(Number(point?.facingAngle)) ? Number(point?.facingAngle) : undefined,
+              hasTakenDamage: Boolean(point?.hasTakenDamage)
+            });
+          }
+          const points = Array.from(byT.values()).sort((a, b) => a.t - b.t);
+          if (points.length === 0) return null;
+          return {
+            id,
+            type,
+            level: Math.max(1, Math.floor(Number(track.level) || 1)),
+            owner: track.owner === 'ENEMY' ? 'ENEMY' : 'PLAYER',
+            maxHealth: Math.max(1, Number(track.maxHealth) || 1),
+            recursionGen: Number.isFinite(Number(track.recursionGen))
+              ? Math.max(0, Math.floor(Number(track.recursionGen)))
+              : undefined,
+            points
+          } as ReplayTroopPathSnapshot;
+        })
+        .filter((item): item is ReplayTroopPathSnapshot => item !== null)
+      : [];
+
     return {
       t: Math.max(0, Math.floor(Number(input.t) || 0)),
       destruction: Math.max(0, Math.min(100, Number(input.destruction) || 0)),
       solLooted: Math.max(0, Math.floor(Number(input.solLooted) || 0)),
       buildings,
-      troops
+      troops,
+      troopPaths: troopPaths.length > 0 ? troopPaths : undefined
     };
   }
 
