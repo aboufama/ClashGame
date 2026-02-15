@@ -186,6 +186,13 @@ export class TroopRenderer {
             graphics.fillStyle(0xdaa520, 1);
             graphics.fillCircle(-9 + bodyLean, runBob + 1, 2);
         }
+        // L3: Brighter blade + gold guard + faint glow on shield
+        if (troopLevel >= 3) {
+            graphics.fillStyle(0xcccccc, 0.4);
+            graphics.fillCircle(-9 + bodyLean, runBob + 1, 5.5);
+            graphics.fillStyle(0xdaa520, 1);
+            graphics.fillCircle(swordMidX, swordMidY, 2.5);
+        }
     }
 
     private static drawArcher(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean, facingAngle: number, troopLevel: number = 1) {
@@ -294,6 +301,14 @@ export class TroopRenderer {
             // Gold clasp at collar
             graphics.fillStyle(0xdaa520, 1);
             graphics.fillCircle(0, -4 + runBob, 1.5);
+        }
+        // L3: Third gold arrow tip + glowing eyes (sharper vision)
+        if (troopLevel >= 3) {
+            graphics.fillStyle(0xdaa520, 1);
+            graphics.fillTriangle(-7, -10 + runBob, -7.5, -11.5 + runBob, -6.5, -11.5 + runBob);
+            graphics.fillStyle(0x44ff44, 0.6);
+            graphics.fillCircle(-1, -9 + runBob, 1);
+            graphics.fillCircle(1, -9 + runBob, 1);
         }
     }
 
@@ -547,6 +562,18 @@ export class TroopRenderer {
             graphics.fillCircle(bodyLean, hy - 8, 1);
             graphics.fillStyle(0xaaaacc, 0.4);
             graphics.fillCircle(-2 + bodyLean, hy - 7, 2);
+        }
+        // L3: Gold rivets on helmet + gold arm bands
+        if (troopLevel >= 3) {
+            const hy = headY;
+            graphics.fillStyle(0xdaa520, 1);
+            graphics.fillCircle(-4 + bodyLean, hy - 3, 1.5);
+            graphics.fillCircle(4 + bodyLean, hy - 3, 1.5);
+            graphics.fillCircle(bodyLean, hy - 8, 1.5);
+            // Gold arm wraps
+            graphics.lineStyle(1.5, 0xdaa520, 0.8);
+            graphics.lineBetween(-12 + bodyLean, -6 + walkBob, -12 + bodyLean, -2 + walkBob);
+            graphics.lineBetween(12 + bodyLean, -6 + walkBob, 12 + bodyLean, -2 + walkBob);
         }
     }
 
@@ -1275,6 +1302,18 @@ export class TroopRenderer {
             graphics.fillRect(16, -2, 3, 4);
             graphics.restore();
         }
+        // L3: Scope lens glint + silver headband upgrade
+        if (troopLevel >= 3) {
+            graphics.fillStyle(0xccccdd, 1);
+            graphics.fillRect(-5, -28, 10, 2);
+            // Scope glint on crossbow
+            graphics.fillStyle(0x88ddff, 0.5);
+            graphics.save();
+            graphics.translateCanvas(0, -12);
+            graphics.rotateCanvas(facingAngle + armBob);
+            graphics.fillCircle(20, 0, 2);
+            graphics.restore();
+        }
     }
 
     private static drawMobileMortar(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean, facingAngle: number, mortarRecoil: number, troopLevel: number = 1) {
@@ -1475,6 +1514,15 @@ export class TroopRenderer {
             graphics.lineStyle(1, 0x444444, 0.6);
             graphics.strokeRect(mortarX - 7, -2 + mortarY, 5, 4);
         }
+        // L3: Gold helmet badge + second ammo crate
+        if (troopLevel >= 3) {
+            graphics.fillStyle(0xdaa520, 1);
+            graphics.fillCircle(soldierX, -22 + soldierY, 1.5);
+            graphics.fillStyle(0x5a3a1a, 1);
+            graphics.fillRect(mortarX - 7, 2 + mortarY, 5, 3);
+            graphics.lineStyle(1, 0xdaa520, 0.6);
+            graphics.strokeRect(mortarX - 7, 2 + mortarY, 5, 3);
+        }
     }
 
     private static drawWard(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean = false, troopLevel: number = 1) {
@@ -1612,6 +1660,13 @@ export class TroopRenderer {
             graphics.lineStyle(1.5, 0xffd700, 0.5);
             graphics.strokeCircle(8.5 + staffSway, -18 + walkBob, 6);
         }
+        // L3: Second glow ring + brighter orb core
+        if (troopLevel >= 3) {
+            graphics.lineStyle(1, glowColor, 0.3);
+            graphics.strokeCircle(8.5 + staffSway, -18 + walkBob, 8);
+            graphics.fillStyle(0xffffff, 0.4);
+            graphics.fillCircle(8.5 + staffSway, -18 + walkBob, 2);
+        }
     }
 
     private static drawRecursion(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, isMoving: boolean = false, troopLevel: number = 1) {
@@ -1725,6 +1780,18 @@ export class TroopRenderer {
             // Gold core accent
             graphics.fillStyle(0xffd700, 0.5);
             graphics.fillCircle(0, -2 + hoverBob, 1.5);
+        }
+        // L3: Brighter core + extra orbiting particles
+        if (troopLevel >= 3) {
+            graphics.fillStyle(0xffffff, 0.4);
+            graphics.fillCircle(0, -2 + hoverBob, 2.5);
+            for (let i = 0; i < 4; i++) {
+                const pAngle = rot * 1.5 + (i / 4) * Math.PI * 2;
+                const px = Math.cos(pAngle) * (outerRadius + 6);
+                const py = Math.sin(pAngle) * (outerRadius + 6) * 0.6 - 2 + hoverBob;
+                graphics.fillStyle(bodyColor, 0.5);
+                graphics.fillCircle(px, py, 1);
+            }
         }
     }
 
@@ -2006,7 +2073,18 @@ export class TroopRenderer {
             graphics.fillStyle(0xffff00, 0.7);
             graphics.fillCircle(frontX + perpX * 0.5 + cos * 8.5, frontY + perpY * 0.5 - ramHeight - 2.5, 0.8);
             graphics.fillCircle(frontX - perpX * 0.5 + cos * 8.5, frontY - perpY * 0.5 - ramHeight - 2.5, 0.8);
-        } else {
+        }
+        // L3: Gold reinforcement rings + glowing eyes brighter
+        if (troopLevel >= 3) {
+            graphics.lineStyle(1.5, 0xdaa520, 0.8);
+            for (let i = 0; i < 5; i++) {
+                const t = (i + 1) / 6;
+                const bx = backX + (frontX - backX) * t;
+                const by = backY + (frontY - backY) * t - ramHeight - 1;
+                graphics.lineBetween(bx + perpX * 1.2, by + perpY * 1.2, bx - perpX * 1.2, by - perpY * 1.2);
+            }
+        }
+        if (troopLevel < 2) {
             // === L1: SIMPLE ROPE BINDINGS ===
             graphics.lineStyle(2, 0x8a7a5a, 1);
             for (let i = 0; i < 3; i++) {
@@ -2180,6 +2258,13 @@ export class TroopRenderer {
             graphics.lineBetween(-1, -4 + walkBob, 1, -2 + walkBob);
             graphics.lineBetween(1, -2 + walkBob, 3, -4 + walkBob);
         }
+        // L3: Crackling lightning aura around hands
+        if (troopLevel >= 3) {
+            const spark2 = 0.4 + Math.sin(now / 50) * 0.3;
+            graphics.lineStyle(1, glowColor, spark2);
+            graphics.lineBetween(-9 + Math.sin(now / 40) * 3, -14 + walkBob, -9 - Math.sin(now / 60) * 3, -8 + walkBob);
+            graphics.lineBetween(-11, -12 + walkBob + Math.sin(now / 30), -7, -10 + walkBob - Math.sin(now / 45));
+        }
     }
 
     static drawDaVinciTank(graphics: Phaser.GameObjects.Graphics, isPlayer: boolean, _isMoving: boolean, isDeactivated: boolean = false, facingAngle: number = 0, troopLevel: number = 1) {
@@ -2195,9 +2280,9 @@ export class TroopRenderer {
         const woodDark = isDeactivated ? 0x4a3530 : (isPlayer ? 0x9a7050 : 0x8a6548);
         const woodLight = isDeactivated ? 0x8a7060 : (isPlayer ? 0xdab898 : 0xd0a080);
         const woodPlank = isDeactivated ? 0x5a4535 : (isPlayer ? 0xb08560 : 0xa57852);
-        const metalColor = isDeactivated ? 0x3a3a3a : 0x4a4a4a;
-        const metalDark = isDeactivated ? 0x2a2a2a : 0x333333;
-        const cannonColor = isDeactivated ? 0x2a2a2a : 0x1a1a1a;
+        const metalColor = isDeactivated ? 0x3a3a3a : (troopLevel >= 3 ? 0xdaa520 : 0x4a4a4a);
+        const metalDark = isDeactivated ? 0x2a2a2a : (troopLevel >= 3 ? 0xb8860b : 0x333333);
+        const cannonColor = isDeactivated ? 0x2a2a2a : (troopLevel >= 3 ? 0xc99a18 : 0x1a1a1a);
 
         // Deactivation visual - darker, no glow
         const alpha = isDeactivated ? 0.7 : 1;
@@ -2244,14 +2329,14 @@ export class TroopRenderer {
             const barrelEndX = cx + Math.cos(angle) * cannonLength;
             const barrelEndY = cy + Math.sin(angle) * cannonLength * 0.5;
 
-            graphics.lineStyle(4, cannonColor, alpha);
+            graphics.lineStyle(troopLevel >= 3 ? 5.5 : 4, cannonColor, alpha);
             graphics.lineBetween(cx, cy, barrelEndX, barrelEndY);
 
             // Cannon muzzle ring
             graphics.fillStyle(metalColor, alpha);
-            graphics.fillCircle(barrelEndX, barrelEndY, 3);
+            graphics.fillCircle(barrelEndX, barrelEndY, troopLevel >= 3 ? 4 : 3);
             graphics.fillStyle(0x000000, alpha);
-            graphics.fillCircle(barrelEndX, barrelEndY, 1.5);
+            graphics.fillCircle(barrelEndX, barrelEndY, troopLevel >= 3 ? 2 : 1.5);
         }
 
         // === LOWER CONE (sloped wooden armor) ===
@@ -2458,6 +2543,21 @@ export class TroopRenderer {
             }
             graphics.strokePath();
         }
+        // L3: Second gold band at base + golden glow around top finial
+        if (troopLevel >= 3 && !isDeactivated) {
+            graphics.lineStyle(2, 0xdaa520, alpha * 0.8);
+            graphics.beginPath();
+            for (let t = 0; t <= Math.PI; t += 0.1) {
+                const px = Math.cos(t) * (coneBaseRadius + 1);
+                const py = Math.sin(t) * (coneBaseRadius + 1) * 0.5 + coneBaseY;
+                if (t === 0) graphics.moveTo(px, py);
+                else graphics.lineTo(px, py);
+            }
+            graphics.strokePath();
+            // Golden glow halo on finial
+            graphics.fillStyle(0xffd700, 0.3);
+            graphics.fillCircle(0, topConeY - 6, 5);
+        }
     }
 
     // === ROMAN SOLDIER - Individual Legionary ===
@@ -2466,12 +2566,12 @@ export class TroopRenderer {
         const marchPhase = isMoving ? (now % 600) / 600 : 0;
         const legPhase = (marchPhase + stagger) % 1;
 
-        // Colors - Roman legion colors, L3 switches to blue
-        const shieldMain = troopLevel >= 3 ? (isPlayer ? 0x2244aa : 0x334466) : (isPlayer ? 0xcc3333 : 0x554433);
-        const shieldTrim = troopLevel >= 3 ? (isPlayer ? 0x6688cc : 0x5577aa) : (isPlayer ? 0xd4a84b : 0x8b7355);
-        const shieldBoss = troopLevel >= 3 ? (isPlayer ? 0x88bbff : 0x7799cc) : (isPlayer ? 0xffd700 : 0xaa9977);
-        const tunicColor = troopLevel >= 3 ? (isPlayer ? 0x1a3388 : 0x223355) : (isPlayer ? 0xbb2222 : 0x443322);
-        const armorColor = troopLevel >= 3 ? (isPlayer ? 0x99aacc : 0x8899bb) : (isPlayer ? 0x888899 : 0x777788);
+        // Colors - Roman legion colors, L3 is white & gold royal elite
+        const shieldMain = troopLevel >= 3 ? (isPlayer ? 0xeeeedd : 0xbbaa99) : (isPlayer ? 0xcc3333 : 0x554433);
+        const shieldTrim = troopLevel >= 3 ? (isPlayer ? 0xdaa520 : 0xb8960b) : (isPlayer ? 0xd4a84b : 0x8b7355);
+        const shieldBoss = troopLevel >= 3 ? (isPlayer ? 0xffd700 : 0xdaa520) : (isPlayer ? 0xffd700 : 0xaa9977);
+        const tunicColor = troopLevel >= 3 ? (isPlayer ? 0xddddcc : 0xaa9988) : (isPlayer ? 0xbb2222 : 0x443322);
+        const armorColor = troopLevel >= 3 ? (isPlayer ? 0xdaa520 : 0xb8960b) : (isPlayer ? 0x888899 : 0x777788);
         const skinColor = 0xd4a574;
         const spearWood = 0x5d4e37;
         const spearTip = 0x555566;
@@ -2513,9 +2613,9 @@ export class TroopRenderer {
         // Helmet
         graphics.fillStyle(armorColor, 1);
         graphics.fillRect(sx - 4, currentSy - 14, 8, 4);
-        graphics.fillStyle(troopLevel >= 3 ? 0x6677aa : 0x666677, 1);
+        graphics.fillStyle(troopLevel >= 3 ? 0xdaa520 : 0x666677, 1);
         graphics.fillRect(sx - 1, currentSy - 16, 2, 3); // Crest base
-        graphics.fillStyle(troopLevel >= 3 ? 0x3366cc : 0xcc2222, 1);
+        graphics.fillStyle(troopLevel >= 3 ? 0xffeedd : 0xcc2222, 1);
         graphics.fillRect(sx - 1, currentSy - 19, 2, 4);
 
         // === SPEAR ===
@@ -2564,24 +2664,30 @@ export class TroopRenderer {
 
         // L2+: Taller helmet plume + shoulder pauldrons
         if (troopLevel >= 2) {
-            const crestColor = troopLevel >= 3 ? 0x3366cc : 0xffd700;
-            const pauldronColor = troopLevel >= 3 ? 0x4477bb : 0xdaa520;
-            // Taller crest
-            graphics.fillStyle(crestColor, 1);
+            // Taller crest — L3 is white plume, L2 is gold
+            graphics.fillStyle(troopLevel >= 3 ? 0xffeedd : 0xffd700, 1);
             graphics.fillRect(sx - 1, currentSy - 21, 2, 6);
-            // Shoulder pauldrons
-            graphics.fillStyle(pauldronColor, 0.8);
+            // Shoulder pauldrons — L3 gold, L2 gold
+            graphics.fillStyle(0xdaa520, 0.8);
             graphics.fillCircle(sx - 5, currentSy - 5, 2);
             graphics.fillCircle(sx + 5, currentSy - 5, 2);
         }
-        // L3: Blue shield emblem cross
+        // L3: Gold eagle emblem on shield
         if (troopLevel >= 3) {
             if (!isTestudo) {
                 const shieldX = sx + Math.cos(facingAngle) * 6;
                 const shieldY = currentSy - 4 + Math.sin(facingAngle) * 3;
-                graphics.lineStyle(1, 0x88bbff, 0.7);
-                graphics.lineBetween(shieldX, shieldY - 6, shieldX, shieldY + 6);
-                graphics.lineBetween(shieldX - 3, shieldY, shieldX + 3, shieldY);
+                // Small gold eagle silhouette
+                graphics.fillStyle(0xdaa520, 0.8);
+                graphics.beginPath();
+                graphics.moveTo(shieldX, shieldY - 3);
+                graphics.lineTo(shieldX - 3, shieldY);
+                graphics.lineTo(shieldX - 1, shieldY);
+                graphics.lineTo(shieldX, shieldY + 2);
+                graphics.lineTo(shieldX + 1, shieldY);
+                graphics.lineTo(shieldX + 3, shieldY);
+                graphics.closePath();
+                graphics.fillPath();
             }
         }
     }
@@ -2625,70 +2731,94 @@ export class TroopRenderer {
         const bannerY = -Math.sin(facingAngle) * 7.5 - 5;
         const bannerPoleTop = troopLevel >= 3 ? bannerY - 35 : bannerY - 25;
 
-        graphics.lineStyle(2, troopLevel >= 3 ? 0x4a5a6a : 0x5d4e37, 1);
+        graphics.lineStyle(2, troopLevel >= 3 ? 0xdaa520 : 0x5d4e37, 1);
         graphics.lineBetween(bannerX, bannerY, bannerX, bannerPoleTop);
 
         if (troopLevel >= 3) {
-            // L3: Large elaborate blue banner with flowing tails
-            const bannerColor = isPlayer ? 0x2244aa : 0x334466;
-            const trimColor = isPlayer ? 0x88bbff : 0x7799cc;
+            // L3: Royal white & gold eagle banner
+            const bannerColor = isPlayer ? 0xeeeedd : 0xccbbaa;
+            const trimColor = 0xdaa520;
             const flagWave = isMoving ? Math.sin(Date.now() / 300) * 2 : 0;
 
-            // Main banner (larger)
+            // Main banner (larger white/cream)
             graphics.fillStyle(bannerColor, 1);
             graphics.beginPath();
             graphics.moveTo(bannerX - 1, bannerPoleTop);
-            graphics.lineTo(bannerX + 12 + flagWave, bannerPoleTop + 2);
-            graphics.lineTo(bannerX + 10 + flagWave * 0.5, bannerPoleTop + 14);
-            graphics.lineTo(bannerX - 1, bannerPoleTop + 12);
+            graphics.lineTo(bannerX + 13 + flagWave, bannerPoleTop + 2);
+            graphics.lineTo(bannerX + 11 + flagWave * 0.5, bannerPoleTop + 15);
+            graphics.lineTo(bannerX - 1, bannerPoleTop + 13);
             graphics.closePath();
             graphics.fillPath();
 
-            // Banner trim
-            graphics.lineStyle(1, trimColor, 1);
-            graphics.strokeRect(bannerX, bannerPoleTop + 1, 11 + flagWave * 0.5, 11);
+            // Gold border trim
+            graphics.lineStyle(1.5, trimColor, 1);
+            graphics.beginPath();
+            graphics.moveTo(bannerX - 1, bannerPoleTop);
+            graphics.lineTo(bannerX + 13 + flagWave, bannerPoleTop + 2);
+            graphics.lineTo(bannerX + 11 + flagWave * 0.5, bannerPoleTop + 15);
+            graphics.lineTo(bannerX - 1, bannerPoleTop + 13);
+            graphics.closePath();
+            graphics.strokePath();
 
-            // Banner emblem — star
-            graphics.fillStyle(trimColor, 0.9);
+            // Gold eagle emblem on banner
             const embX = bannerX + 5 + flagWave * 0.3;
             const embY = bannerPoleTop + 7;
+            // Eagle body
+            graphics.fillStyle(0xdaa520, 0.9);
             graphics.beginPath();
-            graphics.moveTo(embX, embY - 3);
-            graphics.lineTo(embX + 1.5, embY - 1);
+            graphics.moveTo(embX, embY - 4);
+            graphics.lineTo(embX + 2, embY - 2);
+            graphics.lineTo(embX + 5, embY - 3); // right wing tip
             graphics.lineTo(embX + 3, embY);
-            graphics.lineTo(embX + 1.5, embY + 1);
-            graphics.lineTo(embX, embY + 3);
-            graphics.lineTo(embX - 1.5, embY + 1);
+            graphics.lineTo(embX + 2, embY + 3);  // right talon
+            graphics.lineTo(embX, embY + 1);
+            graphics.lineTo(embX - 2, embY + 3);  // left talon
             graphics.lineTo(embX - 3, embY);
-            graphics.lineTo(embX - 1.5, embY - 1);
+            graphics.lineTo(embX - 5, embY - 3); // left wing tip
+            graphics.lineTo(embX - 2, embY - 2);
             graphics.closePath();
             graphics.fillPath();
+            // Eagle head dot
+            graphics.fillStyle(0xffd700, 1);
+            graphics.fillCircle(embX, embY - 3, 1);
 
-            // Flowing banner tails
+            // Flowing banner tails (white/cream with gold tips)
             graphics.fillStyle(bannerColor, 0.9);
             graphics.beginPath();
-            graphics.moveTo(bannerX + 3 + flagWave * 0.3, bannerPoleTop + 12);
-            graphics.lineTo(bannerX + 5 + flagWave, bannerPoleTop + 18);
-            graphics.lineTo(bannerX + 7 + flagWave * 0.3, bannerPoleTop + 12);
+            graphics.moveTo(bannerX + 2 + flagWave * 0.3, bannerPoleTop + 13);
+            graphics.lineTo(bannerX + 4 + flagWave, bannerPoleTop + 20);
+            graphics.lineTo(bannerX + 6 + flagWave * 0.3, bannerPoleTop + 13);
             graphics.closePath();
             graphics.fillPath();
             graphics.beginPath();
-            graphics.moveTo(bannerX + 7 + flagWave * 0.3, bannerPoleTop + 12);
-            graphics.lineTo(bannerX + 9 + flagWave, bannerPoleTop + 18);
-            graphics.lineTo(bannerX + 11 + flagWave * 0.3, bannerPoleTop + 12);
+            graphics.moveTo(bannerX + 6 + flagWave * 0.3, bannerPoleTop + 13);
+            graphics.lineTo(bannerX + 8 + flagWave, bannerPoleTop + 20);
+            graphics.lineTo(bannerX + 10 + flagWave * 0.3, bannerPoleTop + 13);
             graphics.closePath();
             graphics.fillPath();
+            // Gold tips on tails
+            graphics.fillStyle(0xdaa520, 0.8);
+            graphics.fillCircle(bannerX + 4 + flagWave, bannerPoleTop + 19, 1);
+            graphics.fillCircle(bannerX + 8 + flagWave, bannerPoleTop + 19, 1);
 
-            // Ornate pole finial — blue crystal
-            graphics.fillStyle(0x88bbff, 1);
+            // Grand golden eagle finial on pole top
+            graphics.fillStyle(0xffd700, 1);
+            // Eagle body
             graphics.beginPath();
-            graphics.moveTo(bannerX, bannerPoleTop - 4);
-            graphics.lineTo(bannerX - 2, bannerPoleTop);
-            graphics.lineTo(bannerX + 2, bannerPoleTop);
+            graphics.moveTo(bannerX, bannerPoleTop - 7);
+            graphics.lineTo(bannerX - 2, bannerPoleTop - 3);
+            graphics.lineTo(bannerX + 2, bannerPoleTop - 3);
             graphics.closePath();
             graphics.fillPath();
-            graphics.fillStyle(0xaaddff, 0.8);
-            graphics.fillCircle(bannerX, bannerPoleTop - 1, 1);
+            // Eagle wings spread wide
+            graphics.lineStyle(1.5, 0xffd700, 1);
+            graphics.lineBetween(bannerX - 2, bannerPoleTop - 5, bannerX - 6, bannerPoleTop - 8);
+            graphics.lineBetween(bannerX + 2, bannerPoleTop - 5, bannerX + 6, bannerPoleTop - 8);
+            graphics.lineBetween(bannerX - 6, bannerPoleTop - 8, bannerX - 8, bannerPoleTop - 6);
+            graphics.lineBetween(bannerX + 6, bannerPoleTop - 8, bannerX + 8, bannerPoleTop - 6);
+            // Eagle head
+            graphics.fillStyle(0xffd700, 1);
+            graphics.fillCircle(bannerX, bannerPoleTop - 7, 1.5);
         } else {
             // L1-L2 banner
             graphics.fillStyle(isPlayer ? 0xcc3333 : 0x554433, 1);
@@ -2840,6 +2970,14 @@ export class TroopRenderer {
             // Gold headband replaces red
             graphics.fillStyle(0xdaa520, 1);
             graphics.fillRect(-4, headY - 4, 8, 2);
+        }
+        // L3: Skull emblem on barrel + extra fuse sparks
+        if (troopLevel >= 3) {
+            graphics.fillStyle(0xdddddd, 0.6);
+            graphics.fillCircle(0, barrelY - 1, 2.5);
+            graphics.fillStyle(0x111111, 0.8);
+            graphics.fillCircle(-0.8, barrelY - 1.5, 0.6);
+            graphics.fillCircle(0.8, barrelY - 1.5, 0.6);
         }
     }
 }
