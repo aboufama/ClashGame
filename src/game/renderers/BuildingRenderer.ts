@@ -1293,26 +1293,18 @@ export class BuildingRenderer {
         }
 
         if (!onlyBase) {
-            // === DUAL BARREL SETUP ===
+            // === SINGLE THICK BARREL ===
             const barrelHeight = -14;
-            const barrelLength = 30;  // Slightly longer barrels
-            const barrelWidth = 8;    // Slightly thinner for dual setup
-            const barrelSpacing = 5;  // Distance between the two barrels
+            const barrelLength = 32;
+            const barrelWidth = 14;
 
             // Recoil animation
             const recoilAmount = (building?.cannonRecoilOffset ?? 0) * 10;
             const recoilOffsetX = -cos * recoilAmount;
             const recoilOffsetY = -sin * 0.5 * recoilAmount;
 
-            // Barrel perpendicular offset for dual barrels
-            const perpX = -sin * barrelSpacing;
-            const perpY = cos * 0.5 * barrelSpacing;
-
-            // Both barrel tip positions
-            const barrelTip1X = center.x + cos * barrelLength + recoilOffsetX + perpX;
-            const barrelTip1Y = center.y + barrelHeight + sin * 0.5 * barrelLength + recoilOffsetY + perpY;
-            const barrelTip2X = center.x + cos * barrelLength + recoilOffsetX - perpX;
-            const barrelTip2Y = center.y + barrelHeight + sin * 0.5 * barrelLength + recoilOffsetY - perpY;
+            const tipX = center.x + cos * barrelLength + recoilOffsetX;
+            const tipY = center.y + barrelHeight + sin * 0.5 * barrelLength + recoilOffsetY;
 
             // Barrel shadow on ground
             g.fillStyle(0x1a1a1a, alpha * 0.4);
@@ -1356,12 +1348,10 @@ export class BuildingRenderer {
                 graphics.fillCircle(pivotX, pivotY, 10);
                 graphics.fillStyle(0xddddcc, alpha);
                 graphics.fillCircle(pivotX, pivotY, 8);
-                // Gold center accent
                 graphics.fillStyle(0xdaa520, alpha);
                 graphics.fillCircle(pivotX, pivotY, 5);
                 graphics.fillStyle(0xffd700, alpha * 0.8);
                 graphics.fillCircle(pivotX - 1, pivotY - 1, 3);
-                // Bright gold core
                 graphics.fillStyle(0xffd700, alpha * 0.5);
                 graphics.fillCircle(pivotX, pivotY, 2);
             };
@@ -1372,67 +1362,49 @@ export class BuildingRenderer {
             const baseJointX = center.x + cos * 4 + recoilOffsetX;
             const baseJointY = center.y + barrelHeight + sin * 2 + recoilOffsetY;
             graphics.fillStyle(0xeeeedd, alpha);
-            graphics.fillEllipse(baseJointX, baseJointY, 16, 10);
+            graphics.fillEllipse(baseJointX, baseJointY, 18, 11);
             graphics.fillStyle(0xdaa520, alpha * 0.8);
-            graphics.fillEllipse(baseJointX, baseJointY, 12, 7);
+            graphics.fillEllipse(baseJointX, baseJointY, 14, 8);
             graphics.fillStyle(0xddddcc, alpha);
-            graphics.fillEllipse(baseJointX, baseJointY, 8, 5);
+            graphics.fillEllipse(baseJointX, baseJointY, 9, 5);
 
-            // === DUAL BARRELS ===
-            const drawBarrel = (tipX: number, tipY: number, offsetX: number, offsetY: number) => {
-                const barrelBaseX = center.x + recoilOffsetX + offsetX;
-                const barrelBaseY = center.y + barrelHeight + recoilOffsetY + offsetY;
+            // === THICK BARREL — marble body with gold accents ===
+            const barrelBaseX = center.x + recoilOffsetX;
+            const barrelBaseY = center.y + barrelHeight + recoilOffsetY;
 
-                // Barrel main body - gold
-                graphics.lineStyle(barrelWidth, 0xb8860b, alpha);
-                graphics.lineBetween(barrelBaseX, barrelBaseY, tipX, tipY);
+            // Barrel outer body — marble white
+            graphics.lineStyle(barrelWidth, 0xccccbb, alpha);
+            graphics.lineBetween(barrelBaseX, barrelBaseY, tipX, tipY);
 
-                // Barrel highlight strip
-                graphics.lineStyle(barrelWidth - 3, 0xdaa520, alpha);
-                graphics.lineBetween(barrelBaseX, barrelBaseY - 1, tipX, tipY - 1);
+            // Barrel mid layer — lighter marble
+            graphics.lineStyle(barrelWidth - 3, 0xddddcc, alpha);
+            graphics.lineBetween(barrelBaseX, barrelBaseY - 1, tipX, tipY - 1);
 
-                // Bright highlight
-                graphics.lineStyle(2, 0xffd700, alpha * 0.9);
-                graphics.lineBetween(barrelBaseX, barrelBaseY - 2, tipX, tipY - 2);
+            // Barrel highlight strip
+            graphics.lineStyle(3, 0xeeeedd, alpha * 0.9);
+            graphics.lineBetween(barrelBaseX, barrelBaseY - 2, tipX, tipY - 2);
 
-                // === GOLD DECORATIVE BANDS ===
-                const bands = [0.2, 0.5, 0.8];
-                for (const t of bands) {
-                    const bandX = barrelBaseX + cos * barrelLength * t;
-                    const bandY = barrelBaseY + sin * 0.5 * barrelLength * t;
+            // === GOLD DECORATIVE BANDS ===
+            const bands = [0.15, 0.4, 0.65, 0.9];
+            for (const t of bands) {
+                const bandX = barrelBaseX + cos * barrelLength * t;
+                const bandY = barrelBaseY + sin * 0.5 * barrelLength * t;
 
-                    graphics.fillStyle(0xffd700, alpha);
-                    graphics.fillEllipse(bandX, bandY, 6, 3.5);
-                    graphics.fillStyle(0xffd700, alpha * 0.7);
-                    graphics.fillCircle(bandX - 1, bandY - 1, 1.5);
-                    graphics.lineStyle(1, 0xdaa520, alpha);
-                    graphics.strokeEllipse(bandX, bandY, 6, 3.5);
-                }
-
-                // Muzzle ring + bore
                 graphics.fillStyle(0xdaa520, alpha);
-                graphics.fillEllipse(tipX, tipY, 8, 5);
-                graphics.fillStyle(0xffd700, alpha);
-                graphics.fillEllipse(tipX, tipY, 6, 4);
-                graphics.fillStyle(0x1a1a1a, alpha);
-                graphics.fillEllipse(tipX + cos * 2, tipY + sin, 4, 2.5);
-            };
+                graphics.fillEllipse(bandX, bandY, 9, 5);
+                graphics.fillStyle(0xffd700, alpha * 0.7);
+                graphics.fillCircle(bandX - 1, bandY - 1, 2);
+                graphics.lineStyle(1, 0xb8860b, alpha);
+                graphics.strokeEllipse(bandX, bandY, 9, 5);
+            }
 
-            // Draw both barrels
-            drawBarrel(barrelTip1X, barrelTip1Y, perpX, perpY);
-            drawBarrel(barrelTip2X, barrelTip2Y, -perpX, -perpY);
-
-            // === CONNECTING BRACE BETWEEN BARRELS (marble & gold) ===
-            const braceT = 0.35;
-            const brace1X = center.x + cos * barrelLength * braceT + recoilOffsetX + perpX;
-            const brace1Y = center.y + barrelHeight + sin * 0.5 * barrelLength * braceT + recoilOffsetY + perpY;
-            const brace2X = center.x + cos * barrelLength * braceT + recoilOffsetX - perpX;
-            const brace2Y = center.y + barrelHeight + sin * 0.5 * barrelLength * braceT + recoilOffsetY - perpY;
-
-            graphics.lineStyle(3, 0xddddcc, alpha);
-            graphics.lineBetween(brace1X, brace1Y, brace2X, brace2Y);
-            graphics.lineStyle(1, 0xffd700, alpha * 0.8);
-            graphics.lineBetween(brace1X, brace1Y, brace2X, brace2Y);
+            // Muzzle ring + bore
+            graphics.fillStyle(0xdaa520, alpha);
+            graphics.fillEllipse(tipX, tipY, 10, 6);
+            graphics.fillStyle(0xffd700, alpha);
+            graphics.fillEllipse(tipX, tipY, 8, 5);
+            graphics.fillStyle(0x1a1a1a, alpha);
+            graphics.fillEllipse(tipX + cos * 2, tipY + sin, 5, 3);
 
             if (sin < 0) drawPivot();
         }
