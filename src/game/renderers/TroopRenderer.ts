@@ -563,17 +563,75 @@ export class TroopRenderer {
             graphics.fillStyle(0xaaaacc, 0.4);
             graphics.fillCircle(-2 + bodyLean, hy - 7, 2);
         }
-        // L3: Gold rivets on helmet + gold arm bands
+        // L3: Viking horns on helmet, chest armor plate, spiky club, gold accents
         if (troopLevel >= 3) {
             const hy = headY;
+            // Gold rivets on helmet
             graphics.fillStyle(0xdaa520, 1);
             graphics.fillCircle(-4 + bodyLean, hy - 3, 1.5);
             graphics.fillCircle(4 + bodyLean, hy - 3, 1.5);
             graphics.fillCircle(bodyLean, hy - 8, 1.5);
-            // Gold arm wraps
-            graphics.lineStyle(1.5, 0xdaa520, 0.8);
-            graphics.lineBetween(-12 + bodyLean, -6 + walkBob, -12 + bodyLean, -2 + walkBob);
-            graphics.lineBetween(12 + bodyLean, -6 + walkBob, 12 + bodyLean, -2 + walkBob);
+
+            // Viking horns on helmet
+            graphics.fillStyle(0xddddbb, 1);
+            // Left horn
+            graphics.beginPath();
+            graphics.moveTo(-6 + bodyLean, hy - 7);
+            graphics.lineTo(-12 + bodyLean, hy - 16);
+            graphics.lineTo(-8 + bodyLean, hy - 12);
+            graphics.closePath();
+            graphics.fillPath();
+            // Right horn
+            graphics.beginPath();
+            graphics.moveTo(6 + bodyLean, hy - 7);
+            graphics.lineTo(12 + bodyLean, hy - 16);
+            graphics.lineTo(8 + bodyLean, hy - 12);
+            graphics.closePath();
+            graphics.fillPath();
+            // Horn tips (darker)
+            graphics.fillStyle(0xcccc99, 1);
+            graphics.fillCircle(-12 + bodyLean, hy - 16, 1);
+            graphics.fillCircle(12 + bodyLean, hy - 16, 1);
+
+            // Chest armor plate (gold-trimmed iron)
+            graphics.fillStyle(0x6a6a7a, 0.8);
+            graphics.beginPath();
+            graphics.moveTo(-5 + bodyLean, -4 + walkBob);
+            graphics.lineTo(5 + bodyLean, -4 + walkBob);
+            graphics.lineTo(4 + bodyLean, 2 + walkBob);
+            graphics.lineTo(-4 + bodyLean, 2 + walkBob);
+            graphics.closePath();
+            graphics.fillPath();
+            graphics.lineStyle(1, 0xdaa520, 0.8);
+            graphics.strokeRect(-5 + bodyLean, -4 + walkBob, 10, 6);
+
+            // Gold arm bands
+            graphics.lineStyle(2, 0xdaa520, 0.9);
+            graphics.lineBetween(-12 + bodyLean, -4 + walkBob, -12 + bodyLean, -1 + walkBob);
+            graphics.lineBetween(12 + bodyLean, -4 + walkBob, 12 + bodyLean, -1 + walkBob);
+
+            // Spikes on bat head — draw iron spikes along the club head
+            const spikeCount = 4;
+            for (let i = 0; i < spikeCount; i++) {
+                const t = headStart + (batLen - headStart) * ((i + 0.5) / spikeCount);
+                const baseX = batBaseX + Math.sin(batAngle) * t;
+                const baseY = batBaseY - Math.cos(batAngle) * t;
+                const spikeLen = 5;
+                // Two spikes per position (left and right of club)
+                graphics.fillStyle(0x555566, 1);
+                graphics.beginPath();
+                graphics.moveTo(baseX - perpX * 3, baseY - perpY * 3);
+                graphics.lineTo(baseX - perpX * (3 + spikeLen), baseY - perpY * (3 + spikeLen));
+                graphics.lineTo(baseX - perpX * 2, baseY - perpY * 2);
+                graphics.closePath();
+                graphics.fillPath();
+                graphics.beginPath();
+                graphics.moveTo(baseX + perpX * 3, baseY + perpY * 3);
+                graphics.lineTo(baseX + perpX * (3 + spikeLen), baseY + perpY * (3 + spikeLen));
+                graphics.lineTo(baseX + perpX * 2, baseY + perpY * 2);
+                graphics.closePath();
+                graphics.fillPath();
+            }
         }
     }
 
@@ -1334,8 +1392,8 @@ export class TroopRenderer {
         const uniformColor = isPlayer ? 0x455a64 : 0x5d4037;
         const uniformDark = isPlayer ? 0x37474f : 0x4e342e;
         const skinColor = 0xe8d4b8;
-        const metalColor = 0x555555;
-        const metalDark = 0x333333;
+        const metalColor = troopLevel >= 3 ? 0xdaa520 : 0x555555;
+        const metalDark = troopLevel >= 3 ? 0xb8860b : 0x333333;
         const woodColor = 0x8b4513;
 
         // DIRECTION LOGIC: Soldier is always in front (direction of travel)
@@ -1394,29 +1452,35 @@ export class TroopRenderer {
         graphics.fillStyle(metalDark, 1);
         graphics.fillRect(mortarX - 5, -2 + mortarY, 10, 6);
 
-        // Mortar tube (angled up)
+        // Mortar tube (angled up) — L3 is wider
+        const tubeW = troopLevel >= 3 ? 5.5 : 4;
+        const tubeInner = troopLevel >= 3 ? 4 : 3;
+        const tubeTopW = troopLevel >= 3 ? 4 : 3;
+        const tubeTopInner = troopLevel >= 3 ? 3 : 2;
         graphics.fillStyle(metalDark, 1);
         graphics.beginPath();
-        graphics.moveTo(mortarX - 4, -2 + mortarY);
-        graphics.lineTo(mortarX - 3, -22 + mortarY);
-        graphics.lineTo(mortarX + 3, -22 + mortarY);
-        graphics.lineTo(mortarX + 4, -2 + mortarY);
+        graphics.moveTo(mortarX - tubeW, -2 + mortarY);
+        graphics.lineTo(mortarX - tubeTopW, -22 + mortarY);
+        graphics.lineTo(mortarX + tubeTopW, -22 + mortarY);
+        graphics.lineTo(mortarX + tubeW, -2 + mortarY);
         graphics.closePath();
         graphics.fillPath();
         graphics.fillStyle(metalColor, 1);
         graphics.beginPath();
-        graphics.moveTo(mortarX - 3, -2 + mortarY);
-        graphics.lineTo(mortarX - 2, -20 + mortarY);
-        graphics.lineTo(mortarX + 2, -20 + mortarY);
-        graphics.lineTo(mortarX + 3, -2 + mortarY);
+        graphics.moveTo(mortarX - tubeInner, -2 + mortarY);
+        graphics.lineTo(mortarX - tubeTopInner, -20 + mortarY);
+        graphics.lineTo(mortarX + tubeTopInner, -20 + mortarY);
+        graphics.lineTo(mortarX + tubeInner, -2 + mortarY);
         graphics.closePath();
         graphics.fillPath();
 
         // Mortar opening
+        const openW = troopLevel >= 3 ? 4.5 : 3;
+        const openStroke = troopLevel >= 3 ? 5.5 : 4;
         graphics.fillStyle(0x1a1a1a, 1);
-        graphics.fillEllipse(mortarX, -22 + mortarY, 3, 1.5);
+        graphics.fillEllipse(mortarX, -22 + mortarY, openW, 1.5);
         graphics.lineStyle(2, metalColor, 1);
-        graphics.strokeEllipse(mortarX, -22 + mortarY, 4, 2);
+        graphics.strokeEllipse(mortarX, -22 + mortarY, openStroke, 2);
 
         // === ROPE connecting soldier to mortar ===
         const soldierX = baseSoldierX;

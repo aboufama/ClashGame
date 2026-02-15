@@ -1461,7 +1461,9 @@ export class MainScene extends Phaser.Scene {
                 break;
             case 'cannon':
                 // Use level-based rendering for cannon
-                if (building && building.level >= 4) {
+                if (building && building.level >= 5) {
+                    BuildingRenderer.drawCannonLevel5(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, skipBase, onlyBase);
+                } else if (building && building.level >= 4) {
                     BuildingRenderer.drawCannonLevel4(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, skipBase, onlyBase);
                 } else if (building && building.level === 3) {
                     BuildingRenderer.drawCannonLevel3(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, skipBase, onlyBase);
@@ -1472,7 +1474,9 @@ export class MainScene extends Phaser.Scene {
                 }
                 break;
             case 'ballista':
-                if (building && building.level >= 2) {
+                if (building && building.level >= 3) {
+                    BuildingRenderer.drawBallistaLevel3(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, skipBase, onlyBase);
+                } else if (building && building.level >= 2) {
                     BuildingRenderer.drawBallistaLevel2(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, skipBase, onlyBase);
                 } else {
                     BuildingRenderer.drawBallista(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, skipBase, onlyBase);
@@ -1507,7 +1511,9 @@ export class MainScene extends Phaser.Scene {
                 BuildingRenderer.drawArmyCamp(graphics, c1, c2, c3, c4, center, alpha, tint, baseGraphics, building, skipBase, onlyBase);
                 break;
             case 'xbow':
-                if (building && building.level >= 2) {
+                if (building && building.level >= 3) {
+                    BuildingRenderer.drawXBowLevel3(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now, baseGraphics, skipBase, onlyBase);
+                } else if (building && building.level >= 2) {
                     BuildingRenderer.drawXBowLevel2(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now, baseGraphics, skipBase, onlyBase);
                 } else {
                     BuildingRenderer.drawXBow(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now, baseGraphics, skipBase, onlyBase);

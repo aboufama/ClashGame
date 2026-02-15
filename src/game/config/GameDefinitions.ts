@@ -108,12 +108,13 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         color: 0x333333,
         fireRate: 2400,
         damage: 58,
-        maxLevel: 4,
+        maxLevel: 5,
         levels: [
             { hp: 820, damage: 58, fireRate: 2400, cost: 220 },
             { hp: 940, damage: 70, fireRate: 2200, cost: 360 },
             { hp: 1040, damage: 82, fireRate: 2050, cost: 520 },
-            { hp: 1150, damage: 95, fireRate: 1900, cost: 700 }
+            { hp: 1150, damage: 95, fireRate: 1900, cost: 700 },
+            { hp: 1300, damage: 110, fireRate: 1750, cost: 1000 }
         ]
     },
     ballista: {
@@ -130,10 +131,11 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         color: 0x8b4513,
         fireRate: 1900,
         damage: 185,
-        maxLevel: 2,
+        maxLevel: 3,
         levels: [
             { hp: 950, damage: 185, fireRate: 1900, cost: 360 },
-            { hp: 1150, damage: 230, fireRate: 1700, cost: 620 }
+            { hp: 1150, damage: 230, fireRate: 1700, cost: 620 },
+            { hp: 1400, damage: 280, fireRate: 1550, cost: 950 }
         ]
     },
     xbow: {
@@ -150,10 +152,11 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         color: 0x8b008b,
         fireRate: 220,
         damage: 20,
-        maxLevel: 2,
+        maxLevel: 3,
         levels: [
             { hp: 1550, damage: 20, fireRate: 220, cost: 900 },
-            { hp: 1850, damage: 26, fireRate: 190, cost: 1350 }
+            { hp: 1850, damage: 26, fireRate: 190, cost: 1350 },
+            { hp: 2200, damage: 32, fireRate: 165, cost: 1900 }
         ]
     },
     solana_collector: {
@@ -168,10 +171,11 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         maxCount: 16,
         color: 0x14f195,
         productionRate: 5.0,
-        maxLevel: 2,
+        maxLevel: 3,
         levels: [
             { hp: 700, productionRate: 5.0, cost: 300 },     // Level 1 - Wooden drill rig
-            { hp: 900, productionRate: 8.0, cost: 600 }      // Level 2 - Metal-reinforced, Solana veins
+            { hp: 900, productionRate: 8.0, cost: 600 },     // Level 2 - Metal-reinforced, Solana veins
+            { hp: 1150, productionRate: 11.0, cost: 1000 }   // Level 3 - Marble & Gold
         ]
     },
     mortar: {
@@ -189,11 +193,12 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         color: 0x555555,
         fireRate: 3900,
         damage: 62,
-        maxLevel: 3,
+        maxLevel: 4,
         levels: [
             { hp: 760, damage: 62, fireRate: 3900, cost: 500 },
             { hp: 930, damage: 78, fireRate: 3500, cost: 780 },
-            { hp: 1150, damage: 95, fireRate: 3150, cost: 1100 }
+            { hp: 1150, damage: 95, fireRate: 3150, cost: 1100 },
+            { hp: 1400, damage: 115, fireRate: 2850, cost: 1550 }
         ]
     },
     tesla: {
@@ -210,10 +215,11 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         color: 0x00ccff,
         fireRate: 2400,
         damage: 52,
-        maxLevel: 2,
+        maxLevel: 3,
         levels: [
             { hp: 700, damage: 52, fireRate: 2400, cost: 650 },
-            { hp: 900, damage: 68, fireRate: 2100, cost: 980 }
+            { hp: 900, damage: 68, fireRate: 2100, cost: 980 },
+            { hp: 1150, damage: 85, fireRate: 1850, cost: 1400 }
         ]
     },
     wall: {
@@ -227,11 +233,12 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         category: 'defense',
         maxCount: 100,
         color: 0xcccccc,
-        maxLevel: 3,
+        maxLevel: 4,
         levels: [
             { hp: 500, cost: 50 },      // Level 1 - Wooden palisade
             { hp: 800, cost: 150 },     // Level 2 - Stone wall
-            { hp: 1200, cost: 350 }     // Level 3 - Fortified dark stone
+            { hp: 1200, cost: 350 },    // Level 3 - Fortified dark stone
+            { hp: 1700, cost: 600 }     // Level 4 - Marble & Gold
         ]
     },
     army_camp: {
@@ -245,12 +252,13 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         category: 'military',
         maxCount: 4,
         color: 0x884422,
-        maxLevel: 3,
+        maxLevel: 4,
         capacity: 20,
         levels: [
             { hp: 1000, capacity: 20, cost: 300 },    // Level 1 - Basic (20 space, no decor)
             { hp: 1200, capacity: 25, cost: 500 },    // Level 2 - Weapons rack
-            { hp: 1400, capacity: 30, cost: 700 }     // Level 3 - Full decor
+            { hp: 1400, capacity: 30, cost: 700 },    // Level 3 - Full decor
+            { hp: 1700, capacity: 35, cost: 1100 }    // Level 4 - Marble & Gold
         ]
     },
     prism: {
@@ -267,11 +275,12 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         color: 0xff00ff,
         fireRate: 100,
         damage: 156,
-        maxLevel: 3,
+        maxLevel: 4,
         levels: [
             { hp: 1200, damage: 156, fireRate: 100, cost: 1050, range: 8.5 },
             { hp: 1450, damage: 204, fireRate: 90, cost: 1450, range: 9.0 },
-            { hp: 1750, damage: 264, fireRate: 75, cost: 2100, range: 9.5 }  // Level 3 - Prismatic Obelisk
+            { hp: 1750, damage: 264, fireRate: 75, cost: 2100, range: 9.5 },
+            { hp: 2100, damage: 330, fireRate: 65, cost: 3000, range: 10.0 }
         ]
     },
     magmavent: {
@@ -288,10 +297,11 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         color: 0xff4400,
         fireRate: 1500,
         damage: 96,
-        maxLevel: 2,
+        maxLevel: 3,
         levels: [
             { hp: 1500, damage: 96, fireRate: 1500, cost: 1250, range: 4.4 },
-            { hp: 1850, damage: 125, fireRate: 1250, cost: 1750, range: 4.6 }
+            { hp: 1850, damage: 125, fireRate: 1250, cost: 1750, range: 4.6 },
+            { hp: 2250, damage: 155, fireRate: 1050, cost: 2500, range: 4.8 }
         ]
     },
     dragons_breath: {
@@ -308,9 +318,10 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         color: 0xcc0000,
         fireRate: 2800,
         damage: 34,
-        maxLevel: 1,
+        maxLevel: 2,
         levels: [
-            { hp: 2800, damage: 34, fireRate: 2800, cost: 2200, range: 13.5 }
+            { hp: 2800, damage: 34, fireRate: 2800, cost: 2200, range: 13.5 },
+            { hp: 3500, damage: 45, fireRate: 2400, cost: 3200, range: 14.0 }
         ]
     },
     spike_launcher: {
@@ -328,11 +339,12 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         color: 0x8b6914,
         fireRate: 4200,
         damage: 38,
-        maxLevel: 3,
+        maxLevel: 4,
         levels: [
             { hp: 1200, damage: 38, fireRate: 4200, cost: 1450, range: 9.5 },
             { hp: 1450, damage: 52, fireRate: 3800, cost: 1950, range: 10.0 },
-            { hp: 1800, damage: 70, fireRate: 3400, cost: 2800, range: 10.5 }  // Level 3 - Iron Scorpion
+            { hp: 1800, damage: 70, fireRate: 3400, cost: 2800, range: 10.5 },
+            { hp: 2200, damage: 90, fireRate: 3000, cost: 3800, range: 11.0 }
         ]
     },
 };
