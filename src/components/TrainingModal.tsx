@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import type { TroopDef, TroopType } from '../game/config/GameDefinitions';
-import { getTroopStats } from '../game/config/GameDefinitions';
+import { getTroopStats, getTroopUnlockLevel } from '../game/config/GameDefinitions';
 import { formatSol } from '../game/solana/Currency';
 
 const TROOP_FLAVOR: Record<string, string> = {
@@ -27,6 +27,7 @@ interface TrainingModalProps {
   army: Record<string, number>;
   troops: TroopDef[];
   troopLevel: number;
+  barracksLevel: number;
   onClose: () => void;
   onStartPractice: () => void;
   onFindMatch: () => void;
@@ -48,6 +49,7 @@ export function TrainingModal({
   army,
   troops,
   troopLevel,
+  barracksLevel,
   onClose,
   onStartPractice,
   onFindMatch,
@@ -119,26 +121,34 @@ export function TrainingModal({
 
           <div className="troop-grid">
             {troops.map(t => {
+              const unlockLevel = getTroopUnlockLevel(t.id as TroopType);
+              const isLocked = unlockLevel > barracksLevel;
               const canAfford = resources.sol >= t.cost;
               const hasSpace = capacity.current + t.space <= capacity.max;
-              const isAvailable = canAfford && hasSpace;
+              const isAvailable = !isLocked && canAfford && hasSpace;
 
               return (
                 <div
                   key={t.id}
-                  className={`troop-grid-item ${!isAvailable ? 'disabled' : ''}`}
+                  className={`troop-grid-item ${isLocked ? 'locked' : ''} ${!isAvailable && !isLocked ? 'disabled' : ''}`}
                   onClick={() => isAvailable && onTrainTroop(t.id)}
-                  onMouseEnter={(e) => handleMouseEnter(t.id, e)}
+                  onMouseEnter={(e) => !isLocked && handleMouseEnter(t.id, e)}
                   onMouseLeave={handleMouseLeave}
                 >
-                  <div className="level-badge">Lv{troopLevel}</div>
+                  {isLocked ? (
+                    <div className="level-badge locked-badge">Barracks Lvl {unlockLevel}</div>
+                  ) : (
+                    <div className="level-badge">Lv{troopLevel}</div>
+                  )}
                   <div className={`icon ${t.id}-icon large`}></div>
                   <span className="name" style={{ fontSize: '0.7rem', fontWeight: 900 }}>{t.name}</span>
-                  <div className="cost-badge">
-                    <span className="icon sol-icon"></span>
-                    {formatSol(t.cost, false, false)}
-                  </div>
-                  {!hasSpace && <div style={{ fontSize: '8px', color: '#ff4444', position: 'absolute', bottom: '2px' }}>NO SPACE</div>}
+                  {!isLocked && (
+                    <div className="cost-badge">
+                      <span className="icon sol-icon"></span>
+                      {formatSol(t.cost, false, false)}
+                    </div>
+                  )}
+                  {!isLocked && !hasSpace && <div style={{ fontSize: '8px', color: '#ff4444', position: 'absolute', bottom: '2px' }}>NO SPACE</div>}
                 </div>
               );
             })}

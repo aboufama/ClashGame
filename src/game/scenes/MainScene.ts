@@ -165,6 +165,7 @@ export class MainScene extends Phaser.Scene {
     // Online attack tracking
     public currentEnemyWorld: { id: string; username: string; isBot?: boolean; attackId?: string } | null = null;
     public playerBarracksLevel = 1;
+    public playerLabLevel = 1;
     private needsDefaultBase = false;
     private sceneReadyForBaseLoad = false;
 
@@ -222,6 +223,14 @@ export class MainScene extends Phaser.Scene {
         this.playerBarracksLevel = Math.max(1, maxBarracks);
     }
 
+    private snapshotPlayerLabLevel() {
+        const maxLab = this.buildings.reduce((max, building) => {
+            if (building.owner !== 'PLAYER' || building.type !== 'lab') return max;
+            return Math.max(max, Math.max(1, building.level || 1));
+        }, 0);
+        this.playerLabLevel = maxLab;
+    }
+
     private getBarracksLevelForOwner(owner: 'PLAYER' | 'ENEMY'): number {
         if (owner === 'PLAYER' && this.mode === 'ATTACK') {
             return Math.max(1, this.playerBarracksLevel);
@@ -236,9 +245,23 @@ export class MainScene extends Phaser.Scene {
         return Math.max(1, maxBarracks);
     }
 
+    private getLabLevelForOwner(owner: 'PLAYER' | 'ENEMY'): number {
+        if (owner === 'PLAYER' && this.mode === 'ATTACK') {
+            return Math.max(0, this.playerLabLevel);
+        }
+        const maxLab = this.buildings.reduce((max, building) => {
+            if (building.owner !== owner || building.type !== 'lab') return max;
+            return Math.max(max, Math.max(1, building.level || 1));
+        }, 0);
+        if (owner === 'PLAYER') {
+            this.playerLabLevel = maxLab;
+        }
+        return maxLab;
+    }
+
     private getTroopLevelForOwner(owner: 'PLAYER' | 'ENEMY'): number {
-        const barracksLevel = this.getBarracksLevelForOwner(owner);
-        return barracksLevel >= 2 ? 2 : 1;
+        const labLevel = this.getLabLevelForOwner(owner);
+        return labLevel >= 2 ? 2 : 1;
     }
 
     private getTroopCombatStats(troop: Troop) {
@@ -922,8 +945,14 @@ export class MainScene extends Phaser.Scene {
             if (normalizedType !== 'barracks') return max;
             return Math.max(max, Math.max(1, Number((building as { level?: unknown }).level) || 1));
         }, 1);
+        const maxLabFromWorld = (Array.isArray(world.buildings) ? world.buildings : []).reduce((max, building) => {
+            const normalizedType = this.normalizeBuildingType(String((building as { type?: unknown }).type ?? ''));
+            if (normalizedType !== 'lab') return max;
+            return Math.max(max, Math.max(1, Number((building as { level?: unknown }).level) || 1));
+        }, 0);
         this.preferredWallLevel = Math.max(1, Math.max(world.wallLevel || 1, maxWallFromWorld));
         this.playerBarracksLevel = Math.max(1, maxBarracksFromWorld);
+        this.playerLabLevel = maxLabFromWorld;
 
         // Load buildings with strict per-building validation so one bad entry cannot blank the scene.
         (Array.isArray(world.buildings) ? world.buildings : []).forEach(rawBuilding => {
@@ -1283,6 +1312,10 @@ export class MainScene extends Phaser.Scene {
             this.playerBarracksLevel = Math.max(this.playerBarracksLevel, level || 1);
         }
 
+        if (normalizedType === 'lab' && owner === 'PLAYER') {
+            this.playerLabLevel = Math.max(this.playerLabLevel, level || 1);
+        }
+
         // Update neighbor wall connections when a new wall is placed
         if (normalizedType === 'wall') {
             this.refreshWallNeighbors(gridX, gridY, owner);
@@ -1491,6 +1524,9 @@ export class MainScene extends Phaser.Scene {
                 break;
             case 'spike_launcher':
                 BuildingRenderer.drawSpikeLauncher(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now, baseGraphics, skipBase, onlyBase);
+                break;
+            case 'lab':
+                BuildingRenderer.drawLab(graphics, c1, c2, c3, c4, center, alpha, tint, building, this.time.now, baseGraphics, skipBase, onlyBase);
                 break;
 
             default:
@@ -5925,6 +5961,7 @@ export class MainScene extends Phaser.Scene {
                 this.showCloudTransition(async () => {
                     await this.flushPendingSaveForTransition();
                     this.snapshotPlayerBarracksLevel();
+                    this.snapshotPlayerLabLevel();
                     // Set UI immediately
                     gameManager.setGameMode('ATTACK');
                     this.mode = 'ATTACK';
@@ -5945,6 +5982,7 @@ export class MainScene extends Phaser.Scene {
                 this.showCloudTransition(async () => {
                     await this.flushPendingSaveForTransition();
                     this.snapshotPlayerBarracksLevel();
+                    this.snapshotPlayerLabLevel();
                     // Set UI immediately
                     gameManager.setGameMode('ATTACK');
                     this.mode = 'ATTACK';
@@ -6025,6 +6063,7 @@ export class MainScene extends Phaser.Scene {
                 this.showCloudTransition(async () => {
                     await this.flushPendingSaveForTransition();
                     this.snapshotPlayerBarracksLevel();
+                    this.snapshotPlayerLabLevel();
                     // Set UI immediately
                     gameManager.setGameMode('ATTACK');
                     this.mode = 'ATTACK';
@@ -6046,6 +6085,7 @@ export class MainScene extends Phaser.Scene {
                 this.showCloudTransition(async () => {
                     await this.flushPendingSaveForTransition();
                     this.snapshotPlayerBarracksLevel();
+                    this.snapshotPlayerLabLevel();
                     // Set UI immediately
                     gameManager.setGameMode('ATTACK');
                     this.mode = 'ATTACK';
@@ -6071,6 +6111,7 @@ export class MainScene extends Phaser.Scene {
                 this.showCloudTransition(async () => {
                     await this.flushPendingSaveForTransition();
                     this.snapshotPlayerBarracksLevel();
+                    this.snapshotPlayerLabLevel();
                     gameManager.setGameMode('ATTACK');
                     this.mode = 'ATTACK';
                     this.isScouting = true;
@@ -6170,6 +6211,9 @@ export class MainScene extends Phaser.Scene {
                     }
                     if (this.selectedInWorld.type === 'barracks' && this.selectedInWorld.owner === 'PLAYER') {
                         this.playerBarracksLevel = Math.max(this.playerBarracksLevel, this.selectedInWorld.level || 1);
+                    }
+                    if (this.selectedInWorld.type === 'lab' && this.selectedInWorld.owner === 'PLAYER') {
+                        this.playerLabLevel = Math.max(this.playerLabLevel, this.selectedInWorld.level || 1);
                     }
 
                     // NOTE: Do NOT call Backend.upgradeBuilding here.

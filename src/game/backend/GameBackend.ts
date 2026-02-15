@@ -203,8 +203,20 @@ export class Backend {
     }
   }
 
+  /** Migrate legacy saves: keep only one barracks (highest level), remove extras. */
+  private static migrateBarracks(world: SerializedWorld) {
+    if (!Array.isArray(world.buildings)) return;
+    const barracks = world.buildings.filter(b => b.type === 'barracks');
+    if (barracks.length <= 1) return;
+    // Keep the highest-level barracks
+    barracks.sort((a, b) => (b.level || 1) - (a.level || 1));
+    const keepId = barracks[0].id;
+    world.buildings = world.buildings.filter(b => b.type !== 'barracks' || b.id === keepId);
+  }
+
   private static setCachedWorld(userId: string, world: SerializedWorld, persist = true) {
     Backend.normalizeWallLevel(world);
+    Backend.migrateBarracks(world);
     Backend.memoryCache.set(userId, world);
     if (persist && typeof window !== 'undefined') {
       localStorage.setItem(getCacheKey(userId), JSON.stringify(world));
@@ -1006,7 +1018,7 @@ export class Backend {
       if (chance(0.40)) placeMany('tesla', 1, 1, easyCompactZones, easyCompactZones);
 
       placeMany('army_camp', 1, 1, easyCompactZones, easyCompactZones);
-      placeMany('barracks', 1, 1, easyCompactZones, easyCompactZones);
+      placeMany('barracks', 1, 5, easyCompactZones, easyCompactZones);
       placeMany('solana_collector', 2, 1, easyCompactZones, easyCompactZones);
     } else if (difficulty === 'intermediate') {
       // Intermediate: one outer wall ring and level 2 where available.
@@ -1024,7 +1036,8 @@ export class Backend {
       placeMany('tesla', 2, 2, defenseZones, innerZones);
 
       placeMany('army_camp', 2, 2, supportZones, midZones);
-      placeMany('barracks', 2, 2, supportZones, midZones);
+      placeMany('barracks', 1, 8, supportZones, midZones);
+      placeMany('lab', 1, 1, supportZones, midZones);
       placeMany('solana_collector', 4, 2, supportZones, fullZones);
     } else if (difficulty === 'hard') {
       // Hard: layered walls, compartment defenses, stronger/high-tier mix.
@@ -1065,7 +1078,8 @@ export class Backend {
       placeMany('cannon', 5, () => randInt(3, 4), hardDefenseZones, midZones);
 
       placeMany('army_camp', 4, 3, hardSupportZones, midZones);
-      placeMany('barracks', 3, 1, hardSupportZones, midZones);
+      placeMany('barracks', 1, 11, hardSupportZones, midZones);
+      placeMany('lab', 1, 2, hardSupportZones, midZones);
       placeMany('solana_collector', randInt(6, 8), 2, hardSupportZones, outerZones);
 
       fillWallsTo(randInt(88, 96), [{ ...midRect, minRadius: 4.5, maxRadius: 12.5 }]);
@@ -1121,7 +1135,8 @@ export class Backend {
       placeMany('mortar', BUILDING_DEFINITIONS.mortar.maxCount, maxLevelFor('mortar'), crazyDefenseZones, fullZones);
       placeMany('army_camp', BUILDING_DEFINITIONS.army_camp.maxCount, maxLevelFor('army_camp'), crazySupportZones, fullZones);
       placeMany('solana_collector', 10, maxLevelFor('solana_collector'), crazySupportZones, fullZones);
-      placeMany('barracks', BUILDING_DEFINITIONS.barracks.maxCount, maxLevelFor('barracks'), crazySupportZones, fullZones);
+      placeMany('barracks', 1, maxLevelFor('barracks'), crazySupportZones, fullZones);
+      placeMany('lab', 1, maxLevelFor('lab'), crazySupportZones, fullZones);
       placeMany('cannon', BUILDING_DEFINITIONS.cannon.maxCount, maxLevelFor('cannon'), crazySupportZones, fullZones);
       placeMany('tesla', BUILDING_DEFINITIONS.tesla.maxCount, maxLevelFor('tesla'), crazySupportZones, fullZones);
       placeMany('prism', BUILDING_DEFINITIONS.prism.maxCount, maxLevelFor('prism'), crazyDefenseZones, fullZones);

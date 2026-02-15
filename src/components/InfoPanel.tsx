@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BUILDING_DEFINITIONS, type BuildingType, getBuildingStats } from '../game/config/GameDefinitions';
+import { BUILDING_DEFINITIONS, type BuildingType, getBuildingStats, BARRACKS_TROOP_UNLOCK_ORDER, TROOP_DEFINITIONS, getTroopLevelMultiplier } from '../game/config/GameDefinitions';
 import { BUILDING_TEXTS } from '../game/config/GameText';
 import { formatSol } from '../game/solana/Currency';
 interface InfoPanelProps {
@@ -153,6 +153,41 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ type, level, resources, is
                                 {nextLevelStats?.capacity && nextLevelStats.capacity > (stats.capacity ?? 0) && (
                                     <span style={{ color: '#44ff44', fontSize: '0.7rem', marginLeft: '4px' }}>
                                         (+{nextLevelStats.capacity - (stats.capacity ?? 0)})
+                                    </span>
+                                )}
+                            </span>
+                        </div>
+                    )}
+
+                    {/* Barracks: show current and next unlock */}
+                    {type === 'barracks' && (
+                        <>
+                            {level <= BARRACKS_TROOP_UNLOCK_ORDER.length && (
+                                <div className="stat-row">
+                                    <span className="stat-label">Current</span>
+                                    <span className="stat-value">{TROOP_DEFINITIONS[BARRACKS_TROOP_UNLOCK_ORDER[level - 1]]?.name ?? '—'}</span>
+                                </div>
+                            )}
+                            {!isMaxLevel && level < BARRACKS_TROOP_UNLOCK_ORDER.length && (
+                                <div className="stat-row">
+                                    <span className="stat-label">Next</span>
+                                    <span className="stat-value" style={{ color: '#ffcc44' }}>
+                                        {TROOP_DEFINITIONS[BARRACKS_TROOP_UNLOCK_ORDER[level]]?.name ?? '—'}
+                                    </span>
+                                </div>
+                            )}
+                        </>
+                    )}
+
+                    {/* Lab: show current troop stat multiplier */}
+                    {type === 'lab' && (
+                        <div className="stat-row">
+                            <span className="stat-label">Troop Stats</span>
+                            <span className="stat-value">
+                                {getTroopLevelMultiplier(level)}x
+                                {nextLevelStats && (
+                                    <span style={{ color: '#44ff44', fontSize: '0.7rem', marginLeft: '4px' }}>
+                                        (+{(getTroopLevelMultiplier(level + 1) - getTroopLevelMultiplier(level)).toFixed(1)}x)
                                     </span>
                                 )}
                             </span>

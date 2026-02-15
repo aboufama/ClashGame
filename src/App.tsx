@@ -399,6 +399,7 @@ function App() {
   const [buildingCounts, setBuildingCounts] = useState<Record<BuildingType, number>>({} as Record<BuildingType, number>);
   const [shopWallLevel, setShopWallLevel] = useState(1);
   const [troopLevel, setTroopLevel] = useState(1);
+  const [barracksLevel, setBarracksLevel] = useState(1);
   const [isDebugOpen, setIsDebugOpen] = useState(false);
   const [isDummyActive, setIsDummyActive] = useState(false);
   const [scoutTarget, setScoutTarget] = useState<{ userId: string; username: string } | null>(null);
@@ -752,7 +753,7 @@ function App() {
     }
   }, [isBuildingOpen, user]);
 
-  // Derive troop level from max barracks level when training modal opens
+  // Derive barracks level and troop level (from lab) when training modal opens
   useEffect(() => {
     if (!isTrainingOpen || !user) return;
     let cancelled = false;
@@ -762,7 +763,12 @@ function App() {
         if (!world || cancelled) return;
         const barracks = world.buildings.filter((b: any) => b.type === 'barracks');
         const maxBarracksLvl = barracks.length > 0 ? Math.max(...barracks.map((b: any) => b.level || 1)) : 1;
-        if (!cancelled) setTroopLevel(maxBarracksLvl >= 2 ? 2 : 1);
+        const labs = world.buildings.filter((b: any) => b.type === 'lab');
+        const maxLabLvl = labs.length > 0 ? Math.max(...labs.map((b: any) => b.level || 1)) : 0;
+        if (!cancelled) {
+          setBarracksLevel(maxBarracksLvl);
+          setTroopLevel(maxLabLvl >= 2 ? 2 : 1);
+        }
       } catch { /* ignore */ }
     })();
     return () => { cancelled = true; };
@@ -1223,6 +1229,7 @@ function App() {
         army={army}
         troops={troopList}
         troopLevel={troopLevel}
+        barracksLevel={barracksLevel}
         onClose={() => setIsTrainingOpen(false)}
         onStartPractice={handleStartPractice}
         onFindMatch={handleFindMatch}

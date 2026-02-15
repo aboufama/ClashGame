@@ -2,7 +2,7 @@
 export const MAP_SIZE = 25;
 
 export type BuildingType =
-    | 'town_hall' | 'barracks' | 'cannon' | 'ballista' | 'xbow'
+    | 'town_hall' | 'barracks' | 'lab' | 'cannon' | 'ballista' | 'xbow'
     | 'solana_collector' | 'mortar' | 'tesla' | 'wall'
     | 'army_camp' | 'prism' | 'magmavent' | 'dragons_breath' | 'spike_launcher';
 
@@ -52,17 +52,45 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         id: 'barracks',
         name: 'Barracks',
         cost: 200,
-        desc: 'Trains brave troops. Level 2 boosts troop combat stats.',
+        desc: 'Unlocks new troop types as it levels up.',
         width: 2,
         height: 2,
         maxHealth: 850,
         category: 'military',
-        maxCount: 4,
+        maxCount: 1,
         color: 0xff3333,
-        maxLevel: 2,
+        maxLevel: 13,
         levels: [
             { hp: 850, cost: 200 },
-            { hp: 1100, cost: 420 }
+            { hp: 900, cost: 320 },
+            { hp: 950, cost: 460 },
+            { hp: 1000, cost: 620 },
+            { hp: 1060, cost: 800 },
+            { hp: 1120, cost: 1000 },
+            { hp: 1200, cost: 1250 },
+            { hp: 1280, cost: 1550 },
+            { hp: 1380, cost: 1900 },
+            { hp: 1480, cost: 2300 },
+            { hp: 1600, cost: 2800 },
+            { hp: 1750, cost: 3400 },
+            { hp: 1900, cost: 4000 }
+        ]
+    },
+    lab: {
+        id: 'lab',
+        name: 'Lab',
+        cost: 500,
+        desc: 'Researches troop upgrades. Higher levels boost all troop stats.',
+        width: 2,
+        height: 2,
+        maxHealth: 900,
+        category: 'military',
+        maxCount: 1,
+        color: 0x6644aa,
+        maxLevel: 2,
+        levels: [
+            { hp: 900, cost: 500 },
+            { hp: 1200, cost: 1200 }
         ]
     },
     cannon: {
@@ -383,6 +411,35 @@ export const TROOP_DEFINITIONS: Record<TroopType, TroopDef> = {
     romanwarrior: { id: 'romanwarrior', name: 'Roman Soldier', cost: 0, space: 1, desc: 'An individual soldier from a Phalanx formation.', health: 300, range: 0.5, damage: 15, speed: 0.0015, color: 0xcc3333, attackDelay: 900 },
     wallbreaker: { id: 'wallbreaker', name: 'Wall Breaker', cost: 100, space: 4, desc: 'Suicidal bomber. Runs at walls and explodes for massive damage.', health: 200, range: 0.5, damage: 800, speed: 0.004, color: 0xff6633, targetPriority: 'wall', wallDamageMultiplier: 3, splashRadius: 2.5, attackDelay: 500 }
 };
+
+/** Maps barracks level (1-indexed) to the troop type unlocked at that level. */
+export const BARRACKS_TROOP_UNLOCK_ORDER: TroopType[] = [
+    'warrior',        // L1
+    'archer',         // L2
+    'wallbreaker',    // L3
+    'recursion',      // L4
+    'ward',           // L5
+    'sharpshooter',   // L6
+    'giant',          // L7
+    'stormmage',      // L8
+    'mobilemortar',   // L9
+    'ram',            // L10
+    'phalanx',        // L11
+    'golem',          // L12
+    'davincitank'     // L13
+];
+
+/** Returns the list of troop types unlocked at the given barracks level. */
+export function getUnlockedTroops(barracksLevel: number): TroopType[] {
+    const level = Math.max(0, Math.min(BARRACKS_TROOP_UNLOCK_ORDER.length, Math.floor(barracksLevel)));
+    return BARRACKS_TROOP_UNLOCK_ORDER.slice(0, level);
+}
+
+/** Returns the barracks level required to unlock the given troop type. Returns Infinity if not found. */
+export function getTroopUnlockLevel(troopType: TroopType): number {
+    const index = BARRACKS_TROOP_UNLOCK_ORDER.indexOf(troopType);
+    return index >= 0 ? index + 1 : Infinity;
+}
 
 const TROOP_LEVEL_MULTIPLIERS: Record<number, number> = {
     1: 1,

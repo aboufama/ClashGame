@@ -196,8 +196,10 @@ export class BuildingRenderer {
 
     static drawBarracks(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
         const level = building?.level ?? 1;
-        const isLevel2 = level >= 2;
-        const wallHeight = isLevel2 ? 34 : 28;
+        // Visual tiers: L1-4 wooden, L5-8 stone, L9-13 iron-fortified
+        const tier = level >= 9 ? 3 : level >= 5 ? 2 : 1;
+        const isLevel2 = tier >= 2;
+        const wallHeight = tier >= 3 ? 36 : tier >= 2 ? 34 : 28;
         const g = baseGraphics || graphics;
 
         // Wall top corners
@@ -356,6 +358,151 @@ export class BuildingRenderer {
             graphics.lineStyle(1, isLevel2 ? 0x6a6a7a : 0x7a5a40, alpha * 0.6);
             graphics.lineBetween(r4.x, r4.y, peakFront.x, peakFront.y);
 
+            // Tier 3 (L9-13): Iron fortification details
+            if (tier >= 3) {
+                // Iron plate reinforcements on walls
+                graphics.fillStyle(0x555555, alpha * 0.6);
+                const plateMidX = (c2.x + c3.x) / 2;
+                const plateMidY = (c2.y + c3.y) / 2 - wallHeight * 0.5;
+                graphics.fillRect(plateMidX - 6, plateMidY - 4, 12, 8);
+                // Rivets on iron plates
+                graphics.fillStyle(0x999999, alpha * 0.9);
+                graphics.fillCircle(plateMidX - 4, plateMidY - 2, 1.5);
+                graphics.fillCircle(plateMidX + 4, plateMidY - 2, 1.5);
+                graphics.fillCircle(plateMidX - 4, plateMidY + 2, 1.5);
+                graphics.fillCircle(plateMidX + 4, plateMidY + 2, 1.5);
+                // Banner on roof
+                graphics.fillStyle(0xcc2222, alpha * 0.8);
+                const bannerX = peakFront.x + 2;
+                const bannerY = peakFront.y - 6;
+                graphics.fillTriangle(bannerX, bannerY, bannerX + 6, bannerY + 4, bannerX, bannerY + 8);
+                // Banner pole
+                graphics.lineStyle(1, 0x666666, alpha);
+                graphics.lineBetween(bannerX, bannerY - 2, bannerX, bannerY + 10);
+            }
+        }
+    }
+
+    static drawLab(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, time: number = 0, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
+        const level = building?.level ?? 1;
+        const isLevel2 = level >= 2;
+        const wallHeight = isLevel2 ? 36 : 30;
+        const g = baseGraphics || graphics;
+
+        const t1 = new Phaser.Math.Vector2(c1.x, c1.y - wallHeight);
+        const t2 = new Phaser.Math.Vector2(c2.x, c2.y - wallHeight);
+        const t3 = new Phaser.Math.Vector2(c3.x, c3.y - wallHeight);
+        const t4 = new Phaser.Math.Vector2(c4.x, c4.y - wallHeight);
+
+        if (!skipBase) {
+            // Stone foundation
+            g.fillStyle(tint ?? 0x6a6a78, alpha);
+            g.fillPoints([c1, c2, c3, c4], true);
+            g.lineStyle(2, 0x555566, alpha * 0.7);
+            g.lineBetween(c1.x, c1.y, c2.x, c2.y);
+            g.lineBetween(c3.x, c3.y, c4.x, c4.y);
+            // Floor detail
+            g.fillStyle(0x5a5a68, alpha * 0.5);
+            g.fillCircle(center.x - 6, center.y + 3, 3);
+            g.fillCircle(center.x + 8, center.y + 2, 2.5);
+        }
+
+        if (!onlyBase) {
+            // Walls - dark stone workshop
+            const rightWallColor = isLevel2 ? 0x4a4458 : 0x5a5a6a;
+            const leftWallColor = isLevel2 ? 0x5a5468 : 0x6a6a7a;
+            graphics.fillStyle(tint ?? rightWallColor, alpha);
+            graphics.fillPoints([c2, c3, t3, t2], true);
+            graphics.fillStyle(tint ?? leftWallColor, alpha);
+            graphics.fillPoints([c3, c4, t4, t3], true);
+
+            // Wall edges
+            graphics.lineStyle(1, 0x3a3a4a, 0.6 * alpha);
+            graphics.lineBetween(c2.x, c2.y, t2.x, t2.y);
+            graphics.lineBetween(c3.x, c3.y, t3.x, t3.y);
+            graphics.lineBetween(c4.x, c4.y, t4.x, t4.y);
+
+            // Glowing interior window on right wall
+            const rWallDirX = (c3.x - c2.x);
+            const rWallDirY = (c3.y - c2.y);
+            const rwMidX = c2.x + rWallDirX * 0.5;
+            const rwMidY = c2.y + rWallDirY * 0.5;
+            const windowGlow = 0.6 + Math.sin(time / 500) * 0.15;
+            // Window frame
+            graphics.fillStyle(0x1a1a2a, alpha);
+            const ww = rWallDirX * 0.12;
+            const ws = rWallDirY * 0.12;
+            const wTop = rwMidY - wallHeight * 0.65;
+            const wBot = rwMidY - wallHeight * 0.3;
+            graphics.beginPath();
+            graphics.moveTo(rwMidX - ww, wTop - ws);
+            graphics.lineTo(rwMidX + ww, wTop + ws);
+            graphics.lineTo(rwMidX + ww, wBot + ws);
+            graphics.lineTo(rwMidX - ww, wBot - ws);
+            graphics.closePath();
+            graphics.fillPath();
+            // Glow
+            const glowColor = isLevel2 ? 0x8844ff : 0x44cc88;
+            graphics.fillStyle(glowColor, alpha * windowGlow);
+            graphics.beginPath();
+            graphics.moveTo(rwMidX - ww + 2, wTop - ws + 2);
+            graphics.lineTo(rwMidX + ww - 2, wTop + ws + 2);
+            graphics.lineTo(rwMidX + ww - 2, wBot + ws - 2);
+            graphics.lineTo(rwMidX - ww + 2, wBot - ws - 2);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Flat isometric roof
+            const roofOverhang = 4;
+            const r1 = new Phaser.Math.Vector2(t1.x, t1.y - roofOverhang);
+            const r2 = new Phaser.Math.Vector2(t2.x + roofOverhang, t2.y);
+            const r3 = new Phaser.Math.Vector2(t3.x, t3.y + roofOverhang);
+            const r4 = new Phaser.Math.Vector2(t4.x - roofOverhang, t4.y);
+
+            graphics.fillStyle(isLevel2 ? 0x3a3448 : 0x4a4a5a, alpha);
+            graphics.fillPoints([r1, r2, r3, r4], true);
+            graphics.lineStyle(1, 0x2a2a3a, alpha * 0.8);
+            graphics.strokePoints([r1, r2, r3, r4], true, true);
+
+            // Chimney on right side
+            const chimneyX = (r2.x + r3.x) / 2;
+            const chimneyY = (r2.y + r3.y) / 2;
+            const chimneyH = 14;
+            graphics.fillStyle(0x5a5a5a, alpha);
+            graphics.fillRect(chimneyX - 3, chimneyY - chimneyH, 6, chimneyH);
+            graphics.lineStyle(1, 0x3a3a3a, alpha * 0.8);
+            graphics.strokeRect(chimneyX - 3, chimneyY - chimneyH, 6, chimneyH);
+
+            // Smoke from chimney (animated)
+            const smokePhase = time / 800;
+            const smokeColor = isLevel2 ? 0x7744aa : 0x888888;
+            for (let i = 0; i < 3; i++) {
+                const sy = chimneyY - chimneyH - 4 - i * 6 - Math.sin(smokePhase + i) * 2;
+                const sx = chimneyX + Math.sin(smokePhase * 0.7 + i * 1.5) * 3;
+                graphics.fillStyle(smokeColor, alpha * (0.4 - i * 0.1));
+                graphics.fillCircle(sx, sy, 3 - i * 0.5);
+            }
+
+            // Level 2: Glowing runes on walls
+            if (isLevel2) {
+                const runeGlow = 0.5 + Math.sin(time / 400) * 0.2;
+                graphics.fillStyle(0x9966ff, alpha * runeGlow);
+                // Runes on left wall
+                const lWallDirX = (c4.x - c3.x);
+                const lWallDirY = (c4.y - c3.y);
+                for (let i = 0; i < 3; i++) {
+                    const frac = 0.25 + i * 0.25;
+                    const rx = c3.x + lWallDirX * frac;
+                    const ry = c3.y + lWallDirY * frac - wallHeight * 0.5;
+                    graphics.fillCircle(rx, ry, 2);
+                    graphics.lineStyle(1, 0x9966ff, alpha * runeGlow * 0.7);
+                    graphics.lineBetween(rx - 2, ry - 3, rx + 2, ry + 3);
+                }
+                // Reinforced wall bands
+                graphics.lineStyle(2, 0x444466, alpha * 0.6);
+                const bandY = c3.y + (t3.y - c3.y) * 0.5;
+                graphics.lineBetween(c3.x, bandY, c4.x, c4.y + (t4.y - c4.y) * 0.5);
+            }
         }
     }
 

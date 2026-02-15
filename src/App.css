@@ -790,6 +790,20 @@ button:disabled {
     cursor: not-allowed;
 }
 
+.troop-grid-item.locked {
+    filter: grayscale(1) opacity(0.45);
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.troop-grid-item .locked-badge {
+    background: rgba(80, 80, 80, 0.9);
+    border-color: #666;
+    font-size: 7px;
+    padding: 2px 4px;
+    white-space: nowrap;
+}
+
 .troop-grid-item:active:not(.disabled) {
     box-shadow:
         1px 1px 0 var(--panel-border-dark),
