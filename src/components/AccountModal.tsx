@@ -13,6 +13,18 @@ interface AccountModalProps {
 type Mode = 'login' | 'register';
 const EMAIL_LIKE_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+function isAccountMissingError(message: string) {
+  const normalized = message.trim().toLowerCase();
+  return (
+    normalized.includes('no account found') ||
+    normalized.includes('account not found') ||
+    normalized.includes('user not found') ||
+    normalized.includes('unknown user') ||
+    normalized.includes('request failed: 404') ||
+    normalized.includes('404')
+  );
+}
+
 export function AccountModal({
   isOpen,
   currentUser,
@@ -56,13 +68,16 @@ export function AccountModal({
       setLoginPassword('');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Login failed.';
-      if (
-        EMAIL_LIKE_PATTERN.test(identifier) &&
-        message.toLowerCase().includes('no account found')
-      ) {
+      if (EMAIL_LIKE_PATTERN.test(identifier) && isAccountMissingError(message)) {
+        const localPart = identifier.split('@')[0]?.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 18) ?? '';
         setRegisterEmail(identifier);
+        if (!registerName.trim() && localPart.length >= 3) {
+          setRegisterName(localPart);
+        }
+        setRegisterPassword('');
+        setRegisterConfirmPassword('');
         setMode('register');
-        setError('No account found for that email. Create an account below.');
+        setError('No account found for that email. Create your account below.');
       } else {
         setError(message);
       }

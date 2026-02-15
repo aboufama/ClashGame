@@ -181,7 +181,10 @@ export class MainScene extends Phaser.Scene {
     public pendingSpawnCount = 0; // Prevent battle end during troop splits (phalanx/recursion)
     private readonly HEALTH_BAR_IDLE_MS = 5000;
     private readonly HEALTH_BAR_FADE_MS = 600;
-    private readonly REPLAY_PUSH_INTERVAL_MS = 700;
+    private readonly REPLAY_PUSH_INTERVAL_MS = 160;
+    private readonly REPLAY_LIVE_POLL_INTERVAL_MS = 240;
+    private readonly REPLAY_SIM_SPEED_LIVE = 1.85;
+    private readonly REPLAY_SIM_SPEED_REPLAY = 1.6;
 
     public villageNameLabel!: Phaser.GameObjects.Text;
     public attackModeSelectedBuilding: PlacedBuilding | null = null;
@@ -196,6 +199,8 @@ export class MainScene extends Phaser.Scene {
     private sceneReadyForBaseLoad = false;
     private replayCaptureState: ReplayCaptureState | null = null;
     private replayWatchState: ReplayWatchState | null = null;
+    private replaySimulationTime = 0;
+    private isApplyingReplayFrame = false;
 
     public get userId(): string {
         try {
@@ -472,9 +477,20 @@ export class MainScene extends Phaser.Scene {
         PixelatePipeline.scroll.set(this.cameras.main.scrollX, this.cameras.main.scrollY);
 
         if (this.mode === 'REPLAY') {
+            const replaySpeed = this.replayWatchState?.mode === 'live'
+                ? this.REPLAY_SIM_SPEED_LIVE
+                : this.REPLAY_SIM_SPEED_REPLAY;
+            const replayDelta = delta * replaySpeed;
+            this.replaySimulationTime += replayDelta;
+
             this.handleCameraMovement(delta);
+            this.updateCombat(this.replaySimulationTime);
+            this.updateSpikeZones();
+            this.updateLavaZones();
+            this.updateTroops(replayDelta);
             this.updateReplayWatchPlayback(time);
             this.refreshBuildingHealthBars();
+            this.updateBuildingAnimations(time);
             this.updateObstacleAnimations(time);
             this.updateRubbleAnimations(time);
             return;
@@ -1938,7 +1954,8 @@ export class MainScene extends Phaser.Scene {
 
     private updateCombat(time: number) {
         const isDummyActive = this.mode === 'HOME' && this.dummyTroop !== null;
-        if (this.mode !== 'ATTACK' && !isDummyActive) return;
+        const isReplayWatch = this.mode === 'REPLAY';
+        if (this.mode !== 'ATTACK' && !isDummyActive && !isReplayWatch) return;
 
         // Include any fireable defense (no per-type hardcoding).
         const defenses = this.buildings.filter(b => {
@@ -4770,6 +4787,14 @@ export class MainScene extends Phaser.Scene {
         const index = this.buildings.findIndex(x => x.id === b.id);
         if (index === -1) return;
 
+        // During replay watch, combat simulation should never authoritatively remove buildings.
+        // Only synced replay frames are allowed to do that.
+        if (this.mode === 'REPLAY' && !this.isApplyingReplayFrame) {
+            b.health = Math.max(1, b.health);
+            b.isDestroyed = false;
+            return;
+        }
+
         if (b.isDestroyed) return;
         b.isDestroyed = true;
 
@@ -5044,16 +5069,16 @@ export class MainScene extends Phaser.Scene {
         }
 
         // Create rubble at the building location (attack mode only)
-        if (this.mode === 'ATTACK') {
-                const info = BUILDINGS[b.type];
-                if (info) {
-                    if (b.type === 'magmavent') {
-                        this.createLavaPool(b.gridX, b.gridY, info.width, info.height, b.owner, b.level || 1);
-                    } else {
-                        this.createRubble(b.gridX, b.gridY, info.width, info.height);
-                    }
+        if (this.mode === 'ATTACK' || this.mode === 'REPLAY') {
+            const info = BUILDINGS[b.type];
+            if (info) {
+                if (b.type === 'magmavent') {
+                    this.createLavaPool(b.gridX, b.gridY, info.width, info.height, b.owner, b.level || 1);
+                } else {
+                    this.createRubble(b.gridX, b.gridY, info.width, info.height);
                 }
             }
+        }
 
         if (b.barrelGraphics) b.barrelGraphics.destroy();
         b.healthBar.destroy();
@@ -5100,6 +5125,7 @@ export class MainScene extends Phaser.Scene {
             }
 
             this.updateBattleStats();
+            this.maybePushReplayFrame(true);
 
         } else {
             if (b.type === 'army_camp') {
@@ -5126,6 +5152,15 @@ export class MainScene extends Phaser.Scene {
 
     private destroyTroop(t: Troop) {
         if (t.id === 'dummy_target') return; // Ignore dummy targets used for fun shooting
+
+        // During replay watch, troop removals come from replay frame sync only.
+        if (this.mode === 'REPLAY' && !this.isApplyingReplayFrame) {
+            t.health = Math.max(1, t.health);
+            t.hasTakenDamage = true;
+            this.updateHealthBar(t);
+            return;
+        }
+
         const pos = IsoUtils.cartToIso(t.gridX, t.gridY);
 
         // WALL BREAKER EXPLOSION: Detailed boom with smoke, debris, and area ring
@@ -6925,6 +6960,8 @@ export class MainScene extends Phaser.Scene {
             this.replayWatchState.pollEvent.remove(false);
         }
         this.replayWatchState = null;
+        this.replaySimulationTime = this.time.now;
+        this.isApplyingReplayFrame = false;
     }
 
     private buildReplayEnemyWorldSnapshot(victimId: string, victimName: string): SerializedWorld | null {
@@ -7116,86 +7153,90 @@ export class MainScene extends Phaser.Scene {
 
     private applyReplayFrame(frame: ReplayFrameSnapshot) {
         const buildingById = new Map(frame.buildings.map(entry => [entry.id, entry]));
-        this.buildings.forEach(building => {
-            if (building.owner !== 'ENEMY') return;
-            const state = buildingById.get(building.id);
-            if (!state) return;
 
-            const nextHealth = Math.max(0, Math.min(building.maxHealth, Math.floor(state.health)));
-            const isDestroyed = Boolean(state.isDestroyed || nextHealth <= 0);
-            building.health = nextHealth;
-            building.isDestroyed = isDestroyed;
+        this.isApplyingReplayFrame = true;
+        try {
+            const enemyBuildings = this.buildings.filter(building => building.owner === 'ENEMY');
+            for (const building of enemyBuildings) {
+                const state = buildingById.get(building.id);
+                const shouldDestroy = !state || state.isDestroyed || Number(state.health) <= 0;
+                if (shouldDestroy) {
+                    this.destroyBuilding(building);
+                    continue;
+                }
 
-            building.graphics.setVisible(!isDestroyed);
-            building.baseGraphics?.setVisible(!isDestroyed);
-            building.barrelGraphics?.setVisible(!isDestroyed);
-            building.prismLaserGraphics?.setVisible(!isDestroyed);
-            building.prismLaserCore?.setVisible(!isDestroyed);
-            if (isDestroyed) {
-                building.healthBar.setVisible(false);
-            } else {
+                const nextHealth = Math.max(0, Math.min(building.maxHealth, Math.floor(state.health)));
+                building.health = nextHealth;
+                building.isDestroyed = false;
+                building.graphics.setVisible(true);
+                building.baseGraphics?.setVisible(true);
+                building.barrelGraphics?.setVisible(true);
+                building.prismLaserGraphics?.setVisible(true);
+                building.prismLaserCore?.setVisible(true);
                 this.updateHealthBar(building);
             }
-        });
 
-        const existingTroops = new Map(this.troops.map(troop => [troop.id, troop]));
-        const nextTroops: Troop[] = [];
-        frame.troops.forEach(snapshot => {
-            const troopType = this.getReplayTroopType(snapshot.type);
-            if (!troopType) return;
+            const existingTroops = new Map(this.troops.map(troop => [troop.id, troop]));
+            const nextTroops: Troop[] = [];
+            frame.troops.forEach(snapshot => {
+                const troopType = this.getReplayTroopType(snapshot.type);
+                if (!troopType) return;
 
-            let troop = existingTroops.get(snapshot.id);
-            if (!troop) {
-                troop = this.createReplayTroop({ ...snapshot, type: troopType });
-                if (!troop) return;
-            }
-            existingTroops.delete(snapshot.id);
+                let troop = existingTroops.get(snapshot.id);
+                if (!troop) {
+                    troop = this.createReplayTroop({ ...snapshot, type: troopType });
+                    if (!troop) return;
+                }
+                existingTroops.delete(snapshot.id);
 
-            troop.type = troopType;
-            troop.level = Math.max(1, Math.floor(snapshot.level || 1));
-            troop.owner = snapshot.owner;
-            troop.gridX = snapshot.gridX;
-            troop.gridY = snapshot.gridY;
-            troop.health = Math.max(0, snapshot.health);
-            troop.maxHealth = Math.max(1, snapshot.maxHealth);
-            troop.recursionGen = snapshot.recursionGen;
-            troop.hasTakenDamage = snapshot.hasTakenDamage ?? troop.health < troop.maxHealth;
-            troop.facingAngle = Number.isFinite(snapshot.facingAngle) ? Number(snapshot.facingAngle) : troop.facingAngle;
-            troop.target = null;
-            troop.path = undefined;
+                troop.type = troopType;
+                troop.level = Math.max(1, Math.floor(snapshot.level || 1));
+                troop.owner = snapshot.owner;
+                troop.gridX = snapshot.gridX;
+                troop.gridY = snapshot.gridY;
+                troop.health = Math.max(0, snapshot.health);
+                troop.maxHealth = Math.max(1, snapshot.maxHealth);
+                troop.recursionGen = snapshot.recursionGen;
+                troop.hasTakenDamage = snapshot.hasTakenDamage ?? troop.health < troop.maxHealth;
+                troop.facingAngle = Number.isFinite(snapshot.facingAngle) ? Number(snapshot.facingAngle) : troop.facingAngle;
+                troop.target = null;
+                troop.path = undefined;
 
-            const pos = IsoUtils.cartToIso(troop.gridX, troop.gridY);
-            troop.gameObject.setPosition(pos.x, pos.y);
-            troop.gameObject.setDepth(depthForTroop(troop.gridX, troop.gridY, troop.type));
-            troop.gameObject.setVisible(troop.health > 0);
-            troop.gameObject.clear();
-            TroopRenderer.drawTroopVisual(
-                troop.gameObject,
-                troop.type,
-                troop.owner,
-                this.time.now,
-                true,
-                0,
-                0,
-                0,
-                false,
-                troop.facingAngle,
-                troop.level
-            );
+                const pos = IsoUtils.cartToIso(troop.gridX, troop.gridY);
+                troop.gameObject.setPosition(pos.x, pos.y);
+                troop.gameObject.setDepth(depthForTroop(troop.gridX, troop.gridY, troop.type));
+                troop.gameObject.setVisible(troop.health > 0);
+                troop.gameObject.clear();
+                TroopRenderer.drawTroopVisual(
+                    troop.gameObject,
+                    troop.type,
+                    troop.owner,
+                    this.time.now,
+                    true,
+                    0,
+                    0,
+                    0,
+                    false,
+                    troop.facingAngle,
+                    troop.level
+                );
 
-            if (troop.health <= 0) {
-                troop.healthBar.setVisible(false);
-            } else {
-                this.updateHealthBar(troop);
-            }
-            nextTroops.push(troop);
-        });
+                if (troop.health <= 0) {
+                    troop.healthBar.setVisible(false);
+                } else {
+                    this.updateHealthBar(troop);
+                }
+                nextTroops.push(troop);
+            });
 
-        existingTroops.forEach(troop => {
-            troop.gameObject.destroy();
-            troop.healthBar.destroy();
-        });
-        this.troops = nextTroops;
+            existingTroops.forEach(troop => {
+                troop.gameObject.destroy();
+                troop.healthBar.destroy();
+            });
+            this.troops = nextTroops;
+        } finally {
+            this.isApplyingReplayFrame = false;
+        }
 
         const destruction = Math.max(0, Math.min(100, Math.floor(frame.destruction)));
         this.solLooted = Math.max(0, Math.floor(frame.solLooted));
@@ -7237,6 +7278,7 @@ export class MainScene extends Phaser.Scene {
         gameManager.updateBattleStats(0, 0);
         this.setVillageNameVisible(true);
         this.updateVillageName();
+        this.replaySimulationTime = this.time.now;
 
         const replayFrames = mode === 'replay'
             ? (replay.frames ?? [])
@@ -7250,7 +7292,7 @@ export class MainScene extends Phaser.Scene {
         const watchState: ReplayWatchState = {
             attackId: replay.attackId,
             mode,
-            playbackStartTime: this.time.now,
+            playbackStartTime: this.replaySimulationTime,
             nextFrameIndex: 0,
             lastAppliedFrameT: -1,
             pollInFlight: false,
@@ -7273,7 +7315,7 @@ export class MainScene extends Phaser.Scene {
         }
 
         watchState.pollEvent = this.time.addEvent({
-            delay: 900,
+            delay: this.REPLAY_LIVE_POLL_INTERVAL_MS,
             loop: true,
             callback: () => {
                 const current = this.replayWatchState;
@@ -7316,7 +7358,8 @@ export class MainScene extends Phaser.Scene {
         const replay = this.replayWatchState;
         if (!replay || replay.mode !== 'replay') return;
 
-        const elapsed = Math.max(0, time - replay.playbackStartTime);
+        void time;
+        const elapsed = Math.max(0, this.replaySimulationTime - replay.playbackStartTime);
         while (replay.nextFrameIndex < replay.frames.length) {
             const frame = replay.frames[replay.nextFrameIndex];
             if (frame.t > elapsed) break;
