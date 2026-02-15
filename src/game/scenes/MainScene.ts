@@ -52,6 +52,9 @@ interface ReplayWatchState {
     playbackStartTime: number;
     nextFrameIndex: number;
     lastAppliedFrameT: number;
+    lastFetchedFrameT: number;
+    status: 'live' | 'finished' | 'aborted';
+    liveRenderDelayMs: number;
     pollInFlight: boolean;
     frames: ReplayFrameSnapshot[];
     pollEvent?: Phaser.Time.TimerEvent;
@@ -182,7 +185,8 @@ export class MainScene extends Phaser.Scene {
     private readonly HEALTH_BAR_IDLE_MS = 5000;
     private readonly HEALTH_BAR_FADE_MS = 600;
     private readonly REPLAY_PUSH_INTERVAL_MS = 160;
-    private readonly REPLAY_LIVE_POLL_INTERVAL_MS = 240;
+    private readonly REPLAY_LIVE_POLL_INTERVAL_MS = 160;
+    private readonly REPLAY_LIVE_RENDER_DELAY_MS = 760;
     private readonly REPLAY_SIM_SPEED_LIVE = 1.85;
     private readonly REPLAY_SIM_SPEED_REPLAY = 1.6;
 
@@ -821,9 +825,12 @@ export class MainScene extends Phaser.Scene {
     }
 
     private updateBuildingAnimations(_time: number) {
+        const frameStepMs = Phaser.Math.Clamp(this.game.loop.delta || 16, 8, 34);
+
         // Redraw all buildings for idle animations
         this.buildings.forEach(b => {
-            if (b.owner === 'PLAYER' || this.mode === 'ATTACK') {
+            const shouldAnimateBuilding = this.mode === 'ATTACK' || this.mode === 'REPLAY' || b.owner === 'PLAYER';
+            if (shouldAnimateBuilding) {
                 if (this.isOffScreen(b.gridX, b.gridY, (BUILDINGS[b.type]?.width || 1))) return;
 
                 // Hide original building if being moved (ghost is shown instead)
@@ -872,7 +879,7 @@ export class MainScene extends Phaser.Scene {
                         b.idleTargetAngle = Math.random() * Math.PI * 2;
                     }
 
-                    b.idleSwiveTime += 16; // Approximate frame time
+                    b.idleSwiveTime += frameStepMs;
 
                     // Change idle target angle every 3-6 seconds
                     const idleChangeInterval = 3000 + Math.random() * 3000;
@@ -6982,6 +6989,40 @@ export class MainScene extends Phaser.Scene {
         });
     }
 
+    private rebuildReplayFrameCursor(state: ReplayWatchState) {
+        let index = 0;
+        while (index < state.frames.length && state.frames[index].t <= state.lastAppliedFrameT) {
+            index++;
+        }
+        state.nextFrameIndex = index;
+    }
+
+    private ingestReplayFrames(state: ReplayWatchState, incoming: ReplayFrameSnapshot[]) {
+        if (!incoming || incoming.length === 0) return;
+
+        const byT = new Map<number, ReplayFrameSnapshot>();
+        for (const frame of state.frames) {
+            byT.set(frame.t, frame);
+        }
+        for (const frame of incoming) {
+            byT.set(frame.t, frame);
+            if (frame.t > state.lastFetchedFrameT) {
+                state.lastFetchedFrameT = frame.t;
+            }
+        }
+
+        state.frames = Array.from(byT.values()).sort((a, b) => a.t - b.t);
+        this.rebuildReplayFrameCursor(state);
+
+        // Keep memory bounded while preserving a bit of already-played history.
+        const maxFrames = 260;
+        if (state.frames.length > maxFrames) {
+            const keepFrom = Math.max(0, state.nextFrameIndex - 40);
+            state.frames = state.frames.slice(keepFrom);
+            this.rebuildReplayFrameCursor(state);
+        }
+    }
+
     private buildReplayEnemyWorldSnapshot(victimId: string, victimName: string): SerializedWorld | null {
         const enemyBuildings = this.buildings
             .filter(building => building.owner === 'ENEMY')
@@ -7353,27 +7394,29 @@ export class MainScene extends Phaser.Scene {
         this.updateVillageName();
         this.replaySimulationTime = this.time.now;
 
-        const replayFrames = mode === 'replay'
-            ? (replay.frames ?? [])
-            : [];
-        const replayTimeOffset = replayFrames.length > 0 ? replayFrames[0].t : 0;
-        const normalizedFrames = replayFrames.map(frame => ({
-            ...frame,
-            t: Math.max(0, frame.t - replayTimeOffset)
-        }));
-
         const watchState: ReplayWatchState = {
             attackId: replay.attackId,
             mode,
             playbackStartTime: this.replaySimulationTime,
             nextFrameIndex: 0,
             lastAppliedFrameT: -1,
+            lastFetchedFrameT: -1,
+            status: replay.status,
+            liveRenderDelayMs: mode === 'live' ? this.REPLAY_LIVE_RENDER_DELAY_MS : 0,
             pollInFlight: false,
-            frames: normalizedFrames
+            frames: []
         };
         this.replayWatchState = watchState;
 
         if (mode === 'replay') {
+            const replayFrames = replay.frames ?? [];
+            const replayTimeOffset = replayFrames.length > 0 ? replayFrames[0].t : 0;
+            const normalizedFrames = replayFrames.map(frame => ({
+                ...frame,
+                t: Math.max(0, frame.t - replayTimeOffset)
+            }));
+            this.ingestReplayFrames(watchState, normalizedFrames);
+
             if (watchState.frames.length > 0) {
                 this.applyReplayFrame(watchState.frames[0]);
                 watchState.nextFrameIndex = 1;
@@ -7384,10 +7427,20 @@ export class MainScene extends Phaser.Scene {
             return true;
         }
 
+        const initialFrames: ReplayFrameSnapshot[] = [];
+        if (Array.isArray(replay.frames) && replay.frames.length > 0) {
+            initialFrames.push(...replay.frames);
+        }
         if (replay.latestFrame) {
-            this.applyReplayFrame(replay.latestFrame);
-            watchState.lastAppliedFrameT = replay.latestFrame.t;
-        } else if (replay.status !== 'live') {
+            initialFrames.push(replay.latestFrame);
+        }
+        this.ingestReplayFrames(watchState, initialFrames);
+
+        if (watchState.frames.length > 0) {
+            this.applyReplayFrame(watchState.frames[0]);
+            watchState.lastAppliedFrameT = watchState.frames[0].t;
+            watchState.nextFrameIndex = 1;
+        } else if (watchState.status !== 'live') {
             this.queueReplayReturnHome(700);
         }
 
@@ -7400,7 +7453,7 @@ export class MainScene extends Phaser.Scene {
                 if (current.pollInFlight) return;
                 current.pollInFlight = true;
 
-                void Backend.getLiveAttackState(current.attackId)
+                void Backend.getLiveAttackState(current.attackId, current.lastFetchedFrameT, 64)
                     .then(next => {
                         const active = this.replayWatchState;
                         if (!active || active.attackId !== current.attackId || active.mode !== 'live') return;
@@ -7409,15 +7462,22 @@ export class MainScene extends Phaser.Scene {
                             return;
                         }
 
-                        if (next.latestFrame && next.latestFrame.t > active.lastAppliedFrameT) {
-                            this.applyReplayFrame(next.latestFrame);
-                            active.lastAppliedFrameT = next.latestFrame.t;
+                        active.status = next.status;
+                        const incoming: ReplayFrameSnapshot[] = [];
+                        if (Array.isArray(next.frames) && next.frames.length > 0) {
+                            incoming.push(...next.frames);
                         }
+                        if (next.latestFrame && next.latestFrame.t > active.lastFetchedFrameT) {
+                            incoming.push(next.latestFrame);
+                        }
+                        this.ingestReplayFrames(active, incoming);
 
                         if (next.status !== 'live' && active.pollEvent) {
                             active.pollEvent.remove(false);
                             active.pollEvent = undefined;
-                            this.queueReplayReturnHome(900);
+                            if (active.nextFrameIndex >= active.frames.length) {
+                                this.queueReplayReturnHome(900);
+                            }
                         }
                     })
                     .catch(error => {
@@ -7437,20 +7497,50 @@ export class MainScene extends Phaser.Scene {
 
     private updateReplayWatchPlayback(time: number) {
         const replay = this.replayWatchState;
-        if (!replay || replay.mode !== 'replay') return;
+        if (!replay) return;
 
-        void time;
-        const elapsed = Math.max(0, this.replaySimulationTime - replay.playbackStartTime);
+        if (replay.mode === 'replay') {
+            void time;
+            const elapsed = Math.max(0, this.replaySimulationTime - replay.playbackStartTime);
+            while (replay.nextFrameIndex < replay.frames.length) {
+                const frame = replay.frames[replay.nextFrameIndex];
+                if (frame.t > elapsed) break;
+                this.applyReplayFrame(frame);
+                replay.lastAppliedFrameT = frame.t;
+                replay.nextFrameIndex += 1;
+            }
+
+            if (replay.nextFrameIndex >= replay.frames.length && replay.frames.length > 0) {
+                this.queueReplayReturnHome(1200);
+            }
+            return;
+        }
+
+        if (replay.frames.length === 0) {
+            if (replay.status !== 'live') {
+                this.queueReplayReturnHome(900);
+            }
+            return;
+        }
+
+        const headT = replay.frames[replay.frames.length - 1].t;
+        const renderTargetT = Math.max(0, headT - replay.liveRenderDelayMs);
         while (replay.nextFrameIndex < replay.frames.length) {
             const frame = replay.frames[replay.nextFrameIndex];
-            if (frame.t > elapsed) break;
+            if (frame.t > renderTargetT) break;
             this.applyReplayFrame(frame);
             replay.lastAppliedFrameT = frame.t;
             replay.nextFrameIndex += 1;
         }
 
-        if (replay.nextFrameIndex >= replay.frames.length && replay.frames.length > 0) {
-            this.queueReplayReturnHome(1200);
+        if (replay.lastAppliedFrameT < 0 && replay.frames.length > 0) {
+            this.applyReplayFrame(replay.frames[0]);
+            replay.lastAppliedFrameT = replay.frames[0].t;
+            replay.nextFrameIndex = Math.max(replay.nextFrameIndex, 1);
+        }
+
+        if (replay.status !== 'live' && replay.nextFrameIndex >= replay.frames.length) {
+            this.queueReplayReturnHome(900);
         }
     }
 

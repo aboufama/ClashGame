@@ -1536,12 +1536,14 @@ export class Backend {
       .filter((item): item is IncomingAttackSession => item !== null);
   }
 
-  static async getLiveAttackState(attackId: string): Promise<AttackReplayState | null> {
+  static async getLiveAttackState(attackId: string, afterT?: number, limit?: number): Promise<AttackReplayState | null> {
     if (!Auth.isOnlineMode()) return null;
     if (!attackId) return null;
     const response = await Backend.apiPost<{ replay?: Record<string, unknown> }>('/api/attacks/replay', {
       action: 'state',
-      attackId
+      attackId,
+      afterT,
+      limit
     });
     return Backend.normalizeAttackReplayState(response.replay ?? null);
   }

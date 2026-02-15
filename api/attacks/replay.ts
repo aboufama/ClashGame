@@ -31,6 +31,8 @@ interface ReplayBody {
   status?: AttackReplayStatus;
   destruction?: number;
   solLooted?: number;
+  afterT?: number;
+  limit?: number;
 }
 
 function sanitizeAttackId(input: unknown) {
@@ -347,6 +349,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (action === 'state') {
       const latestFrame = replay.frames.length > 0 ? replay.frames[replay.frames.length - 1] : null;
+      const afterT = Number(body.afterT);
+      const hasAfterT = Number.isFinite(afterT);
+      const requestedLimit = Math.floor(Number(body.limit) || 0);
+      const limit = Math.max(1, Math.min(180, requestedLimit || 36));
+      let frames: typeof replay.frames = [];
+
+      if (replay.frames.length > 0) {
+        if (hasAfterT) {
+          frames = replay.frames.filter(frame => frame.t > afterT).slice(0, limit);
+        } else {
+          frames = replay.frames.slice(Math.max(0, replay.frames.length - limit));
+        }
+      }
+
       sendJson(res, 200, {
         replay: {
           attackId: replay.attackId,
@@ -361,7 +377,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           enemyWorld: replay.enemyWorld,
           finalResult: replay.finalResult,
           frameCount: replay.frames.length,
-          latestFrame
+          latestFrame,
+          frames
         }
       });
       return;
