@@ -1566,7 +1566,7 @@ export class MainScene extends Phaser.Scene {
                 BuildingRenderer.drawPrismTower(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, skipBase, onlyBase);
                 break;
             case 'frostfall':
-                BuildingRenderer.drawFrostfall(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, skipBase, onlyBase);
+                BuildingRenderer.drawFrostfall(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, skipBase, onlyBase, this.time.now);
                 break;
             case 'magmavent':
                 BuildingRenderer.drawMagmaVent(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, this.time.now, skipBase, onlyBase);

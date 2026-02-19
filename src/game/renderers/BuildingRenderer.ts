@@ -774,127 +774,101 @@ export class BuildingRenderer {
             g.lineStyle(2, isL4 ? 0xdaa520 : 0x222222, alpha * 0.5);
             g.strokePoints([c1, c2, c3, c4], true, true);
 
-            // Static Wooden/Metal Carriage Frame
-            const frameY = center.y - 4;
-            const frameWidth = isL3 ? 28 : 24;
-            const frameHeight = isL3 ? 24 : 20;
-            const woodColor = isL4 ? 0xddddcc : (isL3 ? 0x4a4a5a : (isL2 ? 0x3a2008 : 0x4a3018));
+            // Central rotating mount
+            const mountColor = isL4 ? 0xddddcc : (isL3 ? 0x4a4a5a : (isL2 ? 0x4a3018 : 0x5a4030));
+            g.fillStyle(mountColor, alpha);
+            g.fillEllipse(center.x, center.y - 2, 16, 10);
+            g.lineStyle(1.5, isL4 ? 0xdaa520 : 0x222222, alpha);
+            g.strokeEllipse(center.x, center.y - 2, 16, 10);
 
-            g.fillStyle(woodColor, alpha);
-            g.beginPath();
-            g.moveTo(center.x, frameY - frameHeight / 2);
-            g.lineTo(center.x + frameWidth / 2, frameY);
-            g.lineTo(center.x, frameY + frameHeight / 2);
-            g.lineTo(center.x - frameWidth / 2, frameY);
-            g.closePath();
-            g.fillPath();
-
-            // Draw dual side Spoked Wheels
-            const drawWheel = (wx: number, wy: number) => {
-                const wheelW = isL3 ? 10 : 8;
-                const wheelH = isL3 ? 20 : 16;
-                const spokeBg = isL4 ? 0xffd700 : (isL3 ? 0x2a2a3a : 0x3a2008);
-                const rimColor = isL4 ? 0xdaa520 : 0x222222;
-
-                g.fillStyle(spokeBg, alpha);
-                g.fillEllipse(wx, wy, wheelW, wheelH);
-
-                g.lineStyle(isL3 ? 3 : 2, rimColor, alpha);
-                g.strokeEllipse(wx, wy, wheelW, wheelH);
-
-                g.lineStyle(1, rimColor, alpha);
-                g.lineBetween(wx, wy - wheelH / 2, wx, wy + wheelH / 2);
-                g.lineBetween(wx - wheelW / 2, wy, wx + wheelW / 2, wy);
-                g.lineBetween(wx - wheelW / 4, wy - wheelH / 3, wx + wheelW / 4, wy + wheelH / 3);
-                g.lineBetween(wx + wheelW / 4, wy - wheelH / 3, wx - wheelW / 4, wy + wheelH / 3);
-
-                g.fillStyle(isL4 ? 0xffffff : 0x555555, alpha);
-                g.fillCircle(wx, wy, 2.5);
-            };
-            drawWheel(center.x - (isL3 ? 18 : 16), frameY);
-            drawWheel(center.x + (isL3 ? 18 : 16), frameY);
+            if (isL3) {
+                g.fillStyle(0x222222, alpha);
+                g.fillCircle(center.x, center.y - 2, 3);
+            }
         }
 
         if (!onlyBase) {
-            const barrelHeight = isL3 ? -12 : -10;
-            const recoilAmount = (building?.cannonRecoilOffset ?? 0) * (isL4 ? 14 : (isL3 ? 12 : 10));
-            const recoilOffsetX = -cos * recoilAmount;
-            const recoilOffsetY = -sin * recoilAmount;
+            // Barrel pivot height
+            const pivotY = center.y - 8;
 
-            const length = isL4 ? 38 : (isL3 ? 34 : (isL2 ? 30 : 24));
-            const breechX = center.x - cos * 8 + recoilOffsetX;
-            const breechY = center.y + barrelHeight - sin * 8 + recoilOffsetY;
+            // Recoil offset (small recoil)
+            const recoilAmount = (building?.cannonRecoilOffset ?? 0) * 6;
+            const recoilOffsetX = -cos * recoilAmount;
+            const recoilOffsetY = -sin * 0.5 * recoilAmount; // Isometric recoil Y
+
+            // Keep barrel short! Max size is about the original L1 length
+            const length = isL4 ? 24 : (isL3 ? 22 : (isL2 ? 20 : 18));
+
+            const breechX = center.x - cos * 6 + recoilOffsetX;
+            // Isometric perspective: apply * 0.5 to sinusoidal Y displacement
+            const breechY = pivotY - sin * 0.5 * 6 + recoilOffsetY;
+
             const muzzleX = center.x + cos * length + recoilOffsetX;
-            const muzzleY = center.y + barrelHeight + sin * length + recoilOffsetY;
+            const muzzleY = pivotY + sin * 0.5 * length + recoilOffsetY;
 
             // Cannon Drop Shadow
             graphics.fillStyle(0x111111, alpha * 0.4);
-            graphics.fillEllipse(center.x + cos * (length / 2), center.y + 4, length, 10);
+            graphics.fillEllipse(center.x + cos * (length / 2), center.y + 2, length * 0.8, 6);
 
-            // Double barrels for Level 4
-            const drawBarrel = (ox: number, oy: number) => {
-                const bx = breechX + ox;
-                const by = breechY + oy;
-                const mx = muzzleX + ox;
-                const my = muzzleY + oy;
+            // Draw Barrel Pivot / Carriage Arms
+            const armColor = isL4 ? 0xffd700 : (isL3 ? 0x2a2a3a : 0x3a2008);
+            graphics.lineStyle(4, armColor, alpha);
+            graphics.lineBetween(center.x - 4, center.y - 2, center.x - 4, pivotY + 2);
+            graphics.lineBetween(center.x + 4, center.y - 2, center.x + 4, pivotY + 2);
+            graphics.fillStyle(isL4 ? 0xdaa520 : 0x555555, alpha);
+            graphics.fillCircle(center.x + recoilOffsetX, pivotY + recoilOffsetY, 3); // Pivot pin
 
-                const barrelColor = isL4 ? 0xddb922 : (isL3 ? 0x444455 : 0x222222);
-                graphics.fillStyle(barrelColor, alpha);
-                graphics.fillCircle(bx - cos * 5, by - sin * 5, isL3 ? 7 : 5); // Cascabel
+            const barrelColor = isL4 ? 0xddb922 : (isL3 ? 0x444455 : 0x2a2a2a);
+            graphics.fillStyle(barrelColor, alpha);
 
-                const wB = isL4 ? 8 : (isL3 ? 9 : (isL2 ? 8 : 7)); // Breech half-width
-                const wM = isL4 ? 6 : (isL3 ? 7 : (isL2 ? 6 : 5)); // Muzzle half-width
+            // Rounded back of the cannon
+            graphics.fillCircle(breechX, breechY, isL3 ? 5 : 4);
 
-                // Tapered Barrel Polygon
+            const wB = isL4 ? 6 : (isL3 ? 6.5 : 5.5); // Breech half-width
+            const wM = isL4 ? 4 : (isL3 ? 4.5 : 3.5); // Muzzle half-width
+
+            // Tapered Barrel Polygon
+            graphics.beginPath();
+            // Isometric perspective: width uses perpendicular vector, scaled Y for iso
+            graphics.moveTo(breechX + pCos * wB, breechY + pSin * 0.5 * wB);
+            graphics.lineTo(breechX - pCos * wB, breechY - pSin * 0.5 * wB);
+            graphics.lineTo(muzzleX - pCos * wM, muzzleY - pSin * 0.5 * wM);
+            graphics.lineTo(muzzleX + pCos * wM, muzzleY + pSin * 0.5 * wM);
+            graphics.closePath();
+            graphics.fillPath();
+
+            graphics.lineStyle(1, isL4 ? 0xffea77 : 0x555555, alpha * 0.6);
+            graphics.lineBetween(breechX, breechY - 1, muzzleX, muzzleY - 1);
+
+            // Muzzle Flare Ring
+            graphics.fillStyle(isL4 ? 0xc8a211 : 0x1a1a1a, alpha);
+            const fM = wM + 1.5;
+            const flareLen = 3;
+            const flareEndX = muzzleX + cos * flareLen;
+            const flareEndY = muzzleY + sin * 0.5 * flareLen;
+            graphics.beginPath();
+            graphics.moveTo(muzzleX + pCos * fM, muzzleY + pSin * 0.5 * fM);
+            graphics.lineTo(muzzleX - pCos * fM, muzzleY - pSin * 0.5 * fM);
+            graphics.lineTo(flareEndX - pCos * fM, flareEndY - pSin * 0.5 * fM);
+            graphics.lineTo(flareEndX + pCos * fM, flareEndY + pSin * 0.5 * fM);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Bore Hole
+            graphics.fillStyle(0x000000, alpha);
+            graphics.fillEllipse(flareEndX, flareEndY, isL3 ? 3 : 2, (isL3 ? 3 : 2) * 0.8);
+
+            // Iron/Gold Bands
+            const bands = isL3 ? [0.2, 0.45, 0.75] : [0.3, 0.7];
+            graphics.lineStyle(isL3 ? 2 : 1.5, isL4 ? 0xffffff : 0x111111, alpha * 0.8);
+            for (const t of bands) {
+                const bandX = breechX + (muzzleX - breechX) * t;
+                const bandY = breechY + (muzzleY - breechY) * t;
+                const bw = wB - (wB - wM) * t + 0.5;
                 graphics.beginPath();
-                graphics.moveTo(bx + pCos * wB, by + pSin * wB);
-                graphics.lineTo(bx - pCos * wB, by - pSin * wB);
-                graphics.lineTo(mx - pCos * wM, my - pSin * wM);
-                graphics.lineTo(mx + pCos * wM, my + pSin * wM);
-                graphics.closePath();
-                graphics.fillPath();
-
-                graphics.lineStyle(1, isL4 ? 0xffea77 : 0x555555, alpha * 0.8);
-                graphics.lineBetween(bx, by - 2, mx, my - 2);
-
-                // Muzzle Flare Ring
-                graphics.fillStyle(isL4 ? 0xc8a211 : 0x1a1a1a, alpha);
-                const fM = wM + 1.5;
-                const flareLen = isL3 ? 6 : 4;
-                const flareEndX = mx + cos * flareLen;
-                const flareEndY = my + sin * flareLen;
-                graphics.beginPath();
-                graphics.moveTo(mx + pCos * fM, my + pSin * fM);
-                graphics.lineTo(mx - pCos * fM, my - pSin * fM);
-                graphics.lineTo(flareEndX - pCos * fM, flareEndY - pSin * fM);
-                graphics.lineTo(flareEndX + pCos * fM, flareEndY + pSin * fM);
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Bore Hole
-                graphics.fillStyle(0x000000, alpha);
-                graphics.fillCircle(flareEndX, flareEndY, isL3 ? 4 : 3);
-
-                // Iron/Gold Bands
-                const bands = isL3 ? [0.2, 0.4, 0.6, 0.8] : [0.25, 0.7];
-                graphics.lineStyle(isL3 ? 3 : 2, isL4 ? 0xffffff : 0x111111, alpha * 0.7);
-                for (const t of bands) {
-                    const bandX = bx + (mx - bx) * t;
-                    const bandY = by + (my - by) * t;
-                    const bw = wB - (wB - wM) * t + 1;
-                    graphics.beginPath();
-                    graphics.moveTo(bandX + pCos * bw, bandY + pSin * bw);
-                    graphics.lineTo(bandX - pCos * bw, bandY - pSin * bw);
-                    graphics.strokePath();
-                }
-            };
-
-            if (isL4) {
-                // Double Barrel layout offset
-                drawBarrel(pCos * 7, pSin * 7);
-                drawBarrel(-pCos * 7, -pSin * 7);
-            } else {
-                drawBarrel(0, 0);
+                graphics.moveTo(bandX + pCos * bw, bandY + pSin * 0.5 * bw);
+                graphics.lineTo(bandX - pCos * bw, bandY - pSin * 0.5 * bw);
+                graphics.strokePath();
             }
         }
     }
@@ -3523,8 +3497,8 @@ export class BuildingRenderer {
         }
     }
 
-    static drawFrostfall(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, _building?: any, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
-        const time = Date.now();
+    static drawFrostfall(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, _building?: any, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false, time: number = 0) {
+        if (time === 0) time = Date.now(); // Fallback for testing/external calls
         const level = _building?.level ?? 1;
         const g = baseGraphics || graphics;
 
