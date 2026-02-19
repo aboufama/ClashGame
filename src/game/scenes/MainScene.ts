@@ -741,7 +741,7 @@ export class MainScene extends Phaser.Scene {
                 this.shootSpikeLauncherAt(defense, target);
                 break;
             case 'frostfall':
-                this.shootFrostfallAoE(defense, time);
+                this.shootFrostfallShard(defense, time);
                 break;
             default:
                 this.shootGenericDefenseAt(defense, target);
@@ -3248,7 +3248,7 @@ export class MainScene extends Phaser.Scene {
         prism.prismLastDamageTime = undefined;
     }
 
-    private shootFrostfallAoE(frostfall: PlacedBuilding, time: number) {
+    private shootFrostfallShard(frostfall: PlacedBuilding, time: number) {
         const info = BUILDINGS['frostfall'];
         const stats = this.getDefenseStats(frostfall);
         const fireRate = stats.fireRate || 2500;
@@ -3263,64 +3263,153 @@ export class MainScene extends Phaser.Scene {
         const centerX = frostfall.gridX + info.width / 2;
         const centerY = frostfall.gridY + info.height / 2;
 
+        // Find the "center of mass" of troops to toss the shard at
+        let targetX = centerX;
+        let targetY = centerY;
+        let maxDensity = 0;
+        let bestTarget: Troop | null = null;
+
         let fired = false;
 
         this.troops.forEach(troop => {
             if (troop.health <= 0 || troop.owner === frostfall.owner) return;
-
-            // Calculate distance to troop
-            const tw = 0.5;
-            const th = 0.5;
-            const bx = troop.gridX - tw / 2;
-            const by = troop.gridY - th / 2;
-
+            const bx = troop.gridX;
+            const by = troop.gridY;
             const edx = Math.max(centerX - bx, 0, bx - (centerX + info.width));
             const edy = Math.max(centerY - by, 0, by - (centerY + info.height));
             const dist = Math.sqrt(edx * edx + edy * edy);
 
             if (dist <= range) {
                 fired = true;
-
-                // Apply damage
-                troop.health -= damage;
-                this.updateHealthBar(troop);
-
-                // Apply Chilled effect for 2 seconds
-                (troop as any).chillRemainingMs = 2000;
-
-                // Apply Pushback and Stun
-                if (troop.velocityX !== undefined && troop.velocityY !== undefined) {
-                    const dx = bx - centerX;
-                    const dy = by - centerY;
-                    const len = Math.sqrt(dx * dx + dy * dy);
-                    if (len > 0) {
-                        troop.velocityX += (dx / len) * 4;
-                        troop.velocityY += (dy / len) * 4;
-                        troop.retargetPauseUntil = time + 400; // Small stun
-                    }
-                }
-
-                if (troop.health <= 0) {
-                    this.destroyTroop(troop);
+                // Basic density heuristic - just aim at the closest for the impact center
+                if (!bestTarget || dist < maxDensity) {
+                    maxDensity = dist;
+                    bestTarget = troop;
+                    targetX = troop.gridX;
+                    targetY = troop.gridY;
                 }
             }
         });
 
         if (fired) {
             frostfall.lastFireTime = time;
-            frostfall.isFiring = true;
-            (frostfall as any).frostfallChargeTime = time; // Used for animation effects
+            frostfall.isFiring = true; // Signals trapdoor animation start
 
-            // Emit frost burst particles
             const start = IsoUtils.cartToIso(centerX, centerY);
-            if (particleManager) {
-                // Radiate outwards
-                for (let i = 0; i < 20; i++) {
-                    const angle = Math.random() * Math.PI * 2;
-                    const r = Math.random() * 50;
-                    particleManager.emitSparkTracker(frostfall.id + '_chill_burst_' + i, start.x + Math.cos(angle) * r, start.y - 40 + Math.sin(angle) * r, time, 1);
+            const end = IsoUtils.cartToIso(targetX, targetY);
+
+            // Draw the literal flying shard
+            const shard = this.add.graphics();
+            const level = frostfall.level ?? 1;
+            let crystalHeight = level >= 3 ? 80 : (level === 2 ? 65 : 50);
+            let crystalWidth = level >= 3 ? 36 : (level === 2 ? 30 : 24);
+            const baseHeight = level >= 3 ? 22 : (level === 2 ? 18 : 15);
+
+            shard.fillStyle(0x66bbff, 1);
+            shard.beginPath();
+            shard.moveTo(0, -crystalHeight);
+            shard.lineTo(-crystalWidth / 2, -crystalHeight / 3);
+            shard.lineTo(0, 0);
+            shard.lineTo(crystalWidth / 2, -crystalHeight / 3);
+            shard.closePath();
+            shard.fillPath();
+
+            shard.fillStyle(0xaaddff, 1);
+            shard.beginPath();
+            shard.moveTo(0, -crystalHeight);
+            shard.lineTo(-crystalWidth / 4, -crystalHeight / 3);
+            shard.lineTo(0, -crystalHeight * 0.2);
+            shard.lineTo(crystalWidth / 4, -crystalHeight / 3);
+            shard.closePath();
+            shard.fillPath();
+
+            // Start at the top of the tower
+            shard.setPosition(start.x, start.y - baseHeight - crystalHeight * 0.2);
+            shard.setDepth(5000);
+
+            shard.setRotation(-Math.PI / 6);
+
+            const travelTime = 600;
+
+            // Arc tween for the massive shard
+            const midY = (start.y + end.y) / 2 - 400; // High arc
+
+            this.tweens.add({
+                targets: shard,
+                x: end.x,
+                duration: travelTime,
+                ease: 'Quad.easeIn',
+                onUpdate: (tween) => {
+                    const t = tween.progress;
+                    shard.y = (1 - t) * (1 - t) * (start.y - baseHeight) + 2 * (1 - t) * t * midY + t * t * (end.y);
+                    shard.setRotation(-Math.PI / 6 + t * Math.PI / 2);
+                    shard.setScale(1 + t * 0.5); // Looks bigger as it approaches
+                },
+                onComplete: () => {
+                    // Massive Impact!
+                    this.cameras.main.shake(150, 0.003);
+
+                    // The shard sticks in the ground and melts
+                    this.tweens.add({
+                        targets: shard,
+                        scaleY: 0,
+                        scaleX: 1.5,
+                        alpha: 0,
+                        y: end.y + 10,
+                        duration: 800,
+                        ease: 'Quad.easeIn',
+                        onComplete: () => shard.destroy()
+                    });
+
+                    // Flash explosion
+                    const flash = this.add.graphics();
+                    flash.fillStyle(0xaaffff, 0.7);
+                    flash.fillEllipse(end.x, end.y, 100, 50);
+                    flash.setDepth(10);
+                    this.tweens.add({ targets: flash, alpha: 0, scale: 2, duration: 300, onComplete: () => flash.destroy() });
+
+                    // Apply AoE Damage and Debuff
+                    this.troops.forEach(troop => {
+                        if (troop.health <= 0 || troop.owner === frostfall.owner) return;
+
+                        const bx = troop.gridX;
+                        const by = troop.gridY;
+
+                        // Calculate distance from impact point (targetX, targetY)
+                        const dx = bx - targetX;
+                        const dy = by - targetY;
+                        const distToImpact = Math.sqrt(dx * dx + dy * dy);
+
+                        // Blast Radius of 2.5 tiles around impact
+                        if (distToImpact <= 2.5) {
+                            troop.health -= damage;
+                            this.updateHealthBar(troop);
+
+                            (troop as any).chillRemainingMs = 4000; // Massive Slow
+
+                            // Physical Pushback & Stun
+                            if (troop.velocityX !== undefined && troop.velocityY !== undefined && distToImpact > 0.1) {
+                                troop.velocityX += (dx / distToImpact) * 5;
+                                troop.velocityY += (dy / distToImpact) * 5;
+                                troop.retargetPauseUntil = time + 600; // Stun
+                            }
+
+                            if (troop.health <= 0) {
+                                this.destroyTroop(troop);
+                            }
+                        }
+                    });
+
+                    // Emit frost burst particles
+                    if (particleManager) {
+                        for (let i = 0; i < 30; i++) {
+                            const angle = Math.random() * Math.PI * 2;
+                            const r = Math.random() * 80;
+                            particleManager.emitSparkTracker(frostfall.id + '_chill_burst_' + i + '_' + time, end.x + Math.cos(angle) * r, end.y + Math.sin(angle) * r * 0.5 - 10, time, 1);
+                        }
+                    }
                 }
-            }
+            });
         }
     }
 

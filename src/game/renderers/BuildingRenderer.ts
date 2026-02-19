@@ -813,11 +813,6 @@ export class BuildingRenderer {
             g.fillEllipse(center.x, center.y - 2, mountW, mountH);
             g.lineStyle(2, isL4 ? 0xdaa520 : 0x222222, alpha);
             g.strokeEllipse(center.x, center.y - 2, mountW, mountH);
-
-            if (isL3) {
-                g.fillStyle(0x222222, alpha);
-                g.fillCircle(center.x, center.y - 2, 4);
-            }
         }
 
         if (!onlyBase) {
@@ -827,48 +822,48 @@ export class BuildingRenderer {
             // Recoil offset (small recoil)
             const recoilAmount = (building?.cannonRecoilOffset ?? 0) * (isL4 ? 8 : 6);
             const recoilOffsetX = -cos * recoilAmount;
-            const recoilOffsetY = -sin * 0.5 * recoilAmount; // Isometric recoil Y
+            const recoilOffsetY = -sin * 0.6 * recoilAmount; // Isometric recoil Y
 
-            // Keep barrel short! Max size is about the original L1 length
-            const length = isL4 ? 28 : (isL3 ? 24 : (isL2 ? 22 : 18));
+            // Larger barrel lengths
+            const length = isL4 ? 40 : (isL3 ? 34 : (isL2 ? 30 : 25));
 
-            const breechOffset = isL4 ? 8 : 6;
+            const breechOffset = isL4 ? 12 : 10;
             const breechX = center.x - cos * breechOffset + recoilOffsetX;
-            // Isometric perspective: apply * 0.5 to sinusoidal Y displacement
-            const breechY = pivotY - sin * 0.5 * breechOffset + recoilOffsetY;
+            // Isometric perspective: apply * 0.6 to sinusoidal Y displacement (less squished)
+            const breechY = pivotY - sin * 0.6 * breechOffset + recoilOffsetY;
 
             const muzzleX = center.x + cos * length + recoilOffsetX;
-            const muzzleY = pivotY + sin * 0.5 * length + recoilOffsetY;
+            const muzzleY = pivotY + sin * 0.6 * length + recoilOffsetY;
 
             // Cannon Drop Shadow
             graphics.fillStyle(0x111111, alpha * 0.4);
-            graphics.fillEllipse(center.x + cos * (length / 2), center.y + 2, length * 0.9, 8);
+            graphics.fillEllipse(center.x + cos * (length / 2), center.y + 2, length * 0.9, 10);
 
             // Draw Barrel Pivot / Carriage Arms
             const armColor = isL4 ? 0xffd700 : (isL3 ? 0x2a2a3a : 0x3a2008);
-            graphics.lineStyle(5, armColor, alpha);
-            const armSpread = isL4 ? 6 : 5;
+            graphics.lineStyle(6, armColor, alpha);
+            const armSpread = isL4 ? 8 : 6;
             graphics.lineBetween(center.x - armSpread, center.y - 2, center.x - armSpread, pivotY + 2);
             graphics.lineBetween(center.x + armSpread, center.y - 2, center.x + armSpread, pivotY + 2);
             graphics.fillStyle(isL4 ? 0xdaa520 : 0x555555, alpha);
-            graphics.fillCircle(center.x + recoilOffsetX, pivotY + recoilOffsetY, 4); // Pivot pin
+            graphics.fillCircle(center.x + recoilOffsetX, pivotY + recoilOffsetY, 5); // Pivot pin
 
             const barrelColor = isL4 ? 0xddb922 : (isL3 ? 0x444455 : 0x2a2a2a);
             graphics.fillStyle(barrelColor, alpha);
 
             // Rounded back of the cannon
-            graphics.fillCircle(breechX, breechY, isL4 ? 7 : (isL3 ? 6.5 : 5.5));
+            graphics.fillCircle(breechX, breechY, isL4 ? 10 : (isL3 ? 9 : 8));
 
-            const wB = isL4 ? 9 : (isL3 ? 8 : 7); // Breech half-width
-            const wM = isL4 ? 6 : (isL3 ? 5.5 : 4.5); // Muzzle half-width
+            const wB = isL4 ? 12 : (isL3 ? 11 : 10); // Breech half-width (Thick!)
+            const wM = isL4 ? 8 : (isL3 ? 7.5 : 6.5); // Muzzle half-width (Thicker!)
 
             // Tapered Barrel Polygon
             graphics.beginPath();
-            // Isometric perspective: width uses perpendicular vector, scaled Y for iso
-            graphics.moveTo(breechX + pCos * wB, breechY + pSin * 0.5 * wB);
-            graphics.lineTo(breechX - pCos * wB, breechY - pSin * 0.5 * wB);
-            graphics.lineTo(muzzleX - pCos * wM, muzzleY - pSin * 0.5 * wM);
-            graphics.lineTo(muzzleX + pCos * wM, muzzleY + pSin * 0.5 * wM);
+            // Isometric perspective: less squash using 0.6 multiplier
+            graphics.moveTo(breechX + pCos * wB, breechY + pSin * 0.6 * wB);
+            graphics.lineTo(breechX - pCos * wB, breechY - pSin * 0.6 * wB);
+            graphics.lineTo(muzzleX - pCos * wM, muzzleY - pSin * 0.6 * wM);
+            graphics.lineTo(muzzleX + pCos * wM, muzzleY + pSin * 0.6 * wM);
             graphics.closePath();
             graphics.fillPath();
 
@@ -3537,9 +3532,49 @@ export class BuildingRenderer {
         const level = _building?.level ?? 1;
         const g = baseGraphics || graphics;
 
+        const timeSinceFire = _building && _building.lastFireTime ? time - _building.lastFireTime : 10000;
+
+        let crystalHeight = 50;
+        let crystalWidth = 24;
+        let baseHeight = 15;
+        let trapDoorW = 28;
+
+        if (level === 2) {
+            crystalHeight = 65;
+            crystalWidth = 30;
+            baseHeight = 18;
+            trapDoorW = 34;
+        } else if (level >= 3) {
+            crystalHeight = 80;
+            crystalWidth = 36;
+            baseHeight = 22;
+            trapDoorW = 40;
+        }
+
+        const isReloading = timeSinceFire < 2500;
+        let reloadProgress = 1.0;
+        let trapdoorOpen = 0; // 0 = closed, 1 = fully open
+
+        if (isReloading) {
+            if (timeSinceFire < 800) {
+                // Trapdoor opening, shard hasn't started rising
+                trapdoorOpen = Math.min(1.0, timeSinceFire / 400); // Opens in 400ms, stays open
+                reloadProgress = 0.0;
+            } else if (timeSinceFire < 2000) {
+                // Shard rises out
+                trapdoorOpen = 1.0;
+                reloadProgress = (timeSinceFire - 800) / 1200;
+            } else {
+                // Shard fully out, trapdoor closes
+                trapdoorOpen = 1.0 - Math.min(1.0, (timeSinceFire - 2000) / 400);
+                reloadProgress = 1.0;
+            }
+        }
+
         if (!skipBase) {
-            // Level 1: Dark Stone, Level 2+ Metal accents
-            g.fillStyle(0x2a2e35, alpha);
+            // Draw a sturdy heavy-metal/stone reinforced housing that acts as the trapdoor base
+            const baseColor = level >= 3 ? 0x223344 : (level === 2 ? 0x3a4a5a : 0x5a6a7a);
+            g.fillStyle(tint ?? baseColor, alpha);
             g.beginPath();
             g.moveTo(c1.x, c1.y);
             g.lineTo(c2.x, c2.y);
@@ -3548,51 +3583,76 @@ export class BuildingRenderer {
             g.closePath();
             g.fillPath();
 
-            // Bevels
-            g.fillStyle(0x3e4450, alpha);
-            g.beginPath();
-            g.moveTo(c1.x, c1.y);
-            g.lineTo(center.x, center.y - 4);
-            g.lineTo(c2.x, c2.y);
-            g.closePath();
-            g.fillPath();
-
-            g.fillStyle(0x1d1f24, alpha);
+            // Elevation Base Walls
+            g.fillStyle(tint ?? (level >= 3 ? 0x112233 : 0x2a3a4a), alpha);
             g.beginPath();
             g.moveTo(c3.x, c3.y);
-            g.lineTo(center.x, center.y + 4);
+            g.lineTo(c3.x, c3.y - baseHeight);
+            g.lineTo(c4.x, c4.y - baseHeight);
             g.lineTo(c4.x, c4.y);
             g.closePath();
             g.fillPath();
 
-            if (level >= 3) {
-                const pulse = (Math.sin(time / 200) + 1) / 2;
-                g.fillStyle(0x88ccff, alpha * (0.6 + pulse * 0.4));
-                g.fillCircle(c1.x + (c3.x - c1.x) * 0.3, c1.y + (c3.y - c1.y) * 0.3, 2);
-                g.fillCircle(c1.x + (c3.x - c1.x) * 0.7, c1.y + (c3.y - c1.y) * 0.7, 2);
-            }
+            g.fillStyle(tint ?? (level >= 3 ? 0x0a1a2a : 0x1f2f3f), alpha);
+            g.beginPath();
+            g.moveTo(c2.x, c2.y);
+            g.lineTo(c2.x, c2.y - baseHeight);
+            g.lineTo(c3.x, c3.y - baseHeight);
+            g.lineTo(c3.x, c3.y);
+            g.closePath();
+            g.fillPath();
+
+            // Trapdoor Housing Surface
+            const hatchY = center.y - baseHeight;
+            g.fillStyle(tint ?? 0x1a2a3a, alpha);
+            g.beginPath();
+            g.moveTo(c1.x, c1.y - baseHeight);
+            g.lineTo(c2.x, c2.y - baseHeight);
+            g.lineTo(c3.x, c3.y - baseHeight);
+            g.lineTo(c4.x, c4.y - baseHeight);
+            g.closePath();
+            g.fillPath();
+
+            // The black abyss inside the trapdoor hole
+            g.fillStyle(0x050a10, alpha);
+            g.fillEllipse(center.x, hatchY, trapDoorW, trapDoorW * 0.5);
+
+            // Left Trapdoor Door
+            g.fillStyle(0x4a5a6a, alpha);
+            const doorSlide = trapdoorOpen * (trapDoorW * 0.45);
+            g.beginPath();
+            g.moveTo(center.x - doorSlide, hatchY - trapDoorW * 0.25);
+            g.lineTo(center.x - doorSlide - trapDoorW / 2, hatchY);
+            g.lineTo(center.x - doorSlide, hatchY + trapDoorW * 0.25);
+            g.lineTo(center.x - doorSlide, hatchY - trapDoorW * 0.25);
+            g.closePath();
+            g.fillPath();
+            g.lineStyle(1, 0x111111, alpha * 0.6);
+            g.strokePath();
+
+            // Right Trapdoor Door
+            g.fillStyle(0x5a6a7a, alpha);
+            g.beginPath();
+            g.moveTo(center.x + doorSlide, hatchY - trapDoorW * 0.25);
+            g.lineTo(center.x + doorSlide + trapDoorW / 2, hatchY);
+            g.lineTo(center.x + doorSlide, hatchY + trapDoorW * 0.25);
+            g.lineTo(center.x + doorSlide, hatchY - trapDoorW * 0.25);
+            g.closePath();
+            g.fillPath();
+            g.strokePath();
         }
 
-        if (!onlyBase) {
-            const crystalBobOffset = Math.sin(time / 400) * 3;
+        if (!onlyBase && reloadProgress > 0) {
+            // How far OUT of the trapdoor the crystal is
+            const riseOffset = (1.0 - reloadProgress) * crystalHeight;
+            const crystalBobOffset = reloadProgress >= 1.0 ? Math.sin(time / 400) * 3 : 0;
             const crystalBaseX = center.x;
-            const crystalBaseY = center.y - 12 + crystalBobOffset; // Shift up from iso center
+            const crystalBaseY = center.y - baseHeight + crystalBobOffset + riseOffset;
 
-            let crystalHeight = 50;
-            let crystalWidth = 24;
+            // Don't draw part of the crystal if it's currently beneath the base level
+            // We simulate this via drawing order, but realistically it emerges from the void.
 
-            if (level === 2) {
-                crystalHeight = 65;
-                crystalWidth = 30;
-            } else if (level >= 3) {
-                crystalHeight = 80;
-                crystalWidth = 36;
-            }
-
-            // Using time Since Fire to govern the pulse logic since we don't have isFiring
-            const timeSinceFire = _building && _building.lastFireTime ? time - _building.lastFireTime : 10000;
-            const isFiring = timeSinceFire < 500;
-            const glowMult = isFiring ? 1.0 : 0.4;
+            const glowMult = 1.0;
             const glowPulse = (Math.sin(time / 150) + 1) / 2;
 
             // Apply damage tint if needed
@@ -3600,8 +3660,8 @@ export class BuildingRenderer {
                 (graphics as any).setTint(tint);
             }
 
-            // Glow
-            graphics.fillStyle(0x44aaff, alpha * (0.2 + (glowPulse * 0.2)) * glowMult);
+            // Glow is weaker when reloading
+            graphics.fillStyle(0x44aaff, alpha * (0.2 + (glowPulse * 0.2)) * glowMult * reloadProgress);
             graphics.fillEllipse(crystalBaseX, crystalBaseY, crystalWidth * 1.5, crystalWidth * 0.8);
 
             // Shaded polygons
@@ -3652,7 +3712,7 @@ export class BuildingRenderer {
             graphics.fillPath();
 
             // Inner core
-            graphics.fillStyle(0xffffff, alpha * (0.5 + (glowPulse * 0.5)) * glowMult);
+            graphics.fillStyle(0xffffff, alpha * (0.5 + (glowPulse * 0.5)) * glowMult * reloadProgress);
             graphics.beginPath();
             graphics.moveTo(crystalBaseX, crystalBaseY - crystalHeight * 0.8);
             graphics.lineTo(crystalBaseX + crystalWidth / 4, crystalBaseY - crystalHeight / 3);
