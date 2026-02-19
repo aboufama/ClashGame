@@ -947,24 +947,7 @@ export class MainScene extends Phaser.Scene {
 
     private createSmokeTrailEffect(gridX: number, gridY: number) {
         const pos = IsoUtils.cartToIso(gridX, gridY);
-        particleManager.spawn({
-            x: pos.x,
-            y: pos.y - 25,
-            depth: 29999,
-            duration: 2000 + Math.random() * 1000,
-            onDraw: (g) => {
-                g.fillStyle(0x111111, 0.5); // Darker, slightly transparent black
-                const size = 3 + Math.random() * 2;
-                g.fillRect(-size / 2, -size / 2, size, size);
-            },
-            move: {
-                x: pos.x + (Math.random() - 0.5) * 5,
-                y: pos.y - 120 - Math.random() * 50
-            },
-            alpha: 0,
-            rotation: Math.random() * 360,
-            scale: 2.5
-        });
+        particleManager.emitSmokeTracker('ambient_' + gridX + '_' + gridY, pos.x, pos.y - 25, this.time.now, 29999, 1, 150, 0x111111);
     }
 
 
@@ -1481,7 +1464,7 @@ export class MainScene extends Phaser.Scene {
                     // Margin tiles: fill only (no edge highlights that bleed into neighbors)
                     // Footprint tiles: full redraw with edges
                     const isMargin = x < b.gridX || x >= b.gridX + info.width ||
-                                     y < b.gridY || y >= b.gridY + info.height;
+                        y < b.gridY || y >= b.gridY + info.height;
                     this.tempGraphics.clear();
                     this.drawIsoTile(this.tempGraphics, x, y, isMargin);
                     this.groundRenderTexture.draw(this.tempGraphics, this.RT_OFFSET_X, this.RT_OFFSET_Y);
@@ -2363,22 +2346,7 @@ export class MainScene extends Phaser.Scene {
                                 ball.setDepth(ballDepth);
 
                                 // Smoke puff at muzzle - smaller
-                                particleManager.spawn({
-                                    x: muzzleX,
-                                    y: muzzleY,
-                                    depth: ballDepth - 1,
-                                    duration: 600,
-                                    onDraw: (g) => {
-                                        g.fillStyle(0x555555, 0.5);
-                                        g.fillCircle(0, 0, 4);
-                                    },
-                                    move: {
-                                        x: muzzleX + (Math.random() - 0.5) * 15,
-                                        y: muzzleY - 15
-                                    },
-                                    alpha: 0,
-                                    scale: 2.5
-                                });
+                                particleManager.emitSmokeTracker('troop_fire_' + troop.id, muzzleX, muzzleY, time, ballDepth - 1, 3, 0);
 
                                 // Light screen shake on fire
                                 this.cameras.main.shake(25, 0.0005);
@@ -2601,7 +2569,7 @@ export class MainScene extends Phaser.Scene {
         const midY = (start.y + end.y) / 2 - 350;
 
         // Muzzle flash and smoke effect
-        this.createSmokeEffect(start.x, start.y - 35, 6, 0.8, 1000);
+        this.createSmokeEffect(start.x, start.y - 35);
 
         const flash = this.add.graphics();
         flash.fillStyle(0xff8800, 0.8);
@@ -3430,19 +3398,8 @@ export class MainScene extends Phaser.Scene {
 
                 // Hit flash on troop - position the graphics at the troop, draw circle at origin
                 // so scaling animates from center instead of flying off-screen
-                const hitFlash = particleManager.getPooledGraphic();
                 const troopPos = IsoUtils.cartToIso(t.gridX, t.gridY);
-                hitFlash.setPosition(troopPos.x, troopPos.y);
-                hitFlash.fillStyle(0xff4400, 0.8);
-                hitFlash.fillCircle(0, 0, 15);
-                hitFlash.setDepth(10006);
-                this.tweens.add({
-                    targets: hitFlash,
-                    alpha: 0,
-                    scale: 2,
-                    duration: 150,
-                    onComplete: () => particleManager.returnToPool(hitFlash)
-                });
+                particleManager.emitHitFlash(troopPos.x, troopPos.y, 10006);
 
                 this.updateHealthBar(t);
                 if (t.health <= 0) this.destroyTroop(t);
@@ -3473,7 +3430,7 @@ export class MainScene extends Phaser.Scene {
 
 
         // Arrow with proper orientation
-        const arrow = particleManager.getPooledGraphic();
+        const arrow = this.add.graphics();
         arrow.fillStyle(0x8b4513, 1);
         arrow.fillRect(-8, -1, 16, 2);
         arrow.fillStyle(0x888888, 1);
@@ -3598,7 +3555,7 @@ export class MainScene extends Phaser.Scene {
 
     private launchSharpshooterArrow(_troop: Troop, start: Phaser.Math.Vector2, end: Phaser.Math.Vector2, angle: number, targetBuilding: PlacedBuilding, damage: number) {
         // Large arrow with proper design
-        const arrow = particleManager.getPooledGraphic();
+        const arrow = this.add.graphics();
         // Arrow shaft
         arrow.fillStyle(0x5d4037, 1);
         arrow.fillRect(-16, -2, 32, 4);
@@ -3628,7 +3585,7 @@ export class MainScene extends Phaser.Scene {
         });
 
         // Trail effect
-        const trail = particleManager.getPooledGraphic();
+        const trail = this.add.graphics();
         trail.lineStyle(2, 0x88ff88, 0.5);
         trail.lineBetween(start.x, start.y - 12, start.x, start.y - 12);
         trail.setDepth(9999);
@@ -3650,8 +3607,8 @@ export class MainScene extends Phaser.Scene {
                 trail.lineBetween(start.x, start.y - 12, arrow.x, arrow.y);
             },
             onComplete: () => {
-                particleManager.returnToPool(arrow);
-                particleManager.returnToPool(trail);
+                arrow.destroy();
+                trail.destroy();
 
                 if (targetBuilding && targetBuilding.health > 0) {
                     targetBuilding.health -= damage;
@@ -3711,7 +3668,7 @@ export class MainScene extends Phaser.Scene {
         });
 
         // Mortar shell - spawns from the mortar position
-        const shell = particleManager.getPooledGraphic();
+        const shell = this.add.graphics();
         shell.fillStyle(0x3a3a3a, 1);
         shell.fillCircle(0, 0, 5);
         shell.fillStyle(0x555555, 1);
@@ -3720,43 +3677,12 @@ export class MainScene extends Phaser.Scene {
         shell.setDepth(10000);
 
         // Muzzle flash at mortar position
-        const flash = particleManager.getPooledGraphic();
-        flash.fillStyle(0xff6600, 0.9);
-        flash.fillCircle(0, 0, 10);
-        flash.fillStyle(0xffaa00, 0.7);
-        flash.fillCircle(0, 0, 6);
-        flash.fillStyle(0xffffcc, 0.5);
-        flash.fillCircle(0, 0, 3);
-        flash.setPosition(mortarX, mortarY);
-        flash.setDepth(10001);
-        this.tweens.add({
-            targets: flash,
-            alpha: 0,
-            scale: 1.8,
-            duration: 100,
-            onComplete: () => particleManager.returnToPool(flash)
-        });
+        particleManager.emitHitFlash(mortarX, mortarY, 10001);
 
         // THIN BLACK SMOKE - rising slowly from mortar muzzle
         for (let i = 0; i < 6; i++) {
-            const smoke = particleManager.getPooledGraphic();
-            // Thin wispy smoke
-            smoke.fillStyle(0x222222, 0.4 + Math.random() * 0.2);
-            smoke.fillRect(-1, -3 - Math.random() * 4, 2 + Math.random() * 2, 6 + Math.random() * 4);
-            smoke.setPosition(mortarX + (Math.random() - 0.5) * 6, mortarY);
-            smoke.setDepth(10002);
-
-            this.tweens.add({
-                targets: smoke,
-                y: mortarY - 40 - Math.random() * 30, // Rise up slowly
-                x: mortarX + (Math.random() - 0.5) * 20, // Slight drift
-                alpha: 0,
-                scaleY: 2.5, // Stretch vertically as it rises
-                scaleX: 0.5, // Get thinner
-                duration: 1200 + Math.random() * 600, // Much slower
-                delay: i * 80,
-                ease: 'Linear',
-                onComplete: () => particleManager.returnToPool(smoke)
+            this.time.delayedCall(i * 80, () => {
+                particleManager.emitDustBurst(mortarX, mortarY, 10002);
             });
         }
 
@@ -3774,27 +3700,11 @@ export class MainScene extends Phaser.Scene {
                     x: { value: end.x, duration: 300, ease: 'Linear' },
                     y: { value: endY, duration: 300, ease: 'Quad.easeIn' },
                     onComplete: () => {
-                        particleManager.returnToPool(shell);
+                        shell.destroy();
 
                         // Explosion effect
                         this.cameras.main.shake(25, 0.001);
-
-                        const explosion = particleManager.getPooledGraphic();
-                        explosion.fillStyle(0xff4400, 0.8);
-                        explosion.fillEllipse(0, 0, 40, 20);
-                        explosion.fillStyle(0xff8800, 0.6);
-                        explosion.fillEllipse(0, 0, 24, 12);
-                        explosion.fillStyle(0xffcc00, 0.4);
-                        explosion.fillEllipse(0, 0, 12, 6);
-                        explosion.setPosition(end.x, endY);
-                        explosion.setDepth(5000);
-                        this.tweens.add({
-                            targets: explosion,
-                            alpha: 0,
-                            scale: 2,
-                            duration: 200,
-                            onComplete: () => particleManager.returnToPool(explosion)
-                        });
+                        particleManager.emitExplosion(end.x, endY, 5000);
 
                         // Splash damage to all buildings in radius
                         const targetInfo = BUILDINGS[target.type];
@@ -3823,26 +3733,6 @@ export class MainScene extends Phaser.Scene {
                                 }
                             }
                         });
-
-                        // Debris
-                        for (let i = 0; i < 6; i++) {
-                            const debris = particleManager.getPooledGraphic();
-                            debris.fillStyle(0x555555, 0.8);
-                            debris.fillCircle(0, 0, 2 + Math.random() * 2);
-                            debris.setPosition(end.x, endY);
-                            debris.setDepth(5001);
-                            const debrisAngle = Math.random() * Math.PI * 2;
-                            const debrisDist = 15 + Math.random() * 25;
-                            this.tweens.add({
-                                targets: debris,
-                                x: end.x + Math.cos(debrisAngle) * debrisDist,
-                                y: endY + Math.sin(debrisAngle) * debrisDist * 0.5 - 10,
-                                alpha: 0,
-                                duration: 300,
-                                ease: 'Quad.easeOut',
-                                onComplete: () => particleManager.returnToPool(debris)
-                            });
-                        }
                     }
                 });
             }
@@ -7689,29 +7579,8 @@ export class MainScene extends Phaser.Scene {
         // 3. Enemy
         return TargetingSystem.findTarget(ward, this.buildings);
     }
-    public createSmokeEffect(x: number, y: number, count: number = 5, scale: number = 1, duration: number = 800) {
-        for (let i = 0; i < count; i++) {
-            this.time.delayedCall(i * 40, () => {
-                particleManager.spawn({
-                    x: x + (Math.random() - 0.5) * 25,
-                    y: y + (Math.random() - 0.5) * 15,
-                    depth: 10005,
-                    duration: duration + Math.random() * (duration * 0.5),
-                    rotation: Math.random() * Math.PI * 2,
-                    scale: 2.2 * scale,
-                    alpha: 0,
-                    move: {
-                        x: x + (Math.random() - 0.5) * 50 * scale, // note: original logic used smoke.x which was random, so passing approximated random here
-                        y: y - (60 + Math.random() * 60) * scale
-                    },
-                    onDraw: (g) => {
-                        const size = (4 + Math.random() * 6) * scale;
-                        g.fillStyle(0x757575, 0.35);
-                        g.fillRect(-size / 2, -size / 2, size, size);
-                    }
-                });
-            });
-        }
+    public createSmokeEffect(x: number, y: number) {
+        particleManager.emitDustBurst(x, y, 10005);
     }
 
     private shootDragonsBreathAt(db: PlacedBuilding, troop: Troop) {
@@ -7920,9 +7789,11 @@ export class MainScene extends Phaser.Scene {
     // ===== SPIKE LAUNCHER =====
     public spikeZones: { x: number; y: number; gridX: number; gridY: number; radius: number; damage: number; owner: 'PLAYER' | 'ENEMY'; endTime: number; graphics: Phaser.GameObjects.Graphics; lastTickTime: number }[] = [];
 
-    public lavaZones: { gridX: number; gridY: number; width: number; height: number;
+    public lavaZones: {
+        gridX: number; gridY: number; width: number; height: number;
         damage: number; owner: 'PLAYER' | 'ENEMY'; endTime: number;
-        graphics: Phaser.GameObjects.Graphics; lastTickTime: number; createdAt: number }[] = [];
+        graphics: Phaser.GameObjects.Graphics; lastTickTime: number; createdAt: number
+    }[] = [];
 
     private shootSpikeLauncherAt(launcher: PlacedBuilding, troop: Troop) {
         const info = BUILDINGS['spike_launcher'];
@@ -7968,25 +7839,25 @@ export class MainScene extends Phaser.Scene {
         bag.fillStyle(spikeColor, 1);
         const s = spikeScale;
         // Top spikes
-        bag.fillTriangle(0, -6*s, -3*s, -14*s, 3*s, -14*s);
-        bag.fillTriangle(-4*s, -5*s, -8*s, -12*s, -2*s, -10*s);
-        bag.fillTriangle(4*s, -5*s, 8*s, -12*s, 2*s, -10*s);
+        bag.fillTriangle(0, -6 * s, -3 * s, -14 * s, 3 * s, -14 * s);
+        bag.fillTriangle(-4 * s, -5 * s, -8 * s, -12 * s, -2 * s, -10 * s);
+        bag.fillTriangle(4 * s, -5 * s, 8 * s, -12 * s, 2 * s, -10 * s);
         // Bottom spikes
-        bag.fillTriangle(0, 6*s, -3*s, 14*s, 3*s, 14*s);
-        bag.fillTriangle(-4*s, 5*s, -8*s, 12*s, -2*s, 10*s);
-        bag.fillTriangle(4*s, 5*s, 8*s, 12*s, 2*s, 10*s);
+        bag.fillTriangle(0, 6 * s, -3 * s, 14 * s, 3 * s, 14 * s);
+        bag.fillTriangle(-4 * s, 5 * s, -8 * s, 12 * s, -2 * s, 10 * s);
+        bag.fillTriangle(4 * s, 5 * s, 8 * s, 12 * s, 2 * s, 10 * s);
         // Side spikes
-        bag.fillTriangle(-6*s, 0, -14*s, -3*s, -14*s, 3*s);
-        bag.fillTriangle(6*s, 0, 14*s, -3*s, 14*s, 3*s);
-        bag.fillTriangle(-5*s, -4*s, -12*s, -8*s, -10*s, -2*s);
-        bag.fillTriangle(5*s, -4*s, 12*s, -8*s, 10*s, -2*s);
-        bag.fillTriangle(-5*s, 4*s, -12*s, 8*s, -10*s, 2*s);
-        bag.fillTriangle(5*s, 4*s, 12*s, 8*s, 10*s, 2*s);
+        bag.fillTriangle(-6 * s, 0, -14 * s, -3 * s, -14 * s, 3 * s);
+        bag.fillTriangle(6 * s, 0, 14 * s, -3 * s, 14 * s, 3 * s);
+        bag.fillTriangle(-5 * s, -4 * s, -12 * s, -8 * s, -10 * s, -2 * s);
+        bag.fillTriangle(5 * s, -4 * s, 12 * s, -8 * s, 10 * s, -2 * s);
+        bag.fillTriangle(-5 * s, 4 * s, -12 * s, 8 * s, -10 * s, 2 * s);
+        bag.fillTriangle(5 * s, 4 * s, 12 * s, 8 * s, 10 * s, 2 * s);
         // Spike highlights / tips
         bag.fillStyle(highlightColor, 0.8);
-        bag.fillTriangle(0, -7*s, -1*s, -12*s, 1*s, -12*s);
-        bag.fillTriangle(-6*s, -1*s, -12*s, 0, -12*s, 2*s);
-        bag.fillTriangle(6*s, -1*s, 12*s, 0, 12*s, 2*s);
+        bag.fillTriangle(0, -7 * s, -1 * s, -12 * s, 1 * s, -12 * s);
+        bag.fillTriangle(-6 * s, -1 * s, -12 * s, 0, -12 * s, 2 * s);
+        bag.fillTriangle(6 * s, -1 * s, 12 * s, 0, 12 * s, 2 * s);
 
         bag.setPosition(start.x, start.y - 40);
         bag.setDepth(5000);
@@ -8055,7 +7926,7 @@ export class MainScene extends Phaser.Scene {
         });
 
         // Launch smoke puff
-        this.createSmokeEffect(start.x, start.y - 35, 4, 0.5, 600);
+        this.createSmokeEffect(start.x, start.y - 35);
     }
 
     private createSpikeZone(
@@ -8073,7 +7944,7 @@ export class MainScene extends Phaser.Scene {
         this.cameras.main.shake(25, 0.00075);
 
         // IMPACT SMOKE EFFECT (small puffs)
-        this.createSmokeEffect(x, y - 5, 5, 0.5, 600);
+        this.createSmokeEffect(x, y - 5);
 
         // IMPACT DAMAGE - immediate damage to troops in zone
         this.troops.forEach(t => {

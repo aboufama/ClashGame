@@ -425,7 +425,7 @@ export class SceneInputController {
 
                     if (success) {
                         const pos = IsoUtils.cartToIso(targetX + info.width / 2, targetY + info.height / 2);
-                        scene.createSmokeEffect(pos.x, pos.y, 8);
+                        scene.createSmokeEffect(pos.x, pos.y);
 
                         if (type !== 'wall') {
                             scene.selectedBuildingType = null;
