@@ -659,7 +659,6 @@ export class MainScene extends Phaser.Scene {
         // Clean up any active prism lasers
         this.buildings.forEach(b => {
             if (b.type === 'prism') this.cleanupPrismLaser(b);
-            if (b.type === 'frostfall') this.cleanupFrostfallBeam(b);
         });
 
         gameManager.setDummyActive(false);
@@ -742,7 +741,7 @@ export class MainScene extends Phaser.Scene {
                 this.shootSpikeLauncherAt(defense, target);
                 break;
             case 'frostfall':
-                this.shootFrostfallBeamAt(defense, target, time);
+                this.shootFrostfallAoE(defense, time);
                 break;
             default:
                 this.shootGenericDefenseAt(defense, target);
@@ -2081,8 +2080,6 @@ export class MainScene extends Phaser.Scene {
                 // No target - clean up continuous lasers if they exist
                 if (defense.type === 'prism') {
                     this.cleanupPrismLaser(defense);
-                } else if (defense.type === 'frostfall') {
-                    this.cleanupFrostfallBeam(defense);
                 }
             }
         });
@@ -3251,84 +3248,80 @@ export class MainScene extends Phaser.Scene {
         prism.prismLastDamageTime = undefined;
     }
 
-    private shootFrostfallBeamAt(frostfall: PlacedBuilding, target: Troop, time: number) {
+    private shootFrostfallAoE(frostfall: PlacedBuilding, time: number) {
         const info = BUILDINGS['frostfall'];
         const stats = this.getDefenseStats(frostfall);
-        const tickInterval = stats.fireRate || 100;
-        const dps = stats.damage ?? 0;
-        const start = IsoUtils.cartToIso(frostfall.gridX + info.width / 2, frostfall.gridY + info.height / 2);
+        const fireRate = stats.fireRate || 2500;
+        const damage = stats.damage || 15;
+        const range = stats.range || 6.0;
 
-        // Shoot from top of crystal
-        start.y -= 60;
-
-        const end = IsoUtils.cartToIso(target.gridX, target.gridY);
-        end.y -= 15; // chest height
-
-        if (!frostfall.laserGraphics) {
-            frostfall.laserGraphics = this.add.graphics();
-            frostfall.laserGraphics.setDepth(10000);
-        }
-        if (!frostfall.laserCore) {
-            frostfall.laserCore = this.add.graphics();
-            frostfall.laserCore.setDepth(10001);
+        // Check if we can fire
+        if (frostfall.lastFireTime && time < frostfall.lastFireTime + fireRate) {
+            return; // on cooldown
         }
 
-        const graphics = frostfall.laserGraphics;
-        const core = frostfall.laserCore;
+        const centerX = frostfall.gridX + info.width / 2;
+        const centerY = frostfall.gridY + info.height / 2;
 
-        graphics.clear();
-        core.clear();
+        let fired = false;
 
-        const pulse = (Math.sin(time / 150) + 1) / 2;
-        const outerGlow = 0x44aaff;
-        const beamCore = 0xffffff;
+        this.troops.forEach(troop => {
+            if (troop.health <= 0 || troop.owner === frostfall.owner) return;
 
-        graphics.lineStyle(6 + pulse * 4, outerGlow, 0.4);
-        graphics.lineBetween(start.x, start.y, end.x, end.y);
+            // Calculate distance to troop
+            const tw = 0.5;
+            const th = 0.5;
+            const bx = troop.gridX - tw / 2;
+            const by = troop.gridY - th / 2;
 
-        graphics.lineStyle(3, outerGlow, 0.8);
-        graphics.lineBetween(start.x, start.y, end.x, end.y);
+            const edx = Math.max(centerX - bx, 0, bx - (centerX + info.width));
+            const edy = Math.max(centerY - by, 0, by - (centerY + info.height));
+            const dist = Math.sqrt(edx * edx + edy * edy);
 
-        core.lineStyle(2, beamCore, 1);
-        core.lineBetween(start.x, start.y, end.x, end.y);
+            if (dist <= range) {
+                fired = true;
 
-        // Apply Chilled effect to target
-        (target as any).chillRemainingMs = 250;
+                // Apply damage
+                troop.health -= damage;
+                this.updateHealthBar(troop);
 
-        const shouldApplyDamage = frostfall.lastDamageTime === undefined || time >= frostfall.lastDamageTime + tickInterval;
-        if (dps > 0 && shouldApplyDamage) {
-            frostfall.lastDamageTime = time;
-            const damagePerTick = dps * (tickInterval / 1000);
-            const actualDamage = Math.max(1, Math.floor(damagePerTick));
-            target.health -= actualDamage;
-            this.updateHealthBar(target);
+                // Apply Chilled effect for 2 seconds
+                (troop as any).chillRemainingMs = 2000;
 
-            // Random tiny snowflake burst at target
-            if (Math.random() < 0.2 && particleManager) {
-                particleManager.emitSparkTracker(target.id + '_chill', end.x, end.y - 10, time, 1);
+                // Apply Pushback and Stun
+                if (troop.velocityX !== undefined && troop.velocityY !== undefined) {
+                    const dx = bx - centerX;
+                    const dy = by - centerY;
+                    const len = Math.sqrt(dx * dx + dy * dy);
+                    if (len > 0) {
+                        troop.velocityX += (dx / len) * 4;
+                        troop.velocityY += (dy / len) * 4;
+                        troop.retargetPauseUntil = time + 400; // Small stun
+                    }
+                }
+
+                if (troop.health <= 0) {
+                    this.destroyTroop(troop);
+                }
             }
+        });
 
-            if (target.health <= 0) {
-                this.cleanupFrostfallBeam(frostfall);
+        if (fired) {
+            frostfall.lastFireTime = time;
+            frostfall.isFiring = true;
+            (frostfall as any).frostfallChargeTime = time; // Used for animation effects
+
+            // Emit frost burst particles
+            const start = IsoUtils.cartToIso(centerX, centerY);
+            if (particleManager) {
+                // Radiate outwards
+                for (let i = 0; i < 20; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const r = Math.random() * 50;
+                    particleManager.emitSparkTracker(frostfall.id + '_chill_burst_' + i, start.x + Math.cos(angle) * r, start.y - 40 + Math.sin(angle) * r, time, 1);
+                }
             }
         }
-
-        // Pass info to the renderer to show it's firing
-        frostfall.laserTarget = target;
-        frostfall.laserHealth = target.health;
-    }
-
-    public cleanupFrostfallBeam(frostfall: PlacedBuilding) {
-        if (frostfall.laserGraphics) {
-            frostfall.laserGraphics.destroy();
-            frostfall.laserGraphics = undefined;
-        }
-        if (frostfall.laserCore) {
-            frostfall.laserCore.destroy();
-            frostfall.laserCore = undefined;
-        }
-        frostfall.laserTarget = undefined;
-        frostfall.lastDamageTime = undefined;
     }
 
     // === MAGMA VENT - MASSIVE VOLCANIC ERUPTION ===

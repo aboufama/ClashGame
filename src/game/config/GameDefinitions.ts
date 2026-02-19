@@ -352,21 +352,21 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         id: 'frostfall',
         name: 'Frostfall Monolith',
         cost: 1200,
-        desc: 'Fires an icy beam that massively slows a single target.',
+        desc: 'Unleashes a burst of freezing wind that slows and pushes back enemies.',
         width: 1,
         height: 1,
         maxHealth: 1050,
-        range: 8.0,
+        range: 6.0,
         category: 'defense',
         maxCount: 2,
         color: 0x88ccff,
-        fireRate: 100, // Continuous beam update rate
-        damage: 5, // low damage
+        fireRate: 2500, // AoE burst every 2.5 seconds
+        damage: 15,
         maxLevel: 3,
         levels: [
-            { hp: 1050, damage: 5, fireRate: 100, cost: 1200, range: 8.0 },
-            { hp: 1300, damage: 8, fireRate: 100, cost: 1800, range: 8.5 },
-            { hp: 1650, damage: 12, fireRate: 100, cost: 2600, range: 9.0 }
+            { hp: 1050, damage: 15, fireRate: 2500, cost: 1200, range: 6.0 },
+            { hp: 1300, damage: 25, fireRate: 2400, cost: 1800, range: 6.5 },
+            { hp: 1650, damage: 38, fireRate: 2300, cost: 2600, range: 7.0 }
         ]
     },
 };
