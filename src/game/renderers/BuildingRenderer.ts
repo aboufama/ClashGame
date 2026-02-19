@@ -755,7 +755,38 @@ export class BuildingRenderer {
     }
 
     private static renderTaperedCannon(level: number, graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, building?: any, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
-        const angle = building?.ballistaAngle ?? Math.PI / 4;
+        // Find nearest target if not actively attacking to track it
+        let angle = building?.ballistaAngle ?? Math.PI / 4;
+
+        if (building && building.scene && building.scene.troops && !building.target) {
+            // Track closest troop if we have a scene reference and no active target
+            let closestDist = Infinity;
+            let closestTroop: any = null;
+            const cx = building.gridX + (building.width || 2) / 2;
+            const cy = building.gridY + (building.height || 2) / 2;
+
+            building.scene.troops.forEach((t: any) => {
+                if (t.health > 0 && t.owner !== building.owner) {
+                    const tx = t.gridX;
+                    const ty = t.gridY;
+                    const d = Math.sqrt((tx - cx) ** 2 + (ty - cy) ** 2);
+                    if (d < closestDist && d < (building.range || 5)) {
+                        closestDist = d;
+                        closestTroop = t;
+                    }
+                }
+            });
+
+            if (closestTroop) {
+                // Iso angle tracking
+                const dx = closestTroop.gridX - cx;
+                const dy = closestTroop.gridY - cy;
+                const isoDx = dx - dy;
+                const isoDy = (dx + dy) * 0.5;
+                angle = Math.atan2(isoDy, isoDx);
+            }
+        }
+
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
         const pCos = Math.cos(angle + Math.PI / 2);
@@ -775,57 +806,61 @@ export class BuildingRenderer {
             g.strokePoints([c1, c2, c3, c4], true, true);
 
             // Central rotating mount
+            const mountW = isL4 ? 22 : (isL3 ? 20 : 16);
+            const mountH = isL4 ? 14 : (isL3 ? 12 : 10);
             const mountColor = isL4 ? 0xddddcc : (isL3 ? 0x4a4a5a : (isL2 ? 0x4a3018 : 0x5a4030));
             g.fillStyle(mountColor, alpha);
-            g.fillEllipse(center.x, center.y - 2, 16, 10);
-            g.lineStyle(1.5, isL4 ? 0xdaa520 : 0x222222, alpha);
-            g.strokeEllipse(center.x, center.y - 2, 16, 10);
+            g.fillEllipse(center.x, center.y - 2, mountW, mountH);
+            g.lineStyle(2, isL4 ? 0xdaa520 : 0x222222, alpha);
+            g.strokeEllipse(center.x, center.y - 2, mountW, mountH);
 
             if (isL3) {
                 g.fillStyle(0x222222, alpha);
-                g.fillCircle(center.x, center.y - 2, 3);
+                g.fillCircle(center.x, center.y - 2, 4);
             }
         }
 
         if (!onlyBase) {
             // Barrel pivot height
-            const pivotY = center.y - 8;
+            const pivotY = center.y - 12;
 
             // Recoil offset (small recoil)
-            const recoilAmount = (building?.cannonRecoilOffset ?? 0) * 6;
+            const recoilAmount = (building?.cannonRecoilOffset ?? 0) * (isL4 ? 8 : 6);
             const recoilOffsetX = -cos * recoilAmount;
             const recoilOffsetY = -sin * 0.5 * recoilAmount; // Isometric recoil Y
 
             // Keep barrel short! Max size is about the original L1 length
-            const length = isL4 ? 24 : (isL3 ? 22 : (isL2 ? 20 : 18));
+            const length = isL4 ? 28 : (isL3 ? 24 : (isL2 ? 22 : 18));
 
-            const breechX = center.x - cos * 6 + recoilOffsetX;
+            const breechOffset = isL4 ? 8 : 6;
+            const breechX = center.x - cos * breechOffset + recoilOffsetX;
             // Isometric perspective: apply * 0.5 to sinusoidal Y displacement
-            const breechY = pivotY - sin * 0.5 * 6 + recoilOffsetY;
+            const breechY = pivotY - sin * 0.5 * breechOffset + recoilOffsetY;
 
             const muzzleX = center.x + cos * length + recoilOffsetX;
             const muzzleY = pivotY + sin * 0.5 * length + recoilOffsetY;
 
             // Cannon Drop Shadow
             graphics.fillStyle(0x111111, alpha * 0.4);
-            graphics.fillEllipse(center.x + cos * (length / 2), center.y + 2, length * 0.8, 6);
+            graphics.fillEllipse(center.x + cos * (length / 2), center.y + 2, length * 0.9, 8);
 
             // Draw Barrel Pivot / Carriage Arms
             const armColor = isL4 ? 0xffd700 : (isL3 ? 0x2a2a3a : 0x3a2008);
-            graphics.lineStyle(4, armColor, alpha);
-            graphics.lineBetween(center.x - 4, center.y - 2, center.x - 4, pivotY + 2);
-            graphics.lineBetween(center.x + 4, center.y - 2, center.x + 4, pivotY + 2);
+            graphics.lineStyle(5, armColor, alpha);
+            const armSpread = isL4 ? 6 : 5;
+            graphics.lineBetween(center.x - armSpread, center.y - 2, center.x - armSpread, pivotY + 2);
+            graphics.lineBetween(center.x + armSpread, center.y - 2, center.x + armSpread, pivotY + 2);
             graphics.fillStyle(isL4 ? 0xdaa520 : 0x555555, alpha);
-            graphics.fillCircle(center.x + recoilOffsetX, pivotY + recoilOffsetY, 3); // Pivot pin
+            graphics.fillCircle(center.x + recoilOffsetX, pivotY + recoilOffsetY, 4); // Pivot pin
 
             const barrelColor = isL4 ? 0xddb922 : (isL3 ? 0x444455 : 0x2a2a2a);
             graphics.fillStyle(barrelColor, alpha);
 
             // Rounded back of the cannon
-            graphics.fillCircle(breechX, breechY, isL3 ? 5 : 4);
+            graphics.fillCircle(breechX, breechY, isL4 ? 7 : (isL3 ? 6.5 : 5.5));
 
-            const wB = isL4 ? 6 : (isL3 ? 6.5 : 5.5); // Breech half-width
-            const wM = isL4 ? 4 : (isL3 ? 4.5 : 3.5); // Muzzle half-width
+            const wB = isL4 ? 9 : (isL3 ? 8 : 7); // Breech half-width
+            const wM = isL4 ? 6 : (isL3 ? 5.5 : 4.5); // Muzzle half-width
 
             // Tapered Barrel Polygon
             graphics.beginPath();
@@ -837,13 +872,13 @@ export class BuildingRenderer {
             graphics.closePath();
             graphics.fillPath();
 
-            graphics.lineStyle(1, isL4 ? 0xffea77 : 0x555555, alpha * 0.6);
-            graphics.lineBetween(breechX, breechY - 1, muzzleX, muzzleY - 1);
+            graphics.lineStyle(2, isL4 ? 0xffea77 : 0x555555, alpha * 0.6);
+            graphics.lineBetween(breechX, breechY - 2, muzzleX, muzzleY - 2);
 
             // Muzzle Flare Ring
             graphics.fillStyle(isL4 ? 0xc8a211 : 0x1a1a1a, alpha);
-            const fM = wM + 1.5;
-            const flareLen = 3;
+            const fM = wM + 2.5;
+            const flareLen = 4;
             const flareEndX = muzzleX + cos * flareLen;
             const flareEndY = muzzleY + sin * 0.5 * flareLen;
             graphics.beginPath();
@@ -856,11 +891,11 @@ export class BuildingRenderer {
 
             // Bore Hole
             graphics.fillStyle(0x000000, alpha);
-            graphics.fillEllipse(flareEndX, flareEndY, isL3 ? 3 : 2, (isL3 ? 3 : 2) * 0.8);
+            graphics.fillEllipse(flareEndX, flareEndY, isL4 ? 5 : 4, (isL4 ? 5 : 4) * 0.8);
 
             // Iron/Gold Bands
             const bands = isL3 ? [0.2, 0.45, 0.75] : [0.3, 0.7];
-            graphics.lineStyle(isL3 ? 2 : 1.5, isL4 ? 0xffffff : 0x111111, alpha * 0.8);
+            graphics.lineStyle(isL3 ? 3 : 2, isL4 ? 0xffffff : 0x111111, alpha * 0.8);
             for (const t of bands) {
                 const bandX = breechX + (muzzleX - breechX) * t;
                 const bandY = breechY + (muzzleY - breechY) * t;
@@ -3539,94 +3574,92 @@ export class BuildingRenderer {
         }
 
         if (!onlyBase) {
-            const ventBaseX = center.x;
-            const ventBaseY = center.y - 15;
+            const crystalBobOffset = Math.sin(time / 400) * 3;
+            const crystalBaseX = center.x;
+            const crystalBaseY = center.y - 12 + crystalBobOffset; // Shift up from iso center
 
-            let ventHeight = 35;
-            let ventWidth = 40;
+            let crystalHeight = 50;
+            let crystalWidth = 24;
 
             if (level === 2) {
-                ventHeight = 45;
-                ventWidth = 48;
+                crystalHeight = 65;
+                crystalWidth = 30;
             } else if (level >= 3) {
-                ventHeight = 55;
-                ventWidth = 56;
+                crystalHeight = 80;
+                crystalWidth = 36;
             }
 
-            const isFiring = _building && _building.isFiring;
+            // Using time Since Fire to govern the pulse logic since we don't have isFiring
+            const timeSinceFire = _building && _building.lastFireTime ? time - _building.lastFireTime : 10000;
+            const isFiring = timeSinceFire < 500;
+            const glowMult = isFiring ? 1.0 : 0.4;
+            const glowPulse = (Math.sin(time / 150) + 1) / 2;
 
             // Apply damage tint if needed
             if (tint !== null) {
                 (graphics as any).setTint(tint);
             }
 
-            // Draw Vent Cylinder Body
-            // Back/Inner rim
-            graphics.fillStyle(0x1a2530, alpha);
-            graphics.fillEllipse(ventBaseX, ventBaseY - ventHeight, ventWidth, ventWidth * 0.5);
+            // Glow
+            graphics.fillStyle(0x44aaff, alpha * (0.2 + (glowPulse * 0.2)) * glowMult);
+            graphics.fillEllipse(crystalBaseX, crystalBaseY, crystalWidth * 1.5, crystalWidth * 0.8);
 
-            // Front/Outer Body
-            graphics.fillStyle(0x3e4a59, alpha);
+            // Shaded polygons
+            // Center
+            graphics.fillStyle(0xaaddff, alpha);
             graphics.beginPath();
-            graphics.moveTo(ventBaseX - ventWidth / 2, ventBaseY);
-            graphics.lineTo(ventBaseX - ventWidth / 2, ventBaseY - ventHeight);
-            graphics.lineTo(ventBaseX + ventWidth / 2, ventBaseY - ventHeight);
-            graphics.lineTo(ventBaseX + ventWidth / 2, ventBaseY);
+            graphics.moveTo(crystalBaseX, crystalBaseY - crystalHeight);
+            graphics.lineTo(crystalBaseX + crystalWidth / 2, crystalBaseY - crystalHeight / 3);
+            graphics.lineTo(crystalBaseX, crystalBaseY);
+            graphics.lineTo(crystalBaseX - crystalWidth / 2, crystalBaseY - crystalHeight / 3);
             graphics.closePath();
             graphics.fillPath();
 
-            // Body Shading (Left)
-            graphics.fillStyle(0x2a3544, alpha);
+            // Left
+            graphics.fillStyle(0x66bbff, alpha);
             graphics.beginPath();
-            graphics.moveTo(ventBaseX - ventWidth / 2, ventBaseY);
-            graphics.lineTo(ventBaseX - ventWidth / 2, ventBaseY - ventHeight);
-            graphics.lineTo(ventBaseX, ventBaseY - ventHeight);
-            graphics.lineTo(ventBaseX, ventBaseY);
+            graphics.moveTo(crystalBaseX, crystalBaseY - crystalHeight);
+            graphics.lineTo(crystalBaseX - crystalWidth / 2, crystalBaseY - crystalHeight / 3);
+            graphics.lineTo(crystalBaseX - crystalWidth * 0.8, crystalBaseY - crystalHeight / 2);
             graphics.closePath();
             graphics.fillPath();
 
-            // Top Cap (Grille area)
-            graphics.fillStyle(0x4a5a6b, alpha);
-            graphics.fillEllipse(ventBaseX, ventBaseY, ventWidth, ventWidth * 0.5);
+            // Right
+            graphics.fillStyle(0x4499dd, alpha);
+            graphics.beginPath();
+            graphics.moveTo(crystalBaseX, crystalBaseY - crystalHeight);
+            graphics.lineTo(crystalBaseX + crystalWidth / 2, crystalBaseY - crystalHeight / 3);
+            graphics.lineTo(crystalBaseX + crystalWidth * 0.8, crystalBaseY - crystalHeight / 2);
+            graphics.closePath();
+            graphics.fillPath();
 
-            // Spin fan rapidly if firing, otherwise slow idle spin
-            const spinSpeed = isFiring ? time / 50 : time / 800;
-            const fanRadius = ventWidth * 0.4;
+            // Bottom left
+            graphics.fillStyle(0x3388cc, alpha);
+            graphics.beginPath();
+            graphics.moveTo(crystalBaseX, crystalBaseY);
+            graphics.lineTo(crystalBaseX - crystalWidth / 2, crystalBaseY - crystalHeight / 3);
+            graphics.lineTo(crystalBaseX - crystalWidth * 0.8, crystalBaseY - crystalHeight / 2);
+            graphics.closePath();
+            graphics.fillPath();
 
-            // Draw Fan Grate / Turbine Blades
-            graphics.lineStyle(2, 0x111111, alpha * 0.8);
-            for (let i = 0; i < 6; i++) {
-                const angle = spinSpeed + (i * Math.PI) / 3;
-                // Iso projection for fan blades
-                const bx = ventBaseX + Math.cos(angle) * fanRadius;
-                const by = ventBaseY + Math.sin(angle) * fanRadius * 0.5;
-                graphics.beginPath();
-                graphics.moveTo(ventBaseX, ventBaseY);
-                graphics.lineTo(bx, by);
-                graphics.strokePath();
-            }
+            // Bottom right
+            graphics.fillStyle(0x2277aa, alpha);
+            graphics.beginPath();
+            graphics.moveTo(crystalBaseX, crystalBaseY);
+            graphics.lineTo(crystalBaseX + crystalWidth / 2, crystalBaseY - crystalHeight / 3);
+            graphics.lineTo(crystalBaseX + crystalWidth * 0.8, crystalBaseY - crystalHeight / 2);
+            graphics.closePath();
+            graphics.fillPath();
 
-            // Cryo Core Glow Output
-            if (isFiring) {
-                // Fade out the glow after firing
-                const fade = 1 - Math.min(1, (time - (_building.frostfallChargeTime || time)) / 2500);
-
-                graphics.fillStyle(0xaaffff, alpha * 0.8 * fade);
-                graphics.fillEllipse(ventBaseX, ventBaseY, ventWidth * 0.3, ventWidth * 0.15);
-
-                // Outer ring glow
-                graphics.lineStyle(3 + (1 - fade) * 2, 0x44aaff, alpha * 0.5 * fade);
-                graphics.strokeEllipse(ventBaseX, ventBaseY, Math.max(1, ventWidth * fade), Math.max(1, ventWidth * 0.5 * fade));
-
-                // Clear firing flag if animation is done so it rests
-                if (fade <= 0.05) {
-                    _building.isFiring = false;
-                }
-            } else {
-                // Idle Core
-                graphics.fillStyle(0x44aaff, alpha * 0.4);
-                graphics.fillEllipse(ventBaseX, ventBaseY, ventWidth * 0.2, ventWidth * 0.1);
-            }
+            // Inner core
+            graphics.fillStyle(0xffffff, alpha * (0.5 + (glowPulse * 0.5)) * glowMult);
+            graphics.beginPath();
+            graphics.moveTo(crystalBaseX, crystalBaseY - crystalHeight * 0.8);
+            graphics.lineTo(crystalBaseX + crystalWidth / 4, crystalBaseY - crystalHeight / 3);
+            graphics.lineTo(crystalBaseX, crystalBaseY - crystalHeight * 0.2);
+            graphics.lineTo(crystalBaseX - crystalWidth / 4, crystalBaseY - crystalHeight / 3);
+            graphics.closePath();
+            graphics.fillPath();
         }
     }
     static drawPrismTower(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, _building?: any, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
