@@ -1142,7 +1142,7 @@ function App() {
     }
   };
 
-  const defenseShopOrder: BuildingType[] = ['wall', 'cannon', 'ballista', 'mortar', 'tesla', 'xbow', 'prism', 'magmavent', 'spike_launcher', 'dragons_breath'];
+  const defenseShopOrder: BuildingType[] = ['wall', 'cannon', 'ballista', 'mortar', 'tesla', 'xbow', 'prism', 'frostfall', 'magmavent', 'spike_launcher', 'dragons_breath'];
   const defenseOrderIndex = new Map(defenseShopOrder.map((type, index) => [type, index]));
   const categoryOrder: Record<string, number> = {
     defense: 0,

@@ -659,6 +659,7 @@ export class MainScene extends Phaser.Scene {
         // Clean up any active prism lasers
         this.buildings.forEach(b => {
             if (b.type === 'prism') this.cleanupPrismLaser(b);
+            if (b.type === 'frostfall') this.cleanupFrostfallBeam(b);
         });
 
         gameManager.setDummyActive(false);
@@ -739,6 +740,9 @@ export class MainScene extends Phaser.Scene {
                 break;
             case 'spike_launcher':
                 this.shootSpikeLauncherAt(defense, target);
+                break;
+            case 'frostfall':
+                this.shootFrostfallBeamAt(defense, target, time);
                 break;
             default:
                 this.shootGenericDefenseAt(defense, target);
@@ -1562,6 +1566,9 @@ export class MainScene extends Phaser.Scene {
             case 'prism':
                 BuildingRenderer.drawPrismTower(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, skipBase, onlyBase);
                 break;
+            case 'frostfall':
+                BuildingRenderer.drawFrostfall(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, skipBase, onlyBase);
+                break;
             case 'magmavent':
                 BuildingRenderer.drawMagmaVent(graphics, c1, c2, c3, c4, center, alpha, tint, building, baseGraphics, this.time.now, skipBase, onlyBase);
                 break;
@@ -2007,7 +2014,7 @@ export class MainScene extends Phaser.Scene {
             }
 
             // Initial delay for non-continuous defenses (not prism laser)
-            const needsInitialDelay = defense.type !== 'prism' && defense.type !== 'magmavent';
+            const needsInitialDelay = defense.type !== 'prism' && defense.type !== 'frostfall' && defense.type !== 'magmavent';
             if (defense.lastFireTime === undefined) {
                 // Set initial fire time - continuous defenses fire immediately, others have 1.5s delay
                 defense.lastFireTime = needsInitialDelay ? time : (time - interval);
@@ -2071,9 +2078,11 @@ export class MainScene extends Phaser.Scene {
                 this.fireDefenseAtTarget(defense, targetToFire, time);
             } else {
                 if (usesTargetLock) defense.lockedTargetId = undefined;
-                // No target - clean up prism laser if it exists
+                // No target - clean up continuous lasers if they exist
                 if (defense.type === 'prism') {
                     this.cleanupPrismLaser(defense);
+                } else if (defense.type === 'frostfall') {
+                    this.cleanupFrostfallBeam(defense);
                 }
             }
         });
@@ -3240,6 +3249,86 @@ export class MainScene extends Phaser.Scene {
         prism.prismTarget = undefined;
         prism.prismTrailLastPos = undefined;
         prism.prismLastDamageTime = undefined;
+    }
+
+    private shootFrostfallBeamAt(frostfall: PlacedBuilding, target: Troop, time: number) {
+        const info = BUILDINGS['frostfall'];
+        const stats = this.getDefenseStats(frostfall);
+        const tickInterval = stats.fireRate || 100;
+        const dps = stats.damage ?? 0;
+        const start = IsoUtils.cartToIso(frostfall.gridX + info.width / 2, frostfall.gridY + info.height / 2);
+
+        // Shoot from top of crystal
+        start.y -= 60;
+
+        const end = IsoUtils.cartToIso(target.gridX, target.gridY);
+        end.y -= 15; // chest height
+
+        if (!frostfall.laserGraphics) {
+            frostfall.laserGraphics = this.add.graphics();
+            frostfall.laserGraphics.setDepth(10000);
+        }
+        if (!frostfall.laserCore) {
+            frostfall.laserCore = this.add.graphics();
+            frostfall.laserCore.setDepth(10001);
+        }
+
+        const graphics = frostfall.laserGraphics;
+        const core = frostfall.laserCore;
+
+        graphics.clear();
+        core.clear();
+
+        const pulse = (Math.sin(time / 150) + 1) / 2;
+        const outerGlow = 0x44aaff;
+        const beamCore = 0xffffff;
+
+        graphics.lineStyle(6 + pulse * 4, outerGlow, 0.4);
+        graphics.lineBetween(start.x, start.y, end.x, end.y);
+
+        graphics.lineStyle(3, outerGlow, 0.8);
+        graphics.lineBetween(start.x, start.y, end.x, end.y);
+
+        core.lineStyle(2, beamCore, 1);
+        core.lineBetween(start.x, start.y, end.x, end.y);
+
+        // Apply Chilled effect to target
+        (target as any).chillRemainingMs = 250;
+
+        const shouldApplyDamage = frostfall.lastDamageTime === undefined || time >= frostfall.lastDamageTime + tickInterval;
+        if (dps > 0 && shouldApplyDamage) {
+            frostfall.lastDamageTime = time;
+            const damagePerTick = dps * (tickInterval / 1000);
+            const actualDamage = Math.max(1, Math.floor(damagePerTick));
+            target.health -= actualDamage;
+            this.updateHealthBar(target);
+
+            // Random tiny snowflake burst at target
+            if (Math.random() < 0.2 && particleManager) {
+                particleManager.emitSparkTracker(target.id + '_chill', end.x, end.y - 10, time, 1);
+            }
+
+            if (target.health <= 0) {
+                this.cleanupFrostfallBeam(frostfall);
+            }
+        }
+
+        // Pass info to the renderer to show it's firing
+        frostfall.laserTarget = target;
+        frostfall.laserHealth = target.health;
+    }
+
+    public cleanupFrostfallBeam(frostfall: PlacedBuilding) {
+        if (frostfall.laserGraphics) {
+            frostfall.laserGraphics.destroy();
+            frostfall.laserGraphics = undefined;
+        }
+        if (frostfall.laserCore) {
+            frostfall.laserCore.destroy();
+            frostfall.laserCore = undefined;
+        }
+        frostfall.laserTarget = undefined;
+        frostfall.lastDamageTime = undefined;
     }
 
     // === MAGMA VENT - MASSIVE VOLCANIC ERUPTION ===
@@ -4410,6 +4499,26 @@ export class MainScene extends Phaser.Scene {
                 this.setTroopRetargetPause(troop, 80, 160);
             }
 
+            // --- CHILLED STATUS EFFECT ---
+            if ((troop as any).chillRemainingMs > 0) {
+                (troop as any).chillRemainingMs -= delta;
+                if ((troop as any).chillRemainingMs <= 0) {
+                    (troop as any).chillRemainingMs = 0;
+                    if (troop.gameObject && (troop.gameObject as any).clearTint) {
+                        (troop.gameObject as any).clearTint();
+                    }
+                } else {
+                    if (troop.gameObject && (troop.gameObject as any).setTint) {
+                        (troop.gameObject as any).setTint(0x88ccff);
+                    }
+                    // 60% Attack Speed Reduction
+                    // By pushing lastAttackTime forward, we artificially extend the cooldown.
+                    if (troop.lastAttackTime) {
+                        troop.lastAttackTime += delta * 1.5;
+                    }
+                }
+            }
+
             // Redraw animated troops every frame
             if (troop.type === 'warrior' || troop.type === 'archer' || troop.type === 'giant' || troop.type === 'ram' || troop.type === 'golem' || troop.type === 'sharpshooter' || troop.type === 'mobilemortar' || troop.type === 'davincitank' || troop.type === 'phalanx' || troop.type === 'romanwarrior' || troop.type === 'wallbreaker') {
                 // Determine if troop is actually moving (not in attack range)
@@ -4590,7 +4699,9 @@ export class MainScene extends Phaser.Scene {
                             desiredMove.normalize();
                         }
 
-                        const speed = stats.speed * troop.speedMult * delta * 1.12;
+                        // 60% Movement Slowdown if chilled
+                        const chillSlowdown = ((troop as any).chillRemainingMs || 0) > 0 ? 0.4 : 1.0;
+                        const speed = stats.speed * troop.speedMult * delta * 1.12 * chillSlowdown;
                         const targetVx = ((desiredMove.x * 0.8) + (moveDir.x * 0.2)) * speed;
                         const targetVy = ((desiredMove.y * 0.8) + (moveDir.y * 0.2)) * speed;
                         troop.velocityX = Phaser.Math.Linear(troop.velocityX ?? targetVx, targetVx, 0.45);

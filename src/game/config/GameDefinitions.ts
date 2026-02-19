@@ -4,7 +4,8 @@ export const MAP_SIZE = 25;
 export type BuildingType =
     | 'town_hall' | 'barracks' | 'lab' | 'cannon' | 'ballista' | 'xbow'
     | 'solana_collector' | 'mortar' | 'tesla' | 'wall'
-    | 'army_camp' | 'prism' | 'magmavent' | 'dragons_breath' | 'spike_launcher';
+    | 'army_camp' | 'prism' | 'magmavent' | 'dragons_breath' | 'spike_launcher'
+    | 'frostfall';
 
 export type TroopType =
     | 'warrior' | 'archer' | 'giant' | 'ward' | 'recursion'
@@ -345,6 +346,27 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
             { hp: 1450, damage: 52, fireRate: 3800, cost: 1950, range: 10.0 },
             { hp: 1800, damage: 70, fireRate: 3400, cost: 2800, range: 10.5 },
             { hp: 2200, damage: 90, fireRate: 3000, cost: 3800, range: 11.0 }
+        ]
+    },
+    frostfall: {
+        id: 'frostfall',
+        name: 'Frostfall Monolith',
+        cost: 1200,
+        desc: 'Fires an icy beam that massively slows a single target.',
+        width: 1,
+        height: 1,
+        maxHealth: 1050,
+        range: 8.0,
+        category: 'defense',
+        maxCount: 2,
+        color: 0x88ccff,
+        fireRate: 100, // Continuous beam update rate
+        damage: 5, // low damage
+        maxLevel: 3,
+        levels: [
+            { hp: 1050, damage: 5, fireRate: 100, cost: 1200, range: 8.0 },
+            { hp: 1300, damage: 8, fireRate: 100, cost: 1800, range: 8.5 },
+            { hp: 1650, damage: 12, fireRate: 100, cost: 2600, range: 9.0 }
         ]
     },
 };

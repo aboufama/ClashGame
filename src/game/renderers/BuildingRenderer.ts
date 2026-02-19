@@ -4038,6 +4038,135 @@ export class BuildingRenderer {
             }
         }
     }
+
+    static drawFrostfall(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, _building?: any, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
+        const time = Date.now();
+        const level = _building?.level ?? 1;
+        const g = baseGraphics || graphics;
+
+        if (!skipBase) {
+            // Level 1: Dark Stone, Level 2+ Metal accents
+            g.fillStyle(0x2a2e35, alpha);
+            g.beginPath();
+            g.moveTo(c1.x, c1.y);
+            g.lineTo(c2.x, c2.y);
+            g.lineTo(c3.x, c3.y);
+            g.lineTo(c4.x, c4.y);
+            g.closePath();
+            g.fillPath();
+
+            // Bevels
+            g.fillStyle(0x3e4450, alpha);
+            g.beginPath();
+            g.moveTo(c1.x, c1.y);
+            g.lineTo(center.x, center.y - 4);
+            g.lineTo(c2.x, c2.y);
+            g.closePath();
+            g.fillPath();
+
+            g.fillStyle(0x1d1f24, alpha);
+            g.beginPath();
+            g.moveTo(c3.x, c3.y);
+            g.lineTo(center.x, center.y + 4);
+            g.lineTo(c4.x, c4.y);
+            g.closePath();
+            g.fillPath();
+
+            if (level >= 3) {
+                const pulse = (Math.sin(time / 200) + 1) / 2;
+                g.fillStyle(0x88ccff, alpha * (0.6 + pulse * 0.4));
+                g.fillCircle(c1.x + (c3.x - c1.x) * 0.3, c1.y + (c3.y - c1.y) * 0.3, 2);
+                g.fillCircle(c1.x + (c3.x - c1.x) * 0.7, c1.y + (c3.y - c1.y) * 0.7, 2);
+            }
+        }
+
+        if (!onlyBase) {
+            const crystalBobOffset = Math.sin(time / 400) * 3;
+            const crystalBaseX = center.x;
+            const crystalBaseY = center.y - 12 + crystalBobOffset; // Shift up from iso center
+
+            let crystalHeight = 50;
+            let crystalWidth = 24;
+
+            if (level === 2) {
+                crystalHeight = 65;
+                crystalWidth = 30;
+            } else if (level >= 3) {
+                crystalHeight = 80;
+                crystalWidth = 36;
+            }
+
+            const isFiring = _building && _building.laserTarget && _building.laserHealth > 0;
+            const glowMult = isFiring ? 1.0 : 0.4;
+            const glowPulse = (Math.sin(time / 150) + 1) / 2;
+
+            // Apply damage tint if needed
+            if (tint !== null) {
+                graphics.setTint(tint);
+            }
+
+            // Glow
+            graphics.fillStyle(0x44aaff, alpha * (0.2 + (glowPulse * 0.2)) * glowMult);
+            graphics.fillEllipse(crystalBaseX, crystalBaseY, crystalWidth * 1.5, crystalWidth * 0.8);
+
+            // Shaded polygons
+            // Center
+            graphics.fillStyle(0xaaddff, alpha);
+            graphics.beginPath();
+            graphics.moveTo(crystalBaseX, crystalBaseY - crystalHeight);
+            graphics.lineTo(crystalBaseX + crystalWidth / 2, crystalBaseY - crystalHeight / 3);
+            graphics.lineTo(crystalBaseX, crystalBaseY);
+            graphics.lineTo(crystalBaseX - crystalWidth / 2, crystalBaseY - crystalHeight / 3);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Left
+            graphics.fillStyle(0x66bbff, alpha);
+            graphics.beginPath();
+            graphics.moveTo(crystalBaseX, crystalBaseY - crystalHeight);
+            graphics.lineTo(crystalBaseX - crystalWidth / 2, crystalBaseY - crystalHeight / 3);
+            graphics.lineTo(crystalBaseX - crystalWidth * 0.8, crystalBaseY - crystalHeight / 2);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Right
+            graphics.fillStyle(0x4499dd, alpha);
+            graphics.beginPath();
+            graphics.moveTo(crystalBaseX, crystalBaseY - crystalHeight);
+            graphics.lineTo(crystalBaseX + crystalWidth / 2, crystalBaseY - crystalHeight / 3);
+            graphics.lineTo(crystalBaseX + crystalWidth * 0.8, crystalBaseY - crystalHeight / 2);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Bottom left
+            graphics.fillStyle(0x3388cc, alpha);
+            graphics.beginPath();
+            graphics.moveTo(crystalBaseX, crystalBaseY);
+            graphics.lineTo(crystalBaseX - crystalWidth / 2, crystalBaseY - crystalHeight / 3);
+            graphics.lineTo(crystalBaseX - crystalWidth * 0.8, crystalBaseY - crystalHeight / 2);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Bottom right
+            graphics.fillStyle(0x2277aa, alpha);
+            graphics.beginPath();
+            graphics.moveTo(crystalBaseX, crystalBaseY);
+            graphics.lineTo(crystalBaseX + crystalWidth / 2, crystalBaseY - crystalHeight / 3);
+            graphics.lineTo(crystalBaseX + crystalWidth * 0.8, crystalBaseY - crystalHeight / 2);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Inner core
+            graphics.fillStyle(0xffffff, alpha * (0.5 + (glowPulse * 0.5)) * glowMult);
+            graphics.beginPath();
+            graphics.moveTo(crystalBaseX, crystalBaseY - crystalHeight * 0.8);
+            graphics.lineTo(crystalBaseX + crystalWidth / 4, crystalBaseY - crystalHeight / 3);
+            graphics.lineTo(crystalBaseX, crystalBaseY - crystalHeight * 0.2);
+            graphics.lineTo(crystalBaseX - crystalWidth / 4, crystalBaseY - crystalHeight / 3);
+            graphics.closePath();
+            graphics.fillPath();
+        }
+    }
     static drawPrismTower(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, _building?: any, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
         const time = Date.now();
         const level = _building?.level ?? 1;

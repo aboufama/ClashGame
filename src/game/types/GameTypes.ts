@@ -32,6 +32,12 @@ export interface PlacedBuilding {
     prismLaserCore?: Phaser.GameObjects.Graphics;     // Inner core of laser
     prismChargingUp?: boolean;     // Whether it's charging up
     prismChargeTime?: number;      // When charging started
+    // Frostfall Monolith - Continuous beam properties
+    laserGraphics?: Phaser.GameObjects.Graphics;
+    laserCore?: Phaser.GameObjects.Graphics;
+    laserTarget?: Troop;
+    laserHealth?: number;
+    lastDamageTime?: number;
     // Tesla charge state
     teslaCharging?: boolean;
     teslaChargeStart?: number;
