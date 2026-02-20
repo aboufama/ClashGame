@@ -3435,57 +3435,10 @@ export class MainScene extends Phaser.Scene {
                     embedded.closePath();
                     embedded.strokePath();
 
-                    // === DIRT CRATER MOUND (covers bottom of crystal) ===
-                    // Main dirt mound — elliptical ring around impact point
-                    embedded.fillStyle(0x5a4a3a, 0.9);
-                    embedded.fillEllipse(0, 5, 30, 12);
-                    // Inner crater depression (darker)
-                    embedded.fillStyle(0x3a2a1a, 0.8);
-                    embedded.fillEllipse(0, 5, 20, 8);
-
-                    // Pushed-up dirt clumps on sides
-                    embedded.fillStyle(0x665544, 0.7);
-                    embedded.fillCircle(-12, 3, 4);
-                    embedded.fillCircle(13, 4, 3.5);
-                    embedded.fillCircle(-8, 7, 3);
-                    embedded.fillCircle(9, 6, 2.5);
-
-                    // Tiny dirt highlights
-                    embedded.fillStyle(0x887766, 0.4);
-                    embedded.fillCircle(-14, 1, 2);
-                    embedded.fillCircle(15, 2, 2);
 
                     embedded.setPosition(end.x, end.y);
                     embedded.setRotation(0.12); // Slightly tilted
                     embedded.setDepth(100);
-
-                    // === EJECT DIRT CHUNKS on impact ===
-                    for (let i = 0; i < 6; i++) {
-                        const dirt = this.add.graphics();
-                        const dirtSize = 2 + Math.random() * 3;
-                        dirt.fillStyle(Phaser.Display.Color.GetColor(
-                            80 + Math.random() * 40,
-                            60 + Math.random() * 30,
-                            40 + Math.random() * 20
-                        ), 0.9);
-                        dirt.fillCircle(0, 0, dirtSize);
-                        dirt.setPosition(end.x, end.y);
-                        dirt.setDepth(101);
-
-                        const angle = (i / 6) * Math.PI * 2 + Math.random() * 0.5;
-                        const dist = 15 + Math.random() * 20;
-                        this.tweens.add({
-                            targets: dirt,
-                            x: end.x + Math.cos(angle) * dist,
-                            y: end.y + Math.sin(angle) * dist * 0.5 - 10,
-                            alpha: 0,
-                            scaleX: 0.3,
-                            scaleY: 0.3,
-                            duration: 400 + Math.random() * 300,
-                            ease: 'Quad.easeOut',
-                            onComplete: () => dirt.destroy()
-                        });
-                    }
 
                     // === WATER PUDDLE that spreads as crystal melts ===
                     const puddle = this.add.graphics();
