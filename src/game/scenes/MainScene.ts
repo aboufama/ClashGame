@@ -3280,12 +3280,12 @@ export class MainScene extends Phaser.Scene {
         frostfall.frostfallProjectileActive = false; // Crystal is rising, not launched yet
 
         const level = frostfall.level ?? 1;
-        const crystalHeight = level >= 3 ? 80 : (level === 2 ? 65 : 50);
-        const crystalWidth = level >= 3 ? 36 : (level === 2 ? 30 : 24);
-        const baseHeight = level >= 3 ? 22 : (level === 2 ? 18 : 15);
+        const crystalHeight = level >= 3 ? 45 : (level === 2 ? 40 : 35);
+        const crystalWidth = level >= 3 ? 22 : (level === 2 ? 20 : 18);
+        const baseHeight = 10;
 
-        // Wait for the crystal to fully rise from the pit (renderer timeline: 2000ms after lastFireTime)
-        this.time.delayedCall(2000, () => {
+        // Wait for the crystal to swing forward (renderer timeline: 4200ms after lastFireTime)
+        this.time.delayedCall(4200, () => {
             // The crystal is now fully risen — LAUNCH it as the projectile!
             frostfall.frostfallProjectileActive = true; // Tell renderer to hide its crystal
 
