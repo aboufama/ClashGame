@@ -3413,8 +3413,8 @@ export class MainScene extends Phaser.Scene {
 
                     // Create the EMBEDDED crystal at impact point (sticks into the ground)
                     const embedded = this.add.graphics();
-                    const embedHeight = crystalHeight * 0.6; // Partially buried
-                    const embedWidth = crystalWidth * 0.8;
+                    const embedHeight = crystalHeight; // Full size
+                    const embedWidth = crystalWidth;
 
                     // Draw embedded crystal (tilted, partially in ground)
                     embedded.fillStyle(0xaaddff, 0.9);
@@ -3475,35 +3475,35 @@ export class MainScene extends Phaser.Scene {
                         alpha: 1,
                         scaleX: { from: 0.3, to: 1.5 },
                         scaleY: { from: 0.3, to: 1.5 },
-                        duration: 4000,
+                        duration: 8000,
                         ease: 'Quad.easeOut',
                         onComplete: () => {
                             // Puddle slowly fades away
                             this.tweens.add({
                                 targets: puddle,
                                 alpha: 0,
-                                duration: 2000,
+                                duration: 3000,
                                 onComplete: () => puddle.destroy()
                             });
                         }
                     });
 
-                    // === CRYSTAL MELTS over 5 seconds ===
+                    // === CRYSTAL MELTS over 10 seconds ===
                     this.tweens.add({
                         targets: embedded,
                         scaleY: { from: 1.0, to: 0.0 },
                         scaleX: { from: 1.0, to: 1.4 },
                         alpha: { from: 1.0, to: 0.3 },
                         y: end.y + 5,
-                        duration: 5000,
+                        duration: 10000,
                         ease: 'Quad.easeIn',
                         onComplete: () => embedded.destroy()
                     });
 
                     // Water droplets dripping off the crystal as it melts
-                    const dripCount = 12;
+                    const dripCount = 20;
                     for (let i = 0; i < dripCount; i++) {
-                        this.time.delayedCall(400 + i * 350, () => {
+                        this.time.delayedCall(500 + i * 450, () => {
                             const drip = this.add.graphics();
                             drip.fillStyle(0x88ccff, 0.6);
                             drip.fillCircle(0, 0, 1.5);
@@ -3553,20 +3553,6 @@ export class MainScene extends Phaser.Scene {
                         });
                     }
 
-                    // === FROST MIST at impact ===
-                    const flash = this.add.graphics();
-                    flash.fillStyle(0xcceeFF, 0.5);
-                    flash.fillEllipse(end.x, end.y, 80, 40);
-                    flash.setDepth(99);
-                    this.tweens.add({
-                        targets: flash,
-                        alpha: 0,
-                        scaleX: 1.8,
-                        scaleY: 1.5,
-                        duration: 500,
-                        ease: 'Quad.easeOut',
-                        onComplete: () => flash.destroy()
-                    });
 
                     // === APPLY AOE DAMAGE AND DEBUFF ===
                     this.troops.forEach(troop => {

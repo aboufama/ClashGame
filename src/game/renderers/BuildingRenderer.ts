@@ -3606,31 +3606,36 @@ export class BuildingRenderer {
         // --- LAYER 2: The Rising Crystal (so it clips UNDER the front walls) ---
         // Skip drawing when the crystal has been launched as a projectile
         const projectileActive = _building?.frostfallProjectileActive === true;
-        if (!onlyBase && reloadProgress > 0 && !projectileActive) {
+        // After launch, don't draw the crystal at all for the rest of this fire cycle
+        const shouldDrawCrystal = !onlyBase && reloadProgress > 0 && !projectileActive && timeSinceFire < 2000;
+        if (shouldDrawCrystal) {
             const riseOffset = (1.0 - Math.min(reloadProgress, 1)) * crystalHeight;
             const crystalBobOffset = reloadProgress >= 1.0 ? Math.sin(time / 400) * 3 : 0;
             const crystalBaseX = center.x;
             const crystalBaseY = center.y - baseHeight + crystalBobOffset + riseOffset;
 
-            // Only draw if it's high enough to be seen (or fully exposed)
-            const glowMult = 1.0;
             const glowPulse = (Math.sin(time / 150) + 1) / 2;
 
             if (tint !== null) {
                 (graphics as any).setTint(tint);
             }
 
-            // Apply a simple Y-clip using a mask if we wanted to be perfect, 
-            // but simply drawing it before the front walls usually suffices for isometric top-down
+            // Glow/shadow at base — only show when crystal is fully risen
+            if (reloadProgress >= 1.0) {
+                graphics.fillStyle(0x44aaff, alpha * (0.2 + (glowPulse * 0.2)));
+                graphics.fillEllipse(crystalBaseX, crystalBaseY, crystalWidth * 1.5, crystalWidth * 0.8);
+            }
 
-            graphics.fillStyle(0x44aaff, alpha * (0.2 + (glowPulse * 0.2)) * glowMult * reloadProgress);
-            graphics.fillEllipse(crystalBaseX, crystalBaseY, crystalWidth * 1.5, crystalWidth * 0.8);
+            // Clip: don't draw crystal parts that would extend below the pit floor
+            const pitFloorY = center.y - baseHeight;
+            const clipBottom = Math.max(crystalBaseY, pitFloorY);
 
+            // Draw crystal with bottom clipped to pit floor
             graphics.fillStyle(0xaaddff, alpha);
             graphics.beginPath();
             graphics.moveTo(crystalBaseX, crystalBaseY - crystalHeight);
             graphics.lineTo(crystalBaseX + crystalWidth / 2, crystalBaseY - crystalHeight / 3);
-            graphics.lineTo(crystalBaseX, crystalBaseY);
+            graphics.lineTo(crystalBaseX, clipBottom);
             graphics.lineTo(crystalBaseX - crystalWidth / 2, crystalBaseY - crystalHeight / 3);
             graphics.closePath();
             graphics.fillPath();
@@ -3651,38 +3656,44 @@ export class BuildingRenderer {
             graphics.closePath();
             graphics.fillPath();
 
-            graphics.fillStyle(0x3388cc, alpha);
-            graphics.beginPath();
-            graphics.moveTo(crystalBaseX, crystalBaseY);
-            graphics.lineTo(crystalBaseX - crystalWidth / 2, crystalBaseY - crystalHeight / 3);
-            graphics.lineTo(crystalBaseX - crystalWidth * 0.8, crystalBaseY - crystalHeight / 2);
-            graphics.closePath();
-            graphics.fillPath();
+            // Only draw lower facets if they're above the pit floor
+            if (crystalBaseY - crystalHeight / 3 < pitFloorY) {
+                // Lower facets would clip — skip them
+            } else {
+                graphics.fillStyle(0x3388cc, alpha);
+                graphics.beginPath();
+                graphics.moveTo(crystalBaseX, clipBottom);
+                graphics.lineTo(crystalBaseX - crystalWidth / 2, crystalBaseY - crystalHeight / 3);
+                graphics.lineTo(crystalBaseX - crystalWidth * 0.8, crystalBaseY - crystalHeight / 2);
+                graphics.closePath();
+                graphics.fillPath();
 
-            graphics.fillStyle(0x2277aa, alpha);
-            graphics.beginPath();
-            graphics.moveTo(crystalBaseX, crystalBaseY);
-            graphics.lineTo(crystalBaseX + crystalWidth / 2, crystalBaseY - crystalHeight / 3);
-            graphics.lineTo(crystalBaseX + crystalWidth * 0.8, crystalBaseY - crystalHeight / 2);
-            graphics.closePath();
-            graphics.fillPath();
+                graphics.fillStyle(0x2277aa, alpha);
+                graphics.beginPath();
+                graphics.moveTo(crystalBaseX, clipBottom);
+                graphics.lineTo(crystalBaseX + crystalWidth / 2, crystalBaseY - crystalHeight / 3);
+                graphics.lineTo(crystalBaseX + crystalWidth * 0.8, crystalBaseY - crystalHeight / 2);
+                graphics.closePath();
+                graphics.fillPath();
+            }
 
-            graphics.fillStyle(0xffffff, alpha * (0.5 + (glowPulse * 0.5)) * glowMult * reloadProgress);
-            graphics.beginPath();
-            graphics.moveTo(crystalBaseX, crystalBaseY - crystalHeight * 0.8);
-            graphics.lineTo(crystalBaseX + crystalWidth / 4, crystalBaseY - crystalHeight / 3);
-            graphics.lineTo(crystalBaseX, crystalBaseY - crystalHeight * 0.2);
-            graphics.lineTo(crystalBaseX - crystalWidth / 4, crystalBaseY - crystalHeight / 3);
-            graphics.closePath();
-            graphics.fillPath();
+            // Inner glow highlight — only when crystal is substantially risen
+            if (reloadProgress > 0.5) {
+                graphics.fillStyle(0xffffff, alpha * (0.5 + (glowPulse * 0.5)) * reloadProgress);
+                graphics.beginPath();
+                graphics.moveTo(crystalBaseX, crystalBaseY - crystalHeight * 0.8);
+                graphics.lineTo(crystalBaseX + crystalWidth / 4, crystalBaseY - crystalHeight / 3);
+                graphics.lineTo(crystalBaseX, crystalBaseY - crystalHeight * 0.2);
+                graphics.lineTo(crystalBaseX - crystalWidth / 4, crystalBaseY - crystalHeight / 3);
+                graphics.closePath();
+                graphics.fillPath();
+            }
         }
 
         // --- LAYER 3: The Front Walls & Trapdoors ---
-        // ALWAYS draw these (even when skipBase=true) to mask the crystal properly.
-        // The crystal on Layer 2 would otherwise float above the pit since the baked
-        // ground texture is at a lower depth than the dynamic graphics layer.
+        // ALWAYS draw these to mask the crystal properly.
         {
-            const drawTarget = skipBase ? graphics : g; // Use dynamic graphics when base is baked
+            const drawTarget = skipBase ? graphics : g;
 
             // Elevation Base Walls (Front)
             drawTarget.fillStyle(tint ?? (level >= 3 ? 0x112233 : 0x2a3a4a), alpha);
@@ -3705,29 +3716,38 @@ export class BuildingRenderer {
 
             const hatchY = center.y - baseHeight;
 
-            // Left Trapdoor Door
-            drawTarget.fillStyle(0x4a5a6a, alpha);
-            const doorSlide = trapdoorOpen * (trapDoorW * 0.45);
-            drawTarget.beginPath();
-            drawTarget.moveTo(center.x - doorSlide, hatchY - trapDoorW * 0.25);
-            drawTarget.lineTo(center.x - doorSlide - trapDoorW / 2, hatchY);
-            drawTarget.lineTo(center.x - doorSlide, hatchY + trapDoorW * 0.25);
-            drawTarget.lineTo(center.x - doorSlide, hatchY - trapDoorW * 0.25);
-            drawTarget.closePath();
-            drawTarget.fillPath();
-            drawTarget.lineStyle(1, 0x111111, alpha * 0.6);
-            drawTarget.strokePath();
+            // Redesigned doors: isometric hatch panels that open outward/upward
+            // When closed, they form a diamond covering the hole
+            // When open, they tilt away to reveal the pit
+            const doorOpenFactor = trapdoorOpen;
 
-            // Right Trapdoor Door
-            drawTarget.fillStyle(0x5a6a7a, alpha);
-            drawTarget.beginPath();
-            drawTarget.moveTo(center.x + doorSlide, hatchY - trapDoorW * 0.25);
-            drawTarget.lineTo(center.x + doorSlide + trapDoorW / 2, hatchY);
-            drawTarget.lineTo(center.x + doorSlide, hatchY + trapDoorW * 0.25);
-            drawTarget.lineTo(center.x + doorSlide, hatchY - trapDoorW * 0.25);
-            drawTarget.closePath();
-            drawTarget.fillPath();
-            drawTarget.strokePath();
+            if (doorOpenFactor < 1.0) {
+                // Draw closed/closing doors as diamond panels over the hole
+                const closedAmount = 1.0 - doorOpenFactor;
+
+                // Left door panel
+                drawTarget.fillStyle(0x5a6a7a, alpha);
+                drawTarget.beginPath();
+                drawTarget.moveTo(center.x, hatchY - trapDoorW * 0.3 * closedAmount);
+                drawTarget.lineTo(center.x - trapDoorW * 0.5, hatchY);
+                drawTarget.lineTo(center.x, hatchY + trapDoorW * 0.3 * closedAmount);
+                drawTarget.closePath();
+                drawTarget.fillPath();
+                drawTarget.lineStyle(1, 0x333333, alpha * 0.4);
+                drawTarget.strokePath();
+
+                // Right door panel
+                drawTarget.fillStyle(0x4a5a6a, alpha);
+                drawTarget.beginPath();
+                drawTarget.moveTo(center.x, hatchY - trapDoorW * 0.3 * closedAmount);
+                drawTarget.lineTo(center.x + trapDoorW * 0.5, hatchY);
+                drawTarget.lineTo(center.x, hatchY + trapDoorW * 0.3 * closedAmount);
+                drawTarget.closePath();
+                drawTarget.fillPath();
+                drawTarget.lineStyle(1, 0x333333, alpha * 0.4);
+                drawTarget.strokePath();
+            }
+            // When fully open — no doors visible, just the open pit
         }
     }
     static drawPrismTower(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, _building?: any, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
