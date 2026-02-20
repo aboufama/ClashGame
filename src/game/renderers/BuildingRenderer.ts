@@ -3571,8 +3571,8 @@ export class BuildingRenderer {
             }
         }
 
+        // --- LAYER 1: The back and bottom of the base ---
         if (!skipBase) {
-            // Draw a sturdy heavy-metal/stone reinforced housing that acts as the trapdoor base
             const baseColor = level >= 3 ? 0x223344 : (level === 2 ? 0x3a4a5a : 0x5a6a7a);
             g.fillStyle(tint ?? baseColor, alpha);
             g.beginPath();
@@ -3583,7 +3583,97 @@ export class BuildingRenderer {
             g.closePath();
             g.fillPath();
 
-            // Elevation Base Walls
+            // Trapdoor Housing Surface (Top)
+            const hatchY = center.y - baseHeight;
+            g.fillStyle(tint ?? 0x1a2a3a, alpha);
+            g.beginPath();
+            g.moveTo(c1.x, c1.y - baseHeight);
+            g.lineTo(c2.x, c2.y - baseHeight);
+            g.lineTo(c3.x, c3.y - baseHeight);
+            g.lineTo(c4.x, c4.y - baseHeight);
+            g.closePath();
+            g.fillPath();
+
+            // The black abyss inside the trapdoor hole
+            g.fillStyle(0x050a10, alpha);
+            g.fillEllipse(center.x, hatchY, trapDoorW, trapDoorW * 0.5);
+        }
+
+        // --- LAYER 2: The Rising Crystal (so it clips UNDER the front walls) ---
+        if (!onlyBase && reloadProgress > 0) {
+            const riseOffset = (1.0 - Math.min(reloadProgress, 1)) * crystalHeight;
+            const crystalBobOffset = reloadProgress >= 1.0 ? Math.sin(time / 400) * 3 : 0;
+            const crystalBaseX = center.x;
+            const crystalBaseY = center.y - baseHeight + crystalBobOffset + riseOffset;
+
+            // Only draw if it's high enough to be seen (or fully exposed)
+            const glowMult = 1.0;
+            const glowPulse = (Math.sin(time / 150) + 1) / 2;
+
+            if (tint !== null) {
+                (graphics as any).setTint(tint);
+            }
+
+            // Apply a simple Y-clip using a mask if we wanted to be perfect, 
+            // but simply drawing it before the front walls usually suffices for isometric top-down
+
+            graphics.fillStyle(0x44aaff, alpha * (0.2 + (glowPulse * 0.2)) * glowMult * reloadProgress);
+            graphics.fillEllipse(crystalBaseX, crystalBaseY, crystalWidth * 1.5, crystalWidth * 0.8);
+
+            graphics.fillStyle(0xaaddff, alpha);
+            graphics.beginPath();
+            graphics.moveTo(crystalBaseX, crystalBaseY - crystalHeight);
+            graphics.lineTo(crystalBaseX + crystalWidth / 2, crystalBaseY - crystalHeight / 3);
+            graphics.lineTo(crystalBaseX, crystalBaseY);
+            graphics.lineTo(crystalBaseX - crystalWidth / 2, crystalBaseY - crystalHeight / 3);
+            graphics.closePath();
+            graphics.fillPath();
+
+            graphics.fillStyle(0x66bbff, alpha);
+            graphics.beginPath();
+            graphics.moveTo(crystalBaseX, crystalBaseY - crystalHeight);
+            graphics.lineTo(crystalBaseX - crystalWidth / 2, crystalBaseY - crystalHeight / 3);
+            graphics.lineTo(crystalBaseX - crystalWidth * 0.8, crystalBaseY - crystalHeight / 2);
+            graphics.closePath();
+            graphics.fillPath();
+
+            graphics.fillStyle(0x4499dd, alpha);
+            graphics.beginPath();
+            graphics.moveTo(crystalBaseX, crystalBaseY - crystalHeight);
+            graphics.lineTo(crystalBaseX + crystalWidth / 2, crystalBaseY - crystalHeight / 3);
+            graphics.lineTo(crystalBaseX + crystalWidth * 0.8, crystalBaseY - crystalHeight / 2);
+            graphics.closePath();
+            graphics.fillPath();
+
+            graphics.fillStyle(0x3388cc, alpha);
+            graphics.beginPath();
+            graphics.moveTo(crystalBaseX, crystalBaseY);
+            graphics.lineTo(crystalBaseX - crystalWidth / 2, crystalBaseY - crystalHeight / 3);
+            graphics.lineTo(crystalBaseX - crystalWidth * 0.8, crystalBaseY - crystalHeight / 2);
+            graphics.closePath();
+            graphics.fillPath();
+
+            graphics.fillStyle(0x2277aa, alpha);
+            graphics.beginPath();
+            graphics.moveTo(crystalBaseX, crystalBaseY);
+            graphics.lineTo(crystalBaseX + crystalWidth / 2, crystalBaseY - crystalHeight / 3);
+            graphics.lineTo(crystalBaseX + crystalWidth * 0.8, crystalBaseY - crystalHeight / 2);
+            graphics.closePath();
+            graphics.fillPath();
+
+            graphics.fillStyle(0xffffff, alpha * (0.5 + (glowPulse * 0.5)) * glowMult * reloadProgress);
+            graphics.beginPath();
+            graphics.moveTo(crystalBaseX, crystalBaseY - crystalHeight * 0.8);
+            graphics.lineTo(crystalBaseX + crystalWidth / 4, crystalBaseY - crystalHeight / 3);
+            graphics.lineTo(crystalBaseX, crystalBaseY - crystalHeight * 0.2);
+            graphics.lineTo(crystalBaseX - crystalWidth / 4, crystalBaseY - crystalHeight / 3);
+            graphics.closePath();
+            graphics.fillPath();
+        }
+
+        // --- LAYER 3: The Front Walls & Trapdoors ---
+        if (!skipBase) {
+            // Elevation Base Walls (Front)
             g.fillStyle(tint ?? (level >= 3 ? 0x112233 : 0x2a3a4a), alpha);
             g.beginPath();
             g.moveTo(c3.x, c3.y);
@@ -3602,20 +3692,7 @@ export class BuildingRenderer {
             g.closePath();
             g.fillPath();
 
-            // Trapdoor Housing Surface
             const hatchY = center.y - baseHeight;
-            g.fillStyle(tint ?? 0x1a2a3a, alpha);
-            g.beginPath();
-            g.moveTo(c1.x, c1.y - baseHeight);
-            g.lineTo(c2.x, c2.y - baseHeight);
-            g.lineTo(c3.x, c3.y - baseHeight);
-            g.lineTo(c4.x, c4.y - baseHeight);
-            g.closePath();
-            g.fillPath();
-
-            // The black abyss inside the trapdoor hole
-            g.fillStyle(0x050a10, alpha);
-            g.fillEllipse(center.x, hatchY, trapDoorW, trapDoorW * 0.5);
 
             // Left Trapdoor Door
             g.fillStyle(0x4a5a6a, alpha);
@@ -3640,86 +3717,6 @@ export class BuildingRenderer {
             g.closePath();
             g.fillPath();
             g.strokePath();
-        }
-
-        if (!onlyBase && reloadProgress > 0) {
-            // How far OUT of the trapdoor the crystal is
-            const riseOffset = (1.0 - reloadProgress) * crystalHeight;
-            const crystalBobOffset = reloadProgress >= 1.0 ? Math.sin(time / 400) * 3 : 0;
-            const crystalBaseX = center.x;
-            const crystalBaseY = center.y - baseHeight + crystalBobOffset + riseOffset;
-
-            // Don't draw part of the crystal if it's currently beneath the base level
-            // We simulate this via drawing order, but realistically it emerges from the void.
-
-            const glowMult = 1.0;
-            const glowPulse = (Math.sin(time / 150) + 1) / 2;
-
-            // Apply damage tint if needed
-            if (tint !== null) {
-                (graphics as any).setTint(tint);
-            }
-
-            // Glow is weaker when reloading
-            graphics.fillStyle(0x44aaff, alpha * (0.2 + (glowPulse * 0.2)) * glowMult * reloadProgress);
-            graphics.fillEllipse(crystalBaseX, crystalBaseY, crystalWidth * 1.5, crystalWidth * 0.8);
-
-            // Shaded polygons
-            // Center
-            graphics.fillStyle(0xaaddff, alpha);
-            graphics.beginPath();
-            graphics.moveTo(crystalBaseX, crystalBaseY - crystalHeight);
-            graphics.lineTo(crystalBaseX + crystalWidth / 2, crystalBaseY - crystalHeight / 3);
-            graphics.lineTo(crystalBaseX, crystalBaseY);
-            graphics.lineTo(crystalBaseX - crystalWidth / 2, crystalBaseY - crystalHeight / 3);
-            graphics.closePath();
-            graphics.fillPath();
-
-            // Left
-            graphics.fillStyle(0x66bbff, alpha);
-            graphics.beginPath();
-            graphics.moveTo(crystalBaseX, crystalBaseY - crystalHeight);
-            graphics.lineTo(crystalBaseX - crystalWidth / 2, crystalBaseY - crystalHeight / 3);
-            graphics.lineTo(crystalBaseX - crystalWidth * 0.8, crystalBaseY - crystalHeight / 2);
-            graphics.closePath();
-            graphics.fillPath();
-
-            // Right
-            graphics.fillStyle(0x4499dd, alpha);
-            graphics.beginPath();
-            graphics.moveTo(crystalBaseX, crystalBaseY - crystalHeight);
-            graphics.lineTo(crystalBaseX + crystalWidth / 2, crystalBaseY - crystalHeight / 3);
-            graphics.lineTo(crystalBaseX + crystalWidth * 0.8, crystalBaseY - crystalHeight / 2);
-            graphics.closePath();
-            graphics.fillPath();
-
-            // Bottom left
-            graphics.fillStyle(0x3388cc, alpha);
-            graphics.beginPath();
-            graphics.moveTo(crystalBaseX, crystalBaseY);
-            graphics.lineTo(crystalBaseX - crystalWidth / 2, crystalBaseY - crystalHeight / 3);
-            graphics.lineTo(crystalBaseX - crystalWidth * 0.8, crystalBaseY - crystalHeight / 2);
-            graphics.closePath();
-            graphics.fillPath();
-
-            // Bottom right
-            graphics.fillStyle(0x2277aa, alpha);
-            graphics.beginPath();
-            graphics.moveTo(crystalBaseX, crystalBaseY);
-            graphics.lineTo(crystalBaseX + crystalWidth / 2, crystalBaseY - crystalHeight / 3);
-            graphics.lineTo(crystalBaseX + crystalWidth * 0.8, crystalBaseY - crystalHeight / 2);
-            graphics.closePath();
-            graphics.fillPath();
-
-            // Inner core
-            graphics.fillStyle(0xffffff, alpha * (0.5 + (glowPulse * 0.5)) * glowMult * reloadProgress);
-            graphics.beginPath();
-            graphics.moveTo(crystalBaseX, crystalBaseY - crystalHeight * 0.8);
-            graphics.lineTo(crystalBaseX + crystalWidth / 4, crystalBaseY - crystalHeight / 3);
-            graphics.lineTo(crystalBaseX, crystalBaseY - crystalHeight * 0.2);
-            graphics.lineTo(crystalBaseX - crystalWidth / 4, crystalBaseY - crystalHeight / 3);
-            graphics.closePath();
-            graphics.fillPath();
         }
     }
     static drawPrismTower(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, _building?: any, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {

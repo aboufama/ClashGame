@@ -1974,7 +1974,8 @@ export class MainScene extends Phaser.Scene {
                 defense.type !== 'dragons_breath' &&
                 defense.type !== 'mortar' &&
                 defense.type !== 'magmavent' &&
-                defense.type !== 'spike_launcher';
+                defense.type !== 'spike_launcher' &&
+                defense.type !== 'frostfall';
 
             const isTargetInRange = (troop: Troop | null | undefined): troop is Troop => {
                 if (!troop || troop.health <= 0 || troop.owner === defense.owner) return false;
