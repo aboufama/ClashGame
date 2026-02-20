@@ -3672,51 +3672,56 @@ export class BuildingRenderer {
         }
 
         // --- LAYER 3: The Front Walls & Trapdoors ---
-        if (!skipBase) {
-            // Elevation Base Walls (Front)
-            g.fillStyle(tint ?? (level >= 3 ? 0x112233 : 0x2a3a4a), alpha);
-            g.beginPath();
-            g.moveTo(c3.x, c3.y);
-            g.lineTo(c3.x, c3.y - baseHeight);
-            g.lineTo(c4.x, c4.y - baseHeight);
-            g.lineTo(c4.x, c4.y);
-            g.closePath();
-            g.fillPath();
+        // ALWAYS draw these (even when skipBase=true) to mask the crystal properly.
+        // The crystal on Layer 2 would otherwise float above the pit since the baked
+        // ground texture is at a lower depth than the dynamic graphics layer.
+        {
+            const drawTarget = skipBase ? graphics : g; // Use dynamic graphics when base is baked
 
-            g.fillStyle(tint ?? (level >= 3 ? 0x0a1a2a : 0x1f2f3f), alpha);
-            g.beginPath();
-            g.moveTo(c2.x, c2.y);
-            g.lineTo(c2.x, c2.y - baseHeight);
-            g.lineTo(c3.x, c3.y - baseHeight);
-            g.lineTo(c3.x, c3.y);
-            g.closePath();
-            g.fillPath();
+            // Elevation Base Walls (Front)
+            drawTarget.fillStyle(tint ?? (level >= 3 ? 0x112233 : 0x2a3a4a), alpha);
+            drawTarget.beginPath();
+            drawTarget.moveTo(c3.x, c3.y);
+            drawTarget.lineTo(c3.x, c3.y - baseHeight);
+            drawTarget.lineTo(c4.x, c4.y - baseHeight);
+            drawTarget.lineTo(c4.x, c4.y);
+            drawTarget.closePath();
+            drawTarget.fillPath();
+
+            drawTarget.fillStyle(tint ?? (level >= 3 ? 0x0a1a2a : 0x1f2f3f), alpha);
+            drawTarget.beginPath();
+            drawTarget.moveTo(c2.x, c2.y);
+            drawTarget.lineTo(c2.x, c2.y - baseHeight);
+            drawTarget.lineTo(c3.x, c3.y - baseHeight);
+            drawTarget.lineTo(c3.x, c3.y);
+            drawTarget.closePath();
+            drawTarget.fillPath();
 
             const hatchY = center.y - baseHeight;
 
             // Left Trapdoor Door
-            g.fillStyle(0x4a5a6a, alpha);
+            drawTarget.fillStyle(0x4a5a6a, alpha);
             const doorSlide = trapdoorOpen * (trapDoorW * 0.45);
-            g.beginPath();
-            g.moveTo(center.x - doorSlide, hatchY - trapDoorW * 0.25);
-            g.lineTo(center.x - doorSlide - trapDoorW / 2, hatchY);
-            g.lineTo(center.x - doorSlide, hatchY + trapDoorW * 0.25);
-            g.lineTo(center.x - doorSlide, hatchY - trapDoorW * 0.25);
-            g.closePath();
-            g.fillPath();
-            g.lineStyle(1, 0x111111, alpha * 0.6);
-            g.strokePath();
+            drawTarget.beginPath();
+            drawTarget.moveTo(center.x - doorSlide, hatchY - trapDoorW * 0.25);
+            drawTarget.lineTo(center.x - doorSlide - trapDoorW / 2, hatchY);
+            drawTarget.lineTo(center.x - doorSlide, hatchY + trapDoorW * 0.25);
+            drawTarget.lineTo(center.x - doorSlide, hatchY - trapDoorW * 0.25);
+            drawTarget.closePath();
+            drawTarget.fillPath();
+            drawTarget.lineStyle(1, 0x111111, alpha * 0.6);
+            drawTarget.strokePath();
 
             // Right Trapdoor Door
-            g.fillStyle(0x5a6a7a, alpha);
-            g.beginPath();
-            g.moveTo(center.x + doorSlide, hatchY - trapDoorW * 0.25);
-            g.lineTo(center.x + doorSlide + trapDoorW / 2, hatchY);
-            g.lineTo(center.x + doorSlide, hatchY + trapDoorW * 0.25);
-            g.lineTo(center.x + doorSlide, hatchY - trapDoorW * 0.25);
-            g.closePath();
-            g.fillPath();
-            g.strokePath();
+            drawTarget.fillStyle(0x5a6a7a, alpha);
+            drawTarget.beginPath();
+            drawTarget.moveTo(center.x + doorSlide, hatchY - trapDoorW * 0.25);
+            drawTarget.lineTo(center.x + doorSlide + trapDoorW / 2, hatchY);
+            drawTarget.lineTo(center.x + doorSlide, hatchY + trapDoorW * 0.25);
+            drawTarget.lineTo(center.x + doorSlide, hatchY - trapDoorW * 0.25);
+            drawTarget.closePath();
+            drawTarget.fillPath();
+            drawTarget.strokePath();
         }
     }
     static drawPrismTower(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, _building?: any, baseGraphics?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
