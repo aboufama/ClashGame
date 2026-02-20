@@ -352,21 +352,21 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         id: 'frostfall',
         name: 'Frostfall Monolith',
         cost: 1200,
-        desc: 'Unleashes a burst of freezing wind that slows and pushes back enemies.',
-        width: 1,
-        height: 1,
+        desc: 'An ancient ice well tended by a Frost Keeper who cranks up devastating ice crystals from the frozen depths.',
+        width: 2,
+        height: 2,
         maxHealth: 1050,
         range: 6.0,
         category: 'defense',
         maxCount: 2,
         color: 0x88ccff,
-        fireRate: 3500, // AoE burst — crystal rises (2s), flies (0.6s), then reloads
+        fireRate: 5000,
         damage: 15,
         maxLevel: 3,
         levels: [
-            { hp: 1050, damage: 15, fireRate: 3500, cost: 1200, range: 6.0 },
-            { hp: 1300, damage: 25, fireRate: 3400, cost: 1800, range: 6.5 },
-            { hp: 1650, damage: 38, fireRate: 3300, cost: 2600, range: 7.0 }
+            { hp: 1050, damage: 15, fireRate: 5000, cost: 1200, range: 6.0 },
+            { hp: 1300, damage: 25, fireRate: 4800, cost: 1800, range: 6.5 },
+            { hp: 1650, damage: 38, fireRate: 4600, cost: 2600, range: 7.0 }
         ]
     },
 };
