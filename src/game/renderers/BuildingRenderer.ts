@@ -3551,7 +3551,7 @@ export class BuildingRenderer {
             trapDoorW = 40;
         }
 
-        const isReloading = timeSinceFire < 2500;
+        const isReloading = timeSinceFire < 3500;
         let reloadProgress = 1.0;
         let trapdoorOpen = 0; // 0 = closed, 1 = fully open
 
@@ -3564,9 +3564,13 @@ export class BuildingRenderer {
                 // Shard rises out
                 trapdoorOpen = 1.0;
                 reloadProgress = (timeSinceFire - 800) / 1200;
+            } else if (timeSinceFire < 2800) {
+                // Crystal fully risen, waiting to launch / in flight
+                trapdoorOpen = 1.0;
+                reloadProgress = 1.0;
             } else {
-                // Shard fully out, trapdoor closes
-                trapdoorOpen = 1.0 - Math.min(1.0, (timeSinceFire - 2000) / 400);
+                // Post-launch, trapdoor closes
+                trapdoorOpen = 1.0 - Math.min(1.0, (timeSinceFire - 2800) / 400);
                 reloadProgress = 1.0;
             }
         }
@@ -3600,7 +3604,9 @@ export class BuildingRenderer {
         }
 
         // --- LAYER 2: The Rising Crystal (so it clips UNDER the front walls) ---
-        if (!onlyBase && reloadProgress > 0) {
+        // Skip drawing when the crystal has been launched as a projectile
+        const projectileActive = _building?.frostfallProjectileActive === true;
+        if (!onlyBase && reloadProgress > 0 && !projectileActive) {
             const riseOffset = (1.0 - Math.min(reloadProgress, 1)) * crystalHeight;
             const crystalBobOffset = reloadProgress >= 1.0 ? Math.sin(time / 400) * 3 : 0;
             const crystalBaseX = center.x;

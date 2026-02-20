@@ -360,13 +360,13 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDef> = {
         category: 'defense',
         maxCount: 2,
         color: 0x88ccff,
-        fireRate: 2500, // AoE burst every 2.5 seconds
+        fireRate: 3500, // AoE burst — crystal rises (2s), flies (0.6s), then reloads
         damage: 15,
         maxLevel: 3,
         levels: [
-            { hp: 1050, damage: 15, fireRate: 2500, cost: 1200, range: 6.0 },
-            { hp: 1300, damage: 25, fireRate: 2400, cost: 1800, range: 6.5 },
-            { hp: 1650, damage: 38, fireRate: 2300, cost: 2600, range: 7.0 }
+            { hp: 1050, damage: 15, fireRate: 3500, cost: 1200, range: 6.0 },
+            { hp: 1300, damage: 25, fireRate: 3400, cost: 1800, range: 6.5 },
+            { hp: 1650, damage: 38, fireRate: 3300, cost: 2600, range: 7.0 }
         ]
     },
 };

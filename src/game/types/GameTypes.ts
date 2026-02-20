@@ -34,6 +34,7 @@ export interface PlacedBuilding {
     prismChargeTime?: number;      // When charging started
     // Frostfall Monolith
     frostfallChargeTime?: number;
+    frostfallProjectileActive?: boolean; // true when the big crystal has launched and is flying
     // Tesla charge state
     teslaCharging?: boolean;
     teslaChargeStart?: number;

@@ -3260,138 +3260,322 @@ export class MainScene extends Phaser.Scene {
         const centerX = frostfall.gridX + info.width / 2;
         const centerY = frostfall.gridY + info.height / 2;
 
-        // Find the closest enemy troop in range for AoE targeting
-        let targetX = centerX;
-        let targetY = centerY;
+        // Find the closest enemy troop in range
         let bestTarget: Troop | null = null;
         let bestDist = Infinity;
 
         this.troops.forEach(troop => {
             if (troop.health <= 0 || troop.owner === frostfall.owner) return;
             const dist = Phaser.Math.Distance.Between(centerX, centerY, troop.gridX, troop.gridY);
-
             if (dist <= range && dist < bestDist) {
                 bestDist = dist;
                 bestTarget = troop;
-                targetX = troop.gridX;
-                targetY = troop.gridY;
             }
         });
 
-        if (!bestTarget) return; // No valid target in range
+        if (!bestTarget) return;
 
-        // Signal the renderer to start the trapdoor animation
+        // Signal the renderer to start the trapdoor + crystal rise animation
         frostfall.isFiring = true;
+        frostfall.frostfallProjectileActive = false; // Crystal is rising, not launched yet
 
-        const start = IsoUtils.cartToIso(centerX, centerY);
         const level = frostfall.level ?? 1;
+        const crystalHeight = level >= 3 ? 80 : (level === 2 ? 65 : 50);
+        const crystalWidth = level >= 3 ? 36 : (level === 2 ? 30 : 24);
         const baseHeight = level >= 3 ? 22 : (level === 2 ? 18 : 15);
 
-        // Delay the projectile launch to sync with trapdoor opening animation
-        // The renderer opens the trapdoor over 400ms and the crystal starts rising at 800ms
-        this.time.delayedCall(800, () => {
-            // Re-check target position — troop may have moved
-            let finalTargetX = targetX;
-            let finalTargetY = targetY;
+        // Wait for the crystal to fully rise from the pit (renderer timeline: 2000ms after lastFireTime)
+        this.time.delayedCall(2000, () => {
+            // The crystal is now fully risen — LAUNCH it as the projectile!
+            frostfall.frostfallProjectileActive = true; // Tell renderer to hide its crystal
+
+            // Re-check target position
+            let targetX: number;
+            let targetY: number;
             if (bestTarget && bestTarget.health > 0) {
-                finalTargetX = bestTarget.gridX;
-                finalTargetY = bestTarget.gridY;
+                targetX = bestTarget.gridX;
+                targetY = bestTarget.gridY;
+            } else {
+                // Target died while rising; find a new one
+                let fallback: Troop | null = null;
+                let fallbackDist = Infinity;
+                this.troops.forEach(t => {
+                    if (t.health <= 0 || t.owner === frostfall.owner) return;
+                    const d = Phaser.Math.Distance.Between(centerX, centerY, t.gridX, t.gridY);
+                    if (d <= range && d < fallbackDist) {
+                        fallbackDist = d;
+                        fallback = t;
+                    }
+                });
+                if (!fallback) {
+                    frostfall.frostfallProjectileActive = false;
+                    return; // No targets
+                }
+                targetX = fallback.gridX;
+                targetY = fallback.gridY;
             }
 
-            const end = IsoUtils.cartToIso(finalTargetX, finalTargetY);
+            const start = IsoUtils.cartToIso(centerX, centerY);
+            const end = IsoUtils.cartToIso(targetX, targetY);
 
-            // Create the flying ice shard projectile
+            // Create the projectile — same shape as the renderer's big crystal
             const shard = this.add.graphics();
-            const crystalHeight = level >= 3 ? 40 : (level === 2 ? 32 : 25); // Smaller projectile shard
-            const crystalWidth = level >= 3 ? 18 : (level === 2 ? 15 : 12);
 
-            // Main crystal body
+            // Draw the full crystal (matching BuildingRenderer.drawFrostfall Layer 2)
+            // Main body - light blue face
+            shard.fillStyle(0xaaddff, 1);
+            shard.beginPath();
+            shard.moveTo(0, -crystalHeight);
+            shard.lineTo(crystalWidth / 2, -crystalHeight / 3);
+            shard.lineTo(0, 0);
+            shard.lineTo(-crystalWidth / 2, -crystalHeight / 3);
+            shard.closePath();
+            shard.fillPath();
+
+            // Left facet
             shard.fillStyle(0x66bbff, 1);
             shard.beginPath();
             shard.moveTo(0, -crystalHeight);
             shard.lineTo(-crystalWidth / 2, -crystalHeight / 3);
-            shard.lineTo(0, 0);
-            shard.lineTo(crystalWidth / 2, -crystalHeight / 3);
+            shard.lineTo(-crystalWidth * 0.8, -crystalHeight / 2);
             shard.closePath();
             shard.fillPath();
 
-            // Inner highlight
-            shard.fillStyle(0xaaddff, 1);
+            // Right facet
+            shard.fillStyle(0x4499dd, 1);
             shard.beginPath();
             shard.moveTo(0, -crystalHeight);
-            shard.lineTo(-crystalWidth / 4, -crystalHeight / 3);
-            shard.lineTo(0, -crystalHeight * 0.2);
-            shard.lineTo(crystalWidth / 4, -crystalHeight / 3);
+            shard.lineTo(crystalWidth / 2, -crystalHeight / 3);
+            shard.lineTo(crystalWidth * 0.8, -crystalHeight / 2);
             shard.closePath();
             shard.fillPath();
 
-            // Start from inside the trapdoor
+            // Left lower facet
+            shard.fillStyle(0x3388cc, 1);
+            shard.beginPath();
+            shard.moveTo(0, 0);
+            shard.lineTo(-crystalWidth / 2, -crystalHeight / 3);
+            shard.lineTo(-crystalWidth * 0.8, -crystalHeight / 2);
+            shard.closePath();
+            shard.fillPath();
+
+            // Right lower facet
+            shard.fillStyle(0x2277aa, 1);
+            shard.beginPath();
+            shard.moveTo(0, 0);
+            shard.lineTo(crystalWidth / 2, -crystalHeight / 3);
+            shard.lineTo(crystalWidth * 0.8, -crystalHeight / 2);
+            shard.closePath();
+            shard.fillPath();
+
+            // Inner glow highlight
+            shard.fillStyle(0xffffff, 0.7);
+            shard.beginPath();
+            shard.moveTo(0, -crystalHeight * 0.8);
+            shard.lineTo(crystalWidth / 4, -crystalHeight / 3);
+            shard.lineTo(0, -crystalHeight * 0.2);
+            shard.lineTo(-crystalWidth / 4, -crystalHeight / 3);
+            shard.closePath();
+            shard.fillPath();
+
+            // Start from the crystal's fully-risen position (matching renderer)
             const startY = start.y - baseHeight;
             shard.setPosition(start.x, startY);
-            shard.setDepth(10000); // Above buildings
-            shard.setRotation(-Math.PI / 6);
+            shard.setDepth(10000);
 
-            const travelTime = 500;
+            const travelTime = 600;
 
-            // Dynamic arc height based on distance (proportional, not hardcoded)
+            // Dynamic arc based on distance
             const distPixels = Phaser.Math.Distance.Between(start.x, startY, end.x, end.y);
-            const arcHeight = Math.min(200, distPixels * 0.6 + 60);
+            const arcHeight = Math.min(200, distPixels * 0.5 + 60);
             const midY = (startY + end.y) / 2 - arcHeight;
 
             this.tweens.add({
                 targets: shard,
                 x: end.x,
                 duration: travelTime,
-                ease: 'Quad.easeIn',
+                ease: 'Sine.easeIn',
                 onUpdate: (tween) => {
                     const t = tween.progress;
                     // Quadratic Bezier arc
                     shard.y = (1 - t) * (1 - t) * startY + 2 * (1 - t) * t * midY + t * t * end.y;
-                    shard.setRotation(-Math.PI / 6 + t * Math.PI / 2);
-                    shard.setScale(0.6 + t * 0.8);
+                    // Rotate as it flies — tip forward
+                    shard.setRotation(t * Math.PI * 0.4);
+                    // Slight scale increase as it approaches
+                    shard.setScale(1.0 + t * 0.3);
                 },
                 onComplete: () => {
                     shard.destroy();
+                    frostfall.frostfallProjectileActive = false; // New crystal can rise on next cycle
 
-                    // Impact effects
-                    this.cameras.main.shake(150, 0.003);
+                    // === IMPACT ===
+                    this.cameras.main.shake(200, 0.004);
 
-                    // Ice flash at impact
-                    const flash = this.add.graphics();
-                    flash.fillStyle(0xaaffff, 0.7);
-                    flash.fillEllipse(end.x, end.y, 100, 50);
-                    flash.setDepth(10000);
-                    this.tweens.add({ targets: flash, alpha: 0, scale: 2, duration: 300, onComplete: () => flash.destroy() });
+                    // Create the EMBEDDED crystal at impact point (sticks into the ground)
+                    const embedded = this.add.graphics();
+                    const embedHeight = crystalHeight * 0.6; // Partially buried
+                    const embedWidth = crystalWidth * 0.8;
 
-                    // Ice shard fragments
-                    for (let i = 0; i < 8; i++) {
+                    // Draw embedded crystal (tilted, partially in ground)
+                    embedded.fillStyle(0xaaddff, 0.9);
+                    embedded.beginPath();
+                    embedded.moveTo(0, -embedHeight);
+                    embedded.lineTo(embedWidth / 2, -embedHeight / 4);
+                    embedded.lineTo(0, embedHeight * 0.1);
+                    embedded.lineTo(-embedWidth / 2, -embedHeight / 4);
+                    embedded.closePath();
+                    embedded.fillPath();
+
+                    // Facet shading
+                    embedded.fillStyle(0x66bbff, 0.85);
+                    embedded.beginPath();
+                    embedded.moveTo(0, -embedHeight);
+                    embedded.lineTo(-embedWidth / 2, -embedHeight / 4);
+                    embedded.lineTo(-embedWidth * 0.6, -embedHeight / 3);
+                    embedded.closePath();
+                    embedded.fillPath();
+
+                    embedded.fillStyle(0x4499dd, 0.85);
+                    embedded.beginPath();
+                    embedded.moveTo(0, -embedHeight);
+                    embedded.lineTo(embedWidth / 2, -embedHeight / 4);
+                    embedded.lineTo(embedWidth * 0.6, -embedHeight / 3);
+                    embedded.closePath();
+                    embedded.fillPath();
+
+                    // Inner glow
+                    embedded.fillStyle(0xffffff, 0.5);
+                    embedded.beginPath();
+                    embedded.moveTo(0, -embedHeight * 0.75);
+                    embedded.lineTo(embedWidth / 5, -embedHeight / 4);
+                    embedded.lineTo(0, -embedHeight * 0.15);
+                    embedded.lineTo(-embedWidth / 5, -embedHeight / 4);
+                    embedded.closePath();
+                    embedded.fillPath();
+
+                    embedded.setPosition(end.x, end.y);
+                    embedded.setRotation(0.15); // Slightly tilted, as if stuck
+                    embedded.setDepth(100);
+
+                    // === WATER PUDDLE that spreads as crystal melts ===
+                    const puddle = this.add.graphics();
+                    puddle.setPosition(end.x, end.y);
+                    puddle.setDepth(5);
+                    puddle.setAlpha(0);
+
+                    // Draw water puddle shape
+                    puddle.fillStyle(0x88ccff, 0.3);
+                    puddle.fillEllipse(0, 5, 60, 30);
+                    puddle.fillStyle(0xaaddff, 0.2);
+                    puddle.fillEllipse(0, 5, 40, 20);
+
+                    // Puddle fades in as crystal melts
+                    this.tweens.add({
+                        targets: puddle,
+                        alpha: 1,
+                        scaleX: { from: 0.3, to: 1.5 },
+                        scaleY: { from: 0.3, to: 1.5 },
+                        duration: 4000,
+                        ease: 'Quad.easeOut',
+                        onComplete: () => {
+                            // Puddle slowly fades away
+                            this.tweens.add({
+                                targets: puddle,
+                                alpha: 0,
+                                duration: 2000,
+                                onComplete: () => puddle.destroy()
+                            });
+                        }
+                    });
+
+                    // === CRYSTAL MELTS over 5 seconds ===
+                    this.tweens.add({
+                        targets: embedded,
+                        scaleY: { from: 1.0, to: 0.0 },
+                        scaleX: { from: 1.0, to: 1.4 },
+                        alpha: { from: 1.0, to: 0.3 },
+                        y: end.y + 5,
+                        duration: 5000,
+                        ease: 'Quad.easeIn',
+                        onComplete: () => embedded.destroy()
+                    });
+
+                    // Water droplets dripping off the crystal as it melts
+                    const dripCount = 12;
+                    for (let i = 0; i < dripCount; i++) {
+                        this.time.delayedCall(400 + i * 350, () => {
+                            const drip = this.add.graphics();
+                            drip.fillStyle(0x88ccff, 0.6);
+                            drip.fillCircle(0, 0, 1.5);
+                            const dripX = end.x + (Math.random() - 0.5) * embedWidth;
+                            const dripStartY = end.y - embedHeight * 0.3 * Math.max(0, 1 - i / dripCount);
+                            drip.setPosition(dripX, dripStartY);
+                            drip.setDepth(101);
+
+                            this.tweens.add({
+                                targets: drip,
+                                y: end.y + 5 + Math.random() * 10,
+                                alpha: 0,
+                                duration: 400 + Math.random() * 300,
+                                ease: 'Quad.easeIn',
+                                onComplete: () => drip.destroy()
+                            });
+                        });
+                    }
+
+                    // === ICE SHATTER FRAGMENTS on impact ===
+                    for (let i = 0; i < 10; i++) {
                         const frag = this.add.graphics();
-                        frag.fillStyle(i % 2 === 0 ? 0x88ccff : 0xaaddff, 0.8);
-                        const fragSize = 2 + Math.random() * 4;
-                        frag.fillRect(-fragSize / 2, -fragSize / 2, fragSize, fragSize);
-                        frag.setPosition(end.x, end.y);
+                        frag.fillStyle(i % 3 === 0 ? 0xaaddff : (i % 3 === 1 ? 0x88ccff : 0x66bbff), 0.9);
+                        const fragSize = 2 + Math.random() * 5;
+                        // Diamond-shaped fragment
+                        frag.beginPath();
+                        frag.moveTo(0, -fragSize);
+                        frag.lineTo(fragSize * 0.6, 0);
+                        frag.lineTo(0, fragSize * 0.5);
+                        frag.lineTo(-fragSize * 0.6, 0);
+                        frag.closePath();
+                        frag.fillPath();
+
+                        frag.setPosition(end.x, end.y - embedHeight * 0.3);
                         frag.setDepth(10001);
-                        const fragAngle = (i / 8) * Math.PI * 2;
-                        const fragDist = 20 + Math.random() * 40;
+                        const fragAngle = (i / 10) * Math.PI * 2;
+                        const fragDist = 15 + Math.random() * 50;
                         this.tweens.add({
                             targets: frag,
                             x: end.x + Math.cos(fragAngle) * fragDist,
-                            y: end.y + Math.sin(fragAngle) * fragDist * 0.5 - Math.random() * 20,
+                            y: end.y + Math.sin(fragAngle) * fragDist * 0.5 - 10 - Math.random() * 15,
                             alpha: 0,
-                            duration: 300 + Math.random() * 200,
+                            rotation: Math.random() * Math.PI,
+                            duration: 300 + Math.random() * 300,
+                            ease: 'Quad.easeOut',
                             onComplete: () => frag.destroy()
                         });
                     }
 
-                    // Apply AoE Damage and Debuff
+                    // === FROST MIST at impact ===
+                    const flash = this.add.graphics();
+                    flash.fillStyle(0xcceeFF, 0.5);
+                    flash.fillEllipse(end.x, end.y, 80, 40);
+                    flash.setDepth(99);
+                    this.tweens.add({
+                        targets: flash,
+                        alpha: 0,
+                        scaleX: 1.8,
+                        scaleY: 1.5,
+                        duration: 500,
+                        ease: 'Quad.easeOut',
+                        onComplete: () => flash.destroy()
+                    });
+
+                    // === APPLY AOE DAMAGE AND DEBUFF ===
                     this.troops.forEach(troop => {
                         if (troop.health <= 0 || troop.owner === frostfall.owner) return;
 
-                        const dx = troop.gridX - finalTargetX;
-                        const dy = troop.gridY - finalTargetY;
+                        const dx = troop.gridX - targetX;
+                        const dy = troop.gridY - targetY;
                         const distToImpact = Math.sqrt(dx * dx + dy * dy);
 
-                        // Blast Radius of 2.5 tiles around impact
                         if (distToImpact <= 2.5) {
                             troop.health -= damage;
                             troop.hasTakenDamage = true;
@@ -3403,7 +3587,7 @@ export class MainScene extends Phaser.Scene {
                             if (troop.velocityX !== undefined && troop.velocityY !== undefined && distToImpact > 0.1) {
                                 troop.velocityX += (dx / distToImpact) * 5;
                                 troop.velocityY += (dy / distToImpact) * 5;
-                                troop.retargetPauseUntil = time + 600; // Stun
+                                troop.retargetPauseUntil = time + 600;
                             }
 
                             // Hit flash on troop
