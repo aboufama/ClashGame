@@ -3673,7 +3673,7 @@ export class BuildingRenderer {
         // 3. ICE CRYSTAL (with pendulum swing)
         // ============================================
         // Pendulum pivot is directly above pit at pulley
-        const pendulumLength = 55;
+        const pendulumLength = 20;
         const crystalPivotX = pulleyX;
         const crystalPivotY = pulleyY + 4;
 
@@ -3686,8 +3686,6 @@ export class BuildingRenderer {
             const pitCenterY = pitY + 8;
             const hangY = crystalPivotY + pendulumLength;
             crystalCX = center.x;
-            crystalCY = pitCenterY + (hangY - pitCenterY) * (crystalRise > 0 ? -1 : 0) + pitCenterY * (1 - crystalRise);
-            // Simpler: lerp from pit to hang point
             crystalCY = pitCenterY + (hangY - pitCenterY) * crystalRise;
         } else {
             // Full height: apply pendulum swing
@@ -3757,10 +3755,29 @@ export class BuildingRenderer {
                 graphics.lineBetween(crystalCX - crystalW * 0.4, crystalCY, crystalCX, topPt);
                 graphics.lineBetween(crystalCX + crystalW * 0.4, crystalCY, crystalCX, topPt);
             }
-        } else if (!showCrystal && crystalRise === 0 && timeSinceFire < 500) {
-            // Rope dangling into pit after launch
-            graphics.lineStyle(1, ropeColor, alpha * 0.5);
-            graphics.lineBetween(crystalPivotX, crystalPivotY, center.x, pitY + 3);
+        } else if (!showCrystal) {
+            // Crystal is gone (launched) — harness flops from pulley
+            const flopTime = timeSinceFire - 4200; // ms since launch
+            if (flopTime > 0 && flopTime < 2000) {
+                // Rope + harness dangling and swinging loosely
+                const flopDecay = Math.max(0, 1 - flopTime / 2000);
+                const flopSwing = Math.sin(flopTime * 0.008) * 8 * flopDecay;
+                const ropeEndX = crystalPivotX + flopSwing;
+                const ropeEndY = crystalPivotY + pendulumLength + 10;
+                // Dangling rope from pulley
+                graphics.lineStyle(1, ropeColor, alpha * 0.6);
+                graphics.lineBetween(crystalPivotX, crystalPivotY, ropeEndX, ropeEndY);
+                // Flopping harness strands
+                graphics.lineStyle(1, ropeColor, alpha * 0.4);
+                graphics.lineBetween(ropeEndX - 6, ropeEndY + 3 + flopSwing * 0.3, ropeEndX, ropeEndY - 5);
+                graphics.lineBetween(ropeEndX + 6, ropeEndY + 3 - flopSwing * 0.3, ropeEndX, ropeEndY - 5);
+                // Horizontal wrap remnant
+                graphics.lineBetween(ropeEndX - 8, ropeEndY, ropeEndX + 8, ropeEndY);
+            } else if (flopTime <= 0) {
+                // Before launch but crystal hidden — rope into pit
+                graphics.lineStyle(1, ropeColor, alpha * 0.5);
+                graphics.lineBetween(crystalPivotX, crystalPivotY, center.x, pitY + 3);
+            }
         }
 
         // ============================================

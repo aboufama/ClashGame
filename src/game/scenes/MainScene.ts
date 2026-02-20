@@ -3318,67 +3318,47 @@ export class MainScene extends Phaser.Scene {
             const start = IsoUtils.cartToIso(centerX, centerY);
             const end = IsoUtils.cartToIso(targetX, targetY);
 
-            // Create the projectile — same shape as the renderer's big crystal
+            // Create the projectile — smaller, matching renderer crystal size
             const shard = this.add.graphics();
 
-            // Draw the full crystal (matching BuildingRenderer.drawFrostfall Layer 2)
-            // Main body - light blue face
-            shard.fillStyle(0xaaddff, 1);
+            // Simple diamond shape matching renderer
+            shard.fillStyle(0xaaddff, 0.9);
             shard.beginPath();
-            shard.moveTo(0, -crystalHeight);
-            shard.lineTo(crystalWidth / 2, -crystalHeight / 3);
-            shard.lineTo(0, 0);
-            shard.lineTo(-crystalWidth / 2, -crystalHeight / 3);
+            shard.moveTo(0, -crystalHeight * 0.5);
+            shard.lineTo(crystalWidth * 0.5, 0);
+            shard.lineTo(0, crystalHeight * 0.5);
+            shard.lineTo(-crystalWidth * 0.5, 0);
             shard.closePath();
             shard.fillPath();
 
-            // Left facet
-            shard.fillStyle(0x66bbff, 1);
+            // Left face
+            shard.fillStyle(0x77bbee, 0.5);
             shard.beginPath();
-            shard.moveTo(0, -crystalHeight);
-            shard.lineTo(-crystalWidth / 2, -crystalHeight / 3);
-            shard.lineTo(-crystalWidth * 0.8, -crystalHeight / 2);
+            shard.moveTo(0, -crystalHeight * 0.5);
+            shard.lineTo(0, crystalHeight * 0.5);
+            shard.lineTo(-crystalWidth * 0.5, 0);
             shard.closePath();
             shard.fillPath();
 
-            // Right facet
-            shard.fillStyle(0x4499dd, 1);
+            // Highlight
+            shard.fillStyle(0xcceeFF, 0.4);
             shard.beginPath();
-            shard.moveTo(0, -crystalHeight);
-            shard.lineTo(crystalWidth / 2, -crystalHeight / 3);
-            shard.lineTo(crystalWidth * 0.8, -crystalHeight / 2);
+            shard.moveTo(0, -crystalHeight * 0.5);
+            shard.lineTo(crystalWidth * 0.5, 0);
+            shard.lineTo(crystalWidth * 0.15, -crystalHeight * 0.1);
             shard.closePath();
             shard.fillPath();
 
-            // Left lower facet
-            shard.fillStyle(0x3388cc, 1);
-            shard.beginPath();
-            shard.moveTo(0, 0);
-            shard.lineTo(-crystalWidth / 2, -crystalHeight / 3);
-            shard.lineTo(-crystalWidth * 0.8, -crystalHeight / 2);
-            shard.closePath();
-            shard.fillPath();
+            // Outline
+            shard.lineStyle(1, 0x5599cc, 0.6);
+            shard.strokePoints([
+                new Phaser.Math.Vector2(0, -crystalHeight * 0.5),
+                new Phaser.Math.Vector2(crystalWidth * 0.5, 0),
+                new Phaser.Math.Vector2(0, crystalHeight * 0.5),
+                new Phaser.Math.Vector2(-crystalWidth * 0.5, 0),
+            ], true, true);
 
-            // Right lower facet
-            shard.fillStyle(0x2277aa, 1);
-            shard.beginPath();
-            shard.moveTo(0, 0);
-            shard.lineTo(crystalWidth / 2, -crystalHeight / 3);
-            shard.lineTo(crystalWidth * 0.8, -crystalHeight / 2);
-            shard.closePath();
-            shard.fillPath();
-
-            // Inner glow highlight
-            shard.fillStyle(0xffffff, 0.7);
-            shard.beginPath();
-            shard.moveTo(0, -crystalHeight * 0.8);
-            shard.lineTo(crystalWidth / 4, -crystalHeight / 3);
-            shard.lineTo(0, -crystalHeight * 0.2);
-            shard.lineTo(-crystalWidth / 4, -crystalHeight / 3);
-            shard.closePath();
-            shard.fillPath();
-
-            // Start from the crystal's fully-risen position (matching renderer)
+            // Start from the crystal's position near the top beam
             const startY = start.y - baseHeight;
             shard.setPosition(start.x, startY);
             shard.setDepth(10000);
@@ -3401,8 +3381,8 @@ export class MainScene extends Phaser.Scene {
                     shard.y = (1 - t) * (1 - t) * startY + 2 * (1 - t) * t * midY + t * t * end.y;
                     // Rotate as it flies — tip forward
                     shard.setRotation(t * Math.PI * 0.4);
-                    // Slight scale increase as it approaches
-                    shard.setScale(1.0 + t * 0.3);
+                    // Keep scale consistent (no growth)
+                    shard.setScale(1.0);
                 },
                 onComplete: () => {
                     shard.destroy();
@@ -3411,51 +3391,101 @@ export class MainScene extends Phaser.Scene {
                     // === IMPACT ===
                     this.cameras.main.shake(200, 0.004);
 
-                    // Create the EMBEDDED crystal at impact point (sticks into the ground)
+                    // Create the EMBEDDED crystal at impact point (sticks into ground)
                     const embedded = this.add.graphics();
-                    const embedHeight = crystalHeight; // Full size
+                    const embedHeight = crystalHeight;
                     const embedWidth = crystalWidth;
 
-                    // Draw embedded crystal (tilted, partially in ground)
+                    // Draw the crystal — only the top portion is visible above ground
+                    // Crystal body (diamond shape, tilted)
                     embedded.fillStyle(0xaaddff, 0.9);
                     embedded.beginPath();
-                    embedded.moveTo(0, -embedHeight);
-                    embedded.lineTo(embedWidth / 2, -embedHeight / 4);
+                    embedded.moveTo(0, -embedHeight * 0.8); // Tip sticking up
+                    embedded.lineTo(embedWidth * 0.5, -embedHeight * 0.3);
+                    embedded.lineTo(0, embedHeight * 0.1);  // Goes into ground
+                    embedded.lineTo(-embedWidth * 0.5, -embedHeight * 0.3);
+                    embedded.closePath();
+                    embedded.fillPath();
+
+                    // Left face shading
+                    embedded.fillStyle(0x77bbee, 0.5);
+                    embedded.beginPath();
+                    embedded.moveTo(0, -embedHeight * 0.8);
                     embedded.lineTo(0, embedHeight * 0.1);
-                    embedded.lineTo(-embedWidth / 2, -embedHeight / 4);
+                    embedded.lineTo(-embedWidth * 0.5, -embedHeight * 0.3);
                     embedded.closePath();
                     embedded.fillPath();
 
-                    // Facet shading
-                    embedded.fillStyle(0x66bbff, 0.85);
+                    // Highlight
+                    embedded.fillStyle(0xcceeFF, 0.4);
                     embedded.beginPath();
-                    embedded.moveTo(0, -embedHeight);
-                    embedded.lineTo(-embedWidth / 2, -embedHeight / 4);
-                    embedded.lineTo(-embedWidth * 0.6, -embedHeight / 3);
+                    embedded.moveTo(0, -embedHeight * 0.8);
+                    embedded.lineTo(embedWidth * 0.5, -embedHeight * 0.3);
+                    embedded.lineTo(embedWidth * 0.15, -embedHeight * 0.5);
                     embedded.closePath();
                     embedded.fillPath();
 
-                    embedded.fillStyle(0x4499dd, 0.85);
+                    // Outline
+                    embedded.lineStyle(1, 0x5599cc, 0.6);
                     embedded.beginPath();
-                    embedded.moveTo(0, -embedHeight);
-                    embedded.lineTo(embedWidth / 2, -embedHeight / 4);
-                    embedded.lineTo(embedWidth * 0.6, -embedHeight / 3);
+                    embedded.moveTo(0, -embedHeight * 0.8);
+                    embedded.lineTo(embedWidth * 0.5, -embedHeight * 0.3);
+                    embedded.lineTo(0, embedHeight * 0.1);
+                    embedded.lineTo(-embedWidth * 0.5, -embedHeight * 0.3);
                     embedded.closePath();
-                    embedded.fillPath();
+                    embedded.strokePath();
 
-                    // Inner glow
-                    embedded.fillStyle(0xffffff, 0.5);
-                    embedded.beginPath();
-                    embedded.moveTo(0, -embedHeight * 0.75);
-                    embedded.lineTo(embedWidth / 5, -embedHeight / 4);
-                    embedded.lineTo(0, -embedHeight * 0.15);
-                    embedded.lineTo(-embedWidth / 5, -embedHeight / 4);
-                    embedded.closePath();
-                    embedded.fillPath();
+                    // === DIRT CRATER MOUND (covers bottom of crystal) ===
+                    // Main dirt mound — elliptical ring around impact point
+                    embedded.fillStyle(0x5a4a3a, 0.9);
+                    embedded.fillEllipse(0, 5, 30, 12);
+                    // Inner crater depression (darker)
+                    embedded.fillStyle(0x3a2a1a, 0.8);
+                    embedded.fillEllipse(0, 5, 20, 8);
+
+                    // Pushed-up dirt clumps on sides
+                    embedded.fillStyle(0x665544, 0.7);
+                    embedded.fillCircle(-12, 3, 4);
+                    embedded.fillCircle(13, 4, 3.5);
+                    embedded.fillCircle(-8, 7, 3);
+                    embedded.fillCircle(9, 6, 2.5);
+
+                    // Tiny dirt highlights
+                    embedded.fillStyle(0x887766, 0.4);
+                    embedded.fillCircle(-14, 1, 2);
+                    embedded.fillCircle(15, 2, 2);
 
                     embedded.setPosition(end.x, end.y);
-                    embedded.setRotation(0.15); // Slightly tilted, as if stuck
+                    embedded.setRotation(0.12); // Slightly tilted
                     embedded.setDepth(100);
+
+                    // === EJECT DIRT CHUNKS on impact ===
+                    for (let i = 0; i < 6; i++) {
+                        const dirt = this.add.graphics();
+                        const dirtSize = 2 + Math.random() * 3;
+                        dirt.fillStyle(Phaser.Display.Color.GetColor(
+                            80 + Math.random() * 40,
+                            60 + Math.random() * 30,
+                            40 + Math.random() * 20
+                        ), 0.9);
+                        dirt.fillCircle(0, 0, dirtSize);
+                        dirt.setPosition(end.x, end.y);
+                        dirt.setDepth(101);
+
+                        const angle = (i / 6) * Math.PI * 2 + Math.random() * 0.5;
+                        const dist = 15 + Math.random() * 20;
+                        this.tweens.add({
+                            targets: dirt,
+                            x: end.x + Math.cos(angle) * dist,
+                            y: end.y + Math.sin(angle) * dist * 0.5 - 10,
+                            alpha: 0,
+                            scaleX: 0.3,
+                            scaleY: 0.3,
+                            duration: 400 + Math.random() * 300,
+                            ease: 'Quad.easeOut',
+                            onComplete: () => dirt.destroy()
+                        });
+                    }
 
                     // === WATER PUDDLE that spreads as crystal melts ===
                     const puddle = this.add.graphics();
