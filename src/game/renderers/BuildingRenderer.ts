@@ -3531,410 +3531,315 @@ export class BuildingRenderer {
         if (time === 0) time = Date.now();
         const level = _building?.level ?? 1;
         const g = baseGraphics || graphics;
+        const fireRate = 5000;
+        const timeSinceFire = _building && _building.lastFireTime ? time - _building.lastFireTime : fireRate + 1;
 
-        const timeSinceFire = _building && _building.lastFireTime ? time - _building.lastFireTime : 10000;
+        // --- COLORS ---
+        const stoneBase = tint ?? 0x4a5560;
+        const stoneDark = 0x3a4550;
+        const stoneLight = 0x6a7580;
+        const frostAccent = 0x88ccff;
+        const woodColor = 0x6b4226;
+        const woodDark = 0x4a2e1a;
+        const ropeColor = 0x8b7355;
 
-        // --- DIMENSIONS (scaled for 2x2 building) ---
-        let crystalHeight = 55;
-        let crystalWidth = 26;
-        let baseHeight = 18;
-        let wellRadius = 22;
+        // --- DIMENSIONS ---
+        const pitRadiusX = 22;
+        const pitRadiusY = 11;
+        const pitY = center.y + 2;
 
-        if (level === 2) {
-            crystalHeight = 68;
-            crystalWidth = 32;
-            baseHeight = 21;
-            wellRadius = 26;
-        } else if (level >= 3) {
-            crystalHeight = 82;
-            crystalWidth = 38;
-            baseHeight = 25;
-            wellRadius = 30;
-        }
-
-        // --- ANIMATION TIMELINE (5000ms cycle) ---
-        // Phase 0: Recovery / well empty (0-600ms)
-        // Phase 1: Keeper walks to winch (600-1200ms)
-        // Phase 2: Cranking — crystal rises (1200-3500ms)
-        // Phase 3: Detach rope, keeper steps back (3500-4200ms)
-        // Phase 4: Crystal charged, ready (4200-4500ms)
-        // Phase 5+: Idle / crystal launched as projectile
-        const isReloading = timeSinceFire < 4800;
-        let reloadProgress = 1.0;      // 0 = crystal hidden, 1 = fully risen
-        let keeperPhase = 'idle';       // recovery | walking | cranking | detaching | ready | idle
-        let keeperX = 0;               // Relative to center
-        let keeperArmAngle = 0;        // Crank handle rotation
-        let ropeVisible = false;
-        let ropeLength = 0;            // 0 = taut, 1 = fully extended
-
+        // --- ANIMATION PHASE ---
+        // Single cycle: crystal rises from pit over 0-4000ms, then launches at 4000ms
+        // After launch (timeSinceFire >= fireRate), crystal is hidden until next fire
+        const isReloading = timeSinceFire < fireRate;
+        // Crystal rise: 0 = fully hidden in pit, 1 = fully risen
+        let crystalRise = 0;
         if (isReloading) {
-            if (timeSinceFire < 600) {
-                // Recovery — keeper stumbles, no crystal
-                keeperPhase = 'recovery';
-                reloadProgress = 0;
-                keeperX = 15; // Near edge, recovering from launch
-            } else if (timeSinceFire < 1200) {
-                // Walking to winch
-                keeperPhase = 'walking';
-                reloadProgress = 0;
-                const walkT = (timeSinceFire - 600) / 600; // 0 → 1
-                keeperX = 15 - walkT * 25; // Walk from right to winch (at x=-10)
+            if (timeSinceFire < 500) {
+                crystalRise = 0; // Brief pause after fire
             } else if (timeSinceFire < 3500) {
-                // Cranking the winch — crystal rises
-                keeperPhase = 'cranking';
-                const crankT = (timeSinceFire - 1200) / 2300; // 0 → 1
-                reloadProgress = crankT;
-                keeperX = -10; // At winch position
-                keeperArmAngle = (timeSinceFire - 1200) * 0.01; // Rotating crank
-                ropeVisible = true;
-                ropeLength = 1.0 - crankT; // Rope shortens as crystal rises
-            } else if (timeSinceFire < 4200) {
-                // Detaching rope, stepping back
-                keeperPhase = 'detaching';
-                reloadProgress = 1.0;
-                const detachT = (timeSinceFire - 3500) / 700;
-                keeperX = -10 + detachT * 22; // Walk away from winch
-                ropeVisible = detachT < 0.4; // Rope disappears partway through
+                crystalRise = (timeSinceFire - 500) / 3000; // Rise over 3 seconds
             } else {
-                // Crystal ready, keeper watching
-                keeperPhase = 'ready';
-                reloadProgress = 1.0;
-                keeperX = 12; // Standing back
+                crystalRise = 1; // Fully up, ready to fire
             }
+        } else {
+            crystalRise = 1; // Default: crystal up and ready
         }
 
-        // --- LAYER 1: Base platform (baked) ---
+        // Crystal dimensions
+        const crystalH = level >= 3 ? 45 : (level >= 2 ? 40 : 35);
+        const crystalW = level >= 3 ? 22 : (level >= 2 ? 20 : 18);
+
+        // ============================================
+        // 1. STONE BASE PLATFORM
+        // ============================================
         if (!skipBase) {
-            // Stone base with frost tint
-            const baseColor = level >= 3 ? 0x1a2a3a : (level === 2 ? 0x2a3a4a : 0x3a4a5a);
-            g.fillStyle(tint ?? baseColor, alpha);
+            // Front elevation sides
+            g.fillStyle(stoneDark, alpha);
             g.beginPath();
-            g.moveTo(c1.x, c1.y);
-            g.lineTo(c2.x, c2.y);
+            g.moveTo(c2.x, c2.y);
             g.lineTo(c3.x, c3.y);
+            g.lineTo(c3.x, c3.y + 6);
+            g.lineTo(c2.x, c2.y + 6);
+            g.closePath();
+            g.fillPath();
+
+            g.beginPath();
+            g.moveTo(c3.x, c3.y);
             g.lineTo(c4.x, c4.y);
+            g.lineTo(c4.x, c4.y + 6);
+            g.lineTo(c3.x, c3.y + 6);
             g.closePath();
             g.fillPath();
 
-            // Top surface (lighter stone with frost)
-            g.fillStyle(tint ?? (level >= 3 ? 0x2a3a4a : 0x4a5a6a), alpha);
-            g.beginPath();
-            g.moveTo(c1.x, c1.y - baseHeight);
-            g.lineTo(c2.x, c2.y - baseHeight);
-            g.lineTo(c3.x, c3.y - baseHeight);
-            g.lineTo(c4.x, c4.y - baseHeight);
-            g.closePath();
-            g.fillPath();
+            // Top surface
+            g.fillStyle(stoneBase, alpha);
+            g.fillPoints([c1, c2, c3, c4], true);
 
-            // Frost edge highlights on the top surface
-            g.lineStyle(1, 0x88ccff, alpha * 0.3);
-            g.beginPath();
-            g.moveTo(c1.x, c1.y - baseHeight);
-            g.lineTo(c2.x, c2.y - baseHeight);
-            g.lineTo(c3.x, c3.y - baseHeight);
-            g.lineTo(c4.x, c4.y - baseHeight);
-            g.closePath();
-            g.strokePath();
+            // Edge highlights
+            g.lineStyle(2, stoneLight, alpha * 0.5);
+            g.lineBetween(c1.x, c1.y, c2.x, c2.y);
+            g.lineBetween(c1.x, c1.y, c4.x, c4.y);
+            g.lineStyle(2, stoneDark, alpha * 0.5);
+            g.lineBetween(c2.x, c2.y, c3.x, c3.y);
+            g.lineBetween(c3.x, c3.y, c4.x, c4.y);
 
-            // Well opening (dark pit)
-            const hatchY = center.y - baseHeight;
-            g.fillStyle(0x050a10, alpha);
-            g.fillEllipse(center.x, hatchY, wellRadius * 2, wellRadius);
-
-            // Well rim (stone ring)
-            g.lineStyle(2, 0x556677, alpha * 0.7);
-            g.strokeEllipse(center.x, hatchY, wellRadius * 2, wellRadius);
-
-            // Frost crystals on the rim (small decorative)
-            for (let i = 0; i < 4; i++) {
-                const angle = (i / 4) * Math.PI * 2;
-                const rx = Math.cos(angle) * wellRadius * 0.9;
-                const ry = Math.sin(angle) * wellRadius * 0.4;
-                g.fillStyle(0x88ccff, alpha * 0.4);
-                g.fillTriangle(
-                    center.x + rx, hatchY + ry - 5,
-                    center.x + rx - 2, hatchY + ry,
-                    center.x + rx + 2, hatchY + ry
-                );
-            }
+            // Frost accent lines on platform
+            g.lineStyle(1, frostAccent, alpha * 0.15);
+            g.lineBetween(c1.x, c1.y, c3.x, c3.y);
+            g.lineBetween(c2.x, c2.y, c4.x, c4.y);
         }
 
-        // --- LAYER 2: Winch Frame + Rope + Crystal + Keeper ---
-        const projectileActive = _building?.frostfallProjectileActive === true;
-        if (!onlyBase) {
-            const hatchY = center.y - baseHeight;
+        if (onlyBase) return;
 
-            // === WINCH FRAME (wooden posts + crossbeam) ===
-            const postLeftX = center.x - wellRadius - 5;
-            const postRightX = center.x - wellRadius + 5;
-            const postBaseY = hatchY;
-            const postTopY = hatchY - 35;
-            const beamColor = level >= 3 ? 0x443322 : 0x665544;
+        // ============================================
+        // 2. WELL PIT (dark hole)
+        // ============================================
+        // Outer stone rim
+        graphics.fillStyle(stoneDark, alpha);
+        graphics.fillEllipse(center.x, pitY, pitRadiusX * 2.4, pitRadiusY * 2.4);
 
-            // Left post
-            graphics.fillStyle(tint ?? beamColor, alpha);
-            graphics.fillRect(postLeftX - 2, postTopY, 4, postBaseY - postTopY);
+        // Frost-tinged rim
+        graphics.lineStyle(2, frostAccent, alpha * 0.3);
+        graphics.strokeEllipse(center.x, pitY, pitRadiusX * 2.4, pitRadiusY * 2.4);
 
-            // Right post (same x but offset in iso for depth feel)
-            graphics.fillRect(postLeftX + 12, postTopY + 3, 4, postBaseY - postTopY - 3);
+        // Inner dark pit
+        graphics.fillStyle(0x0a0a15, alpha);
+        graphics.fillEllipse(center.x, pitY, pitRadiusX * 2.0, pitRadiusY * 2.0);
 
-            // Crossbeam
-            graphics.fillStyle(tint ?? (level >= 3 ? 0x554433 : 0x776655), alpha);
-            graphics.fillRect(postLeftX - 3, postTopY - 2, 18, 4);
+        // Deep black center
+        graphics.fillStyle(0x000008, alpha);
+        graphics.fillEllipse(center.x, pitY + 1, pitRadiusX * 1.6, pitRadiusY * 1.6);
 
-            // Crank handle
-            const crankCenterX = postLeftX + 16;
-            const crankCenterY = postTopY + 1;
-            const crankRadius = 6;
-            const handleAngle = keeperPhase === 'cranking' ? keeperArmAngle : 0;
-            const handleX = crankCenterX + Math.cos(handleAngle) * crankRadius;
-            const handleY = crankCenterY + Math.sin(handleAngle) * crankRadius;
+        // ============================================
+        // 3. ICE CRYSTAL (rises from pit — drawn BEFORE front wall mask)
+        // ============================================
+        const crystalBaseY = pitY + 8; // Below pit when hidden
+        const crystalTopY = center.y - crystalH - 5; // Above pit when risen
+        const crystalCenterY = crystalBaseY + (crystalTopY - crystalBaseY) * crystalRise;
+        const crystalTopPt = crystalCenterY - crystalH * 0.5;
+        const crystalBotPt = crystalCenterY + crystalH * 0.5;
+        const crystalMidY = crystalCenterY;
 
-            // Crank arm
-            graphics.lineStyle(2, 0x665544, alpha);
+        // Only draw crystal if it has started rising
+        if (crystalRise > 0) {
+            // Crystal body — diamond shape
+            // Light blue fill
+            graphics.fillStyle(0xaaddff, alpha * 0.9);
             graphics.beginPath();
-            graphics.moveTo(crankCenterX, crankCenterY);
-            graphics.lineTo(handleX, handleY);
-            graphics.strokePath();
-
-            // Crank handle knob
-            graphics.fillStyle(0x554433, alpha);
-            graphics.fillCircle(handleX, handleY, 2.5);
-
-            // Axle (small circle at center)
-            graphics.fillStyle(0x444444, alpha);
-            graphics.fillCircle(crankCenterX, crankCenterY, 2);
-
-            // === ROPE (from winch down into well) ===
-            if (ropeVisible) {
-                const ropeStartX = crankCenterX;
-                const ropeStartY = crankCenterY + 3;
-                const ropeEndY = hatchY + ropeLength * 30;
-
-                graphics.lineStyle(1, 0x998877, alpha * 0.8);
-                graphics.beginPath();
-                graphics.moveTo(ropeStartX, ropeStartY);
-                // Rope curves toward center then down
-                graphics.lineTo(center.x - 3, hatchY - 8);
-                graphics.lineTo(center.x - 1, ropeEndY);
-                graphics.strokePath();
-
-                // Small tie knot at crystal if crystal is rising
-                if (reloadProgress > 0 && reloadProgress < 1.0) {
-                    const knotY = hatchY - reloadProgress * crystalHeight + 5;
-                    graphics.fillStyle(0x887766, alpha);
-                    graphics.fillCircle(center.x - 1, knotY, 2);
-                }
-            }
-
-            // === RISING CRYSTAL ===
-            const shouldDrawCrystal = reloadProgress > 0 && !projectileActive && timeSinceFire < 4500;
-            if (shouldDrawCrystal) {
-                const riseOffset = (1.0 - reloadProgress) * crystalHeight;
-                const crystalBobOffset = reloadProgress >= 1.0 ? Math.sin(time / 400) * 3 : 0;
-                const crystalBaseX = center.x;
-                const crystalBaseY = hatchY + crystalBobOffset + riseOffset;
-
-                const glowPulse = (Math.sin(time / 150) + 1) / 2;
-
-                // Glow at base — only when fully risen
-                if (reloadProgress >= 1.0) {
-                    graphics.fillStyle(0x44aaff, alpha * (0.2 + glowPulse * 0.2));
-                    graphics.fillEllipse(crystalBaseX, hatchY, crystalWidth * 1.5, crystalWidth * 0.6);
-                }
-
-                // Clip bottom to pit floor
-                const clipBottom = Math.max(crystalBaseY, hatchY);
-
-                // Main crystal body
-                graphics.fillStyle(0xaaddff, alpha);
-                graphics.beginPath();
-                graphics.moveTo(crystalBaseX, crystalBaseY - crystalHeight);
-                graphics.lineTo(crystalBaseX + crystalWidth / 2, crystalBaseY - crystalHeight / 3);
-                graphics.lineTo(crystalBaseX, clipBottom);
-                graphics.lineTo(crystalBaseX - crystalWidth / 2, crystalBaseY - crystalHeight / 3);
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Left facet
-                graphics.fillStyle(0x66bbff, alpha);
-                graphics.beginPath();
-                graphics.moveTo(crystalBaseX, crystalBaseY - crystalHeight);
-                graphics.lineTo(crystalBaseX - crystalWidth / 2, crystalBaseY - crystalHeight / 3);
-                graphics.lineTo(crystalBaseX - crystalWidth * 0.8, crystalBaseY - crystalHeight / 2);
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Right facet
-                graphics.fillStyle(0x4499dd, alpha);
-                graphics.beginPath();
-                graphics.moveTo(crystalBaseX, crystalBaseY - crystalHeight);
-                graphics.lineTo(crystalBaseX + crystalWidth / 2, crystalBaseY - crystalHeight / 3);
-                graphics.lineTo(crystalBaseX + crystalWidth * 0.8, crystalBaseY - crystalHeight / 2);
-                graphics.closePath();
-                graphics.fillPath();
-
-                // Lower facets (only if above pit floor)
-                if (crystalBaseY - crystalHeight / 3 >= hatchY) {
-                    graphics.fillStyle(0x3388cc, alpha);
-                    graphics.beginPath();
-                    graphics.moveTo(crystalBaseX, clipBottom);
-                    graphics.lineTo(crystalBaseX - crystalWidth / 2, crystalBaseY - crystalHeight / 3);
-                    graphics.lineTo(crystalBaseX - crystalWidth * 0.8, crystalBaseY - crystalHeight / 2);
-                    graphics.closePath();
-                    graphics.fillPath();
-
-                    graphics.fillStyle(0x2277aa, alpha);
-                    graphics.beginPath();
-                    graphics.moveTo(crystalBaseX, clipBottom);
-                    graphics.lineTo(crystalBaseX + crystalWidth / 2, crystalBaseY - crystalHeight / 3);
-                    graphics.lineTo(crystalBaseX + crystalWidth * 0.8, crystalBaseY - crystalHeight / 2);
-                    graphics.closePath();
-                    graphics.fillPath();
-                }
-
-                // Inner glow when nearly/fully risen
-                if (reloadProgress > 0.6) {
-                    graphics.fillStyle(0xffffff, alpha * (0.4 + glowPulse * 0.4) * reloadProgress);
-                    graphics.beginPath();
-                    graphics.moveTo(crystalBaseX, crystalBaseY - crystalHeight * 0.8);
-                    graphics.lineTo(crystalBaseX + crystalWidth / 4, crystalBaseY - crystalHeight / 3);
-                    graphics.lineTo(crystalBaseX, crystalBaseY - crystalHeight * 0.2);
-                    graphics.lineTo(crystalBaseX - crystalWidth / 4, crystalBaseY - crystalHeight / 3);
-                    graphics.closePath();
-                    graphics.fillPath();
-                }
-            }
-
-            // === FROST KEEPER CHARACTER ===
-            const keeperDrawX = center.x + keeperX;
-            const keeperDrawY = hatchY - 1; // Standing on the platform surface
-            const keeperScale = level >= 3 ? 1.3 : (level === 2 ? 1.15 : 1.0);
-
-            // Walking animation: slight bob
-            const walkBob = keeperPhase === 'walking' ? Math.sin(time / 80) * 1.5 : 0;
-            // Recovery stumble
-            const staggerX = keeperPhase === 'recovery' ? Math.sin(time / 100) * 2 : 0;
-
-            const kx = keeperDrawX + staggerX;
-            const ky = keeperDrawY + walkBob;
-            const ks = keeperScale;
-
-            // Legs (two small lines below body)
-            const legSpread = keeperPhase === 'walking' ? Math.sin(time / 120) * 3 : 2;
-            graphics.lineStyle(1.5, 0x222222, alpha);
-            graphics.beginPath();
-            graphics.moveTo(kx - legSpread * ks, ky);
-            graphics.lineTo(kx - 1 * ks, ky - 4 * ks);
-            graphics.strokePath();
-            graphics.beginPath();
-            graphics.moveTo(kx + legSpread * ks, ky);
-            graphics.lineTo(kx + 1 * ks, ky - 4 * ks);
-            graphics.strokePath();
-
-            // Body (small rectangle)
-            graphics.fillStyle(0x336688, alpha);
-            graphics.fillRect(kx - 3 * ks, ky - 10 * ks, 6 * ks, 6 * ks);
-
-            // Hood/cloak (triangle over the head)
-            graphics.fillStyle(0x224466, alpha);
-            graphics.beginPath();
-            graphics.moveTo(kx, ky - 16 * ks); // Hood peak
-            graphics.lineTo(kx - 5 * ks, ky - 8 * ks);
-            graphics.lineTo(kx + 5 * ks, ky - 8 * ks);
+            graphics.moveTo(center.x, crystalTopPt);
+            graphics.lineTo(center.x + crystalW * 0.5, crystalMidY);
+            graphics.lineTo(center.x, crystalBotPt);
+            graphics.lineTo(center.x - crystalW * 0.5, crystalMidY);
             graphics.closePath();
             graphics.fillPath();
 
-            // Head (small circle under hood)
-            graphics.fillStyle(0xddccbb, alpha);
-            graphics.fillCircle(kx, ky - 12 * ks, 2.5 * ks);
+            // Left face darker
+            graphics.fillStyle(0x77bbee, alpha * 0.5);
+            graphics.beginPath();
+            graphics.moveTo(center.x, crystalTopPt);
+            graphics.lineTo(center.x, crystalBotPt);
+            graphics.lineTo(center.x - crystalW * 0.5, crystalMidY);
+            graphics.closePath();
+            graphics.fillPath();
 
-            // Arms + tool
-            if (keeperPhase === 'cranking') {
-                // Cranking arm — reaching toward the crank handle
-                const armEndX = kx + (handleX - kx) * 0.7;
-                const armEndY = ky - 8 * ks + (handleY - (ky - 8 * ks)) * 0.5;
-                graphics.lineStyle(1.5, 0x336688, alpha);
-                graphics.beginPath();
-                graphics.moveTo(kx + 3 * ks, ky - 8 * ks);
-                graphics.lineTo(armEndX, armEndY);
-                graphics.strokePath();
-                // Other arm also reaching
-                graphics.beginPath();
-                graphics.moveTo(kx - 3 * ks, ky - 8 * ks);
-                graphics.lineTo(armEndX - 2, armEndY + 1);
-                graphics.strokePath();
-            } else if (keeperPhase === 'detaching') {
-                // Arms reaching toward crystal (detaching rope)
-                const armReachX = center.x;
-                const armReachY = hatchY - crystalHeight * 0.3;
-                graphics.lineStyle(1.5, 0x336688, alpha);
-                graphics.beginPath();
-                graphics.moveTo(kx + 3 * ks, ky - 8 * ks);
-                graphics.lineTo(armReachX, armReachY);
-                graphics.strokePath();
-            } else if (keeperPhase === 'recovery') {
-                // Arms flailing
-                const flailAngle = Math.sin(time / 80) * 0.5;
-                graphics.lineStyle(1.5, 0x336688, alpha);
-                graphics.beginPath();
-                graphics.moveTo(kx + 3 * ks, ky - 8 * ks);
-                graphics.lineTo(kx + 8 * ks, ky - 12 * ks + Math.sin(flailAngle) * 4);
-                graphics.strokePath();
-                graphics.beginPath();
-                graphics.moveTo(kx - 3 * ks, ky - 8 * ks);
-                graphics.lineTo(kx - 7 * ks, ky - 10 * ks - Math.cos(flailAngle) * 3);
-                graphics.strokePath();
-            } else {
-                // Arms at sides (idle or ready)
-                graphics.lineStyle(1.5, 0x336688, alpha);
-                graphics.beginPath();
-                graphics.moveTo(kx + 3 * ks, ky - 8 * ks);
-                graphics.lineTo(kx + 4 * ks, ky - 4 * ks);
-                graphics.strokePath();
-                graphics.beginPath();
-                graphics.moveTo(kx - 3 * ks, ky - 8 * ks);
-                graphics.lineTo(kx - 4 * ks, ky - 4 * ks);
-                graphics.strokePath();
-            }
+            // Right face lighter highlight
+            graphics.fillStyle(0xcceeFF, alpha * 0.4);
+            graphics.beginPath();
+            graphics.moveTo(center.x, crystalTopPt);
+            graphics.lineTo(center.x + crystalW * 0.5, crystalMidY);
+            graphics.lineTo(center.x + crystalW * 0.15, crystalMidY - crystalH * 0.15);
+            graphics.closePath();
+            graphics.fillPath();
+
+            // Crystal outline
+            graphics.lineStyle(1, 0x5599cc, alpha * 0.6);
+            graphics.beginPath();
+            graphics.moveTo(center.x, crystalTopPt);
+            graphics.lineTo(center.x + crystalW * 0.5, crystalMidY);
+            graphics.lineTo(center.x, crystalBotPt);
+            graphics.lineTo(center.x - crystalW * 0.5, crystalMidY);
+            graphics.closePath();
+            graphics.strokePath();
+
+            // Internal facet line
+            graphics.lineStyle(1, 0x99ccee, alpha * 0.3);
+            graphics.lineBetween(center.x, crystalTopPt, center.x, crystalBotPt);
         }
 
-        // --- LAYER 3: Front Walls (always drawn for masking) ---
-        {
-            const drawTarget = skipBase ? graphics : g;
+        // ============================================
+        // 4. ROPE HARNESS around crystal (visible while rising/ready, before launch)
+        // ============================================
+        if (crystalRise > 0.1 && isReloading && timeSinceFire < 4500) {
+            graphics.lineStyle(2, ropeColor, alpha * 0.8);
+            // Horizontal wrap around crystal middle
+            graphics.lineBetween(
+                center.x - crystalW * 0.55, crystalMidY,
+                center.x + crystalW * 0.55, crystalMidY
+            );
+            // Rope up to scaffolding top (left side)
+            const scaffoldTopX = center.x - 20;
+            const scaffoldTopY = center.y - 55;
+            graphics.lineBetween(center.x, crystalMidY - crystalH * 0.3, scaffoldTopX + 8, scaffoldTopY + 5);
+        }
 
-            // Front wall right
-            drawTarget.fillStyle(tint ?? (level >= 3 ? 0x112233 : 0x2a3a4a), alpha);
-            drawTarget.beginPath();
-            drawTarget.moveTo(c3.x, c3.y);
-            drawTarget.lineTo(c3.x, c3.y - baseHeight);
-            drawTarget.lineTo(c4.x, c4.y - baseHeight);
-            drawTarget.lineTo(c4.x, c4.y);
-            drawTarget.closePath();
-            drawTarget.fillPath();
+        // ============================================
+        // 5. FRONT WALL ARC (masks crystal bottom — mortar-style)
+        // ============================================
+        // Front arc of the stone rim that covers the bottom of the crystal
+        graphics.fillStyle(stoneDark, alpha);
+        graphics.beginPath();
+        // Outer arc (front half)
+        for (let i = 0; i <= 16; i++) {
+            const angle = (i / 32) * Math.PI * 2;
+            const px = center.x + Math.cos(angle) * pitRadiusX * 1.2;
+            const py = pitY + Math.sin(angle) * pitRadiusY * 1.2;
+            if (i === 0) graphics.moveTo(px, py);
+            else graphics.lineTo(px, py);
+        }
+        // Inner arc (front half, reversed)
+        for (let i = 16; i >= 0; i--) {
+            const angle = (i / 32) * Math.PI * 2;
+            const px = center.x + Math.cos(angle) * pitRadiusX * 0.75;
+            const py = pitY + Math.sin(angle) * pitRadiusY * 0.75;
+            graphics.lineTo(px, py);
+        }
+        graphics.closePath();
+        graphics.fillPath();
 
-            // Front wall left
-            drawTarget.fillStyle(tint ?? (level >= 3 ? 0x0a1a2a : 0x1f2f3f), alpha);
-            drawTarget.beginPath();
-            drawTarget.moveTo(c2.x, c2.y);
-            drawTarget.lineTo(c2.x, c2.y - baseHeight);
-            drawTarget.lineTo(c3.x, c3.y - baseHeight);
-            drawTarget.lineTo(c3.x, c3.y);
-            drawTarget.closePath();
-            drawTarget.fillPath();
+        // Frost accent on front rim
+        graphics.lineStyle(1, frostAccent, alpha * 0.2);
+        for (let i = 0; i <= 16; i++) {
+            const angle = (i / 32) * Math.PI * 2;
+            const px = center.x + Math.cos(angle) * pitRadiusX * 1.2;
+            const py = pitY + Math.sin(angle) * pitRadiusY * 1.2;
+            if (i === 0) graphics.moveTo(px, py);
+            else graphics.lineTo(px, py);
+        }
+        graphics.strokePath();
 
-            // Frost streaks on front walls
-            drawTarget.lineStyle(1, 0x88ccff, alpha * 0.15);
-            const wallMidX = (c2.x + c3.x) / 2;
-            const wallMidY = (c2.y + c3.y) / 2;
-            drawTarget.beginPath();
-            drawTarget.moveTo(wallMidX, wallMidY - baseHeight);
-            drawTarget.lineTo(wallMidX + 3, wallMidY - baseHeight * 0.3);
-            drawTarget.strokePath();
-            drawTarget.beginPath();
-            drawTarget.moveTo(wallMidX + 8, wallMidY - baseHeight * 0.8);
-            drawTarget.lineTo(wallMidX + 5, wallMidY - baseHeight * 0.1);
-            drawTarget.strokePath();
+        // ============================================
+        // 6. SCAFFOLDING (tall wooden frame, to the LEFT)
+        // ============================================
+        const scaffX = center.x - 22; // Left of center
+        const scaffBaseY = center.y - 2;
+        const scaffTopY = center.y - 60;
+        const scaffW = 4;
+
+        // Left vertical post
+        graphics.fillStyle(woodColor, alpha);
+        graphics.fillRect(scaffX - scaffW / 2, scaffTopY, scaffW, scaffBaseY - scaffTopY);
+        // Right vertical post (slightly right)
+        graphics.fillRect(scaffX + 10 - scaffW / 2, scaffTopY, scaffW, scaffBaseY - scaffTopY);
+
+        // Post shading
+        graphics.lineStyle(1, woodDark, alpha * 0.6);
+        graphics.lineBetween(scaffX + scaffW / 2, scaffTopY, scaffX + scaffW / 2, scaffBaseY);
+        graphics.lineBetween(scaffX + 10 + scaffW / 2, scaffTopY, scaffX + 10 + scaffW / 2, scaffBaseY);
+
+        // Cross braces
+        graphics.lineStyle(2, woodColor, alpha * 0.9);
+        // Lower brace
+        graphics.lineBetween(scaffX, scaffBaseY - 15, scaffX + 10, scaffBaseY - 15);
+        // Upper brace
+        graphics.lineBetween(scaffX, scaffTopY + 10, scaffX + 10, scaffTopY + 10);
+
+        // Top horizontal beam (extends over the pit)
+        graphics.fillStyle(woodColor, alpha);
+        graphics.fillRect(scaffX - 2, scaffTopY - 2, 30, 4);
+        // Beam shading
+        graphics.lineStyle(1, woodDark, alpha * 0.5);
+        graphics.lineBetween(scaffX - 2, scaffTopY + 2, scaffX + 28, scaffTopY + 2);
+
+        // Pulley wheel at beam end (over the pit)
+        const pulleyX = scaffX + 22;
+        const pulleyY = scaffTopY;
+        graphics.fillStyle(0x555555, alpha);
+        graphics.fillCircle(pulleyX, pulleyY, 4);
+        graphics.fillStyle(0x777777, alpha);
+        graphics.fillCircle(pulleyX, pulleyY, 2);
+
+        // Winch drum on scaffolding (between posts, lower)
+        const winchY = scaffBaseY - 15;
+        graphics.fillStyle(woodDark, alpha);
+        graphics.fillEllipse(scaffX + 5, winchY, 8, 5);
+        // Crank handle (rotates during reload)
+        if (isReloading && timeSinceFire >= 500 && timeSinceFire < 3500) {
+            const crankAngle = (timeSinceFire - 500) / 300 * Math.PI;
+            const crankR = 6;
+            const crankEndX = scaffX + 5 + Math.cos(crankAngle) * crankR;
+            const crankEndY = winchY + Math.sin(crankAngle) * crankR * 0.5;
+            graphics.lineStyle(2, 0x555555, alpha);
+            graphics.lineBetween(scaffX + 5, winchY, crankEndX, crankEndY);
+            graphics.fillStyle(0x444444, alpha);
+            graphics.fillCircle(crankEndX, crankEndY, 2);
+        }
+
+        // Rope from pulley down to crystal (or into pit)
+        if (crystalRise < 1 || (isReloading && timeSinceFire < 4500)) {
+            graphics.lineStyle(1, ropeColor, alpha * 0.7);
+            const ropeEndY = crystalRise > 0.05 ? crystalMidY - crystalH * 0.3 : pitY + 5;
+            graphics.lineBetween(pulleyX, pulleyY + 4, center.x, ropeEndY);
+        }
+
+        // ============================================
+        // 7. FROST KEEPER (small hooded figure, to the LEFT of scaffolding)
+        // ============================================
+        const keeperX = scaffX - 10;
+        const keeperBaseY = scaffBaseY;
+
+        // Body (small rectangle)
+        graphics.fillStyle(0x3366aa, alpha);
+        graphics.fillRect(keeperX - 3, keeperBaseY - 12, 6, 10);
+
+        // Hood/head
+        graphics.fillStyle(0x2a4488, alpha);
+        graphics.fillCircle(keeperX, keeperBaseY - 14, 4);
+
+        // Hood top
+        graphics.fillStyle(0x223366, alpha);
+        graphics.beginPath();
+        graphics.moveTo(keeperX - 3, keeperBaseY - 14);
+        graphics.lineTo(keeperX, keeperBaseY - 19);
+        graphics.lineTo(keeperX + 3, keeperBaseY - 14);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Arms — one holding out toward scaffolding
+        graphics.lineStyle(2, 0x3366aa, alpha);
+        graphics.lineBetween(keeperX + 3, keeperBaseY - 10, keeperX + 10, keeperBaseY - 12);
+
+        // ============================================
+        // 8. FROST PARTICLES (when crystal is fully risen)
+        // ============================================
+        if (crystalRise >= 0.9) {
+            const t = time * 0.002;
+            for (let i = 0; i < 4; i++) {
+                const px = center.x + Math.sin(t + i * 1.5) * 12;
+                const py = crystalMidY - 5 + Math.cos(t + i * 2.1) * 8;
+                graphics.fillStyle(frostAccent, alpha * 0.3);
+                graphics.fillCircle(px, py, 1.5);
+            }
         }
     }
     static drawPrismTower(graphics: Phaser.GameObjects.Graphics, c1: Phaser.Math.Vector2, c2: Phaser.Math.Vector2, c3: Phaser.Math.Vector2, c4: Phaser.Math.Vector2, center: Phaser.Math.Vector2, alpha: number, tint: number | null, _building ?: any, baseGraphics ?: Phaser.GameObjects.Graphics, skipBase: boolean = false, onlyBase: boolean = false) {
