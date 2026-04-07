@@ -1505,8 +1505,9 @@ export class BuildingRenderer {
                 }
             }
 
-            // === VAPOR WISPS — rising from drill site when actively drilling ===
-            if (isDrilling) {
+            // === VAPOR WISPS — only once drill is in the ground (shake phase) ===
+            const isShaking = cycleTime >= 2000 && cycleTime < 3000;
+            if (isShaking) {
                 const vaporSeed = time / 220;
                 for (let i = 0; i < 4; i++) {
                     const vLife = (vaporSeed * 0.35 + i * 0.25) % 1;

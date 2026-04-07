@@ -926,14 +926,14 @@ export class MainScene extends Phaser.Scene {
                 // If baseGraphics is missing (baked), skipBase=true. If present (moving), skipBase=false.
                 this.drawBuildingVisuals(b.graphics, b.gridX, b.gridY, b.type, alpha, null, b, b.baseGraphics, !b.baseGraphics);
 
-                // SOLANA COLLECTOR: Particle burst during shake phase
+                // SOLANA COLLECTOR: Rock dust burst during shake phase
                 if (b.type === 'solana_collector') {
                     const cycleLength = 8000;
                     const cycleTime = this.time.now % cycleLength;
                     const isShaking = cycleTime >= 2000 && cycleTime < 3000;
-                    if (isShaking && (this.time.now % 180 < 20)) { // Spawn coin every ~180ms during shake
+                    if (isShaking) {
                         const pos = IsoUtils.cartToIso(b.gridX + 1, b.gridY + 1);
-                        this.spawnSolCoinBurst(pos.x, pos.y, 1);
+                        particleManager.emitSmokeTracker(b.id + '_drill', pos.x, pos.y, this.time.now, 29900, 2, 180, 0x7a6a55);
                     }
                 }
 
@@ -5192,7 +5192,8 @@ export class MainScene extends Phaser.Scene {
                 });
             }
         } else if (b.type === 'solana_collector' || b.type === 'mine' || b.type === 'elixir_collector') {
-            this.spawnSolCoinBurst(pos.x, pos.y - 10);
+            particleManager.emitDustBurst(pos.x, pos.y - 10, 29900);
+            particleManager.emitExplosion(pos.x, pos.y - 10, 29900);
         } else if (b.type === 'magmavent') {
             // === VOLCANIC DEATH ===
 
