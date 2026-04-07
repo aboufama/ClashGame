@@ -9,7 +9,6 @@ interface LeaderboardUser {
 interface LeaderboardPanelProps {
   currentUserId: string;
   isOnline: boolean;
-  onAttackUser: (userId: string, username: string) => void;
   onScoutUser: (userId: string, username: string) => void;
 }
 
@@ -94,7 +93,7 @@ function writeCache(users: LeaderboardUser[]) {
   }
 }
 
-export function LeaderboardPanel({ currentUserId, isOnline, onAttackUser, onScoutUser }: LeaderboardPanelProps) {
+export function LeaderboardPanel({ currentUserId, isOnline, onScoutUser }: LeaderboardPanelProps) {
   const initialCache = readCache();
   const [users, setUsers] = useState<LeaderboardUser[]>(initialCache?.users ?? []);
   const [isOpen, setIsOpen] = useState(false);
@@ -298,28 +297,16 @@ export function LeaderboardPanel({ currentUserId, isOnline, onAttackUser, onScou
                       <span className="buildings">{user.buildingCount} buildings</span>
                     </div>
                     {user.id !== currentUserId && (
-                      <div className="leaderboard-actions">
-                        <button
-                          className="scout-btn"
-                          onClick={() => {
-                            handleClose();
-                            onScoutUser(user.id, user.username);
-                          }}
-                          title="Scout"
-                        >
-                          <div className="btn-icon eye-icon"></div>
-                        </button>
-                        <button
-                          className="attack-btn"
-                          onClick={() => {
-                            handleClose();
-                            onAttackUser(user.id, user.username);
-                          }}
-                          title="Attack"
-                        >
-                          <div className="btn-icon sword-icon"></div>
-                        </button>
-                      </div>
+                      <button
+                        className="scout-btn"
+                        onClick={() => {
+                          handleClose();
+                          onScoutUser(user.id, user.username);
+                        }}
+                        title="View base"
+                      >
+                        <div className="btn-icon eye-icon"></div>
+                      </button>
                     )}
                     {user.id === currentUserId && (
                       <span className="you-badge">YOU</span>

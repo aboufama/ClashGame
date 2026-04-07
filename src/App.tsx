@@ -1257,7 +1257,6 @@ function App() {
           <LeaderboardPanel
             currentUserId={user.id}
             isOnline={isOnline}
-            onAttackUser={handleAttackUser}
             onScoutUser={handleScoutUser}
           />
           <NotificationsPanel

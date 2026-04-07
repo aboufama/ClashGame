@@ -2864,25 +2864,6 @@ body.is-touch {
     color: var(--text-secondary);
 }
 
-.leaderboard-item .attack-btn {
-    background: var(--fantasy-red);
-    border: 2px solid #A52A2A;
-    color: #fff;
-    padding: 0;
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    box-shadow: 2px 2px 0 #000;
-}
-
-.leaderboard-item .leaderboard-actions {
-    display: flex;
-    gap: 4px;
-}
-
 .leaderboard-item .scout-btn {
     background: var(--fantasy-blue);
     border: 2px solid #1e3f9a;
@@ -2899,10 +2880,6 @@ body.is-touch {
 
 .leaderboard-item .scout-btn:hover {
     background: #3458c8;
-}
-
-.leaderboard-item .attack-btn:hover {
-    background: #B22222;
 }
 
 .leaderboard-item .you-badge {

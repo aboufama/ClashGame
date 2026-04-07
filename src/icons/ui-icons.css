@@ -378,28 +378,29 @@
     left: 50%;
     transform: translate(-50%, -50%);
     box-shadow:
-        /* Outline - almond shape with pointed tips */
-        0 -6px #1a1a1a,
-        -4px -4px #1a1a1a, -2px -4px #1a1a1a, 0 -4px #1a1a1a, 2px -4px #1a1a1a, 4px -4px #1a1a1a,
-        -6px -2px #1a1a1a, 6px -2px #1a1a1a,
-        -6px 0 #1a1a1a, 6px 0 #1a1a1a,
-        -6px 2px #1a1a1a, 6px 2px #1a1a1a,
-        -4px 4px #1a1a1a, -2px 4px #1a1a1a, 0 4px #1a1a1a, 2px 4px #1a1a1a, 4px 4px #1a1a1a,
-        0 6px #1a1a1a,
-        /* White sclera - flanking the iris */
-        -4px -2px #f5f5f5, 4px -2px #f5f5f5,
-        -4px 0 #f5f5f5, 4px 0 #f5f5f5,
-        -4px 2px #f5f5f5, 4px 2px #f5f5f5,
-        /* Iris - 3x3 ring with shading */
-        -2px -2px #99CCFF,
-        0 -2px #4488DD,
-        2px -2px #3377CC,
-        -2px 0 #3377CC,
-        2px 0 #3377CC,
-        -2px 2px #2255AA,
-        0 2px #2255AA,
-        2px 2px #2255AA;
-        /* Pupil = background at center (0,0) = #0a0a0a */
+        /* Top outline curve (wide almond) */
+        -6px -4px #1a1a1a, -4px -4px #1a1a1a, -2px -4px #1a1a1a, 0 -4px #1a1a1a, 2px -4px #1a1a1a, 4px -4px #1a1a1a, 6px -4px #1a1a1a,
+        /* Upper side outlines (step out wider) */
+        -8px -2px #1a1a1a, 8px -2px #1a1a1a,
+        /* Center — pointed tips at far corners */
+        -10px 0 #1a1a1a, 10px 0 #1a1a1a,
+        /* Lower side outlines */
+        -8px 2px #1a1a1a, 8px 2px #1a1a1a,
+        /* Bottom outline curve */
+        -6px 4px #1a1a1a, -4px 4px #1a1a1a, -2px 4px #1a1a1a, 0 4px #1a1a1a, 2px 4px #1a1a1a, 4px 4px #1a1a1a, 6px 4px #1a1a1a,
+        /* White sclera - upper row */
+        -6px -2px #f5f5f5, -4px -2px #f5f5f5, 4px -2px #f5f5f5, 6px -2px #f5f5f5,
+        /* White sclera - center row (wide) */
+        -8px 0 #f5f5f5, -6px 0 #f5f5f5, -4px 0 #f5f5f5, 4px 0 #f5f5f5, 6px 0 #f5f5f5, 8px 0 #f5f5f5,
+        /* White sclera - lower row */
+        -6px 2px #f5f5f5, -4px 2px #f5f5f5, 4px 2px #f5f5f5, 6px 2px #f5f5f5,
+        /* Iris - top row (highlight on upper-left) */
+        -2px -2px #aaddff, 0 -2px #5599ee, 2px -2px #4488dd,
+        /* Iris - center flanking pupil */
+        -2px 0 #3377cc, 2px 0 #3377cc,
+        /* Iris - bottom row (shadow) */
+        -2px 2px #2255aa, 0 2px #2255aa, 2px 2px #1e4499;
+        /* Pupil = element background #0a0a0a at center (0,0) */
 }
 
 /* SWORD ICON - Compact upright sword for attack buttons */
