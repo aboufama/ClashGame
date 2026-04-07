@@ -307,7 +307,7 @@ export function LeaderboardPanel({ currentUserId, isOnline, onAttackUser, onScou
                           }}
                           title="Scout"
                         >
-                          👁️
+                          <div className="btn-icon eye-icon"></div>
                         </button>
                         <button
                           className="attack-btn"
@@ -317,7 +317,7 @@ export function LeaderboardPanel({ currentUserId, isOnline, onAttackUser, onScou
                           }}
                           title="Attack"
                         >
-                          ⚔️
+                          <div className="btn-icon sword-icon"></div>
                         </button>
                       </div>
                     )}

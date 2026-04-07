@@ -363,6 +363,72 @@
         0 6px #8B6914, 0 8px #6B4E0A;
 }
 
+/* EYE ICON - Pixel art eye for scout/view buttons */
+.eye-icon {
+    position: relative !important;
+}
+
+.eye-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #111111;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Top outline curve */
+        -4px -4px #111111, -2px -4px #111111, 0 -4px #111111, 2px -4px #111111, 4px -4px #111111,
+        /* Side outlines */
+        -6px -2px #111111, 6px -2px #111111,
+        -6px 0 #111111, 6px 0 #111111,
+        -6px 2px #111111, 6px 2px #111111,
+        /* Bottom outline curve */
+        -4px 4px #111111, -2px 4px #111111, 0 4px #111111, 2px 4px #111111, 4px 4px #111111,
+        /* White sclera - top row (with glint) */
+        -4px -2px #ffffff, -2px -2px #ddeeff, 0 -2px #ffffff, 2px -2px #ffffff, 4px -2px #ffffff,
+        /* White sclera - left/right flanking iris */
+        -4px 0 #ffffff, 4px 0 #ffffff,
+        /* White sclera - bottom row */
+        -4px 2px #ffffff, -2px 2px #ffffff, 0 2px #ffffff, 2px 2px #ffffff, 4px 2px #ffffff,
+        /* Blue iris flanking pupil */
+        -2px 0 #2266CC, 2px 0 #2266CC;
+        /* Pupil = element background at center (#111111) */
+}
+
+/* SWORD ICON - Compact upright sword for attack buttons */
+.sword-icon {
+    position: relative !important;
+}
+
+.sword-icon::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #B8860B;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        /* Blade tip */
+        0 -10px #ffffff,
+        /* Blade body - left highlight, center, right shadow */
+        -2px -8px #d0d0d0, 0 -8px #f0f0f0, 2px -8px #a0a0a0,
+        -2px -6px #c8c8c8, 0 -6px #e8e8e8, 2px -6px #989898,
+        -2px -4px #c0c0c0, 0 -4px #e0e0e0, 2px -4px #909090,
+        -2px -2px #b8b8b8, 0 -2px #d8d8d8, 2px -2px #888888,
+        /* Golden guard (center guard pixel = background #B8860B at 0,0) */
+        -8px 0 #8B6914, -6px 0 #B8860B, -4px 0 #DAA520, -2px 0 #FFD700,
+        2px 0 #FFD700, 4px 0 #DAA520, 6px 0 #B8860B, 8px 0 #8B6914,
+        /* Leather handle */
+        -2px 2px #5D3420, 0 2px #7D4C3A, 2px 2px #5D3420,
+        -2px 4px #4D2410, 0 4px #5D3420, 2px 4px #4D2410,
+        /* Pommel */
+        -4px 6px #B8860B, -2px 6px #DAA520, 0 6px #FFD700, 2px 6px #DAA520, 4px 6px #B8860B;
+}
+
 /* TEST ICON - Scarecrow/target dummy */
 .test-icon {
     position: relative !important;

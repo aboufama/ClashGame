@@ -171,7 +171,7 @@ export function TrainingModal({
           <div className="tooltip-flavor">{tooltipFlavor}</div>
           <div className="tooltip-stats">
             <span>♥ {tooltipScaled.health}</span>
-            <span>⚔ {tooltipScaled.damage}</span>
+            <span>{'\u2694\uFE0E'} {tooltipScaled.damage}</span>
             <span>◎ {tooltipTroop.space}</span>
           </div>
         </div>
