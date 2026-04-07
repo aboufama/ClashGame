@@ -17,6 +17,7 @@ import {
 
 const MAX_REPLAY_FRAMES = 900;
 const LIVE_STALE_MS = 25_000;
+const LIVE_SESSION_TOUCH_INTERVAL_MS = 1_000;
 
 type ReplayAction = 'start' | 'frame' | 'end' | 'incoming' | 'state' | 'replay';
 
@@ -49,7 +50,7 @@ function livePath(victimId: string) {
   return `attack_live/${victimId}.json`;
 }
 
-function sanitizeEnemyWorld(input: Partial<SerializedWorld> | null | undefined, victimId: string, attackerName: string): SerializedWorld | null {
+function sanitizeEnemyWorld(input: Partial<SerializedWorld> | null | undefined, victimId: string): SerializedWorld | null {
   if (!input || !Array.isArray(input.buildings) || input.buildings.length === 0) return null;
 
   const buildings = input.buildings
@@ -70,7 +71,7 @@ function sanitizeEnemyWorld(input: Partial<SerializedWorld> | null | undefined, 
   return {
     id: String(input.id || `replay_world_${victimId}`).slice(0, 120),
     ownerId: victimId,
-    username: sanitizeUsername(input.username || attackerName || 'Enemy'),
+    username: sanitizeUsername(input.username || 'Village'),
     buildings,
     obstacles: [],
     resources: { sol: Math.max(0, Math.floor(Number(input.resources?.sol ?? 0) || 0)) },
@@ -149,11 +150,15 @@ async function readLiveStore(victimId: string): Promise<LiveAttackStore> {
 }
 
 async function writeLiveStore(victimId: string, store: LiveAttackStore) {
-  await writeJson(livePath(victimId), store);
+  await writeJson(livePath(victimId), store, { writeHistory: false });
 }
 
-async function upsertLiveSession(victimId: string, session: LiveAttackSession) {
+async function upsertLiveSession(victimId: string, session: LiveAttackSession, minUpdateGapMs = 0) {
   const store = await readLiveStore(victimId);
+  const existing = store.sessions.find(item => item.attackId === session.attackId);
+  if (existing && minUpdateGapMs > 0 && session.updatedAt - existing.updatedAt < minUpdateGapMs) {
+    return;
+  }
   const nextSessions = store.sessions.filter(item => item.attackId !== session.attackId);
   nextSessions.unshift(session);
   store.sessions = nextSessions.slice(0, 8);
@@ -248,7 +253,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const attackerName = sanitizeUsername(body.attackerName || auth.user.username);
-      const enemyWorld = sanitizeEnemyWorld(body.enemyWorld, victimId, attackerName);
+      const enemyWorld = sanitizeEnemyWorld(body.enemyWorld, victimId);
       if (!enemyWorld) {
         sendError(res, 400, 'enemyWorld required');
         return;
@@ -305,13 +310,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const frame = sanitizeReplayFrame(body.frame);
-      replay.frames.push(frame);
+      const lastFrame = replay.frames.length > 0 ? replay.frames[replay.frames.length - 1] : null;
+      if (lastFrame && frame.t <= lastFrame.t) {
+        replay.frames[replay.frames.length - 1] = frame;
+      } else {
+        replay.frames.push(frame);
+      }
       if (replay.frames.length > MAX_REPLAY_FRAMES) {
         replay.frames = replay.frames.slice(replay.frames.length - MAX_REPLAY_FRAMES);
       }
       replay.updatedAt = Date.now();
 
-      await writeReplay(replay);
+      await writeJson(replayPath(replay.attackId), replay, { writeHistory: false });
       await upsertLiveSession(replay.victimId, {
         attackId: replay.attackId,
         attackerId: replay.attackerId,
@@ -319,7 +329,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         victimId: replay.victimId,
         startedAt: replay.startedAt,
         updatedAt: replay.updatedAt
-      });
+      }, LIVE_SESSION_TOUCH_INTERVAL_MS);
 
       sendJson(res, 200, { ok: true, frameCount: replay.frames.length });
       return;

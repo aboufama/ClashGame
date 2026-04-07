@@ -10,6 +10,7 @@ type WriteOptions = {
   cacheSeconds?: number;
   allowOverwrite?: boolean;
   addRandomSuffix?: boolean;
+  writeHistory?: boolean;
 };
 
 function ensureBlobToken() {
@@ -173,17 +174,26 @@ async function deleteHistory(pathname: string): Promise<void> {
 
 export async function readJson<T>(pathname: string): Promise<T | null> {
   try {
-    const entries = await readVersionedJsonEntries<T>(pathname, 1);
-    if (entries.length > 0) return entries[0].value;
-
     ensureBlobToken();
     const { head } = await getBlobModule();
     const meta = await head(pathname);
-    return await fetchJsonFromBlobUrl<T>(meta.url);
+    const current = await fetchJsonFromBlobUrl<T>(meta.url);
+    if (current !== null) return current;
+  } catch (error) {
+    if (!isBlobNotFound(error)) {
+      throw error;
+    }
+  }
+
+  try {
+    const entries = await readVersionedJsonEntries<T>(pathname, 1);
+    if (entries.length > 0) return entries[0].value;
   } catch (error) {
     if (isBlobNotFound(error)) return null;
     throw error;
   }
+
+  return null;
 }
 
 export async function readJsonHistory<T>(pathname: string, limit = 8): Promise<T[]> {
@@ -201,6 +211,7 @@ export async function writeJson<T>(pathname: string, data: T, options: WriteOpti
   const cacheSeconds = options.cacheSeconds ?? 0;
   const allowOverwrite = options.allowOverwrite ?? true;
   const addRandomSuffix = options.addRandomSuffix ?? false;
+  const writeHistory = options.writeHistory ?? true;
   const payload = JSON.stringify(data);
 
   await put(pathname, payload, {
@@ -210,6 +221,10 @@ export async function writeJson<T>(pathname: string, data: T, options: WriteOpti
     contentType: JSON_CONTENT_TYPE,
     cacheControlMaxAge: cacheSeconds
   });
+
+  if (!writeHistory) {
+    return;
+  }
 
   try {
     await put(historyPathname(pathname), payload, {

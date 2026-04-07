@@ -186,10 +186,10 @@ export class MainScene extends Phaser.Scene {
     public pendingSpawnCount = 0; // Prevent battle end during troop splits (phalanx/recursion)
     private readonly HEALTH_BAR_IDLE_MS = 5000;
     private readonly HEALTH_BAR_FADE_MS = 600;
-    private readonly REPLAY_PUSH_INTERVAL_MS = 160;
-    private readonly REPLAY_LIVE_POLL_INTERVAL_MS = 160;
-    private readonly REPLAY_LIVE_RENDER_DELAY_MS = 760;
-    private readonly REPLAY_MAX_EXTRAPOLATION_MS = 460;
+    private readonly REPLAY_PUSH_INTERVAL_MS = 100;
+    private readonly REPLAY_LIVE_POLL_INTERVAL_MS = 100;
+    private readonly REPLAY_LIVE_RENDER_DELAY_MS = 520;
+    private readonly REPLAY_MAX_EXTRAPOLATION_MS = 320;
     private readonly REPLAY_SIM_SPEED_LIVE = 1.85;
     private readonly REPLAY_SIM_SPEED_REPLAY = 1.6;
 
@@ -3299,14 +3299,14 @@ export class MainScene extends Phaser.Scene {
                 // Target died while rising; find a new one
                 let fallback: Troop | null = null;
                 let fallbackDist = Infinity;
-                this.troops.forEach(t => {
-                    if (t.health <= 0 || t.owner === frostfall.owner) return;
+                for (const t of this.troops) {
+                    if (t.health <= 0 || t.owner === frostfall.owner) continue;
                     const d = Phaser.Math.Distance.Between(centerX, centerY, t.gridX, t.gridY);
                     if (d <= range && d < fallbackDist) {
                         fallbackDist = d;
                         fallback = t;
                     }
-                });
+                }
                 if (!fallback) {
                     frostfall.frostfallProjectileActive = false;
                     return; // No targets
@@ -7805,7 +7805,7 @@ export class MainScene extends Phaser.Scene {
                 if (current.pollInFlight) return;
                 current.pollInFlight = true;
 
-                void Backend.getLiveAttackState(current.attackId, current.lastFetchedFrameT, 64)
+                void Backend.getLiveAttackState(current.attackId, current.lastFetchedFrameT, 96)
                     .then(next => {
                         const active = this.replayWatchState;
                         if (!active || active.attackId !== current.attackId || active.mode !== 'live') return;
