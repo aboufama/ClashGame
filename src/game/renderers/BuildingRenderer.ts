@@ -1224,8 +1224,8 @@ export class BuildingRenderer {
         const metalLight = 0x9d9d9d;
         const metalHighlight = 0xc0c0c0;
 
-        // Solana accent
-        const solGreen = 0x14f195;
+        // Crystal ore accent (glowing mineral veins in the rock)
+        const oreGlow = 0xaaddff;
 
         if (!skipBase) {
             // === FLAT GROUND ===
@@ -1306,10 +1306,10 @@ export class BuildingRenderer {
                 g.fillCircle(center.x - 13, center.y - 1, 1);
             }
 
-            // L2: Tiny bright Solana-colored dots in the rocks
+            // L2: Glowing crystal ore veins in the rocks
             if (isL2 && !isL4) {
-                const gPulse = 0.5 + Math.sin(time / 800) * 0.3;
-                g.fillStyle(solGreen, alpha * gPulse * 0.8);
+                const orePulse = 0.4 + Math.sin(time / 900) * 0.35;
+                g.fillStyle(oreGlow, alpha * orePulse * 0.85);
                 g.fillCircle(center.x - 6, center.y, 1.5);
                 g.fillCircle(center.x + 9, center.y - 2, 1);
                 g.fillCircle(center.x + 2, center.y + 5, 1);
@@ -1480,10 +1480,10 @@ export class BuildingRenderer {
                 graphics.fillCircle(center.x + 8, center.y + 2, 1);
             }
 
-            // L2/L3: Tiny bright Solana dots on front rocks
+            // L2/L3: Glowing crystal ore on front rocks
             if (isL2 && !isL4) {
-                const gPulse = 0.5 + Math.sin(time / 800) * 0.3;
-                graphics.fillStyle(solGreen, alpha * gPulse * 0.8);
+                const orePulse = 0.4 + Math.sin(time / 900) * 0.35;
+                graphics.fillStyle(oreGlow, alpha * orePulse * 0.85);
                 graphics.fillCircle(center.x - 8, center.y + 4, 1);
                 graphics.fillCircle(center.x + 7, center.y + 3, 1);
             }
@@ -1505,10 +1505,24 @@ export class BuildingRenderer {
                 }
             }
 
+            // === VAPOR WISPS — rising from drill site when actively drilling ===
+            if (isDrilling) {
+                const vaporSeed = time / 220;
+                for (let i = 0; i < 4; i++) {
+                    const vLife = (vaporSeed * 0.35 + i * 0.25) % 1;
+                    const vx = center.x + Math.sin(vaporSeed + i * 1.6) * 9;
+                    const vy = center.y + 2 - vLife * 30;
+                    const va = vLife < 0.12 ? vLife / 0.12 : (vLife > 0.55 ? (1 - vLife) / 0.45 : 1);
+                    const vs = 2 + vLife * 5;
+                    graphics.fillStyle(0xdddddd, alpha * va * 0.3);
+                    graphics.fillCircle(vx, vy, vs);
+                }
+            }
+
             // === ACCENT — small lantern on left leg ===
             const flicker = 0.6 + Math.sin(time / 400) * 0.4;
-            const lanternColor = isL4 ? 0xffd700 : solGreen;
-            graphics.fillStyle(lanternColor, alpha * flicker * 0.6);
+            const lanternColor = isL4 ? 0xffd700 : 0xff7722;
+            graphics.fillStyle(lanternColor, alpha * flicker * 0.7);
             graphics.fillCircle(center.x - 23, center.y - 40, 3);
             graphics.fillStyle(lanternColor, alpha * flicker * 0.2);
             graphics.fillCircle(center.x - 23, center.y - 40, 6);
