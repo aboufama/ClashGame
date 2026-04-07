@@ -33,6 +33,20 @@ interface StoredPlayerState {
   requestKeys: string[];
 }
 
+export interface ResourceDeltaMutationResult {
+  applied: boolean;
+  appliedDelta: number;
+  balance: number;
+  revision: number;
+  deduped: boolean;
+}
+
+interface ResourceDeltaMutationOptions {
+  allowPartial?: boolean;
+}
+
+const playerMutationQueues = new Map<string, Promise<void>>();
+
 function statePath(userId: string) {
   return `${GAME_ROOT}/${userId}/state.json`;
 }
@@ -47,6 +61,31 @@ function legacyEventsPrefix(userId: string) {
 
 function deepClone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+async function withPlayerMutationLock<T>(userId: string, task: () => Promise<T>): Promise<T> {
+  const previous = playerMutationQueues.get(userId) ?? Promise.resolve();
+  let releaseCurrent!: () => void;
+  const current = new Promise<void>(resolve => {
+    releaseCurrent = resolve;
+  });
+  const queued = previous.catch(() => undefined).then(() => current);
+  playerMutationQueues.set(userId, queued);
+
+  await previous.catch(() => undefined);
+
+  try {
+    return await task();
+  } finally {
+    releaseCurrent();
+    if (playerMutationQueues.get(userId) === queued) {
+      playerMutationQueues.delete(userId);
+    }
+  }
+}
+
+export function resetGameStateTestState() {
+  playerMutationQueues.clear();
 }
 
 function toFiniteInt(value: unknown, fallback: number) {
@@ -365,11 +404,11 @@ async function writeStoredState(userId: string, state: StoredPlayerState): Promi
   await writeJson(statePath(userId), payload);
 }
 
-async function loadOrCreateState(userId: string, username: string): Promise<StoredPlayerState> {
+async function loadOrCreateState(userId: string, username: string, at = Date.now()): Promise<StoredPlayerState> {
   const existing = await readStoredState(userId, username);
   if (existing) return existing;
 
-  const legacy = await materializeLegacyState(userId, username, Date.now());
+  const legacy = await materializeLegacyState(userId, username, at);
   const migratedWorld = normalizeWorldForStorage(legacy.world, userId, username);
   migratedWorld.resources.sol = clamp(toFiniteInt(legacy.balance, migratedWorld.resources.sol), 0, MAX_BALANCE);
   migratedWorld.lastSaveTime = Math.max(0, toFiniteInt(legacy.lastMutationAt, Date.now()));
@@ -465,11 +504,13 @@ function createPatch(current: SerializedWorld, incoming: SerializedWorld): World
 }
 
 export async function ensurePlayerState(userId: string, username: string): Promise<void> {
-  await loadOrCreateState(userId, username);
+  await withPlayerMutationLock(userId, async () => {
+    await loadOrCreateState(userId, username);
+  });
 }
 
 export async function materializeState(userId: string, username: string, at = Date.now()): Promise<MaterializedState> {
-  const stored = await loadOrCreateState(userId, username);
+  const stored = await loadOrCreateState(userId, username, at);
   return materializeFromStoredState(stored, at);
 }
 
@@ -479,68 +520,72 @@ export async function saveWorldState(
   incoming: SerializedWorld,
   requestKey?: string
 ): Promise<SerializedWorld> {
-  const key = normalizedRequestKey(requestKey);
-  const stored = await loadOrCreateState(userId, username);
+  return await withPlayerMutationLock(userId, async () => {
+    const key = normalizedRequestKey(requestKey);
+    const stored = await loadOrCreateState(userId, username);
 
-  if (key && stored.requestKeys.includes(key)) {
-    return materializeFromStoredState(stored, Date.now()).world;
-  }
+    if (key && stored.requestKeys.includes(key)) {
+      return materializeFromStoredState(stored, Date.now()).world;
+    }
 
-  const now = Date.now();
-  const materialized = materializeFromStoredState(stored, now);
-  const normalizedIncoming = normalizeWorldForStorage(incoming, userId, username);
+    const now = Date.now();
+    const materialized = materializeFromStoredState(stored, now);
+    const normalizedIncoming = normalizeWorldForStorage(incoming, userId, username);
 
-  const requestedSol = Number((incoming.resources as { sol?: unknown } | undefined)?.sol);
-  normalizedIncoming.resources.sol = Number.isFinite(requestedSol)
-    ? clamp(Math.floor(requestedSol), 0, MAX_BALANCE)
-    : materialized.balance;
+    const requestedSol = Number((incoming.resources as { sol?: unknown } | undefined)?.sol);
+    normalizedIncoming.resources.sol = Number.isFinite(requestedSol)
+      ? clamp(Math.floor(requestedSol), 0, MAX_BALANCE)
+      : materialized.balance;
 
-  normalizedIncoming.id = materialized.world.id || normalizedIncoming.id;
-  normalizedIncoming.lastSaveTime = now;
-  normalizedIncoming.revision = materialized.revision + 1;
+    normalizedIncoming.id = materialized.world.id || normalizedIncoming.id;
+    normalizedIncoming.lastSaveTime = now;
+    normalizedIncoming.revision = materialized.revision + 1;
 
-  const nextState: StoredPlayerState = {
-    schemaVersion: STATE_SCHEMA_VERSION,
-    updatedAt: now,
-    world: normalizedIncoming,
-    requestKeys: key
-      ? normalizeRequestKeys([...stored.requestKeys, key])
-      : stored.requestKeys
-  };
+    const nextState: StoredPlayerState = {
+      schemaVersion: STATE_SCHEMA_VERSION,
+      updatedAt: now,
+      world: normalizedIncoming,
+      requestKeys: key
+        ? normalizeRequestKeys([...stored.requestKeys, key])
+        : stored.requestKeys
+    };
 
-  await writeStoredState(userId, nextState);
-  return deepClone(normalizedIncoming);
+    await writeStoredState(userId, nextState);
+    return deepClone(normalizedIncoming);
+  });
 }
 
 export async function appendWorldPatchEvent(userId: string, patch: WorldPatch, requestKey?: string): Promise<boolean> {
   if (isWorldPatchEmpty(patch)) return false;
 
-  const key = normalizedRequestKey(requestKey);
-  const stored = await loadOrCreateState(userId, fallbackUsernameFor(userId));
+  return await withPlayerMutationLock(userId, async () => {
+    const key = normalizedRequestKey(requestKey);
+    const stored = await loadOrCreateState(userId, fallbackUsernameFor(userId));
 
-  if (key && stored.requestKeys.includes(key)) {
-    return false;
-  }
+    if (key && stored.requestKeys.includes(key)) {
+      return false;
+    }
 
-  const now = Date.now();
-  const materialized = materializeFromStoredState(stored, now);
-  const nextWorld = deepClone(materialized.world);
-  applyWorldPatch(nextWorld, patch);
-  nextWorld.resources.sol = materialized.balance;
-  nextWorld.lastSaveTime = now;
-  nextWorld.revision = materialized.revision + 1;
+    const now = Date.now();
+    const materialized = materializeFromStoredState(stored, now);
+    const nextWorld = deepClone(materialized.world);
+    applyWorldPatch(nextWorld, patch);
+    nextWorld.resources.sol = materialized.balance;
+    nextWorld.lastSaveTime = now;
+    nextWorld.revision = materialized.revision + 1;
 
-  const nextState: StoredPlayerState = {
-    schemaVersion: STATE_SCHEMA_VERSION,
-    updatedAt: now,
-    world: nextWorld,
-    requestKeys: key
-      ? normalizeRequestKeys([...stored.requestKeys, key])
-      : stored.requestKeys
-  };
+    const nextState: StoredPlayerState = {
+      schemaVersion: STATE_SCHEMA_VERSION,
+      updatedAt: now,
+      world: nextWorld,
+      requestKeys: key
+        ? normalizeRequestKeys([...stored.requestKeys, key])
+        : stored.requestKeys
+    };
 
-  await writeStoredState(userId, nextState);
-  return true;
+    await writeStoredState(userId, nextState);
+    return true;
+  });
 }
 
 export async function appendResourceDeltaEvent(
@@ -548,39 +593,91 @@ export async function appendResourceDeltaEvent(
   delta: number,
   reason: string,
   refId?: string,
-  requestKey?: string
-): Promise<void> {
+  requestKey?: string,
+  options: ResourceDeltaMutationOptions = {}
+): Promise<ResourceDeltaMutationResult> {
   void reason;
   void refId;
 
-  const key = normalizedRequestKey(requestKey);
-  const rounded = Math.floor(delta);
+  return await withPlayerMutationLock(userId, async () => {
+    const key = normalizedRequestKey(requestKey);
+    const rounded = Math.floor(delta);
+    const allowPartial = options.allowPartial ?? false;
 
-  if (!key && rounded === 0) return;
+    const stored = await loadOrCreateState(userId, fallbackUsernameFor(userId));
+    const now = Date.now();
+    const materialized = materializeFromStoredState(stored, now);
 
-  const stored = await loadOrCreateState(userId, fallbackUsernameFor(userId));
-  if (key && stored.requestKeys.includes(key)) {
-    return;
-  }
+    if (key && stored.requestKeys.includes(key)) {
+      return {
+        applied: true,
+        appliedDelta: 0,
+        balance: materialized.balance,
+        revision: materialized.revision,
+        deduped: true
+      };
+    }
 
-  const now = Date.now();
-  const materialized = materializeFromStoredState(stored, now);
-  const nextBalance = clamp(materialized.balance + rounded, 0, MAX_BALANCE);
-  const nextWorld = deepClone(materialized.world);
-  nextWorld.resources.sol = nextBalance;
-  nextWorld.lastSaveTime = now;
-  nextWorld.revision = materialized.revision + 1;
+    if (!key && rounded === 0) {
+      return {
+        applied: true,
+        appliedDelta: 0,
+        balance: materialized.balance,
+        revision: materialized.revision,
+        deduped: false
+      };
+    }
 
-  const nextState: StoredPlayerState = {
-    schemaVersion: STATE_SCHEMA_VERSION,
-    updatedAt: now,
-    world: nextWorld,
-    requestKeys: key
+    if (!allowPartial && rounded < 0 && materialized.balance + rounded < 0) {
+      return {
+        applied: false,
+        appliedDelta: 0,
+        balance: materialized.balance,
+        revision: materialized.revision,
+        deduped: false
+      };
+    }
+
+    const nextBalance = clamp(materialized.balance + rounded, 0, MAX_BALANCE);
+    const appliedDelta = nextBalance - materialized.balance;
+    const nextRequestKeys = key
       ? normalizeRequestKeys([...stored.requestKeys, key])
-      : stored.requestKeys
-  };
+      : stored.requestKeys;
 
-  await writeStoredState(userId, nextState);
+    if (appliedDelta === 0 && !key) {
+      return {
+        applied: true,
+        appliedDelta: 0,
+        balance: materialized.balance,
+        revision: materialized.revision,
+        deduped: false
+      };
+    }
+
+    const nextWorld = deepClone(materialized.world);
+    nextWorld.resources.sol = nextBalance;
+    nextWorld.lastSaveTime = now;
+    nextWorld.revision = appliedDelta !== 0
+      ? materialized.revision + 1
+      : materialized.revision;
+
+    const nextState: StoredPlayerState = {
+      schemaVersion: STATE_SCHEMA_VERSION,
+      updatedAt: now,
+      world: nextWorld,
+      requestKeys: nextRequestKeys
+    };
+
+    await writeStoredState(userId, nextState);
+
+    return {
+      applied: true,
+      appliedDelta,
+      balance: nextBalance,
+      revision: nextWorld.revision,
+      deduped: false
+    };
+  });
 }
 
 export function buildPatchFromClientState(current: SerializedWorld, incoming: SerializedWorld, userId: string, username: string) {

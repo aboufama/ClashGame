@@ -10,7 +10,27 @@ type WriteOptions = {
   cacheSeconds?: number;
   allowOverwrite?: boolean;
   addRandomSuffix?: boolean;
+  writeHistory?: boolean;
 };
+
+export interface BlobTestAdapter {
+  readJson<T>(pathname: string): Promise<T | null>;
+  readJsonHistory<T>(pathname: string, limit: number): Promise<T[]>;
+  writeJson<T>(pathname: string, data: T, options: WriteOptions): Promise<void>;
+  deleteJson(pathname: string): Promise<void>;
+  listPathnames(prefix: string): Promise<string[]>;
+  deletePrefix(prefix: string): Promise<void>;
+}
+
+let testAdapter: BlobTestAdapter | null = null;
+
+export function setBlobTestAdapter(adapter: BlobTestAdapter | null) {
+  testAdapter = adapter;
+}
+
+export function resetBlobTestAdapter() {
+  testAdapter = null;
+}
 
 function ensureBlobToken() {
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
@@ -172,22 +192,38 @@ async function deleteHistory(pathname: string): Promise<void> {
 }
 
 export async function readJson<T>(pathname: string): Promise<T | null> {
-  try {
-    const entries = await readVersionedJsonEntries<T>(pathname, 1);
-    if (entries.length > 0) return entries[0].value;
+  if (testAdapter) {
+    return await testAdapter.readJson<T>(pathname);
+  }
 
+  try {
     ensureBlobToken();
     const { head } = await getBlobModule();
     const meta = await head(pathname);
-    return await fetchJsonFromBlobUrl<T>(meta.url);
+    const current = await fetchJsonFromBlobUrl<T>(meta.url);
+    if (current !== null) return current;
+  } catch (error) {
+    if (!isBlobNotFound(error)) {
+      throw error;
+    }
+  }
+
+  try {
+    const entries = await readVersionedJsonEntries<T>(pathname, 1);
+    if (entries.length > 0) return entries[0].value;
   } catch (error) {
     if (isBlobNotFound(error)) return null;
     throw error;
   }
+
+  return null;
 }
 
 export async function readJsonHistory<T>(pathname: string, limit = 8): Promise<T[]> {
   const safeLimit = Math.max(1, Math.min(40, Math.floor(Number(limit) || 8)));
+  if (testAdapter) {
+    return await testAdapter.readJsonHistory<T>(pathname, safeLimit);
+  }
   const entries = await readVersionedJsonEntries<T>(pathname, safeLimit).catch(error => {
     if (isBlobNotFound(error)) return [];
     throw error;
@@ -196,11 +232,17 @@ export async function readJsonHistory<T>(pathname: string, limit = 8): Promise<T
 }
 
 export async function writeJson<T>(pathname: string, data: T, options: WriteOptions = {}): Promise<void> {
+  if (testAdapter) {
+    await testAdapter.writeJson(pathname, data, options);
+    return;
+  }
+
   ensureBlobToken();
   const { put } = await getBlobModule();
   const cacheSeconds = options.cacheSeconds ?? 0;
   const allowOverwrite = options.allowOverwrite ?? true;
   const addRandomSuffix = options.addRandomSuffix ?? false;
+  const writeHistory = options.writeHistory ?? true;
   const payload = JSON.stringify(data);
 
   await put(pathname, payload, {
@@ -210,6 +252,10 @@ export async function writeJson<T>(pathname: string, data: T, options: WriteOpti
     contentType: JSON_CONTENT_TYPE,
     cacheControlMaxAge: cacheSeconds
   });
+
+  if (!writeHistory) {
+    return;
+  }
 
   try {
     await put(historyPathname(pathname), payload, {
@@ -228,6 +274,10 @@ export async function writeJson<T>(pathname: string, data: T, options: WriteOpti
 }
 
 export async function deleteJson(pathname: string): Promise<void> {
+  if (testAdapter) {
+    await testAdapter.deleteJson(pathname);
+    return;
+  }
   ensureBlobToken();
   const { del } = await getBlobModule();
   await del(pathname).catch(error => {
@@ -241,6 +291,9 @@ export async function deleteJson(pathname: string): Promise<void> {
 }
 
 export async function listPathnames(prefix: string): Promise<string[]> {
+  if (testAdapter) {
+    return await testAdapter.listPathnames(prefix);
+  }
   ensureBlobToken();
   const { list } = await getBlobModule();
 
@@ -261,6 +314,10 @@ export async function listPathnames(prefix: string): Promise<string[]> {
 }
 
 export async function deletePrefix(prefix: string): Promise<void> {
+  if (testAdapter) {
+    await testAdapter.deletePrefix(prefix);
+    return;
+  }
   const pathnames = await listPathnames(prefix);
   if (pathnames.length === 0) return;
   ensureBlobToken();

@@ -18,9 +18,14 @@ interface UsersListCache {
 
 const MAX_USERS = 50;
 const FALLBACK_SAMPLE_SIZE = 120;
+const FALLBACK_COUNT_HYDRATION_LIMIT = 16;
 const CACHE_TTL_MS = 15000;
 
 let responseCache: UsersListCache | null = null;
+
+export function resetUsersListCacheForTests() {
+  responseCache = null;
+}
 
 function sanitizeListedUser(user: ListedUser): ListedUser {
   return {
@@ -72,15 +77,14 @@ async function hydrateAccurateBuildingCounts(users: ListedUser[]): Promise<Liste
 
 async function readUsersFromIndex(): Promise<ListedUser[]> {
   const index = await readUsersIndex();
-  const listed = index.users
+  return dedupeUsers(index.users
     .filter(entry => entry.buildingCount > 0)
     .slice(0, MAX_USERS)
     .map(entry => sanitizeListedUser({
       id: entry.id,
       username: entry.username,
       buildingCount: entry.buildingCount
-    }));
-  return await hydrateAccurateBuildingCounts(dedupeUsers(listed));
+    })));
 }
 
 async function readUsersFromFallback(): Promise<ListedUser[]> {
@@ -98,7 +102,9 @@ async function readUsersFromFallback(): Promise<ListedUser[]> {
       buildingCount: 0
     }))
     .slice(0, MAX_USERS);
-  return await hydrateAccurateBuildingCounts(dedupeUsers(listed));
+  const deduped = dedupeUsers(listed);
+  const accurate = await hydrateAccurateBuildingCounts(deduped.slice(0, FALLBACK_COUNT_HYDRATION_LIMIT));
+  return dedupeUsers([...accurate, ...deduped.slice(FALLBACK_COUNT_HYDRATION_LIMIT)]);
 }
 
 function writeResponseHeaders(res: VercelResponse) {

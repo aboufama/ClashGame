@@ -122,7 +122,18 @@ export interface AttackReplayRecord {
   endedAt?: number;
   enemyWorld: SerializedWorld;
   frames: AttackReplayFrame[];
+  frameCount?: number;
+  latestFrame?: AttackReplayFrame | null;
+  firstChunkIndex?: number;
+  lastChunkIndex?: number;
   finalResult?: AttackReplayFinalResult;
+}
+
+export interface AttackReplayChunk {
+  attackId: string;
+  chunkIndex: number;
+  updatedAt: number;
+  frames: AttackReplayFrame[];
 }
 
 export interface LiveAttackSession {

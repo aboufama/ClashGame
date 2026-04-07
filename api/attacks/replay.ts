@@ -1,11 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http.js';
-import { readJson, writeJson } from '../_lib/blob.js';
+import { deleteJson, deletePrefix, listPathnames, readJson, writeJson } from '../_lib/blob.js';
 import { requireAuth, sanitizeId } from '../_lib/auth.js';
+import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http.js';
 import {
   clamp,
   sanitizeBuilding,
   sanitizeUsername,
+  type AttackReplayChunk,
   type AttackReplayFrame,
   type AttackReplayRecord,
   type AttackReplayStatus,
@@ -16,7 +17,9 @@ import {
 } from '../_lib/models.js';
 
 const MAX_REPLAY_FRAMES = 900;
+const REPLAY_CHUNK_SIZE = 30;
 const LIVE_STALE_MS = 25_000;
+const LIVE_SESSION_TOUCH_INTERVAL_MS = 1_000;
 
 type ReplayAction = 'start' | 'frame' | 'end' | 'incoming' | 'state' | 'replay';
 
@@ -45,11 +48,19 @@ function replayPath(attackId: string) {
   return `attack_replays/${attackId}.json`;
 }
 
+function replayChunksPrefix(attackId: string) {
+  return `attack_replay_chunks/${attackId}/`;
+}
+
+function replayChunkPath(attackId: string, chunkIndex: number) {
+  return `${replayChunksPrefix(attackId)}${String(chunkIndex).padStart(6, '0')}.json`;
+}
+
 function livePath(victimId: string) {
   return `attack_live/${victimId}.json`;
 }
 
-function sanitizeEnemyWorld(input: Partial<SerializedWorld> | null | undefined, victimId: string, attackerName: string): SerializedWorld | null {
+function sanitizeEnemyWorld(input: Partial<SerializedWorld> | null | undefined, victimId: string): SerializedWorld | null {
   if (!input || !Array.isArray(input.buildings) || input.buildings.length === 0) return null;
 
   const buildings = input.buildings
@@ -70,7 +81,7 @@ function sanitizeEnemyWorld(input: Partial<SerializedWorld> | null | undefined, 
   return {
     id: String(input.id || `replay_world_${victimId}`).slice(0, 120),
     ownerId: victimId,
-    username: sanitizeUsername(input.username || attackerName || 'Enemy'),
+    username: sanitizeUsername(input.username || 'Enemy'),
     buildings,
     obstacles: [],
     resources: { sol: Math.max(0, Math.floor(Number(input.resources?.sol ?? 0) || 0)) },
@@ -105,7 +116,7 @@ function sanitizeReplayFrame(frame: Partial<AttackReplayFrame> | null | undefine
         const type = String((entry as { type?: unknown }).type ?? '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
         if (!type) return null;
         const ownerRaw = String((entry as { owner?: unknown }).owner ?? 'PLAYER').toUpperCase();
-        const owner = ownerRaw === 'ENEMY' ? 'ENEMY' : 'PLAYER';
+        const owner: 'PLAYER' | 'ENEMY' = ownerRaw === 'ENEMY' ? 'ENEMY' : 'PLAYER';
         return {
           id,
           type,
@@ -136,12 +147,28 @@ function sanitizeReplayFrame(frame: Partial<AttackReplayFrame> | null | undefine
   };
 }
 
+function replayFrameCount(replay: AttackReplayRecord) {
+  return Math.max(0, Math.floor(Number(replay.frameCount ?? replay.frames.length) || 0));
+}
+
+function replayLatestFrame(replay: AttackReplayRecord) {
+  return replay.latestFrame ?? replay.frames[replay.frames.length - 1] ?? null;
+}
+
 async function readReplay(attackId: string) {
   return await readJson<AttackReplayRecord>(replayPath(attackId));
 }
 
-async function writeReplay(record: AttackReplayRecord) {
-  await writeJson(replayPath(record.attackId), record);
+async function writeReplay(record: AttackReplayRecord, writeHistory = true) {
+  await writeJson(replayPath(record.attackId), record, { writeHistory });
+}
+
+async function readReplayChunk(attackId: string, chunkIndex: number) {
+  return await readJson<AttackReplayChunk>(replayChunkPath(attackId, chunkIndex));
+}
+
+async function writeReplayChunk(chunk: AttackReplayChunk) {
+  await writeJson(replayChunkPath(chunk.attackId, chunk.chunkIndex), chunk, { writeHistory: false });
 }
 
 async function readLiveStore(victimId: string): Promise<LiveAttackStore> {
@@ -149,23 +176,34 @@ async function readLiveStore(victimId: string): Promise<LiveAttackStore> {
 }
 
 async function writeLiveStore(victimId: string, store: LiveAttackStore) {
-  await writeJson(livePath(victimId), store);
+  await writeJson(livePath(victimId), store, { writeHistory: false });
 }
 
-async function upsertLiveSession(victimId: string, session: LiveAttackSession) {
+async function upsertLiveSession(victimId: string, session: LiveAttackSession, minUpdateGapMs = 0) {
   const store = await readLiveStore(victimId);
+  const existing = store.sessions.find(item => item.attackId === session.attackId) ?? null;
+  if (
+    existing &&
+    minUpdateGapMs > 0 &&
+    existing.attackerId === session.attackerId &&
+    existing.attackerName === session.attackerName &&
+    existing.victimId === session.victimId &&
+    existing.startedAt === session.startedAt &&
+    session.updatedAt - existing.updatedAt < minUpdateGapMs
+  ) {
+    return;
+  }
+
   const nextSessions = store.sessions.filter(item => item.attackId !== session.attackId);
   nextSessions.unshift(session);
-  store.sessions = nextSessions.slice(0, 8);
-  await writeLiveStore(victimId, store);
+  await writeLiveStore(victimId, { sessions: nextSessions.slice(0, 8) });
 }
 
 async function removeLiveSession(victimId: string, attackId: string) {
   const store = await readLiveStore(victimId);
   const next = store.sessions.filter(item => item.attackId !== attackId);
   if (next.length === store.sessions.length) return;
-  store.sessions = next;
-  await writeLiveStore(victimId, store);
+  await writeLiveStore(victimId, { sessions: next });
 }
 
 function toFinalStatus(status: AttackReplayStatus | undefined): AttackReplayStatus {
@@ -174,6 +212,155 @@ function toFinalStatus(status: AttackReplayStatus | undefined): AttackReplayStat
 
 function isParticipant(replay: AttackReplayRecord, userId: string) {
   return replay.attackerId === userId || replay.victimId === userId;
+}
+
+async function listReplayChunkIndices(replay: AttackReplayRecord) {
+  if (
+    Number.isInteger(replay.firstChunkIndex) &&
+    Number.isInteger(replay.lastChunkIndex) &&
+    Number(replay.firstChunkIndex) <= Number(replay.lastChunkIndex)
+  ) {
+    const out: number[] = [];
+    for (let index = Number(replay.firstChunkIndex); index <= Number(replay.lastChunkIndex); index += 1) {
+      out.push(index);
+    }
+    return out;
+  }
+
+  const prefix = replayChunksPrefix(replay.attackId);
+  const pathnames = await listPathnames(prefix);
+  return pathnames
+    .map(pathname => {
+      const match = pathname.match(/\/(\d+)\.json$/);
+      return match ? Number(match[1]) : Number.NaN;
+    })
+    .filter(index => Number.isInteger(index) && index >= 0)
+    .sort((a, b) => a - b);
+}
+
+async function readReplayFramesFromChunks(
+  replay: AttackReplayRecord,
+  options: { afterT?: number; limit?: number } = {}
+): Promise<AttackReplayFrame[]> {
+  const afterT = Number.isFinite(options.afterT) ? Number(options.afterT) : Number.NaN;
+  const requestedLimit = Math.floor(Number(options.limit) || 0);
+  const limit = Math.max(1, Math.min(MAX_REPLAY_FRAMES, requestedLimit || MAX_REPLAY_FRAMES));
+  const indices = await listReplayChunkIndices(replay);
+
+  if (indices.length === 0) {
+    const fallbackFrames = Array.isArray(replay.frames) ? replay.frames : [];
+    if (Number.isFinite(afterT)) {
+      return fallbackFrames.filter(frame => frame.t > afterT).slice(0, limit);
+    }
+    return fallbackFrames.slice(Math.max(0, fallbackFrames.length - limit));
+  }
+
+  if (Number.isFinite(afterT)) {
+    const frames: AttackReplayFrame[] = [];
+    for (const index of indices) {
+      const chunk = await readReplayChunk(replay.attackId, index);
+      if (!chunk || !Array.isArray(chunk.frames) || chunk.frames.length === 0) continue;
+      const nextFrames = chunk.frames.filter(frame => frame.t > afterT);
+      if (nextFrames.length === 0) {
+        if (chunk.frames[chunk.frames.length - 1]?.t <= afterT) continue;
+      }
+      frames.push(...nextFrames);
+      if (frames.length >= limit) break;
+    }
+    return frames.slice(0, limit);
+  }
+
+  let frames: AttackReplayFrame[] = [];
+  for (let cursor = indices.length - 1; cursor >= 0; cursor -= 1) {
+    const chunk = await readReplayChunk(replay.attackId, indices[cursor]);
+    if (!chunk || !Array.isArray(chunk.frames) || chunk.frames.length === 0) continue;
+    frames = chunk.frames.concat(frames);
+    if (frames.length >= limit) {
+      frames = frames.slice(Math.max(0, frames.length - limit));
+      break;
+    }
+  }
+  return frames;
+}
+
+async function appendReplayFrameToChunks(replay: AttackReplayRecord, frame: AttackReplayFrame) {
+  let firstChunkIndex = Number.isInteger(replay.firstChunkIndex) ? Number(replay.firstChunkIndex) : undefined;
+  let lastChunkIndex = Number.isInteger(replay.lastChunkIndex) ? Number(replay.lastChunkIndex) : undefined;
+  let frameCount = replayFrameCount(replay);
+  const now = Date.now();
+
+  if (lastChunkIndex == null) {
+    lastChunkIndex = 0;
+  }
+  if (firstChunkIndex == null) {
+    firstChunkIndex = lastChunkIndex;
+  }
+
+  let chunk = await readReplayChunk(replay.attackId, lastChunkIndex);
+  if (!chunk) {
+    chunk = {
+      attackId: replay.attackId,
+      chunkIndex: lastChunkIndex,
+      updatedAt: now,
+      frames: []
+    };
+  }
+
+  const lastFrame = chunk.frames[chunk.frames.length - 1];
+  let appendedNewFrame = false;
+
+  if (lastFrame && lastFrame.t === frame.t) {
+    chunk.frames[chunk.frames.length - 1] = frame;
+  } else if (chunk.frames.length < REPLAY_CHUNK_SIZE) {
+    chunk.frames.push(frame);
+    frameCount += 1;
+    appendedNewFrame = true;
+  } else {
+    lastChunkIndex += 1;
+    chunk = {
+      attackId: replay.attackId,
+      chunkIndex: lastChunkIndex,
+      updatedAt: now,
+      frames: [frame]
+    };
+    frameCount += 1;
+    appendedNewFrame = true;
+  }
+
+  chunk.updatedAt = now;
+  await writeReplayChunk(chunk);
+
+  while (appendedNewFrame && frameCount > MAX_REPLAY_FRAMES) {
+    if (firstChunkIndex == null) break;
+    const oldestChunk = await readReplayChunk(replay.attackId, firstChunkIndex);
+    if (!oldestChunk) {
+      if (firstChunkIndex < lastChunkIndex) {
+        firstChunkIndex += 1;
+        continue;
+      }
+      break;
+    }
+
+    oldestChunk.frames.shift();
+    frameCount -= 1;
+
+    if (oldestChunk.frames.length === 0 && firstChunkIndex < lastChunkIndex) {
+      await deleteJson(replayChunkPath(replay.attackId, firstChunkIndex));
+      firstChunkIndex += 1;
+      continue;
+    }
+
+    oldestChunk.updatedAt = Date.now();
+    await writeReplayChunk(oldestChunk);
+    break;
+  }
+
+  return {
+    frameCount,
+    latestFrame: frame,
+    firstChunkIndex,
+    lastChunkIndex
+  };
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -234,7 +421,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return;
         }
         if (existing.status === 'live') {
-          await upsertLiveSession(victimId, {
+          await upsertLiveSession(existing.victimId, {
             attackId: existing.attackId,
             attackerId: existing.attackerId,
             attackerName: existing.attackerName,
@@ -248,7 +435,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const attackerName = sanitizeUsername(body.attackerName || auth.user.username);
-      const enemyWorld = sanitizeEnemyWorld(body.enemyWorld, victimId, attackerName);
+      const enemyWorld = sanitizeEnemyWorld(body.enemyWorld, victimId);
       if (!enemyWorld) {
         sendError(res, 400, 'enemyWorld required');
         return;
@@ -265,7 +452,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         startedAt: now,
         updatedAt: now,
         enemyWorld,
-        frames: []
+        frames: [],
+        frameCount: 0,
+        latestFrame: null,
+        firstChunkIndex: 0,
+        lastChunkIndex: 0
       };
 
       await writeReplay(replay);
@@ -300,28 +491,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       if (replay.status !== 'live') {
-        sendJson(res, 200, { ok: true, frameCount: replay.frames.length });
+        sendJson(res, 200, { ok: true, frameCount: replayFrameCount(replay) });
         return;
       }
 
       const frame = sanitizeReplayFrame(body.frame);
-      replay.frames.push(frame);
-      if (replay.frames.length > MAX_REPLAY_FRAMES) {
-        replay.frames = replay.frames.slice(replay.frames.length - MAX_REPLAY_FRAMES);
-      }
+      const chunkState = await appendReplayFrameToChunks(replay, frame);
+      replay.frameCount = chunkState.frameCount;
+      replay.latestFrame = chunkState.latestFrame;
+      replay.firstChunkIndex = chunkState.firstChunkIndex;
+      replay.lastChunkIndex = chunkState.lastChunkIndex;
+      replay.frames = [];
       replay.updatedAt = Date.now();
 
-      await writeReplay(replay);
-      await upsertLiveSession(replay.victimId, {
-        attackId: replay.attackId,
-        attackerId: replay.attackerId,
-        attackerName: replay.attackerName,
-        victimId: replay.victimId,
-        startedAt: replay.startedAt,
-        updatedAt: replay.updatedAt
-      });
+      await writeReplay(replay, false);
+      await upsertLiveSession(
+        replay.victimId,
+        {
+          attackId: replay.attackId,
+          attackerId: replay.attackerId,
+          attackerName: replay.attackerName,
+          victimId: replay.victimId,
+          startedAt: replay.startedAt,
+          updatedAt: replay.updatedAt
+        },
+        LIVE_SESSION_TOUCH_INTERVAL_MS
+      );
 
-      sendJson(res, 200, { ok: true, frameCount: replay.frames.length });
+      sendJson(res, 200, { ok: true, frameCount: replay.frameCount });
       return;
     }
 
@@ -332,6 +529,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const now = Date.now();
+      const finalFrames = await readReplayFramesFromChunks(replay, { limit: MAX_REPLAY_FRAMES });
+      replay.frames = finalFrames;
+      replay.frameCount = finalFrames.length;
+      replay.latestFrame = finalFrames[finalFrames.length - 1] ?? replayLatestFrame(replay);
       replay.updatedAt = now;
       replay.endedAt = now;
       replay.status = toFinalStatus(body.status);
@@ -342,26 +543,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       await writeReplay(replay);
       await removeLiveSession(replay.victimId, replay.attackId);
+      await deletePrefix(replayChunksPrefix(replay.attackId));
 
       sendJson(res, 200, { ok: true });
       return;
     }
 
     if (action === 'state') {
-      const latestFrame = replay.frames.length > 0 ? replay.frames[replay.frames.length - 1] : null;
       const afterT = Number(body.afterT);
       const hasAfterT = Number.isFinite(afterT);
       const requestedLimit = Math.floor(Number(body.limit) || 0);
       const limit = Math.max(1, Math.min(180, requestedLimit || 36));
-      let frames: typeof replay.frames = [];
-
-      if (replay.frames.length > 0) {
-        if (hasAfterT) {
-          frames = replay.frames.filter(frame => frame.t > afterT).slice(0, limit);
-        } else {
-          frames = replay.frames.slice(Math.max(0, replay.frames.length - limit));
-        }
-      }
+      const frames = await readReplayFramesFromChunks(replay, hasAfterT ? { afterT, limit } : { limit });
+      const latestFrame = replayLatestFrame(replay);
 
       sendJson(res, 200, {
         replay: {
@@ -376,7 +570,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           endedAt: replay.endedAt,
           enemyWorld: replay.enemyWorld,
           finalResult: replay.finalResult,
-          frameCount: replay.frames.length,
+          frameCount: replayFrameCount(replay),
           latestFrame,
           frames
         }
@@ -385,7 +579,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (action === 'replay') {
-      sendJson(res, 200, { replay });
+      const frames = replay.frames.length > 0 ? replay.frames : await readReplayFramesFromChunks(replay, { limit: MAX_REPLAY_FRAMES });
+      sendJson(res, 200, {
+        replay: {
+          ...replay,
+          frames,
+          frameCount: replay.frameCount ?? frames.length,
+          latestFrame: replay.latestFrame ?? frames[frames.length - 1] ?? null
+        }
+      });
       return;
     }
 

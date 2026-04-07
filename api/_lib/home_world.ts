@@ -1,5 +1,5 @@
 import { readJsonHistory } from './blob.js';
-import { ensurePlayerState, materializeState, saveWorldState } from './game_state.js';
+import { materializeState, saveWorldState } from './game_state.js';
 import { buildStarterWorld, randomId, type SerializedBuilding, type SerializedWorld } from './models.js';
 
 interface StoredStateSnapshot {
@@ -219,22 +219,16 @@ function repairWorldPayload(world: SerializedWorld, userId: string, username: st
   };
 }
 
-async function wait(ms: number) {
-  await new Promise(resolve => setTimeout(resolve, ms));
-}
-
 export async function resolveHomeWorld(userId: string, username: string, options: ResolveHomeWorldOptions = {}): Promise<ResolveHomeWorldResult> {
   const now = options.now ?? Date.now();
-  const materializeAttempts = Math.max(1, Math.min(10, Math.floor(Number(options.materializeAttempts) || 6)));
+  const materializeAttempts = Math.max(1, Math.min(3, Math.floor(Number(options.materializeAttempts) || 2)));
   const historyDepth = Math.max(4, Math.min(30, Math.floor(Number(options.historyDepth) || 12)));
   const source = options.source?.trim() || 'load';
 
-  await ensurePlayerState(userId, username);
   let world = (await materializeState(userId, username, now)).world;
 
   for (let attempt = 2; attempt <= materializeAttempts; attempt++) {
     if (isRenderableWorld(world) && hasTownHall(world)) break;
-    await wait(100 * attempt);
     world = (await materializeState(userId, username, Date.now())).world;
   }
 

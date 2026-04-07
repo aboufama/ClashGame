@@ -186,10 +186,10 @@ export class MainScene extends Phaser.Scene {
     public pendingSpawnCount = 0; // Prevent battle end during troop splits (phalanx/recursion)
     private readonly HEALTH_BAR_IDLE_MS = 5000;
     private readonly HEALTH_BAR_FADE_MS = 600;
-    private readonly REPLAY_PUSH_INTERVAL_MS = 160;
-    private readonly REPLAY_LIVE_POLL_INTERVAL_MS = 160;
-    private readonly REPLAY_LIVE_RENDER_DELAY_MS = 760;
-    private readonly REPLAY_MAX_EXTRAPOLATION_MS = 460;
+    private readonly REPLAY_PUSH_INTERVAL_MS = 100;
+    private readonly REPLAY_LIVE_POLL_INTERVAL_MS = 100;
+    private readonly REPLAY_LIVE_RENDER_DELAY_MS = 520;
+    private readonly REPLAY_MAX_EXTRAPOLATION_MS = 320;
     private readonly REPLAY_SIM_SPEED_LIVE = 1.85;
     private readonly REPLAY_SIM_SPEED_REPLAY = 1.6;
 
@@ -3299,14 +3299,14 @@ export class MainScene extends Phaser.Scene {
                 // Target died while rising; find a new one
                 let fallback: Troop | null = null;
                 let fallbackDist = Infinity;
-                this.troops.forEach(t => {
-                    if (t.health <= 0 || t.owner === frostfall.owner) return;
-                    const d = Phaser.Math.Distance.Between(centerX, centerY, t.gridX, t.gridY);
+                for (const troop of this.troops) {
+                    if (troop.health <= 0 || troop.owner === frostfall.owner) continue;
+                    const d = Phaser.Math.Distance.Between(centerX, centerY, troop.gridX, troop.gridY);
                     if (d <= range && d < fallbackDist) {
                         fallbackDist = d;
-                        fallback = t;
+                        fallback = troop;
                     }
-                });
+                }
                 if (!fallback) {
                     frostfall.frostfallProjectileActive = false;
                     return; // No targets
@@ -6027,32 +6027,6 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
-    private spawnSolCoinBurst(x: number, y: number, count: number = 14) {
-        if (!this.textures.exists('solanaCoin')) return;
-
-        for (let i = 0; i < count; i++) {
-            const coin = this.add.image(x, y, 'solanaCoin');
-            coin.setDepth(30000);
-            coin.setDisplaySize(16, 16);
-            coin.setAlpha(1);
-            coin.setAngle((Math.random() - 0.5) * 20);
-
-            const angle = Math.random() * Math.PI * 2;
-            const dist = 18 + Math.random() * 26;
-            const rise = 18 + Math.random() * 20;
-
-            this.tweens.add({
-                targets: coin,
-                x: x + Math.cos(angle) * dist,
-                y: y - rise,
-                alpha: 0,
-                duration: 550 + Math.random() * 150,
-                ease: 'Quad.easeOut',
-                onComplete: () => coin.destroy()
-            });
-        }
-    }
-
 
     public spawnTroop(
         gx: number,
@@ -7709,7 +7683,7 @@ export class MainScene extends Phaser.Scene {
 
     private async startReplayWatch(attackId: string, mode: ReplayWatchMode): Promise<boolean> {
         let replay: AttackReplayState | null = mode === 'live'
-            ? await Backend.getLiveAttackState(attackId)
+            ? await Backend.getLiveAttackState(attackId, undefined, 96)
             : await Backend.getAttackReplay(attackId);
 
         if (!replay && mode === 'live') {
@@ -7806,7 +7780,7 @@ export class MainScene extends Phaser.Scene {
                 if (current.pollInFlight) return;
                 current.pollInFlight = true;
 
-                void Backend.getLiveAttackState(current.attackId, current.lastFetchedFrameT, 64)
+                void Backend.getLiveAttackState(current.attackId, current.lastFetchedFrameT, 96)
                     .then(next => {
                         const active = this.replayWatchState;
                         if (!active || active.attackId !== current.attackId || active.mode !== 'live') return;

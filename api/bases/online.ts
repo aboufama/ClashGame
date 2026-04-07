@@ -3,7 +3,7 @@ import { handleOptions, sendError, sendJson } from '../_lib/http.js';
 import { requireAuth } from '../_lib/auth.js';
 import { readUsersIndex } from '../_lib/indexes.js';
 import { readJson } from '../_lib/blob.js';
-import { ensurePlayerState, materializeState } from '../_lib/game_state.js';
+import { materializeState } from '../_lib/game_state.js';
 import type { UserRecord } from '../_lib/models.js';
 
 function normalizeUsernameKey(username: string) {
@@ -50,7 +50,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const targetUser = await readJson<UserRecord>(`users/${pick.id}.json`);
     const username = targetUser?.username || pick.username;
 
-    await ensurePlayerState(pick.id, username);
     const targetState = await materializeState(pick.id, username, Date.now());
 
     sendJson(res, 200, { world: targetState.world });

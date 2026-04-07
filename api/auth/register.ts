@@ -4,7 +4,8 @@ import { deleteJson, listPathnames, readJson, writeJson } from '../_lib/blob.js'
 import {
   createSession,
   createSessionCookie,
-  findUserByIdentifier,
+  findUserIdByEmail,
+  findUserIdByUsername,
   hashPassword,
   isValidEmail,
   isValidUsername,
@@ -54,17 +55,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const email = normalizeEmail(emailInput);
     const normalizedUsername = normalizeUsernameKey(username);
 
-    const [emailOwner, usernameOwner] = await Promise.all([
-      findUserByIdentifier(email),
-      findUserByIdentifier(username)
+    const [emailOwnerId, usernameOwnerId] = await Promise.all([
+      findUserIdByEmail(email),
+      findUserIdByUsername(username)
     ]);
 
-    if (emailOwner && normalizeEmail(emailOwner.email) === email) {
+    if (emailOwnerId) {
       sendError(res, 409, 'Email already in use');
       return;
     }
 
-    if (usernameOwner && normalizeUsernameKey(usernameOwner.username) === normalizedUsername) {
+    if (usernameOwnerId) {
       sendError(res, 409, 'Username already in use');
       return;
     }

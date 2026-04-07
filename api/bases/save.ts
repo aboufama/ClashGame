@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http.js';
 import { requireAuth } from '../_lib/auth.js';
-import { ensurePlayerState, materializeState, saveWorldState } from '../_lib/game_state.js';
+import { materializeState, saveWorldState } from '../_lib/game_state.js';
 import { normalizeWorldInput, worldHasTownHall, type SerializedWorld } from '../_lib/models.js';
 import { upsertUserIndex } from '../_lib/indexes.js';
 
@@ -41,7 +41,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const now = Date.now();
     const { user } = auth;
 
-    await ensurePlayerState(user.id, user.username);
     const current = await materializeState(user.id, user.username, now);
 
     if (hasRevisionCheck(body.ifMatchRevision) && Number(body.ifMatchRevision) !== current.revision) {

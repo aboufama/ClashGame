@@ -12,6 +12,7 @@
     "dev:game": "vite --host 127.0.0.1 --port 5173 --strictPort --open /game",
     "build": "tsc -b && vite build",
     "build:vercel": "vite build",
+    "test:backend": "rm -rf .test-dist && tsc -p tsconfig.backend-tests.json && node --test tests/backend/*.test.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

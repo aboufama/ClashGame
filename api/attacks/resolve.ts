@@ -50,7 +50,7 @@ async function finalizeReplayResult(
   const next = live.sessions.filter(session => session.attackId !== attackId);
   if (next.length === live.sessions.length) return;
   live.sessions = next;
-  await writeJson(livePath, live);
+  await writeJson(livePath, live, { writeHistory: false });
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -98,35 +98,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const now = Date.now();
-
     await Promise.all([
       ensurePlayerState(victimId, victimUser.username),
       ensurePlayerState(attackerId, auth.user.username)
     ]);
 
-    const [victimState, attackerState] = await Promise.all([
-      materializeState(victimId, victimUser.username, now),
-      materializeState(attackerId, auth.user.username, now)
-    ]);
-
     const requestedLoot = Number(body.solLooted ?? 0);
-    const lootApplied = clamp(Math.floor(Number.isFinite(requestedLoot) ? requestedLoot : 0), 0, victimState.balance);
+    const normalizedRequestedLoot = clamp(
+      Math.floor(Number.isFinite(requestedLoot) ? requestedLoot : 0),
+      0,
+      Number.MAX_SAFE_INTEGER
+    );
+    let lootApplied = 0;
+    let attackerBalance: number | null = null;
+    let attackerRevision: number | undefined;
 
-    if (lootApplied > 0) {
+    if (normalizedRequestedLoot > 0) {
       const victimRequestKey = attackId ? attackEventKey(attackId, 'victim') : undefined;
       const attackerRequestKey = attackId ? attackEventKey(attackId, 'attacker') : undefined;
+      const victimMutation = await appendResourceDeltaEvent(
+        victimId,
+        -normalizedRequestedLoot,
+        'raid_loss',
+        attackId,
+        victimRequestKey,
+        { allowPartial: true }
+      );
+      lootApplied = Math.max(0, -victimMutation.appliedDelta);
 
-      if (!victimRequestKey || !victimState.requestKeys.has(victimRequestKey)) {
-        await appendResourceDeltaEvent(victimId, -lootApplied, 'raid_loss', attackId, victimRequestKey);
-      }
-
-      if (!attackerRequestKey || !attackerState.requestKeys.has(attackerRequestKey)) {
-        await appendResourceDeltaEvent(attackerId, lootApplied, 'raid_loot', attackId, attackerRequestKey);
+      if (lootApplied > 0) {
+        const attackerMutation = await appendResourceDeltaEvent(
+          attackerId,
+          lootApplied,
+          'raid_loot',
+          attackId,
+          attackerRequestKey
+        );
+        attackerBalance = attackerMutation.balance;
+        attackerRevision = attackerMutation.revision;
       }
     }
 
-    const attackerAfter = await materializeState(attackerId, auth.user.username, Date.now());
+    if (attackerBalance === null) {
+      const attackerAfter = await materializeState(attackerId, auth.user.username, Date.now());
+      attackerBalance = attackerAfter.balance;
+      attackerRevision = attackerAfter.revision;
+    }
 
     const destruction = clamp(Number(body.destruction ?? 0), 0, 100);
 
@@ -163,8 +180,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const result: AttackResult = {
       lootApplied,
-      attackerBalance: attackerAfter.balance,
-      attackerRevision: attackerAfter.revision
+      attackerBalance,
+      attackerRevision
     };
 
     if (attackId) {

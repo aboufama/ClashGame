@@ -178,6 +178,10 @@ export async function findUserIdByUsername(username: string): Promise<string | n
   ]);
 }
 
+interface FindUserByIdentifierOptions {
+  fullScanFallback?: boolean;
+}
+
 function isUserJsonPath(pathname: string) {
   if (!pathname.startsWith('users/') || !pathname.endsWith('.json')) return false;
   const id = pathname.slice('users/'.length, -'.json'.length);
@@ -217,13 +221,17 @@ function scoreUserCandidate(
   return matchScore + buildingScore + lastSeenScore + createdAtScore;
 }
 
-export async function findUserByIdentifier(identifier: string): Promise<UserRecord | null> {
+export async function findUserByIdentifier(
+  identifier: string,
+  options: FindUserByIdentifierOptions = {}
+): Promise<UserRecord | null> {
   const normalized = identifier.trim();
   if (!normalized) return null;
 
   const normalizedEmail = normalizeEmail(normalized);
   const normalizedUsername = normalizeUsernameKey(normalized);
   const prefersEmail = normalized.includes('@');
+  const fullScanFallback = options.fullScanFallback ?? false;
 
   const matchesIdentifier = (user: UserRecord) => {
     if (!user || typeof user.id !== 'string') return false;
@@ -267,19 +275,21 @@ export async function findUserByIdentifier(identifier: string): Promise<UserReco
 
   for (const entry of indexUsers) {
     if (!entry?.id) continue;
-    if (prefersEmail || normalizeUsernameKey(entry.username) === normalizedUsername) {
+    if (!prefersEmail && normalizeUsernameKey(entry.username) === normalizedUsername) {
       await loadCandidateById(entry.id);
     }
   }
 
-  const userPathnames = await listPathnames('users/').catch(() => [] as string[]);
-  for (const pathname of userPathnames) {
-    if (!isUserJsonPath(pathname)) continue;
-    const id = pathname.slice('users/'.length, -'.json'.length);
-    if (scannedIds.has(id)) continue;
-    scannedIds.add(id);
-    const user = await readJson<UserRecord>(pathname).catch(() => null);
-    considerUser(user);
+  if (fullScanFallback) {
+    const userPathnames = await listPathnames('users/').catch(() => [] as string[]);
+    for (const pathname of userPathnames) {
+      if (!isUserJsonPath(pathname)) continue;
+      const id = pathname.slice('users/'.length, -'.json'.length);
+      if (scannedIds.has(id)) continue;
+      scannedIds.add(id);
+      const user = await readJson<UserRecord>(pathname).catch(() => null);
+      considerUser(user);
+    }
   }
 
   const candidates = Array.from(candidateById.values());

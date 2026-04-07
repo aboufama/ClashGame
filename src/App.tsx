@@ -1020,18 +1020,6 @@ function App() {
     setIsTrainingOpen(false);
   };
 
-  const handleAttackUser = (userId: string, username: string) => {
-    if (capacity.current === 0) {
-      alert('Train some troops first!');
-      return;
-    }
-    // Close any open modals
-    setIsTrainingOpen(false);
-    setScoutTarget(null);
-    // Start attack on specific user
-    gameManager.startAttackOnUser(userId, username);
-  };
-
   const handleScoutUser = (userId: string, username: string) => {
     // Close any open modals
     setIsTrainingOpen(false);

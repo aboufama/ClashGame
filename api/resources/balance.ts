@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, sendError, sendJson } from '../_lib/http.js';
 import { requireAuth } from '../_lib/auth.js';
-import { ensurePlayerState, materializeState } from '../_lib/game_state.js';
+import { materializeState } from '../_lib/game_state.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleOptions(req, res)) return;
@@ -17,7 +17,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const now = Date.now();
     const { user } = auth;
 
-    await ensurePlayerState(user.id, user.username);
     const state = await materializeState(user.id, user.username, now);
 
     sendJson(res, 200, {

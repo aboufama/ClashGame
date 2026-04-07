@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleOptions, readJsonBody, sendError, sendJson } from '../_lib/http.js';
 import { requireAuth, sanitizeId } from '../_lib/auth.js';
-import { ensurePlayerState, materializeState } from '../_lib/game_state.js';
+import { materializeState } from '../_lib/game_state.js';
 import { readJson } from '../_lib/blob.js';
 import type { UserRecord } from '../_lib/models.js';
 
@@ -33,7 +33,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    await ensurePlayerState(targetId, targetUser.username);
     const targetState = await materializeState(targetId, targetUser.username, Date.now());
 
     sendJson(res, 200, { world: targetState.world });
